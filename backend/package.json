@@ -10,11 +10,19 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "fastify": "^4.26.2"
+    "@prisma/client": "^6.19.2",
+    "dotenv": "^17.3.1",
+    "fastify": "^4.26.2",
+    "ioredis": "^5.10.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",
+    "prisma": "^6.19.2",
     "tsx": "^4.7.2",
     "typescript": "^5.4.5"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
