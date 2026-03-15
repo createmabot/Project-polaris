@@ -4,3 +4,11 @@ build
 coverage
 .env
 .DS_Store
+
+# IDEs and Tools
+.vscode
+.idea
+.pnpm-store
+
+# Logs
+*.log

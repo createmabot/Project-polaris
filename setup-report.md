@@ -24,7 +24,7 @@ hokkyokusei/
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
 │   └── vite.config.ts
-├── docs/                   # ドキュメント格納用 (現在は .keep のみ)
+├── docs/                   # ドキュメントおよび設計資料格納用
 ├── fixtures/               # テストデータ格納用 (現在は .keep のみ)
 ├── scripts/                # 自動化スクリプト格納用 (現在は .keep のみ)
 ├── .editorconfig           # エディタ設定
@@ -74,7 +74,7 @@ hokkyokusei/
 - **トップ画面ファイル**: `frontend/src/App.tsx`
 - **実装内容の要約**:
   - Viteの標準 `index.html` から `<div id="root">` 経由で `main.tsx` をロード。
-  - `App.tsx` では `<h1>Hokkyokusei (北極星)</h1>` を含む簡素なReactコンポーネントを定義し、起動確認用のメッセージを出力するのみの画面実装。
+  - `App.tsx` では `<h1>北極星 (Project Polaris)</h1>` を含む簡素なReactコンポーネントを定義し、起動確認用のメッセージを出力するのみの画面実装。
 
 ## 6. 実行した検証コマンドと結果
 
@@ -98,7 +98,7 @@ hokkyokusei/
 ## 8. 気になる点・後続で直すべき箇所
 
 1. **余分なディレクトリやファイル**:
-   - `docs/`, `scripts/`, `fixtures/` は枠組みとして作成しており、Git管理のために `.keep` を配置していますが、現状は中身が空です。
+   - `scripts/`, `fixtures/` は枠組みとして作成しており、Git管理のために `.keep` を配置していますが、現状は中身が空です。
    - `frontend/src/dummy.test.ts` と `backend/test/dummy.test.ts` はVitestのパステスト用に配置しています。本番テスト作成時に削除する必要があります。
 2. **仮実装の箇所**:
    - バックエンドの `/health` エンドポイントがハードコードされた最小限の実装です。（DB接続性確認などのヘルスチェックロジックは入っていません）
