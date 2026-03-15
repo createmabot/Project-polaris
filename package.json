@@ -1,8 +1,8 @@
 {
-  "name": "hokkyokusei",
+  "name": "project-polaris",
   "version": "1.0.0",
   "private": true,
-  "description": "Stock price analysis tool 'Hokkyokusei'",
+  "description": "Stock price analysis tool 'Project-polaris'",
   "scripts": {
     "dev": "pnpm --parallel --filter \"*\" dev",
     "build": "pnpm --recursive build",

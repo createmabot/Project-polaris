@@ -1,4 +1,4 @@
-# Hokkyokusei (北極星)
+# Project-polaris (北極星)
 
 個人用の株価分析ツール「北極星」の開発用リポジトリ。
 
