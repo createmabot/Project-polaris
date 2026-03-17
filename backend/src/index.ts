@@ -2,14 +2,29 @@ import Fastify from 'fastify';
 import { prisma } from './db';
 import { redis } from './redis';
 import { env } from './env';
+import { webhookRoutes } from './routes/webhooks';
+import { errorHandler } from './utils/response';
+import { setupWorker } from './queue';
+import crypto from 'crypto';
 
 const fastify = Fastify({
-  logger: true
+  logger: true,
+  genReqId: () => crypto.randomUUID(),
+});
+
+fastify.setErrorHandler(errorHandler);
+
+fastify.addContentTypeParser('text/plain', { parseAs: 'string' }, (req, body, done) => {
+  done(null, body);
 });
 
 fastify.get('/health', async (request, reply) => {
-  return reply.status(200).send({ status: 'ok', env: env.APP_ENV });
+  return reply.status(200).send({ status: 'ok', request_id: request.id, env: env.APP_ENV });
 });
+
+fastify.register(webhookRoutes, { prefix: '/api/integrations' });
+// Backwards compat mount
+fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 
 const start = async () => {
   try {
@@ -20,6 +35,9 @@ const start = async () => {
     fastify.log.info("Checking Redis connection...");
     await redis.ping();
     fastify.log.info("Redis connection strictly OK.");
+
+    // Start background job worker
+    setupWorker(fastify.log);
 
     await fastify.listen({ port: env.PORT, host: '0.0.0.0' });
     fastify.log.info(`Server listening on ${env.PORT}`);
