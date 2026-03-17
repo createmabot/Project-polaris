@@ -1,0 +1,20 @@
+{
+  "shared_secret": "test-webhook-token-123",
+  "alert_name": "MA25 breakout",
+  "alert_type": "technical",
+  "tradingview_symbol": "TSE:7203",
+  "symbol": "7203",
+  "market_code": "TSE",
+  "timeframe": "D",
+  "trigger_price": 3021.5,
+  "currency": "JPY",
+  "triggered_at": "2026-03-11T00:15:00Z",
+  "message": "7203 triggered technical alert",
+  "condition_summary": "close crossed above MA25",
+  "metadata": {
+    "open": 3001.0,
+    "high": 3030.0,
+    "low": 2998.0,
+    "volume": 18450000
+  }
+}
