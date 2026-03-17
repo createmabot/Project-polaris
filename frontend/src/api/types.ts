@@ -74,3 +74,51 @@ export type AlertDetailData = {
   related_references: ExternalReferenceDto[];
   processing_status: string;
 };
+
+export type SymbolDetailData = {
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+  };
+  current_snapshot: null;
+  tradingview_symbol: string | null;
+  recent_alerts: Array<{
+    id: string;
+    alert_name: string;
+    alert_type: string | null;
+    timeframe: string | null;
+    trigger_price: number | null;
+    triggered_at: string | null;
+    received_at: string | null;
+    processing_status: string;
+    related_ai_summary: {
+      id: string;
+      title: string | null;
+      generated_at: string | null;
+      key_points: string[];
+    } | null;
+  }>;
+  latest_ai_thesis_summary: {
+    id: string;
+    title: string | null;
+    body_markdown: string;
+    generated_at: string | null;
+    overall_view: string | null;
+    structured_json: any;
+  } | null;
+  related_references: Array<{
+    id: string;
+    alert_event_id: string | null;
+    reference_type: string;
+    title: string;
+    source_name: string | null;
+    source_url: string | null;
+    published_at: string | null;
+    summary_text: string | null;
+  }>;
+  latest_processing_status: string;
+};

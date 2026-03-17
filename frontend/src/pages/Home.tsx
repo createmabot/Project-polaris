@@ -6,6 +6,13 @@ import { HomeData } from '../api/types';
 export default function Home() {
   const { data, error, isLoading } = useSWR<HomeData>('/api/home', swrFetcher);
 
+  const formatDate = (value: string | null) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('ja-JP');
+  };
+
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラーが発生しました: {error.message}</div>;
   if (!data) return null;
@@ -38,11 +45,19 @@ export default function Home() {
                   <div>
                     <strong>
                       <Link href={`/alerts/${alert.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
-                        {alert.symbol?.displayName || alert.symbol?.symbol || '不明な銘柄'} - {alert.alertName}
+                        {alert.alertName}
                       </Link>
                     </strong>
                     <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
-                      発生時刻: {new Date(alert.triggeredAt || alert.receivedAt || '').toLocaleString('ja-JP')} |
+                      銘柄:{' '}
+                      {alert.symbol?.id ? (
+                        <Link href={`/symbols/${alert.symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                          {alert.symbol.displayName || alert.symbol.symbol || '不明な銘柄'}
+                        </Link>
+                      ) : (
+                        <span>{alert.symbol?.displayName || alert.symbol?.symbol || '不明な銘柄'}</span>
+                      )}
+                      {' '}| 発生時刻: {formatDate(alert.triggeredAt || alert.receivedAt)} |
                       ステータス: <code>{alert.processingStatus}</code>
                     </div>
                   </div>

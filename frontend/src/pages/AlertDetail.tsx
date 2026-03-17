@@ -30,6 +30,12 @@ export default function AlertDetail() {
   if (!data) return null;
 
   const { alert_event, symbol, related_ai_summary, related_references, processing_status } = data;
+  const formatDate = (value: string | null) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('ja-JP');
+  };
 
   return (
     <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -37,10 +43,19 @@ export default function AlertDetail() {
         <Link href="/" style={{ color: '#666', textDecoration: 'none' }}>← ホームへ戻る</Link>
       </div>
 
-      <h1>{symbol?.displayName || symbol?.symbol || '不明な銘柄'} - {alert_event.alertName}</h1>
+      <h1>
+        {symbol?.id ? (
+          <Link href={`/symbols/${symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+            {symbol.displayName || symbol.symbol || '不明な銘柄'}
+          </Link>
+        ) : (
+          symbol?.displayName || symbol?.symbol || '不明な銘柄'
+        )}{' '}
+        - {alert_event.alertName}
+      </h1>
       <p style={{ color: '#666' }}>
         ステータス: <code>{processing_status}</code> |
-        発生日時: {new Date(alert_event.triggeredAt || alert_event.receivedAt || '').toLocaleString('ja-JP')}
+        発生日時: {formatDate(alert_event.triggeredAt || alert_event.receivedAt)}
       </p>
 
       <section style={{ marginTop: '2rem' }}>
@@ -52,7 +67,7 @@ export default function AlertDetail() {
               {related_ai_summary.bodyMarkdown}
             </div>
             <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: '#999' }}>
-              Model: {related_ai_summary.modelName} | Generated: {new Date(related_ai_summary.generatedAt || '').toLocaleString('ja-JP')}
+              Model: {related_ai_summary.modelName} | Generated: {formatDate(related_ai_summary.generatedAt)}
             </div>
           </div>
         ) : (
@@ -69,7 +84,7 @@ export default function AlertDetail() {
             {related_references.map((ref) => (
               <li key={ref.id} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #eee' }}>
                 <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>
-                  [{ref.referenceType}] {new Date(ref.publishedAt || '').toLocaleString('ja-JP')}
+                  [{ref.referenceType}] {formatDate(ref.publishedAt)}
                 </div>
                 <strong>
                   {ref.sourceUrl ? (

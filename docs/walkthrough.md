@@ -62,3 +62,32 @@ MVP仕様 (docs/3, docs/19) に基づき、先日構築したバックエンドA
 次のステップとしては**「Sprint 3: 銘柄研究とノート機能の成立」**、特に以下の実装が推奨されます。
 1. **銘柄詳細 API と画面の実装**: 個別銘柄に紐づく過去全てのアラートや、AI論点カード（Thesis）を集約するビュー。
 2. **研究ノート機能**: ユーザー自身が画面上から仮説や条件を記録・更新する CRUD 機能。
+
+---
+
+## 追補: Sprint 3-1 「銘柄詳細 API と銘柄詳細画面」
+
+### 実装日
+- 2026-03-18
+
+### 追加した API
+- `GET /api/symbols/:symbolId`
+  - `symbol` 基本情報
+  - `recent_alerts`（新しい順、最大5件）
+  - 各 `alert` に紐づく `related_ai_summary.key_points`
+  - `related_references`（最大20件）
+  - `latest_ai_thesis_summary`
+  - `latest_processing_status`
+  - 共通形式 `{ data, meta, error }`
+  - 不正な `symbolId` は `404 + NOT_FOUND`
+
+### 追加した画面
+- `frontend/src/pages/SymbolDetail.tsx`
+  - ルート: `/symbols/:symbolId`
+  - 表示: 銘柄ヘッダ、最近のアラート、主要なAI論点、関連情報リンク
+  - Loading / Error / Empty を個別表示
+
+### 既存導線への接続
+- Home (`/`) の最近アラート行に銘柄リンクを追加
+- Alert Detail (`/alerts/:alertId`) の銘柄名から銘柄詳細へ遷移可能に変更
+- 既存 `GET /api/home` / `GET /api/alerts/:alertId` の契約は維持
