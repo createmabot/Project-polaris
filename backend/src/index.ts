@@ -3,6 +3,8 @@ import { prisma } from './db';
 import { redis } from './redis';
 import { env } from './env';
 import { webhookRoutes } from './routes/webhooks';
+import { homeRoutes } from './routes/home';
+import { alertRoutes } from './routes/alerts';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import crypto from 'crypto';
@@ -25,6 +27,9 @@ fastify.get('/health', async (request, reply) => {
 fastify.register(webhookRoutes, { prefix: '/api/integrations' });
 // Backwards compat mount
 fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
+
+fastify.register(homeRoutes, { prefix: '/api/home' });
+fastify.register(alertRoutes, { prefix: '/api/alerts' });
 
 const start = async () => {
   try {
