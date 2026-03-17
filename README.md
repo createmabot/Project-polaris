@@ -11,20 +11,40 @@
 - Cache/Queue: Redis
 - Infra: Docker Compose
 
+## AI モデル運用方針 (docs/28 準拠)
+北極星は「常用処理のコスト最適化」と「高精度処理の精度確保」を両立するため、以下の2モデル体制を採用しています。
+
+- **Primary: ローカル Qwen3 (30B系)**
+  - 通常の要約、整理、比較など 95% 以上のタスクを担当。RTX 5090 環境等での高速動作を前提。
+- **Fallback: GPT-5 mini (API)**
+  - Pine Script 修正ループ失敗時や、仕様制約が極めて多い例外時のみ自動エスカレーション。
+
 ## セットアップ手順
-1. リポジトリをクローン
-2. Node.js (22.x) および pnpm をインストール
-3. 依存関係のインストール
+1. **リポジトリをクローン**
+2. **依存関係のインストール**
    ```bash
    pnpm install
    ```
-4. 環境変数の設定
+3. **環境変数の設定**
+   プロジェクトルートの `.env` がバックエンド、ワーカー、スクリプト全ての正本設定となります。
    ```bash
    cp .env.example .env
+   # .env を編集して DATABASE_URL, REDIS_URL, FALLBACK_API_KEY 等を入力
    ```
-5. データベースとRedisの起動
+4. **データベースとRedisの起動**
    ```bash
    docker compose up -d
+   ```
+5. **DBマイグレーションとシード投入**
+   ```bash
+   cd backend
+   pnpm exec prisma migrate dev
+   pnpm exec prisma db seed
+   ```
+6. **ローカルLLM疎通確認** (docs/24 準拠)
+   ローカルLLMサーバー（Ollama等）が起動しており、.env の設定で推論可能か確認します。
+   ```bash
+   pnpm --filter backend exec tsx ../scripts/check-local-llm.ts
    ```
 
 ## 起動手順
@@ -32,11 +52,11 @@
 ```bash
 pnpm run dev
 ```
-（または各ディレクトリで個別に実行）
 
 ## よく使うコマンド
 - `pnpm run up`: DBとRedisをDockerで起動
-- `pnpm run down`: コンテナの停止
+- `pnpm --filter backend exec tsx ../scripts/check-local-llm.ts`: ローカルLLMの診断
 - `pnpm run dev`: 全パッケージの開発サーバーを起動
 - `pnpm run build`: 全パッケージのビルド
 - `pnpm run test`: 全パッケージのテスト
+

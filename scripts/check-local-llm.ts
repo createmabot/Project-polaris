@@ -11,7 +11,11 @@
  */
 
 import * as dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// Point to root .env relative to scripts/
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 
 const endpoint = process.env.LOCAL_LLM_ENDPOINT ?? 'http://localhost:11434';
 const model = process.env.PRIMARY_LOCAL_MODEL ?? 'qwen3-30b-a3b-2507';

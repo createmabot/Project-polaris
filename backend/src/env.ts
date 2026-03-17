@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import * as dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+
+// Point to root .env relative to backend/src/env.ts
+dotenv.config({ path: path.join(__dirname, '../../.env') });
+
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),

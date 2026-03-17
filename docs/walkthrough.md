@@ -1,128 +1,35 @@
-# AI要約基盤 実装ウォークスルー（Sprint 2）
+# 環境設定とドキュメントの正規化 ウォークスルー
 
-## 参照した docs
+## 実施内容の概要
 
-| doc | 利用箇所 |
-|---|---|
-| `docs/0.目次` | 参照対象の特定 |
-| `docs/2.北極星 データモデル設計（MVP）` | ai_summaries カラム設計の根拠 |
-| `docs/5.北極星 AI要約フロー設計（MVP）` | job_type / status値 / 処理フロー |
-| `docs/10.北極星 AI出力 JSON schema 詳細設計（MVP）` | structured_json 共通ラッパー設計 |
-| `docs/19.北極星 スプリント計画案（MVP）` | Sprint 2 スコープ確認 |
+プロジェクト全体の環境設定をルートの [.env](file:///g:/Projects/hokkyokusei/.env) に一本化し、ドキュメント（README / セットアップ手順）を最新の AI 利用方針と整合させました。
 
----
+### 1. 環境変数の正本統一
+- **ルート [.env](file:///g:/Projects/hokkyokusei/.env) を唯一の正本に決定**: バックエンド実行、ワーカー、および診断スクリプトが共通の設定を参照するように変更しました。
+- **[backend/src/env.ts](file:///g:/Projects/hokkyokusei/backend/src/env.ts)**: `dotenv.config({ path: '../../.env' })` を指定し、ルートの [.env](file:///g:/Projects/hokkyokusei/.env) を読み込むよう修正。
+- **[scripts/check-local-llm.ts](file:///g:/Projects/hokkyokusei/scripts/check-local-llm.ts)**: 同様にルートの [.env](file:///g:/Projects/hokkyokusei/.env) を参照するよう修正。
 
-## 変更ファイル一覧
+### 2. 設定ファイルの整理
+- **ルート [.env.example](file:///g:/Projects/hokkyokusei/.env.example)**: AI モデル方針（Qwen3 / GPT-5 mini）を含む全ての必要変数を集約。
+- **Redundant ファイルの削除**: [backend/.env.example](file:///g:/Projects/hokkyokusei/backend/.env.example) を削除し、設定の二重管理を解消。
 
-| ファイル | 区分 | 内容 |
+### 3. ドキュメントの同期 (docs/20, 24, 28 準拠)
+- **ルート [README.md](file:///g:/Projects/hokkyokusei/README.md)**:
+  - AI モデルの運用方針（Qwen3 優先 + GPT-5 mini Fallback）を明記。
+  - ルートの [.env](file:///g:/Projects/hokkyokusei/.env) を使うセットアップ手順に刷新。
+  - 診断スクリプト [scripts/check-local-llm.ts](file:///g:/Projects/hokkyokusei/scripts/check-local-llm.ts) の実行手順を追加。
+- **`docs/24.北極星 開発着手用 README セットアップ手順書`**:
+  - ルートの [.env](file:///g:/Projects/hokkyokusei/.env) を正本とする記述に統一。
+  - MVP に必要な最小限の環境変数値（DATABASE_URL, REDIS_URL, AI設定）を現行実装に合わせ更新。
+
+## 検証結果
+
+| 項目 | 結果 | 備考 |
 |---|---|---|
-| [prisma/schema.prisma](file:///g:/Projects/hokkyokusei/backend/prisma/schema.prisma) | MODIFY | AiJob / AiSummary を仕様準拠に更新 |
-| [src/ai/adapter.ts](file:///g:/Projects/hokkyokusei/backend/src/ai/adapter.ts) | NEW | AiAdapter interface + MockAiAdapter 実装 |
-| [src/ai/context-builder.ts](file:///g:/Projects/hokkyokusei/backend/src/ai/context-builder.ts) | NEW | AlertSummaryContext 構築ロジック |
-| [src/queue/index.ts](file:///g:/Projects/hokkyokusei/backend/src/queue/index.ts) | MODIFY | Worker を全面的に本実装化 |
-| [src/routes/webhooks.ts](file:///g:/Projects/hokkyokusei/backend/src/routes/webhooks.ts) | MODIFY | jobType / status 初期値の修正 |
+| `backend` ビルド | ✅ パス | `tsc` により型定義とパス解釈の整合を確認。 |
+| 診断スクリプト実行 | ✅ パス | ルート [.env](file:///g:/Projects/hokkyokusei/.env) から正しく 16 項目を読み込むことを確認。 (LLM未起動による `fetch failed` は正常な挙動) |
+| README 整合性 | ✅ 確認済 | 手順通りに [.env](file:///g:/Projects/hokkyokusei/.env) を作成し、ローカル開発を開始できる状態。 |
 
----
-
-## Migration
-
-**`20260316182511_ai_summary_schema_update`**
-
-### AiJob の変更
-- `jobType` デフォルト: `"summarize_alert"` → `"generate_alert_summary"`
-- `status` デフォルト: `"PENDING"` → `"queued"`
-- `errorMessage String?` 追加
-
-### AiSummary の追加カラム
-- `userId String?`
-- `title String?`
-- `modelName String?`
-- `promptVersion String?`
-- `generatedAt DateTime?`
-- `generationContextJson Json?`
-- `summaryScope` デフォルト: `"alert"` → `"alert_reason"`
-
----
-
-## ai_job の status 遷移
-
-```
-webhook 受信
-  └─ ai_job.status = "queued"    ← BullMQ enqueue
-       └─ worker 起動
-            ├─ ai_job.status = "running"    (startedAt 記録)
-            │
-            ├─ [SUCCESS] ai_summaries 作成
-            │      └─ ai_job.status = "succeeded"  (completedAt 記録)
-            │
-            └─ [FAILURE] catch
-                   └─ ai_job.status = "failed"  (errorMessage 保存)
-```
-
-スキップ条件（変更なし）:
-- `processingStatus = "unresolved_symbol"` → ai_job 起票なし
-- `processingStatus = "needs_review"` → ai_job 起票なし
-
----
-
-## 保存される ai_summary の実例
-
-```json
-{
-  "id": "...",
-  "summaryScope": "alert_reason",
-  "targetEntityType": "alert_event",
-  "title": "[Mock] MA25 breakout — トヨタ自動車(7203)",
-  "modelName": "mock-v1",
-  "promptVersion": "v1.0.0-mock",
-  "generatedAt": "2026-03-17T...",
-  "inputSnapshotHash": "sha256:...",
-  "structuredJson": {
-    "schema_name": "alert_reason_summary",
-    "schema_version": "1.0",
-    "confidence": "low",
-    "insufficient_context": true,
-    "payload": {
-      "what_happened": "MA25 breakout アラートが TSE:7203 で発火した。",
-      "fact_points": ["設定されたアラート条件が成立した。", "トリガー価格: 3100"],
-      "reason_hypotheses": [{ "text": "外部参照情報が存在しないため...", "confidence": "low", "reference_ids": [] }],
-      "watch_points": ["翌営業日の値動きを確認する。"],
-      "next_actions": ["関連ニュース・開示情報を確認する。"],
-      "reference_ids": []
-    }
-  }
-}
-```
-
----
-
-## 確認した動作
-
-| ケース | 結果 |
-|---|---|
-| 正常 webhook → ai_job(queued→succeeded) → ai_summary 作成 | ✅ |
-| unresolved_symbol → ai_job_id = null | ✅ |
-| needs_review (純テキスト) → ai_job_id = null | ✅ |
-| 重複 event → duplicate_ignored | ✅ |
-| 同一入力への ai_summary 二重作成防止 (inputSnapshotHash) | ✅ |
-
----
-
-## まだ mock のまま残したもの
-
-| 項目 | 現状 | 次フェーズ |
-|---|---|---|
-| AI API 呼び出し | [MockAiAdapter](file:///g:/Projects/hokkyokusei/backend/src/ai/adapter.ts#54-119) (50ms スリープ) | OpenAI / Gemini adapter に差し替え |
-| `confidence` | 常に `"low"`, `insufficient_context: true` | 実 AI 出力に基づいて変動 |
-| `external_references` 参照 | なし | Sprint 2 後半で T-029 実装後に織り込む |
-| `userId` | null | alertEvent.userId から伝播 |
-| retry 設計 | なし | BullMQ `attempts` オプションで実装予定 |
-
----
-
-## 次に着手すべきタスク
-
-1. **external_references 収集ジョブ** (T-029) — alert_event に紐づくニュース・開示を集める
-2. **MockAiAdapter → 実 AI adapter** — Gemini/OpenAI への差し替え
-3. **GET /api/home** (T-047) — ai_summaries の最新を返すホーム API
-4. **ホーム画面 UI** (T-048) — daily summary と最新アラート要約の表示
+## 残る設定上の注意点
+- **Local LLM サーバー**: Qwen3 を使用する場合、Ollama 等でエンドポイントが `11434` ポート等で起動している必要があります。
+- **Fallback API Key**: `GPT-5 mini` を利用する場合は、ルート [.env](file:///g:/Projects/hokkyokusei/.env) の `FALLBACK_API_KEY` に有効な値を設定してください。
