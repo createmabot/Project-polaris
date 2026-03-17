@@ -1,9 +1,14 @@
+import { Route, Switch } from "wouter";
+import Home from "./pages/Home";
+import AlertDetail from "./pages/AlertDetail";
+
 function App() {
   return (
-    <div>
-      <h1>北極星 (Project Polaris)</h1>
-      <p>Frontend is running successfully.</p>
-    </div>
+    <Switch>
+      <Route path="/" component={Home} />
+      <Route path="/alerts/:alertId" component={AlertDetail} />
+      <Route>404: No such page!</Route>
+    </Switch>
   );
 }
 
