@@ -75,6 +75,29 @@ export type AlertDetailData = {
   processing_status: string;
 };
 
+export type ResearchNoteDto = {
+  id: string;
+  symbolId: string;
+  title: string;
+  thesisText?: string;
+  scenarioText?: string;
+  entryConditionText?: string;
+  takeProfitText?: string;
+  stopLossText?: string;
+  invalidationText?: string;
+  nextReviewAt?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NoteRevisionDto = {
+  id: string;
+  revisionNo: number;
+  changeSummary?: string;
+  createdAt: string;
+};
+
 export type SymbolDetailData = {
   symbol: {
     id: string;
@@ -120,5 +143,6 @@ export type SymbolDetailData = {
     published_at: string | null;
     summary_text: string | null;
   }>;
+  latest_active_note: ResearchNoteDto | null;
   latest_processing_status: string;
 };

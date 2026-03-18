@@ -136,6 +136,14 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       orderBy: { generatedAt: 'desc' },
     });
 
+    const latestActiveNote = await prisma.researchNote.findFirst({
+      where: {
+        symbolId,
+        status: 'active',
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
     const recentAlerts = recentAlertsRaw.map((alert) => {
       const summary = alertSummaryMap.get(alert.id) ?? null;
       const keyPoints = getAlertSummaryPoints(
@@ -206,6 +214,7 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         published_at: reference.publishedAt,
         summary_text: reference.summaryText,
       })),
+      latest_active_note: latestActiveNote,
       latest_processing_status: recentAlertsRaw[0]?.processingStatus ?? 'idle',
     };
 

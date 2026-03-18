@@ -6,6 +6,7 @@ import { webhookRoutes } from './routes/webhooks';
 import { homeRoutes } from './routes/home';
 import { alertRoutes } from './routes/alerts';
 import { symbolRoutes } from './routes/symbols';
+import { noteRoutes } from './routes/notes';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import crypto from 'crypto';
@@ -32,6 +33,7 @@ fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 fastify.register(homeRoutes, { prefix: '/api/home' });
 fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
+fastify.register(noteRoutes, { prefix: '/api/notes' });
 
 const start = async () => {
   try {

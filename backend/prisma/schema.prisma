@@ -16,79 +16,83 @@ model User {
 
   webhookTokens WebhookToken[]
   alertEvents   AlertEvent[]
+  researchNotes ResearchNote[]
+
   @@map("users")
 }
 
 model Symbol {
-  id                 String   @id @default(uuid())
-  symbol             String   @unique // e.g., "BTC/USDT"
-  tradingviewSymbol  String?  @unique // e.g., "BINANCE:BTCUSDT"
-  marketCode         String?  // e.g., "BINANCE"
-  symbolCode         String?  // e.g., "BTCUSDT"
-  displayName        String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid())
+  symbol            String   @unique // e.g., "BTC/USDT"
+  tradingviewSymbol String?  @unique // e.g., "BINANCE:BTCUSDT"
+  marketCode        String? // e.g., "BINANCE"
+  symbolCode        String? // e.g., "BTCUSDT"
+  displayName       String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  alertEvents   AlertEvent[]
+  alertEvents        AlertEvent[]
   externalReferences ExternalReference[]
+  researchNotes      ResearchNote[]
+
   @@map("symbols")
 }
 
 model WebhookToken {
-  id               String   @id @default(uuid())
-  provider         String   @default("tradingview")
-  token            String   @unique
+  id               String    @id @default(uuid())
+  provider         String    @default("tradingview")
+  token            String    @unique
   tokenHash        String?
   sharedSecretHash String?
-  isActive         Boolean  @default(true)
+  isActive         Boolean   @default(true)
   rotatedAt        DateTime?
   userId           String
-  user             User     @relation(fields: [userId], references: [id])
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  user             User      @relation(fields: [userId], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@map("webhook_tokens")
 }
 
 model WebhookReceipt {
-  id                    String   @id @default(uuid())
-  provider              String   @default("tradingview")
-  requestHeadersJson    Json
-  rawBodyText           String
-  remoteIp              String?
-  receivedAt            DateTime @default(now())
-  authResult            String?
-  parseResult           String?
+  id                     String   @id @default(uuid())
+  provider               String   @default("tradingview")
+  requestHeadersJson     Json
+  rawBodyText            String
+  remoteIp               String?
+  receivedAt             DateTime @default(now())
+  authResult             String?
+  parseResult            String?
   symbolResolutionResult String?
-  dedupeResult          String?
-  errorReason           String?
-  
-  alertEventId          String?
-  alertEvent            AlertEvent? @relation(fields: [alertEventId], references: [id])
+  dedupeResult           String?
+  errorReason            String?
+
+  alertEventId String?
+  alertEvent   AlertEvent? @relation(fields: [alertEventId], references: [id])
 
   @@map("webhook_receipts")
 }
 
 model AlertEvent {
-  id                   String   @id @default(uuid())
-  userId               String?
-  user                 User?    @relation(fields: [userId], references: [id])
-  symbolId             String?
-  symbol               Symbol?  @relation(fields: [symbolId], references: [id])
-  sourceType           String   @default("tradingview")
-  alertType            String?
-  alertName            String
-  timeframe            String?
-  triggerPrice         Float?
-  triggerPayloadJson   Json
-  dedupeKey            String   @unique
-  eventId              String?  // External provider event id (optional)
-  triggeredAt          DateTime?
-  receivedAt           DateTime @default(now())
-  processingStatus     String   @default("received")
+  id                 String    @id @default(uuid())
+  userId             String?
+  user               User?     @relation(fields: [userId], references: [id])
+  symbolId           String?
+  symbol             Symbol?   @relation(fields: [symbolId], references: [id])
+  sourceType         String    @default("tradingview")
+  alertType          String?
+  alertName          String
+  timeframe          String?
+  triggerPrice       Float?
+  triggerPayloadJson Json
+  dedupeKey          String    @unique
+  eventId            String? // External provider event id (optional)
+  triggeredAt        DateTime?
+  receivedAt         DateTime  @default(now())
+  processingStatus   String    @default("received")
 
-  webhookReceipts      WebhookReceipt[]
-  externalReferences   ExternalReference[]
+  webhookReceipts    WebhookReceipt[]
+  externalReferences ExternalReference[]
 
   @@map("alert_events")
 }
@@ -96,22 +100,22 @@ model AlertEvent {
 // External References (docs/2 §6.8, docs/6)
 // Stores news, disclosures, and earnings references linked to symbols/alert events.
 model ExternalReference {
-  id              String    @id @default(uuid())
-  symbolId        String?   // always link to symbol when known
-  symbol          Symbol?   @relation(fields: [symbolId], references: [id])
-  alertEventId    String?   // link to triggering alert event (nullable for symbol-origin collection)
-  alertEvent      AlertEvent? @relation(fields: [alertEventId], references: [id])
-  referenceType   String    // docs/6 §12.1: news | disclosure | earnings
-  title           String
-  sourceName      String?   // e.g., "news_api_xxx", "tdnet"
-  sourceUrl       String?   // URL to the primary source
-  publishedAt     DateTime? // publication datetime
-  summaryText     String?   // brief summary / snippet (docs/6 §12.6)
-  metadataJson    Json?     // source-specific: relevance_score, category, language, provider_article_id
-  dedupeKey       String    @unique // symbolId:sourceUrl or symbolId:referenceType:title hash
-  relevanceScore  Int?      @default(50) // 0-100 simple relevance (docs/6 §13.3)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String      @id @default(uuid())
+  symbolId       String? // always link to symbol when known
+  symbol         Symbol?     @relation(fields: [symbolId], references: [id])
+  alertEventId   String? // link to triggering alert event (nullable for symbol-origin collection)
+  alertEvent     AlertEvent? @relation(fields: [alertEventId], references: [id])
+  referenceType  String // docs/6 §12.1: news | disclosure | earnings
+  title          String
+  sourceName     String? // e.g., "news_api_xxx", "tdnet"
+  sourceUrl      String? // URL to the primary source
+  publishedAt    DateTime? // publication datetime
+  summaryText    String? // brief summary / snippet (docs/6 §12.6)
+  metadataJson   Json? // source-specific: relevance_score, category, language, provider_article_id
+  dedupeKey      String      @unique // symbolId:sourceUrl or symbolId:referenceType:title hash
+  relevanceScore Int?        @default(50) // 0-100 simple relevance (docs/6 §13.3)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   @@index([symbolId])
   @@index([alertEventId])
@@ -121,55 +125,91 @@ model ExternalReference {
 }
 
 model AiJob {
-  id               String      @id @default(uuid())
-  jobType          String      @default("generate_alert_summary")
+  id               String    @id @default(uuid())
+  jobType          String    @default("generate_alert_summary")
   targetEntityType String
   targetEntityId   String
   requestPayload   Json?
   responsePayload  Json?
-  modelName        String?     // final adopted model
+  modelName        String? // final adopted model
   promptVersion    String?
   errorMessage     String?
   startedAt        DateTime?
   completedAt      DateTime?
-  status           String      @default("queued") // queued, running, succeeded, failed
+  status           String    @default("queued") // queued, running, succeeded, failed
 
   // ── Execution log fields (docs/28 §11, docs/20 §9.5) ──
-  initialModel     String?     // model attempted first (always local)
-  finalModel       String?     // model actually adopted for the result
-  escalated        Boolean     @default(false) // whether API fallback was used
-  escalationReason String?     // pine_compile_error | retry_limit_exceeded | high_constraint_input | final_quality_required
-  retryCount       Int         @default(0)    // local retry attempts before success or escalation
-  durationMs       Int?        // total execution time in ms
-  estimatedTokens  Int?        // approximate token count
-  estimatedCostUsd Float?      // approximate cost in USD (0 for local runs)
+  initialModel     String? // model attempted first (always local)
+  finalModel       String? // model actually adopted for the result
+  escalated        Boolean @default(false) // whether API fallback was used
+  escalationReason String? // pine_compile_error | retry_limit_exceeded | high_constraint_input | final_quality_required
+  retryCount       Int     @default(0) // local retry attempts before success or escalation
+  durationMs       Int? // total execution time in ms
+  estimatedTokens  Int? // approximate token count
+  estimatedCostUsd Float? // approximate cost in USD (0 for local runs)
 
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  aiSummaries      AiSummary[]
+  aiSummaries AiSummary[]
+
   @@map("ai_jobs")
 }
-
 
 model AiSummary {
   id                    String    @id @default(uuid())
   aiJobId               String?
   aiJob                 AiJob?    @relation(fields: [aiJobId], references: [id])
-  userId                String?   // optional user context
+  userId                String? // optional user context
   summaryScope          String    @default("alert_reason") // alert_reason, daily, thesis, backtest_review
-  targetEntityType      String    // e.g., "alert_event"
+  targetEntityType      String // e.g., "alert_event"
   targetEntityId        String
-  title                 String?   // human-readable title shown in UI
-  bodyMarkdown          String    // docs/5 §4.2: human-readable body
-  structuredJson        Json?     // docs/10 §4: { schema_name, schema_version, confidence, insufficient_context, payload }
-  modelName             String?   // e.g., "gpt-4o", "gemini-1.5-pro", "mock-v1"
-  promptVersion         String?   // e.g., "v1.0.0-mock"
+  title                 String? // human-readable title shown in UI
+  bodyMarkdown          String // docs/5 §4.2: human-readable body
+  structuredJson        Json? // docs/10 §4: { schema_name, schema_version, confidence, insufficient_context, payload }
+  modelName             String? // e.g., "gpt-4o", "gemini-1.5-pro", "mock-v1"
+  promptVersion         String? // e.g., "v1.0.0-mock"
   generatedAt           DateTime? // when AI generation completed
-  inputSnapshotHash     String?   // SHA-256 of generation input for idempotency check
-  generationContextJson Json?     // auxiliary metadata: market, timeframe, language, etc.
+  inputSnapshotHash     String? // SHA-256 of generation input for idempotency check
+  generationContextJson Json? // auxiliary metadata: market, timeframe, language, etc.
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
   @@map("ai_summaries")
+}
+
+model ResearchNote {
+  id                 String    @id @default(uuid())
+  userId             String?
+  user               User?     @relation(fields: [userId], references: [id])
+  symbolId           String
+  symbol             Symbol    @relation(fields: [symbolId], references: [id])
+  title              String
+  thesisText         String?   @db.Text
+  scenarioText       String?   @db.Text
+  entryConditionText String?   @db.Text
+  takeProfitText     String?   @db.Text
+  stopLossText       String?   @db.Text
+  invalidationText   String?   @db.Text
+  nextReviewAt       DateTime?
+  status             String    @default("active") // active, archived
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  revisions NoteRevision[]
+
+  @@map("research_notes")
+}
+
+model NoteRevision {
+  id             String       @id @default(uuid())
+  researchNoteId String
+  researchNote   ResearchNote @relation(fields: [researchNoteId], references: [id])
+  revisionNo     Int
+  snapshotJson   Json
+  changeSummary  String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([researchNoteId, revisionNo])
+  @@map("note_revisions")
 }

@@ -136,6 +136,73 @@ export default function SymbolDetail() {
       </section>
 
       <section style={{ marginTop: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2>研究ノート (Research Note)</h2>
+          {data.latest_active_note ? (
+            <Link href={`/notes/${data.latest_active_note.id}`} style={{ background: '#0066cc', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
+              ノートを編集する
+            </Link>
+          ) : (
+            <Link href={`/symbols/${symbolId}/note/new`} style={{ background: '#28a745', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
+              ノートを新規作成
+            </Link>
+          )}
+        </div>
+        {data.latest_active_note ? (
+          <div style={{ background: '#fff', border: '1px solid #ddd', padding: '1.5rem', borderRadius: '4px', marginTop: '1rem' }}>
+            <h3 style={{ marginTop: 0, color: '#333' }}>{data.latest_active_note.title}</h3>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1rem' }}>
+              最終更新: {formatDate(data.latest_active_note.updatedAt)} | ステータス: <code>{data.latest_active_note.status}</code>
+            </div>
+            
+            {data.latest_active_note.thesisText && (
+              <div style={{ marginBottom: '1rem' }}>
+                <strong>■ 投資仮説</strong>
+                <p style={{ whiteSpace: 'pre-wrap', margin: '0.5rem 0 0 0' }}>{data.latest_active_note.thesisText}</p>
+              </div>
+            )}
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem', background: '#f9f9f9', padding: '1rem', borderRadius: '4px' }}>
+              {data.latest_active_note.entryConditionText && (
+                <div>
+                  <strong>エントリー条件:</strong>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.entryConditionText}</p>
+                </div>
+              )}
+              {data.latest_active_note.takeProfitText && (
+                <div>
+                  <strong>利確条件:</strong>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.takeProfitText}</p>
+                </div>
+              )}
+              {data.latest_active_note.stopLossText && (
+                <div>
+                  <strong>損切条件:</strong>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.stopLossText}</p>
+                </div>
+              )}
+              {data.latest_active_note.invalidationText && (
+                <div>
+                  <strong>仮説崩壊条件:</strong>
+                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.invalidationText}</p>
+                </div>
+              )}
+            </div>
+            
+            {data.latest_active_note.nextReviewAt && (
+              <div style={{ marginTop: '1rem', color: '#d9534f', fontSize: '0.9rem', fontWeight: 'bold' }}>
+                📅 再確認予定日: {formatDate(data.latest_active_note.nextReviewAt).split(' ')[0]}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666', marginTop: '1rem' }}>
+            この銘柄のアクティブな研究ノートはありません。
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: '2rem' }}>
         <h2>関連情報リンク</h2>
         {data.related_references.length === 0 ? (
           <p style={{ color: '#666' }}>関連するニュース・開示情報はありません。</p>
