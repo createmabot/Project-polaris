@@ -25,10 +25,12 @@ export interface AlertSummaryContext {
   references: Array<{
     id: string;
     referenceType: string;
+    sourceType?: string;
     title: string;
     sourceName: string | null;
     sourceUrl: string | null;
     publishedAt: Date | null;
+    publishedAtIso?: string | null;
     summaryText: string | null;
     relevanceScore: number | null;
   }>;
@@ -75,13 +77,20 @@ export class MockAiAdapter implements AiAdapter {
     const priceInfo = ctx.triggerPrice ? ` (trigger price: ${ctx.triggerPrice})` : '';
     const timeInfo = ctx.triggeredAt ? ctx.triggeredAt.toISOString() : 'N/A';
     const hasRefs = ctx.references.length > 0;
+    const hasHighSignalReference = ctx.references.some(
+      (ref) => ref.referenceType === 'disclosure' || ref.referenceType === 'earnings'
+    );
+    const confidence: 'high' | 'medium' | 'low' = hasHighSignalReference ? 'high' : hasRefs ? 'medium' : 'low';
     const insufficientContext = !hasRefs;
 
     const title = `[Mock] ${ctx.alertName} — ${symbolLabel}`;
 
     const refLines = ctx.references
       .slice(0, 3)
-      .map((r) => `- [${r.referenceType}] ${r.title}`)
+      .map((r) => {
+        const publishedAt = r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A');
+        return `- [${r.sourceType ?? r.referenceType}] ${r.title} (${publishedAt})`;
+      })
       .join('\n');
 
     const bodyMarkdown = [
@@ -106,7 +115,7 @@ export class MockAiAdapter implements AiAdapter {
       structuredJson: {
         schema_name: 'alert_reason_summary',
         schema_version: '1.0',
-        confidence: hasRefs ? 'medium' : 'low',
+        confidence,
         insufficient_context: insufficientContext,
         payload: {
           what_happened: `${ctx.alertName} アラートが ${symbolLabel} で発火した。`,
@@ -116,7 +125,7 @@ export class MockAiAdapter implements AiAdapter {
           ],
           reason_hypotheses: hasRefs
             ? ctx.references.slice(0, 2).map((r) => ({
-                text: `参照情報「${r.title}」が背景要因の候補となる可能性。`,
+                text: `参照情報（${r.sourceType ?? r.referenceType}）「${r.title}」が背景要因の候補となる可能性。`,
                 confidence: 'low' as const,
                 reference_ids: [r.id],
               }))

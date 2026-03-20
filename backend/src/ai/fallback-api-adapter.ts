@@ -45,7 +45,10 @@ export class FallbackApiAdapter implements AiAdapter {
 
     const refSummaries = ctx.references
       .slice(0, 8)
-      .map((r) => `[${r.id.slice(0, 8)}] (${r.referenceType}) ${r.title}${r.summaryText ? ': ' + r.summaryText : ''}`)
+      .map((r) => {
+        const publishedAt = r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A');
+        return `[${r.id.slice(0, 8)}] (sourceType=${r.sourceType ?? r.referenceType}, published_at=${publishedAt}) ${r.title}${r.summaryText ? ': ' + r.summaryText : ''}`;
+      })
       .join('\n');
 
     const userPrompt = [

@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { AiRouter } from '../ai/router';
 import { buildAlertSummaryContext } from '../ai/context-builder';
 import {
-  mockReferenceCollector,
+  referenceCollector,
   buildDedupeKey,
   AlertReferenceCollectionContext,
 } from '../references/collector';
@@ -93,14 +93,18 @@ async function handleCollectReferences(job: Job, logger: any) {
       triggeredAt: alertEvent.triggeredAt,
     };
 
-    // 3. Collect references via adapter (mock now, real API later)
-    const collector = mockReferenceCollector;
-    const collected = await collector.collectForAlert(ctx);
+    // 3. Collect references via adapter-based collector (docs/6 §10)
+    const collected = await referenceCollector.collectForAlert(ctx);
+    const sourceBreakdown = collected.reduce((acc: Record<string, number>, ref) => {
+      acc[ref.sourceType] = (acc[ref.sourceType] ?? 0) + 1;
+      return acc;
+    }, {});
 
     logger.info({
       event: 'references_collected',
       alert_event_id,
       count: collected.length,
+      source_breakdown: sourceBreakdown,
     });
 
     // 4. Save with deduplication (docs/6 §14.3: same source_url = skip)
@@ -109,12 +113,22 @@ async function handleCollectReferences(job: Job, logger: any) {
     const savedRefIds: string[] = [];
 
     for (const ref of collected) {
-      const dedupeKey = buildDedupeKey(
-        alertEvent.symbolId,
-        ref.sourceUrl,
-        ref.referenceType,
-        ref.title,
-      );
+      const dedupeKey = buildDedupeKey({
+        symbolId: alertEvent.symbolId,
+        sourceName: ref.sourceName,
+        sourceUrl: ref.sourceUrl,
+        referenceType: ref.referenceType,
+        title: ref.title,
+        publishedAt: ref.publishedAt,
+      });
+
+      const metadataJson = {
+        ...(ref.metadataJson ?? {}),
+        source_type: ref.sourceType,
+        category: ref.category ?? null,
+        relevance_hint: ref.relevanceHint ?? null,
+        raw_payload: ref.rawPayloadJson ?? null,
+      };
 
       try {
         const saved = await prisma.externalReference.create({
@@ -127,7 +141,7 @@ async function handleCollectReferences(job: Job, logger: any) {
             sourceUrl: ref.sourceUrl,
             publishedAt: ref.publishedAt,
             summaryText: ref.summaryText,
-            metadataJson: ref.metadataJson as any,
+            metadataJson: metadataJson as any,
             dedupeKey,
             relevanceScore: ref.relevanceScore,
           },
@@ -359,4 +373,3 @@ async function handleGenerateAlertSummary(job: Job, logger: any) {
     throw err;
   }
 }
-

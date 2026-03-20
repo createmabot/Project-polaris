@@ -91,3 +91,123 @@ MVP仕様 (docs/3, docs/19) に基づき、先日構築したバックエンドA
 - Home (`/`) の最近アラート行に銘柄リンクを追加
 - Alert Detail (`/alerts/:alertId`) の銘柄名から銘柄詳細へ遷移可能に変更
 - 既存 `GET /api/home` / `GET /api/alerts/:alertId` の契約は維持
+
+---
+
+## 追補: external references 収集基盤の本格化（adapter化）
+
+### 実装日
+- 2026-03-19
+
+### 変更概要
+- `MockReferenceCollector` 単体実装を adapter 方式へ再設計
+  - `NewsCollectorAdapter`（実データ: Google News RSS）
+  - `MockDisclosureCollectorAdapter`（mock）
+  - `MockEarningsCollectorAdapter`（mock）
+  - `CompositeReferenceCollector` で sourceType ごとに集約
+- `collect_references_for_alert` は adapter collector を利用する形へ変更
+- dedupeKey を `symbol + source + type + source_url（fallback: title/published_at）` ベースへ強化
+- `metadata_json` に `source_type / category / relevance_hint / raw_payload` を保存
+- `buildAlertSummaryContext` で参照情報の優先順を改善
+  - disclosure > earnings > news
+  - relevanceScore
+  - publishedAt
+- AI要約プロンプトに `sourceType` と `publishedAt` を明示
+
+### 実データで動作した source
+- `news`:
+  - sourceName: `google_news_rss`
+  - 取得方式: RSS Search (`https://news.google.com/rss/search`)
+
+### まだ mock の source
+- `disclosure`: mock adapter
+- `earnings`: mock adapter
+
+### 設定追加
+- `.env.example` に collector 設定を追加
+  - `REFERENCE_ENABLED_SOURCES`
+  - `REFERENCE_NEWS_RSS_BASE_URL`
+  - `REFERENCE_NEWS_MAX_ITEMS`
+  - `REFERENCE_FETCH_TIMEOUT_MS`
+
+### 動作確認結果（要点）
+- webhook 受信後に `mock_disclosure_feed` と `google_news_rss` が `external_references` に保存されることを確認
+- 同一 payload 再送で `duplicate_ignored` を確認
+- collect failure（無効RSS + newsのみ）でも
+  - `collect_references_for_alert`: failed
+  - `generate_alert_summary`: succeeded
+  - `alert_event.processing_status`: completed
+  となり、summary job が宙に浮かないことを確認
+- `unresolved_symbol / needs_review` では ai_job 未起票を再確認
+
+---
+
+## 実装メモ: disclosure 実データ adapter (TDnet)
+### 実装日
+- 2026-03-20
+
+### 変更概要
+- `disclosure` source を `MockDisclosureCollectorAdapter` から `TdnetDisclosureCollectorAdapter` に置換。
+- TDnet 日次一覧 (`I_list_001_{date}.html`) を取得し、`code/company/title/pdf/time` を抽出して `external_references` に保存可能な `CollectedReference` へ正規化。
+- `sourceType=disclosure` は維持。
+- 既存の `collect_references_for_alert -> generate_alert_summary` 導線は非破壊。
+
+### symbol 紐付け方針
+- 1次一致: TDnet の `code` と `symbolCode/tradingviewSymbol` の数字一致。
+- 2次一致: `displayName` と TDnet `companyName` の正規化部分一致。
+- TDnet 5桁コード末尾 `0` は 4桁コードへ正規化して照合。
+- 曖昧一致のみで誤紐付けしないよう、いずれにも一致しない行は採用しない。
+
+### dedupe 方針
+- DB保存時の dedupeKey は既存関数を継続利用。
+- 優先キー: `symbolId + referenceType + sourceName + normalized(sourceUrl)`。
+- fallback: `title + publishedAt`。
+- TDnet の `sourceUrl` は PDF URL (`https://www.release.tdnet.info/inbs/<pdfPath>`) を採用し、毎回変化するURLを避ける。
+
+### AI要約連携
+- `buildAlertSummaryContext` の既存優先順 (`disclosure > earnings > news`) を維持。
+- disclosure が存在すれば `reference_ids` 候補へ上位反映される。
+- `structured_json.payload.reference_ids` 仕様は変更なし。
+
+### 確認結果
+- backend `tsc` build 成功。
+- 実データ確認: `symbolCode=3989/7678/9327` で TDnet disclosure の取得を確認。
+- 実行環境制約により frontend build は `vite/esbuild spawn EPERM` で未完了。
+
+---
+
+## 実装メモ: earnings 実データ adapter (TDnet)
+### 実装日
+- 2026-03-20
+
+### 変更概要
+- `MockEarningsCollectorAdapter` を廃止し、`TdnetEarningsCollectorAdapter` を追加。
+- source は TDnet 日次一覧 (`I_list_001_{date}.html`) を利用し、決算関連タイトルのみ抽出。
+- `sourceType/referenceType` は `earnings` を維持。
+- `collectForSymbol` も adapter 単位の部分失敗を許容する実装へ改善し、全adapter失敗時のみ例外化。
+
+### earnings 抽出ルール
+- 決算関連キーワードで抽出。
+  - `決算短信`, `四半期決算`, `通期業績`, `業績予想`, `配当予想`, `決算説明`, `決算補足`, `業績修正`
+- symbol 紐付けは disclosure と同様。
+  - 1次: code一致（5桁末尾0→4桁正規化）
+  - 2次: company名とdisplayNameの正規化一致
+
+### dedupe 方針
+- 既存 `buildDedupeKey` を継続使用。
+- 優先キー: `symbolId + referenceType=earnings + sourceName + normalized(sourceUrl)`。
+- fallback: `title + publishedAt`。
+- `sourceUrl` は TDnet PDF URL を採用し、URL不安定化を回避。
+
+### AI要約連携
+- `buildAlertSummaryContext` の優先順 `disclosure > earnings > news` は維持。
+- earnings は `reference_ids` 候補に乗る状態を維持。
+
+### どこまで本実装か
+- 本実装: `news`, `disclosure`, `earnings`。
+- 未実装(mock): なし（collector adapter の主要3種は実データ化済み）。
+
+### 確認結果
+- backend `tsc` build 成功。
+- 実データ確認: `symbolCode=3989/7678/9327` で earnings の収集を確認。
+- 実行環境制約により frontend build は `vite/esbuild spawn EPERM` で未完了。

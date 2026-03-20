@@ -67,7 +67,10 @@ export class LocalLlmAdapter implements AiAdapter {
   private _buildUserPrompt(ctx: AlertSummaryContext, symbolLabel: string, hasRefs: boolean): string {
     const refSummaries = ctx.references
       .slice(0, 5)
-      .map((r, i) => `[ref${i + 1}] (${r.referenceType}) ${r.title}${r.summaryText ? ': ' + r.summaryText : ''}`)
+      .map((r, i) => {
+        const publishedAt = r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A');
+        return `[ref${i + 1}] (sourceType=${r.sourceType ?? r.referenceType}, published_at=${publishedAt}) ${r.title}${r.summaryText ? ': ' + r.summaryText : ''}`;
+      })
       .join('\n');
 
     return [
@@ -159,7 +162,7 @@ export class LocalLlmAdapter implements AiAdapter {
       `**Alert:** ${ctx.alertName}`,
       '',
       hasRefs
-        ? `**参照情報 (${ctx.references.length}件):**\n${ctx.references.slice(0, 3).map(r => `- [${r.referenceType}] ${r.title}`).join('\n')}`
+        ? `**参照情報 (${ctx.references.length}件):**\n${ctx.references.slice(0, 3).map(r => `- [${r.sourceType ?? r.referenceType}] ${r.title} (${r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A')})`).join('\n')}`
         : '> 外部参照情報なし。背景要因の特定には追加情報が必要です。',
     ].join('\n');
 

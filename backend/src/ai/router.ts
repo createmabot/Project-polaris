@@ -11,10 +11,11 @@
  *   durationMs, estimatedTokens, estimatedCostUsd
  */
 
-import { AlertSummaryContext, AlertSummaryOutput } from './adapter';
+import { AlertSummaryContext, AlertSummaryOutput, MockAiAdapter } from './adapter';
 import { LocalLlmAdapter } from './local-llm-adapter';
 import { FallbackApiAdapter } from './fallback-api-adapter';
 import { AI_CONFIG, EscalationReason, isFallbackAvailable, shouldEscalate } from './config';
+import { env } from '../env';
 
 export interface AiExecutionLog {
   initialModel: string;
@@ -34,9 +35,11 @@ export interface AiRouterResult {
 
 export class AiRouter {
   private readonly localAdapter: LocalLlmAdapter;
+  private readonly mockAdapter: MockAiAdapter;
 
   constructor() {
     this.localAdapter = new LocalLlmAdapter();
+    this.mockAdapter = new MockAiAdapter();
   }
 
   /**
@@ -125,7 +128,24 @@ export class AiRouter {
       return { output: localOutput, log };
     }
 
-    // ── Step 5: Everything failed — throw so the job is marked failed ──────
+    // ── Step 5: Dev fallback (mock) when local/api are both unavailable ─────
+    if (env.APP_ENV !== 'production') {
+      const mockOutput = await this.mockAdapter.generateAlertSummary(ctx);
+      const mockMeta = (mockOutput as any)?._meta ?? {};
+      const log: AiExecutionLog = {
+        initialModel: localModelName,
+        finalModel: this.mockAdapter.modelName,
+        escalated: false,
+        escalationReason: null,
+        retryCount,
+        durationMs: Date.now() - startedAt,
+        estimatedTokens: mockMeta.estimatedTokens ?? 0,
+        estimatedCostUsd: 0,
+      };
+      return { output: mockOutput, log };
+    }
+
+    // ── Step 6: Everything failed — throw so the job is marked failed ──────
     throw lastLocalError ?? new Error('AI execution failed (both local and fallback)');
   }
 }

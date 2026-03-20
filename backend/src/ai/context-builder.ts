@@ -13,16 +13,31 @@ export async function buildAlertSummaryContext(alertEventId: string): Promise<Al
     where: { id: alertEventId },
     include: {
       symbol: true,
-      // Load associated references sorted by relevance desc (docs/6 §13 relevance ordering)
       externalReferences: {
-        orderBy: [{ relevanceScore: 'desc' }, { publishedAt: 'desc' }],
-        take: 10, // top-10 to stay within context window
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        take: 30,
       },
     },
   });
 
+  const typePriority: Record<string, number> = {
+    disclosure: 3,
+    earnings: 2,
+    news: 1,
+  };
+
+  const sortedReferences = [...event.externalReferences].sort((a, b) => {
+    const typeDiff = (typePriority[b.referenceType] ?? 0) - (typePriority[a.referenceType] ?? 0);
+    if (typeDiff !== 0) return typeDiff;
+    const relevanceDiff = (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+    if (relevanceDiff !== 0) return relevanceDiff;
+    const publishedA = a.publishedAt ? a.publishedAt.getTime() : 0;
+    const publishedB = b.publishedAt ? b.publishedAt.getTime() : 0;
+    return publishedB - publishedA;
+  }).slice(0, 10);
+
   // Build reference summaries for structured_json / AI prompt
-  const referenceSummaries = event.externalReferences.map((ref: {
+  const referenceSummaries = sortedReferences.map((ref: {
     id: string;
     referenceType: string;
     title: string;
@@ -34,10 +49,12 @@ export async function buildAlertSummaryContext(alertEventId: string): Promise<Al
   }) => ({
     id: ref.id,
     referenceType: ref.referenceType,
+    sourceType: ref.referenceType,
     title: ref.title,
     sourceName: ref.sourceName,
     sourceUrl: ref.sourceUrl,
     publishedAt: ref.publishedAt,
+    publishedAtIso: ref.publishedAt ? ref.publishedAt.toISOString() : null,
     summaryText: ref.summaryText,
     relevanceScore: ref.relevanceScore,
   }));

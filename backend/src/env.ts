@@ -27,6 +27,24 @@ const envSchema = z.object({
 
   // ── Logging ──
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
+
+  // ── External references collector (docs/6) ──
+  REFERENCE_ENABLED_SOURCES: z.string().default('news,disclosure,earnings'),
+  REFERENCE_NEWS_RSS_BASE_URL: z.string().url().default('https://news.google.com/rss/search'),
+  REFERENCE_NEWS_MAX_ITEMS: z.coerce.number().int().positive().default(5),
+  REFERENCE_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  REFERENCE_DISCLOSURE_TDNET_LIST_URL_TEMPLATE: z
+    .string()
+    .default('https://www.release.tdnet.info/inbs/I_list_001_{date}.html'),
+  REFERENCE_DISCLOSURE_MAX_ITEMS: z.coerce.number().int().positive().default(5),
+  REFERENCE_DISCLOSURE_ALERT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(3),
+  REFERENCE_DISCLOSURE_SYMBOL_LOOKBACK_DAYS: z.coerce.number().int().positive().default(14),
+  REFERENCE_EARNINGS_TDNET_LIST_URL_TEMPLATE: z
+    .string()
+    .default('https://www.release.tdnet.info/inbs/I_list_001_{date}.html'),
+  REFERENCE_EARNINGS_MAX_ITEMS: z.coerce.number().int().positive().default(5),
+  REFERENCE_EARNINGS_ALERT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(7),
+  REFERENCE_EARNINGS_SYMBOL_LOOKBACK_DAYS: z.coerce.number().int().positive().default(30),
 });
 
 const _env = envSchema.safeParse(process.env);
@@ -37,4 +55,3 @@ if (!_env.success) {
 }
 
 export const env = _env.data;
-
