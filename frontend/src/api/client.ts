@@ -52,6 +52,13 @@ export async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   return json.data;
 }
 
+export async function postApi<T>(url: string, body: unknown): Promise<T> {
+  return fetchApi<T>(url, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * SWR fetcher wrapper to easily use `fetchApi` with `useSWR`
  */

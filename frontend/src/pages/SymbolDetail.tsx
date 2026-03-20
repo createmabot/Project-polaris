@@ -44,17 +44,12 @@ export default function SymbolDetail() {
       return (
         <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
           <h2>銘柄が見つかりません</h2>
-          <p>指定された銘柄IDは存在しないか、参照できません。</p>
-          <Link href="/">← ホームへ戻る</Link>
+          <p>指定された銘柄IDは存在しないか、削除されています。</p>
+          <Link href="/">ホームへ戻る</Link>
         </div>
       );
     }
-
-    return (
-      <div style={{ padding: '2rem', color: 'red', fontFamily: 'sans-serif' }}>
-        エラーが発生しました: {error.message}
-      </div>
-    );
+    return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
   }
 
   if (!data) return null;
@@ -64,15 +59,21 @@ export default function SymbolDetail() {
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem' }}>
-        <Link href="/" style={{ color: '#666', textDecoration: 'none' }}>← ホームへ戻る</Link>
+        <Link href="/" style={{ color: '#666', textDecoration: 'none' }}>
+          ホームへ戻る
+        </Link>
       </div>
 
       <h1>{data.symbol.display_name || data.symbol.symbol}</h1>
       <p style={{ color: '#666' }}>
-        コード: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> |
-        市場: <code>{data.symbol.market_code || '-'}</code> |
+        コード: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | 市場: <code>{data.symbol.market_code || '-'}</code> |
         処理状態: <code>{data.latest_processing_status}</code>
       </p>
+      <div style={{ marginBottom: '1rem' }}>
+        <Link href={`/compare?symbolIds=${data.symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+          比較対象に追加
+        </Link>
+      </div>
 
       <section style={{ marginTop: '2rem' }}>
         <h2>最近のアラート</h2>
@@ -82,19 +83,16 @@ export default function SymbolDetail() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {data.recent_alerts.map((alert) => (
               <li key={alert.id} style={{ borderBottom: '1px solid #eee', padding: '1rem 0' }}>
-                <div>
-                  <strong>
-                    <Link href={`/alerts/${alert.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
-                      {alert.alert_name}
-                    </Link>
-                  </strong>
-                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
-                    発生時刻: {formatDate(alert.triggered_at || alert.received_at)} |
-                    ステータス: <code>{alert.processing_status}</code>
-                  </div>
+                <strong>
+                  <Link href={`/alerts/${alert.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                    {alert.alert_name}
+                  </Link>
+                </strong>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                  発生: {formatDate(alert.triggered_at || alert.received_at)} | 状態: <code>{alert.processing_status}</code>
                 </div>
                 {alert.related_ai_summary && alert.related_ai_summary.key_points.length > 0 && (
-                  <ul style={{ margin: '0.5rem 0 0 1rem', color: '#333' }}>
+                  <ul style={{ margin: '0.5rem 0 0 1rem' }}>
                     {alert.related_ai_summary.key_points.map((point, index) => (
                       <li key={`${alert.related_ai_summary?.id}-${index}`}>{point}</li>
                     ))}
@@ -107,105 +105,70 @@ export default function SymbolDetail() {
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>主要なAI論点</h2>
+        <h2>最新AI論点</h2>
         {data.latest_ai_thesis_summary ? (
           <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
             {data.latest_ai_thesis_summary.title && <h3 style={{ marginTop: 0 }}>{data.latest_ai_thesis_summary.title}</h3>}
-            {data.latest_ai_thesis_summary.overall_view && (
-              <p style={{ marginTop: 0 }}>{data.latest_ai_thesis_summary.overall_view}</p>
-            )}
-            {thesisPoints.length > 0 && (
+            {thesisPoints.length > 0 ? (
               <ul style={{ margin: '0.5rem 0 0 1rem' }}>
                 {thesisPoints.map((point, index) => (
                   <li key={`thesis-${index}`}>{point}</li>
                 ))}
               </ul>
-            )}
-            {thesisPoints.length === 0 && (
-              <p style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{data.latest_ai_thesis_summary.body_markdown}</p>
+            ) : (
+              <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{data.latest_ai_thesis_summary.body_markdown}</p>
             )}
             <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#777' }}>
               生成日時: {formatDate(data.latest_ai_thesis_summary.generated_at)}
             </div>
           </div>
         ) : (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
-            銘柄のAI論点はまだ生成されていません。
-          </div>
+          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>AI要約はまだ生成されていません。</div>
         )}
       </section>
 
       <section style={{ marginTop: '2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>研究ノート (Research Note)</h2>
+          <h2>Research Note</h2>
           {data.latest_active_note ? (
-            <Link href={`/notes/${data.latest_active_note.id}`} style={{ background: '#0066cc', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
-              ノートを編集する
+            <Link
+              href={`/notes/${data.latest_active_note.id}`}
+              style={{ background: '#0066cc', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px' }}
+            >
+              ノートを編集
             </Link>
           ) : (
-            <Link href={`/symbols/${symbolId}/note/new`} style={{ background: '#28a745', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px', fontSize: '0.9rem' }}>
+            <Link
+              href={`/symbols/${symbolId}/note/new`}
+              style={{ background: '#28a745', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px' }}
+            >
               ノートを新規作成
             </Link>
           )}
         </div>
+
         {data.latest_active_note ? (
-          <div style={{ background: '#fff', border: '1px solid #ddd', padding: '1.5rem', borderRadius: '4px', marginTop: '1rem' }}>
-            <h3 style={{ marginTop: 0, color: '#333' }}>{data.latest_active_note.title}</h3>
-            <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '1rem' }}>
-              最終更新: {formatDate(data.latest_active_note.updatedAt)} | ステータス: <code>{data.latest_active_note.status}</code>
+          <div style={{ background: '#fff', border: '1px solid #ddd', padding: '1.2rem', borderRadius: '4px', marginTop: '1rem' }}>
+            <h3 style={{ marginTop: 0 }}>{data.latest_active_note.title}</h3>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.8rem' }}>
+              最終更新: {formatDate(data.latest_active_note.updatedAt)} | 状態: <code>{data.latest_active_note.status}</code>
             </div>
-            
-            {data.latest_active_note.thesisText && (
-              <div style={{ marginBottom: '1rem' }}>
-                <strong>■ 投資仮説</strong>
-                <p style={{ whiteSpace: 'pre-wrap', margin: '0.5rem 0 0 0' }}>{data.latest_active_note.thesisText}</p>
-              </div>
-            )}
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '1rem', background: '#f9f9f9', padding: '1rem', borderRadius: '4px' }}>
-              {data.latest_active_note.entryConditionText && (
-                <div>
-                  <strong>エントリー条件:</strong>
-                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.entryConditionText}</p>
-                </div>
-              )}
-              {data.latest_active_note.takeProfitText && (
-                <div>
-                  <strong>利確条件:</strong>
-                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.takeProfitText}</p>
-                </div>
-              )}
-              {data.latest_active_note.stopLossText && (
-                <div>
-                  <strong>損切条件:</strong>
-                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.stopLossText}</p>
-                </div>
-              )}
-              {data.latest_active_note.invalidationText && (
-                <div>
-                  <strong>仮説崩壊条件:</strong>
-                  <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.9rem' }}>{data.latest_active_note.invalidationText}</p>
-                </div>
-              )}
-            </div>
-            
+            {data.latest_active_note.thesisText && <p style={{ whiteSpace: 'pre-wrap' }}>{data.latest_active_note.thesisText}</p>}
             {data.latest_active_note.nextReviewAt && (
-              <div style={{ marginTop: '1rem', color: '#d9534f', fontSize: '0.9rem', fontWeight: 'bold' }}>
-                📅 再確認予定日: {formatDate(data.latest_active_note.nextReviewAt).split(' ')[0]}
-              </div>
+              <div style={{ color: '#d9534f', fontWeight: 600 }}>次回見直し: {formatDate(data.latest_active_note.nextReviewAt)}</div>
             )}
           </div>
         ) : (
           <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666', marginTop: '1rem' }}>
-            この銘柄のアクティブな研究ノートはありません。
+            アクティブな research note はありません。
           </div>
         )}
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>関連情報リンク</h2>
+        <h2>関連参照情報</h2>
         {data.related_references.length === 0 ? (
-          <p style={{ color: '#666' }}>関連するニュース・開示情報はありません。</p>
+          <p style={{ color: '#666' }}>関連参照情報はありません。</p>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {data.related_references.map((reference) => (
@@ -220,9 +183,7 @@ export default function SymbolDetail() {
                 ) : (
                   <strong>{reference.title}</strong>
                 )}
-                {reference.summary_text && (
-                  <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem' }}>{reference.summary_text}</p>
-                )}
+                {reference.summary_text && <p style={{ margin: '4px 0 0 0' }}>{reference.summary_text}</p>}
               </li>
             ))}
           </ul>
@@ -231,4 +192,3 @@ export default function SymbolDetail() {
     </div>
   );
 }
-

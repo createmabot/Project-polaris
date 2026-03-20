@@ -7,6 +7,7 @@ import { homeRoutes } from './routes/home';
 import { alertRoutes } from './routes/alerts';
 import { symbolRoutes } from './routes/symbols';
 import { noteRoutes } from './routes/notes';
+import { comparisonRoutes } from './routes/comparisons';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import crypto from 'crypto';
@@ -34,6 +35,7 @@ fastify.register(homeRoutes, { prefix: '/api/home' });
 fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
 fastify.register(noteRoutes, { prefix: '/api/notes' });
+fastify.register(comparisonRoutes, { prefix: '/api/comparisons' });
 
 const start = async () => {
   try {

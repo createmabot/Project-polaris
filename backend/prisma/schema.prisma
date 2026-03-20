@@ -17,6 +17,7 @@ model User {
   webhookTokens WebhookToken[]
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
+  comparisonSessions ComparisonSession[]
 
   @@map("users")
 }
@@ -34,6 +35,7 @@ model Symbol {
   alertEvents        AlertEvent[]
   externalReferences ExternalReference[]
   researchNotes      ResearchNote[]
+  comparisonSymbols  ComparisonSymbol[]
 
   @@map("symbols")
 }
@@ -212,4 +214,49 @@ model NoteRevision {
 
   @@unique([researchNoteId, revisionNo])
   @@map("note_revisions")
+}
+
+model ComparisonSession {
+  id             String   @id @default(uuid())
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id])
+  name           String?
+  comparisonType String   @default("symbol")
+  status         String   @default("ready")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  comparisonSymbols ComparisonSymbol[]
+  comparisonResults ComparisonResult[]
+
+  @@index([createdAt])
+  @@map("comparison_sessions")
+}
+
+model ComparisonSymbol {
+  id                  String            @id @default(uuid())
+  comparisonSessionId String
+  comparisonSession   ComparisonSession @relation(fields: [comparisonSessionId], references: [id])
+  symbolId            String
+  symbol              Symbol            @relation(fields: [symbolId], references: [id])
+  sortOrder           Int               @default(0)
+  createdAt           DateTime          @default(now())
+
+  @@unique([comparisonSessionId, symbolId])
+  @@index([comparisonSessionId, sortOrder])
+  @@index([symbolId])
+  @@map("comparison_symbols")
+}
+
+model ComparisonResult {
+  id                  String            @id @default(uuid())
+  comparisonSessionId String
+  comparisonSession   ComparisonSession @relation(fields: [comparisonSessionId], references: [id])
+  comparedMetricJson  Json?
+  generatedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([comparisonSessionId, generatedAt])
+  @@map("comparison_results")
 }

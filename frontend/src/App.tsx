@@ -3,6 +3,8 @@ import Home from "./pages/Home";
 import AlertDetail from "./pages/AlertDetail";
 import SymbolDetail from "./pages/SymbolDetail";
 import NoteDetail from "./pages/NoteDetail";
+import CompareCreate from "./pages/CompareCreate";
+import ComparisonDetail from "./pages/ComparisonDetail";
 
 function App() {
   return (
@@ -12,6 +14,8 @@ function App() {
       <Route path="/symbols/:symbolId" component={SymbolDetail} />
       <Route path="/notes/:noteId" component={NoteDetail} />
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
+      <Route path="/compare" component={CompareCreate} />
+      <Route path="/comparisons/:comparisonId" component={ComparisonDetail} />
       <Route>404: No such page!</Route>
     </Switch>
   );

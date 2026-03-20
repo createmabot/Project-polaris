@@ -146,3 +146,74 @@ export type SymbolDetailData = {
   latest_active_note: ResearchNoteDto | null;
   latest_processing_status: string;
 };
+
+export type ComparisonCreateData = {
+  comparison_session: {
+    id: string;
+    name: string | null;
+    comparison_type: string;
+    status: string;
+    created_at: string;
+  };
+  comparison_symbols: Array<{
+    symbol_id: string;
+    sort_order: number;
+  }>;
+};
+
+export type ComparisonSymbolCard = {
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+  };
+  latest_ai_thesis_summary: {
+    id: string;
+    title: string | null;
+    body_markdown: string;
+    generated_at: string | null;
+    structured_json: any;
+  } | null;
+  latest_active_note: ResearchNoteDto | null;
+  recent_alerts: Array<{
+    id: string;
+    alert_name: string;
+    alert_type: string | null;
+    timeframe: string | null;
+    triggered_at: string | null;
+    received_at: string | null;
+    processing_status: string;
+    related_ai_summary: {
+      id: string;
+      title: string | null;
+      generated_at: string | null;
+      key_points: string[];
+    } | null;
+  }>;
+  related_references: Array<{
+    id: string;
+    reference_type: string;
+    title: string;
+    source_name: string | null;
+    source_url: string | null;
+    published_at: string | null;
+    summary_text: string | null;
+  }>;
+  latest_processing_status: string;
+};
+
+export type ComparisonDetailData = {
+  comparison_header: {
+    comparison_id: string;
+    name: string | null;
+    comparison_type: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    symbol_count: number;
+  };
+  symbols: ComparisonSymbolCard[];
+};
