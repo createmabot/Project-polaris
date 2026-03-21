@@ -50,19 +50,15 @@ function createRuntime(): RuntimeState {
   };
 }
 
-const createPrismaKnownError = () => {
-  return class FakeKnownError extends Error {
+vi.mock('../src/db', () => {
+  class FakePrismaKnownError extends Error {
     code: string;
     constructor(code: string) {
       super(code);
       this.code = code;
     }
-  };
-};
+  }
 
-const FakePrismaKnownError = createPrismaKnownError();
-
-vi.mock('../src/db', () => {
   const prisma = {
     webhookReceipt: {
       create: async ({ data }: any) => {
@@ -437,6 +433,14 @@ vi.mock('../src/ai/router', () => {
 });
 
 vi.mock('@prisma/client', () => {
+  class FakePrismaKnownError extends Error {
+    code: string;
+    constructor(code: string) {
+      super(code);
+      this.code = code;
+    }
+  }
+
   return {
     Prisma: {
       PrismaClientKnownRequestError: FakePrismaKnownError,
