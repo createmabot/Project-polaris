@@ -60,3 +60,9 @@ pnpm run dev
 - `pnpm run build`: 全パッケージのビルド
 - `pnpm run test`: 全パッケージのテスト
 
+
+## Integration test (DB required)
+- `pnpm run test:integration:symbol-snapshot-db`
+  - starts Docker `postgres`
+  - runs `prisma migrate deploy` in backend
+  - runs `backend/test/symbol-snapshot.db.integration.test.ts`

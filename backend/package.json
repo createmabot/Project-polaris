@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:integration:symbol-snapshot-db:prepare": "prisma migrate deploy",
     "test:snapshot-failover": "vitest run test/snapshot-failover.test.ts",
     "test:integration:symbol-snapshot-db": "vitest run test/symbol-snapshot.db.integration.test.ts",
     "test:e2e:snapshot-route-failover": "vitest run test/snapshot-route-failover.e2e.test.ts",

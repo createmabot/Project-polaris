@@ -11,10 +11,7 @@ type FetchMode = 'primary_success' | 'secondary_success' | 'all_fail';
 const TEST_SYMBOL_CODE = '7203';
 const TEST_MARKET_CODE = 'TSE';
 
-let symbolId = '';
 let fetchMode: FetchMode = 'primary_success';
-let dbAvailable = true;
-let dbSkipReason = '';
 
 function createFetchStub() {
   return vi.fn(async (input: string | URL) => {
@@ -85,15 +82,14 @@ function assertSnapshotShape(snapshot: any) {
 }
 
 describe('symbols route current_snapshot db integration', () => {
-  beforeAll(async () => {
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-    } catch (error) {
-      dbAvailable = false;
-      dbSkipReason = error instanceof Error ? error.message : String(error);
-      return;
-    }
+  afterAll(async () => {
+    vi.unstubAllGlobals();
+    await prisma.$disconnect();
+  });
 
+  it('keeps API contract across failover cases with real DB symbol', async () => {
+    await prisma.$queryRaw`SELECT 1`;
+    let symbolId = '';
     const unique = randomUUID().slice(0, 8);
     const created = await prisma.symbol.create({
       data: {
@@ -105,28 +101,6 @@ describe('symbols route current_snapshot db integration', () => {
       },
     });
     symbolId = created.id;
-  });
-
-  afterAll(async () => {
-    if (!dbAvailable) {
-      await prisma.$disconnect();
-      return;
-    }
-
-    if (symbolId) {
-      await prisma.symbol.deleteMany({
-        where: { id: symbolId },
-      });
-    }
-    vi.unstubAllGlobals();
-    await prisma.$disconnect();
-  });
-
-  it('keeps API contract across failover cases with real DB symbol', async () => {
-    if (!dbAvailable) {
-      console.warn(`symbol-snapshot db integration skipped: ${dbSkipReason}`);
-      return;
-    }
 
     const app = await createApp();
     const fetchStub = createFetchStub();
@@ -141,30 +115,37 @@ describe('symbols route current_snapshot db integration', () => {
       { mode: 'all_fail', expectedSource: null },
     ];
 
-    for (const scenario of scenarios) {
-      fetchMode = scenario.mode;
-      __resetSnapshotCacheForTests();
+    try {
+      for (const scenario of scenarios) {
+        fetchMode = scenario.mode;
+        __resetSnapshotCacheForTests();
 
-      const res = await app.inject({
-        method: 'GET',
-        url: `/api/symbols/${symbolId}`,
-      });
+        const res = await app.inject({
+          method: 'GET',
+          url: `/api/symbols/${symbolId}`,
+        });
 
-      expect(res.statusCode).toBe(200);
-      const body = res.json();
-      expect(body.data).toBeTruthy();
-      expect(body.meta).toBeTruthy();
-      expect(body.error).toBeNull();
+        expect(res.statusCode).toBe(200);
+        const body = res.json();
+        expect(body.data).toBeTruthy();
+        expect(body.meta).toBeTruthy();
+        expect(body.error).toBeNull();
 
-      if (scenario.expectedSource === null) {
-        expect(body.data.current_snapshot).toBeNull();
-      } else {
-        expect(body.data.current_snapshot).toBeTruthy();
-        assertSnapshotShape(body.data.current_snapshot);
-        expect(body.data.current_snapshot.source_name).toBe(scenario.expectedSource);
+        if (scenario.expectedSource === null) {
+          expect(body.data.current_snapshot).toBeNull();
+        } else {
+          expect(body.data.current_snapshot).toBeTruthy();
+          assertSnapshotShape(body.data.current_snapshot);
+          expect(body.data.current_snapshot.source_name).toBe(scenario.expectedSource);
+        }
+      }
+    } finally {
+      await app.close();
+      if (symbolId) {
+        await prisma.symbol.deleteMany({
+          where: { id: symbolId },
+        });
       }
     }
-
-    await app.close();
   });
 });
