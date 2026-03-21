@@ -83,6 +83,7 @@ pnpm run dev
 ### `market_status` policy (MVP)
 - `stooq_daily`: daily close source, reported as `closed` (or `unknown` when stale/future-inconsistent)
 - `yahoo_chart`: uses `marketState` + `as_of` freshness + JP trading session guard for conservative `open/closed/unknown`
+- JP equities (`TSE/JP/TYO`) also apply a built-in JP market holiday calendar (2024-2028, no external API dependency), so holidays are treated as non-trading days.
 
 ### Troubleshooting
 1. Docker daemon check:

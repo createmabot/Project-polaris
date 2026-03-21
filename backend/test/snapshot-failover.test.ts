@@ -173,4 +173,103 @@ describe('current_snapshot failover', () => {
     expect(snapshot?.source_name).toBe('yahoo_chart');
     expect(snapshot?.market_status).toBe('unknown');
   });
+
+  it('marks fresh yahoo REGULAR as open during JP trading session on a non-holiday weekday', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+
+    const freshEpochSec = Math.floor(new Date('2026-03-18T00:55:00.000Z').getTime() / 1000); // 09:55 JST
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: freshEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('open');
+  });
+
+  it('marks yahoo REGULAR as closed on JP market holiday', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T01:00:00.000Z')); // 10:00 JST (New Year holiday)
+
+    const freshEpochSec = Math.floor(new Date('2026-01-01T00:55:00.000Z').getTime() / 1000); // 09:55 JST
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: freshEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('closed');
+  });
+
+  it('marks yahoo REGULAR as closed on weekend for JP market', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-22T01:00:00.000Z')); // 10:00 JST (Sunday)
+
+    const freshEpochSec = Math.floor(new Date('2026-03-22T00:55:00.000Z').getTime() / 1000); // 09:55 JST
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: freshEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('closed');
+  });
 });
