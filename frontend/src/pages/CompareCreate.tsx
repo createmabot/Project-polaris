@@ -28,7 +28,7 @@ export default function CompareCreate() {
 
     const symbolIds = parseSymbolIds(symbolIdsText);
     if (symbolIds.length < 2 || symbolIds.length > 4) {
-      setError('比較対象は2?4銘柄で指定してください。');
+      setError('比較対象は2〜4銘柄で指定してください。');
       return;
     }
 
@@ -57,7 +57,7 @@ export default function CompareCreate() {
       </div>
 
       <h1>銘柄比較</h1>
-      <p style={{ color: '#666' }}>2?4銘柄を選択して、AI要約・ノート・アラート・参照情報を横並びで確認します。</p>
+      <p style={{ color: '#666' }}>2〜4銘柄を選択して、AI要約・ノート・アラート・参照情報を横並びで確認します。</p>
 
       <form onSubmit={onSubmit} style={{ marginTop: '1.5rem', display: 'grid', gap: '1rem' }}>
         <label style={{ display: 'grid', gap: '0.5rem' }}>

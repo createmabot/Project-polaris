@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import useSWR, { mutate } from 'swr';
 import { useRoute, useLocation, Link } from 'wouter';
 import { swrFetcher, fetchApi } from '../api/client';
@@ -40,7 +40,7 @@ export default function NoteDetail() {
     invalidationText: '',
     nextReviewAt: '',
     status: 'active',
-    changeSummary: ''
+    changeSummary: '',
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -58,14 +58,14 @@ export default function NoteDetail() {
         invalidationText: note.invalidationText || '',
         nextReviewAt: note.nextReviewAt ? note.nextReviewAt.substring(0, 10) : '',
         status: note.status || 'active',
-        changeSummary: ''
+        changeSummary: '',
       });
     }
   }, [note, isEditMatch]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSave = async () => {
@@ -82,11 +82,11 @@ export default function NoteDetail() {
           takeProfitText: formData.takeProfitText,
           stopLossText: formData.stopLossText,
           invalidationText: formData.invalidationText,
-          nextReviewAt: formData.nextReviewAt || undefined
+          nextReviewAt: formData.nextReviewAt || undefined,
         };
         const createdNote = await fetchApi<ResearchNoteDto>('/api/notes', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
         setLocation(`/notes/${createdNote.id}`);
       } else if (isEditMatch && noteId) {
@@ -100,15 +100,15 @@ export default function NoteDetail() {
           invalidationText: formData.invalidationText,
           nextReviewAt: formData.nextReviewAt || undefined,
           status: formData.status,
-          changeSummary: formData.changeSummary || '更新'
+          changeSummary: formData.changeSummary || '更新',
         };
         await fetchApi(`/api/notes/${noteId}`, {
           method: 'PATCH',
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
         });
         mutate(`/api/notes/${noteId}`);
         mutate(`/api/notes/${noteId}/revisions`);
-        setFormData(prev => ({ ...prev, changeSummary: '' }));
+        setFormData((prev) => ({ ...prev, changeSummary: '' }));
         alert('保存しました');
       }
     } catch (err: any) {
@@ -131,14 +131,12 @@ export default function NoteDetail() {
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto', fontFamily: 'sans-serif', display: 'flex', gap: '2rem' }}>
-      
-      {/* メイン編集エリア */}
       <div style={{ flex: '1 1 70%' }}>
         <div style={{ marginBottom: '1rem' }}>
-          <Link href={backLink} style={{ color: '#666', textDecoration: 'none' }}>← 銘柄詳細へ戻る</Link>
+          <Link href={backLink} style={{ color: '#666', textDecoration: 'none' }}>銘柄詳細へ戻る</Link>
         </div>
 
-        <h1>{isNew ? '研究ノート作成' : '研究ノート編集'}</h1>
+        <h1>{isNew ? 'Research Note 新規作成' : 'Research Note 編集'}</h1>
 
         {saveError && (
           <div style={{ padding: '1rem', background: '#fee', color: '#c00', marginBottom: '1rem', borderRadius: '4px' }}>
@@ -148,34 +146,34 @@ export default function NoteDetail() {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
-            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>タイトル <span style={{color:'red'}}>*</span></label>
-            <input 
-              name="title" 
-              value={formData.title} 
-              onChange={handleChange} 
-              style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }} 
-              placeholder="例: 中期成長仮説"
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>タイトル <span style={{ color: 'red' }}>*</span></label>
+            <input
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}
+              placeholder="例: 中期投資の仮説"
             />
           </div>
 
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>投資仮説 (Thesis)</label>
-            <textarea 
-              name="thesisText" 
-              value={formData.thesisText} 
-              onChange={handleChange} 
+            <textarea
+              name="thesisText"
+              value={formData.thesisText}
+              onChange={handleChange}
               rows={4}
               style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}
-              placeholder="なぜこの銘柄を買う/売るか？"
+              placeholder="この銘柄をどう評価するか"
             />
           </div>
 
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>基本シナリオ (Scenario)</label>
-            <textarea 
-              name="scenarioText" 
-              value={formData.scenarioText} 
-              onChange={handleChange} 
+            <textarea
+              name="scenarioText"
+              value={formData.scenarioText}
+              onChange={handleChange}
               rows={3}
               style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box' }}
             />
@@ -198,22 +196,22 @@ export default function NoteDetail() {
               <textarea name="stopLossText" value={formData.stopLossText} onChange={handleChange} rows={2} style={{ width: '100%', boxSizing: 'border-box' }} />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>仮説崩壊条件 (Invalidation)</label>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>仮説破綻条件 (Invalidation)</label>
               <textarea name="invalidationText" value={formData.invalidationText} onChange={handleChange} rows={2} style={{ width: '100%', boxSizing: 'border-box' }} />
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>再確認日</label>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>次回見直し日</label>
               <input type="date" name="nextReviewAt" value={formData.nextReviewAt} onChange={handleChange} style={{ padding: '0.5rem' }} />
             </div>
             {!isNew && (
               <div>
                 <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px' }}>ステータス</label>
                 <select name="status" value={formData.status} onChange={handleChange} style={{ padding: '0.5rem' }}>
-                  <option value="active">Active (監視中)</option>
-                  <option value="archived">Archived (終了)</option>
+                  <option value="active">Active (有効)</option>
+                  <option value="archived">Archived (アーカイブ)</option>
                 </select>
               </div>
             )}
@@ -221,25 +219,30 @@ export default function NoteDetail() {
 
           {!isNew && (
             <div>
-              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px', color: '#0066cc' }}>✏️ 変更内容の要約 (Change Summary)</label>
-              <input 
-                name="changeSummary" 
-                value={formData.changeSummary} 
-                onChange={handleChange} 
-                style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box', border: '1px solid #0066cc' }} 
-                placeholder="例: 損切ラインを切り上げ"
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '4px', color: '#0066cc' }}>変更要約 (Change Summary)</label>
+              <input
+                name="changeSummary"
+                value={formData.changeSummary}
+                onChange={handleChange}
+                style={{ width: '100%', padding: '0.5rem', boxSizing: 'border-box', border: '1px solid #0066cc' }}
+                placeholder="例: 損切ラインを引き上げ"
               />
             </div>
           )}
 
           <div style={{ marginTop: '1rem' }}>
-            <button 
-              onClick={handleSave} 
+            <button
+              onClick={handleSave}
               disabled={isSaving || !formData.title}
               style={{
-                background: '#0066cc', color: '#fff', border: 'none', padding: '0.75rem 2rem', 
-                fontSize: '1rem', borderRadius: '4px', cursor: (isSaving || !formData.title) ? 'not-allowed' : 'pointer',
-                opacity: (isSaving || !formData.title) ? 0.6 : 1
+                background: '#0066cc',
+                color: '#fff',
+                border: 'none',
+                padding: '0.75rem 2rem',
+                fontSize: '1rem',
+                borderRadius: '4px',
+                cursor: (isSaving || !formData.title) ? 'not-allowed' : 'pointer',
+                opacity: (isSaving || !formData.title) ? 0.6 : 1,
               }}
             >
               {isSaving ? '保存中...' : '保存'}
@@ -248,7 +251,6 @@ export default function NoteDetail() {
         </div>
       </div>
 
-      {/* サイドバー：更新履歴 */}
       {!isNew && (
         <div style={{ flex: '1 1 30%', background: '#f9f9f9', padding: '1.5rem', borderRadius: '8px', alignSelf: 'flex-start' }}>
           <h3 style={{ marginTop: 0 }}>更新履歴 (Revisions)</h3>
@@ -272,7 +274,7 @@ export default function NoteDetail() {
           )}
         </div>
       )}
-
     </div>
   );
 }
+

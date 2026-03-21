@@ -1,4 +1,4 @@
-import { ApiResponse } from './types';
+﻿import { ApiResponse } from './types';
 
 class ApiError extends Error {
   public code: string;
@@ -63,3 +63,4 @@ export async function postApi<T>(url: string, body: unknown): Promise<T> {
  * SWR fetcher wrapper to easily use `fetchApi` with `useSWR`
  */
 export const swrFetcher = (url: string) => fetchApi<any>(url);
+

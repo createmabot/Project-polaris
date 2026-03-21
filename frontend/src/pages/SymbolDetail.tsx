@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+﻿import useSWR from 'swr';
 import { Link, useRoute } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { SymbolDetailData } from '../api/types';
@@ -192,3 +192,4 @@ export default function SymbolDetail() {
     </div>
   );
 }
+

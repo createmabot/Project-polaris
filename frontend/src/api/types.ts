@@ -1,4 +1,4 @@
-// Defines the frontend response shape mimicking docs/3
+﻿// Defines the frontend response shape mimicking docs/3
 
 export type ApiResponse<T> = {
   data: T | null;
@@ -243,3 +243,4 @@ export type ComparisonGenerateData = {
     prompt_version: string | null;
   } | null;
 };
+

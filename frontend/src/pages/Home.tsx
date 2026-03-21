@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+﻿import useSWR from 'swr';
 import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
@@ -82,3 +82,4 @@ export default function Home() {
     </div>
   );
 }
+

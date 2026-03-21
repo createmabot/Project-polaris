@@ -1,4 +1,4 @@
-import { Route, Switch } from "wouter";
+﻿import { Route, Switch } from "wouter";
 import Home from "./pages/Home";
 import AlertDetail from "./pages/AlertDetail";
 import SymbolDetail from "./pages/SymbolDetail";
@@ -22,3 +22,4 @@ function App() {
 }
 
 export default App;
+

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -85,7 +85,9 @@ export default function ComparisonDetail() {
 
       <h1>{data.comparison_header.name || '銘柄比較'}</h1>
       <p style={{ color: '#666' }}>
-        比較ID: <code>{data.comparison_header.comparison_id}</code> | 件数: {data.comparison_header.symbol_count} | 更新: {formatDate(data.comparison_header.updated_at)}
+        比較ID: <code>{data.comparison_header.comparison_id}</code> |
+        件数: {data.comparison_header.symbol_count} |
+        更新: {formatDate(data.comparison_header.updated_at)}
       </p>
       <div style={{ marginBottom: '1rem' }}>
         <button
@@ -268,3 +270,4 @@ export default function ComparisonDetail() {
     </div>
   );
 }
+

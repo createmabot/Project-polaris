@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+﻿import useSWR from 'swr';
 import { useRoute, Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { AlertDetailData } from '../api/types';
@@ -112,3 +112,4 @@ export default function AlertDetail() {
     </div>
   );
 }
+
