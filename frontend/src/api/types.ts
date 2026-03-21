@@ -216,4 +216,30 @@ export type ComparisonDetailData = {
     symbol_count: number;
   };
   symbols: ComparisonSymbolCard[];
+  latest_result: {
+    id: string;
+    generated_at: string | null;
+    compared_metric_json: any;
+    ai_summary: {
+      title: string | null;
+      body_markdown: string;
+      structured_json: any;
+      model_name: string | null;
+      prompt_version: string | null;
+    } | null;
+  } | null;
+};
+
+export type ComparisonGenerateData = {
+  comparison_result_id: string;
+  ai_job_id: string | null;
+  generated_at: string | null;
+  compared_metric_json: any;
+  ai_summary: {
+    title: string | null;
+    body_markdown: string;
+    structured_json: any;
+    model_name: string | null;
+    prompt_version: string | null;
+  } | null;
 };

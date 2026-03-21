@@ -249,3 +249,25 @@ MVP仕様 (docs/3, docs/19) に基づき、先日構築したバックエンドA
   - backend: `npm run build` 成功
   - frontend: TypeScript compile (`npm exec tsc --noEmit`) 成功
   - frontend full build (`vite build`) は環境要因の `spawn EPERM` で未完了
+
+## 追加: compare 総評生成フロー (2026-03-21)
+- 追加 API:
+  - `POST /api/comparisons/:comparisonId/generate`
+- 動作:
+  - comparison 対象 symbol の snapshot から `compared_metric_json` を生成
+  - `AiRouter` を通して AI 比較総評を生成（通常 local / 例外時 fallback）
+  - `ai_jobs` に compare 用実行ログを保存
+  - `comparison_results` を最新1件更新（なければ作成）
+- `comparison_results` 保存項目:
+  - `comparedMetricJson`
+  - `title`
+  - `bodyMarkdown`
+  - `structuredJson`
+  - `modelName`
+  - `promptVersion`
+  - `generatedAt`
+  - `aiJobId`
+- UI:
+  - ComparisonDetail に「比較総評を生成」ボタン追加
+  - 生成中表示 / エラー表示 / 生成済み比較総評表示
+  - compared metrics テーブル表示

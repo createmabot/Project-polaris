@@ -154,6 +154,7 @@ model AiJob {
   updatedAt DateTime @updatedAt
 
   aiSummaries AiSummary[]
+  comparisonResults ComparisonResult[]
 
   @@map("ai_jobs")
 }
@@ -252,11 +253,19 @@ model ComparisonResult {
   id                  String            @id @default(uuid())
   comparisonSessionId String
   comparisonSession   ComparisonSession @relation(fields: [comparisonSessionId], references: [id])
+  aiJobId             String?
+  aiJob               AiJob?            @relation(fields: [aiJobId], references: [id])
+  title               String?
+  bodyMarkdown        String?
+  structuredJson      Json?
+  modelName           String?
+  promptVersion       String?
   comparedMetricJson  Json?
   generatedAt         DateTime?
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
+  @@index([aiJobId])
   @@index([comparisonSessionId, generatedAt])
   @@map("comparison_results")
 }
