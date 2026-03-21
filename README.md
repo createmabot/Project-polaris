@@ -66,3 +66,27 @@ pnpm run dev
   - starts Docker `postgres`
   - runs `prisma migrate deploy` in backend
   - runs `backend/test/symbol-snapshot.db.integration.test.ts`
+
+### Preconditions
+- Docker Desktop (daemon) is running
+- `.env` has valid `DATABASE_URL` pointing to `localhost:5432` (or your mapped port)
+
+### What this test verifies
+- `GET /api/symbols/:symbolId` with real DB symbol seed
+- snapshot failover contract (3 cases):
+  - primary success (`stooq_daily`)
+  - primary failure + secondary success (`yahoo_chart`)
+  - primary failure + secondary failure (`current_snapshot: null`)
+- snapshot shape contract:
+  - `last_price`, `change`, `change_percent`, `volume`, `as_of`, `market_status`, `source_name`
+
+### Troubleshooting
+1. Docker daemon check:
+   - `docker version`
+   - If server connection fails, start Docker Desktop first.
+2. DB port check:
+   - PowerShell: `Test-NetConnection localhost -Port 5432`
+3. Migration check:
+   - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
+4. If migration history is broken in local DB:
+   - `cd backend && npx prisma migrate reset --force --skip-seed`

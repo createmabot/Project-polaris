@@ -1,4 +1,4 @@
-﻿-- AlterTable
+-- AlterTable
 ALTER TABLE "comparison_results"
 ADD COLUMN "aiJobId" TEXT,
 ADD COLUMN "title" TEXT,
