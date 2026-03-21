@@ -98,3 +98,4 @@ pnpm run dev
   - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
   - `npm --prefix backend run test:integration:symbol-snapshot-db`
 - This job validates the same failover contract as local integration runs.
+- Required status check on `main`: `symbol-snapshot-db-integration`
