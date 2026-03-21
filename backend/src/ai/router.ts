@@ -75,14 +75,11 @@ export class AiRouter {
 
     // ── Step 2: Escalation evaluation ─────────────────────────────────────
     // docs/28 §6: conditions for API escalation
-    let escalationReason: EscalationReason | null = null;
-
-    if (!localOutput) {
-      // Local repeatedly failed → retry_limit_exceeded
-      escalationReason = 'retry_limit_exceeded';
-    }
-    // Additional conditions can inject escalationReason externally in future
-    // (pine_compile_error is handled in a separate Pine job flow, not here)
+    const escalationReason = this.resolveEscalationReason({
+      ctx,
+      localOutput,
+      retryCount,
+    });
 
     const needsEscalation =
       escalationReason !== null &&
@@ -147,5 +144,32 @@ export class AiRouter {
 
     // ── Step 6: Everything failed — throw so the job is marked failed ──────
     throw lastLocalError ?? new Error('AI execution failed (both local and fallback)');
+  }
+
+  private resolveEscalationReason(params: {
+    ctx: AlertSummaryContext;
+    localOutput: AlertSummaryOutput | null;
+    retryCount: number;
+  }): EscalationReason | null {
+    const { ctx, localOutput, retryCount } = params;
+    const raw = ctx.rawPayload ?? {};
+
+    if (raw.final_quality_required === true || raw.require_high_quality === true) {
+      return 'final_quality_required';
+    }
+
+    if (raw.high_constraint_input === true) {
+      return 'high_constraint_input';
+    }
+
+    if (raw.pine_compile_error === true) {
+      return 'pine_compile_error';
+    }
+
+    if (!localOutput && retryCount >= AI_CONFIG.maxLocalRetryCount) {
+      return 'retry_limit_exceeded';
+    }
+
+    return null;
   }
 }

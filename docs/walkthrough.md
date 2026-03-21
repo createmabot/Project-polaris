@@ -286,3 +286,14 @@ MVP仕様 (docs/3, docs/19) に基づき、先日構築したバックエンドA
   - `cd backend && npm run test:e2e:comparison-generate`
   - `cd backend && npm run test:e2e:webhook-summary`
   - `cd backend && npm run test:e2e:collect-summary`
+## 追加: AiRouter fallback 条件テスト (2026-03-21)
+- 追加テスト: `backend/test/ai-router.fallback.test.ts`
+- 目的: docs/28 の「通常はローカルQwen3、例外時のみ GPT-5 mini fallback」を分岐ロジックとして固定する
+- 主な検証:
+  - local 正常時は fallback を呼ばない
+  - retry 上限超過時のみ `retry_limit_exceeded` で fallback
+  - fallback key 未設定時は fallback せず失敗（production）
+  - `high_constraint_input` で fallback し reason を保持
+  - local 一時失敗だが条件非該当なら fallback しない
+- 実行コマンド:
+  - `cd backend && npm run test:ai-router-fallback`
