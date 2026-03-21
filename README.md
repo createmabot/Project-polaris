@@ -80,6 +80,10 @@ pnpm run dev
 - snapshot shape contract:
   - `last_price`, `change`, `change_percent`, `volume`, `as_of`, `market_status`, `source_name`
 
+### `market_status` policy (MVP)
+- `stooq_daily`: daily close source, reported as `closed` (or `unknown` when stale/future-inconsistent)
+- `yahoo_chart`: uses `marketState` + `as_of` freshness + JP trading session guard for conservative `open/closed/unknown`
+
 ### Troubleshooting
 1. Docker daemon check:
    - `docker version`

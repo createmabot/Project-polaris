@@ -83,19 +83,43 @@ function toAsOf(dateText: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function inferMarketStatus(dateText: string): 'open' | 'closed' | 'unknown' {
-  const asOf = toAsOf(dateText);
-  if (!asOf) return 'unknown';
-  const now = new Date();
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const INTRADAY_STALE_MS = 30 * 60 * 1000;
+const DAILY_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function toJstDate(date: Date): Date {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+}
+
+function toJstDateKey(date: Date): string {
+  const jst = toJstDate(date);
+  const y = jst.getUTCFullYear();
+  const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(jst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function isWithinJpTradingSession(now: Date): boolean {
+  const jst = toJstDate(now);
+  const day = jst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  const minutes = jst.getUTCHours() * 60 + jst.getUTCMinutes();
+  const inMorning = minutes >= 9 * 60 && minutes < 11 * 60 + 30;
+  const inAfternoon = minutes >= 12 * 60 + 30 && minutes < 15 * 60;
+  return inMorning || inAfternoon;
+}
+
+function inferMarketStatusFromStooqDaily(asOf: string): 'open' | 'closed' | 'unknown' {
   const asOfDate = new Date(asOf);
+  if (Number.isNaN(asOfDate.getTime())) return 'unknown';
+  const now = new Date();
+  const ageMs = now.getTime() - asOfDate.getTime();
 
-  const sameDay =
-    now.getUTCFullYear() === asOfDate.getUTCFullYear() &&
-    now.getUTCMonth() === asOfDate.getUTCMonth() &&
-    now.getUTCDate() === asOfDate.getUTCDate();
-
-  if (!sameDay) return 'closed';
-  return 'open';
+  // Future daily close timestamps are not trustworthy as "current" state.
+  if (ageMs < -FIVE_MINUTES_MS) return 'unknown';
+  // Very old daily data should not be presented as active closed session.
+  if (ageMs > DAILY_STALE_MS) return 'unknown';
+  return 'closed';
 }
 
 function inferMarketStatusFromYahoo(stateRaw: unknown): 'open' | 'closed' | 'unknown' {
@@ -110,6 +134,45 @@ function toAsOfFromUnixSeconds(epochRaw: unknown): string | null {
   if (typeof epochRaw !== 'number' || !Number.isFinite(epochRaw)) return null;
   const date = new Date(epochRaw * 1000);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function inferMarketStatusFromYahooMeta(
+  stateRaw: unknown,
+  asOf: string,
+  symbol: Pick<SymbolRef, 'marketCode'>
+): 'open' | 'closed' | 'unknown' {
+  const base = inferMarketStatusFromYahoo(stateRaw);
+  const asOfDate = new Date(asOf);
+  if (Number.isNaN(asOfDate.getTime())) return 'unknown';
+
+  const now = new Date();
+  const ageMs = now.getTime() - asOfDate.getTime();
+  const marketCode = (symbol.marketCode ?? '').toUpperCase();
+  const isJpEquity = marketCode === 'TSE' || marketCode === 'JP' || marketCode === 'TYO';
+
+  if (ageMs < -FIVE_MINUTES_MS) return 'unknown';
+
+  if (base === 'open') {
+    if (ageMs > INTRADAY_STALE_MS) return 'unknown';
+    if (isJpEquity && !isWithinJpTradingSession(now)) return 'closed';
+    return 'open';
+  }
+
+  if (base === 'closed') {
+    if (ageMs > DAILY_STALE_MS) return 'unknown';
+    return 'closed';
+  }
+
+  if (ageMs > DAILY_STALE_MS) return 'unknown';
+
+  // For JP equities, unknown state outside trading session can be safely treated as closed.
+  if (isJpEquity && !isWithinJpTradingSession(now)) return 'closed';
+
+  // Same-day unknown state from intraday source remains unknown.
+  const sameJstDay = toJstDateKey(now) === toJstDateKey(asOfDate);
+  if (sameJstDay && isWithinJpTradingSession(now)) return 'unknown';
+
+  return 'closed';
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {
@@ -199,7 +262,7 @@ async function fetchStooqDailySnapshot(
     change_percent: changePercent,
     volume: latest.volume,
     as_of: asOf,
-    market_status: inferMarketStatus(latest.date),
+    market_status: inferMarketStatusFromStooqDaily(asOf),
     source_name: 'stooq_daily',
   };
 }
@@ -238,7 +301,7 @@ async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapsh
     change_percent: changePercent,
     volume,
     as_of: asOf,
-    market_status: inferMarketStatusFromYahoo(meta.marketState),
+    market_status: inferMarketStatusFromYahooMeta(meta.marketState, asOf, symbol),
     source_name: 'yahoo_chart',
   };
 }

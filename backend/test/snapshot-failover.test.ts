@@ -13,10 +13,12 @@ describe('current_snapshot failover', () => {
   beforeEach(() => {
     __resetSnapshotCacheForTests();
     vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it('uses primary provider when stooq succeeds', async () => {
@@ -86,6 +88,9 @@ describe('current_snapshot failover', () => {
   });
 
   it('reflects provider name in source_name', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
+
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
         ok: false,
@@ -101,7 +106,7 @@ describe('current_snapshot failover', () => {
                   regularMarketPrice: 3500,
                   chartPreviousClose: 3400,
                   regularMarketVolume: 12345678,
-                  regularMarketTime: 1774063200,
+                  regularMarketTime: 1774063200, // 2026-03-21T03:20:00Z
                   marketState: 'REGULAR',
                 },
               },
@@ -114,6 +119,58 @@ describe('current_snapshot failover', () => {
     const snapshot = await getCurrentSnapshotForSymbol(symbol);
 
     expect(snapshot?.source_name).toBe('yahoo_chart');
-    expect(snapshot?.market_status).toBe('open');
+    expect(snapshot?.market_status).toBe('unknown');
+  });
+
+  it('marks stooq daily snapshot as closed when fresh', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T08:00:00.000Z')); // 17:00 JST
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      text: async () => [
+        'Date,Open,High,Low,Close,Volume',
+        '2026-03-20,3300,3360,3290,3340,12000000',
+        '2026-03-21,3340,3410,3330,3404,15583800',
+      ].join('\n'),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('stooq_daily');
+    expect(snapshot?.market_status).toBe('closed');
+  });
+
+  it('marks stale yahoo open state as unknown', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
+
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: 1774056000, // 2026-03-21T01:20:00Z (40 min stale)
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('unknown');
   });
 });
