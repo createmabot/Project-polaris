@@ -1,0 +1,58 @@
+name: Symbol Snapshot DB Integration
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  symbol-snapshot-db-integration:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: polaris
+          POSTGRES_USER: polaris
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U polaris -d polaris"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgresql://polaris:password@localhost:5432/polaris
+      REDIS_URL: redis://localhost:6379
+      APP_ENV: test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build backend
+        run: npm --prefix backend run build
+
+      - name: Apply migrations
+        run: npm --prefix backend run test:integration:symbol-snapshot-db:prepare
+
+      - name: Run symbol snapshot DB integration test
+        run: npm --prefix backend run test:integration:symbol-snapshot-db

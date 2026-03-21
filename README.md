@@ -90,3 +90,11 @@ pnpm run dev
    - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
 4. If migration history is broken in local DB:
    - `cd backend && npx prisma migrate reset --force --skip-seed`
+
+### CI
+- GitHub Actions job: `Symbol Snapshot DB Integration`
+- Uses Postgres service container, then runs:
+  - `npm --prefix backend run build`
+  - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
+  - `npm --prefix backend run test:integration:symbol-snapshot-db`
+- This job validates the same failover contract as local integration runs.
