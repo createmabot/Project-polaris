@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { AiRouter } from '../ai/router';
+import { CurrentSnapshot, getCurrentSnapshotsForSymbols } from '../market/snapshot';
 
 type JsonObject = Record<string, unknown>;
 
@@ -14,6 +15,7 @@ type ComparisonSymbolView = {
     market_code: string | null;
     tradingview_symbol: string | null;
   };
+  current_snapshot: CurrentSnapshot | null;
   latest_ai_thesis_summary: {
     id: string;
     title: string | null;
@@ -157,7 +159,10 @@ function normalizeName(name: unknown, fallback: string): string {
   return trimmed.length > 0 ? trimmed : fallback;
 }
 
-async function buildComparisonSymbolViews(symbolIds: string[]): Promise<ComparisonSymbolView[]> {
+async function buildComparisonSymbolViews(
+  symbolIds: string[],
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+): Promise<ComparisonSymbolView[]> {
   const [alertsRaw, thesisRaw, notesRaw, referencesRaw, symbolsRaw] = await Promise.all([
     prisma.alertEvent.findMany({
       where: { symbolId: { in: symbolIds } },
@@ -188,6 +193,16 @@ async function buildComparisonSymbolViews(symbolIds: string[]): Promise<Comparis
   ]);
 
   const symbolMap = new Map(symbolsRaw.map((symbol) => [symbol.id, symbol]));
+  const snapshotMap = await getCurrentSnapshotsForSymbols(
+    symbolsRaw.map((symbol) => ({
+      id: symbol.id,
+      symbol: symbol.symbol,
+      symbolCode: symbol.symbolCode,
+      marketCode: symbol.marketCode,
+      tradingviewSymbol: symbol.tradingviewSymbol,
+    })),
+    logger
+  );
 
   const alertsBySymbol = new Map<string, typeof alertsRaw>();
   for (const alert of alertsRaw) {
@@ -293,6 +308,7 @@ async function buildComparisonSymbolViews(symbolIds: string[]): Promise<Comparis
         market_code: symbol.marketCode,
         tradingview_symbol: symbol.tradingviewSymbol,
       },
+      current_snapshot: snapshotMap.get(symbol.id) ?? null,
       latest_ai_thesis_summary: latestThesisSummary
         ? {
             id: latestThesisSummary.id,
@@ -313,11 +329,26 @@ async function buildComparisonSymbolViews(symbolIds: string[]): Promise<Comparis
 function buildComparedMetricJson(symbolViews: ComparisonSymbolView[], requestedMetrics?: string[]) {
   const metrics = (requestedMetrics && requestedMetrics.length > 0)
     ? requestedMetrics
-    : ['thesis_presence', 'active_note_presence', 'recent_alert_count', 'recent_reference_count', 'latest_processing_status'];
+    : [
+        'last_price',
+        'change',
+        'change_percent',
+        'thesis_presence',
+        'active_note_presence',
+        'recent_alert_count',
+        'recent_reference_count',
+        'latest_processing_status',
+      ];
 
   const symbolMetrics = symbolViews.map((item) => ({
     symbol_id: item.symbol.id,
     display_name: item.symbol.display_name ?? item.symbol.symbol_code ?? item.symbol.symbol,
+    last_price: item.current_snapshot?.last_price ?? null,
+    change: item.current_snapshot?.change ?? null,
+    change_percent: item.current_snapshot?.change_percent ?? null,
+    volume: item.current_snapshot?.volume ?? null,
+    as_of: item.current_snapshot?.as_of ?? null,
+    market_status: item.current_snapshot?.market_status ?? 'unknown',
     thesis_presence: item.latest_ai_thesis_summary ? 1 : 0,
     active_note_presence: item.latest_active_note ? 1 : 0,
     recent_alert_count: item.recent_alerts.length,
@@ -533,7 +564,7 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
     }
 
     const symbolIds = session.comparisonSymbols.map((item) => item.symbolId);
-    const symbols = symbolIds.length > 0 ? await buildComparisonSymbolViews(symbolIds) : [];
+    const symbols = symbolIds.length > 0 ? await buildComparisonSymbolViews(symbolIds, fastify.log) : [];
 
     const latestResult = await prisma.comparisonResult.findFirst({
       where: { comparisonSessionId: comparisonId },
@@ -601,7 +632,7 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
       throw new AppError(400, 'VALIDATION_ERROR', 'Comparison requires at least 2 symbols.');
     }
 
-    const symbolViews = await buildComparisonSymbolViews(symbolIds);
+    const symbolViews = await buildComparisonSymbolViews(symbolIds, fastify.log);
     const comparedMetricJson = buildComparedMetricJson(symbolViews, request.body?.metrics);
 
     const aiSummaryResult = includeAiSummary

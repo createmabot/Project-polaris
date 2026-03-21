@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:ai-router-fallback": "vitest run test/ai-router.fallback.test.ts",
+    "test:e2e:symbol-snapshot": "vitest run test/symbol-snapshot.e2e.test.ts",
     "test:e2e:collect-summary": "vitest run test/queue-handlers.e2e.test.ts",
     "test:e2e:webhook-summary": "vitest run test/webhook-route.e2e.test.ts",
     "test:e2e:comparison-generate": "vitest run test/comparison-generate.e2e.test.ts"

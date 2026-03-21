@@ -244,6 +244,35 @@ vi.mock('../src/ai/router', () => {
   return { AiRouter };
 });
 
+vi.mock('../src/market/snapshot', () => {
+  return {
+    getCurrentSnapshotForSymbol: async () => ({
+      last_price: 3210.5,
+      change: 12.3,
+      change_percent: 0.38,
+      volume: 1234567,
+      as_of: '2026-03-21T06:00:00.000Z',
+      market_status: 'closed',
+      source_name: 'test_stub',
+    }),
+    getCurrentSnapshotsForSymbols: async (symbols: Array<{ id: string }>) => {
+      const entries = symbols.map((symbol) => [
+        symbol.id,
+        {
+          last_price: symbol.id === 'sym-1' ? 3210.5 : 18950.1,
+          change: symbol.id === 'sym-1' ? 12.3 : -55.2,
+          change_percent: symbol.id === 'sym-1' ? 0.38 : -0.29,
+          volume: symbol.id === 'sym-1' ? 1234567 : 987654,
+          as_of: '2026-03-21T06:00:00.000Z',
+          market_status: 'closed',
+          source_name: 'test_stub',
+        },
+      ] as const);
+      return new Map(entries);
+    },
+  };
+});
+
 import { errorHandler } from '../src/utils/response';
 import { comparisonRoutes } from '../src/routes/comparisons';
 
@@ -416,6 +445,8 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     expect(detailBody.data.latest_result).toBeTruthy();
     expect(detailBody.data.latest_result.ai_summary.title).toContain('比較総評');
     expect(detailBody.data.latest_result.compared_metric_json.schema_name).toBe('comparison_metric_snapshot');
+    expect(detailBody.data.symbols[0].current_snapshot).toBeTruthy();
+    expect(detailBody.data.symbols[0].current_snapshot.last_price).toBeGreaterThan(0);
 
     await app.close();
   });
@@ -495,6 +526,8 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     expect(saved.comparedMetricJson.metrics).toEqual(['recent_alert_count', 'recent_reference_count']);
     expect(saved.structuredJson.schema_name).toBe('comparison_summary');
     expect(saved.structuredJson.payload.reference_ids.length).toBeGreaterThan(0);
+    expect(saved.comparedMetricJson.symbol_metrics[0].last_price).toBeDefined();
+    expect(saved.comparedMetricJson.symbol_metrics[0].change_percent).toBeDefined();
     expect(saved.modelName).toBe('qwen3-test');
     expect(saved.promptVersion).toBe('compare-v1');
 

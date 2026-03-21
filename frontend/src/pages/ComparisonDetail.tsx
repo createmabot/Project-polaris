@@ -11,6 +11,11 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
+function formatNumber(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
+}
+
 function toSummaryPreview(bodyMarkdown: string): string {
   return bodyMarkdown.length <= 220 ? bodyMarkdown : `${bodyMarkdown.slice(0, 220)}...`;
 }
@@ -122,6 +127,9 @@ export default function ComparisonDetail() {
                   <thead>
                     <tr>
                       <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>銘柄</th>
+                      <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>現在値</th>
+                      <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>前日比</th>
+                      <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>変化率</th>
                       <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>thesis</th>
                       <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>note</th>
                       <th style={{ textAlign: 'left', borderBottom: '1px solid #ccc', padding: '0.4rem' }}>alerts</th>
@@ -133,6 +141,13 @@ export default function ComparisonDetail() {
                     {symbolMetrics.map((row: any) => (
                       <tr key={row.symbol_id}>
                         <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{row.display_name || row.symbol_id}</td>
+                        <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{formatNumber(row.last_price, 3)}</td>
+                        <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{formatNumber(row.change, 3)}</td>
+                        <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>
+                          {row.change_percent === null || row.change_percent === undefined
+                            ? '-'
+                            : `${formatNumber(row.change_percent, 2)}%`}
+                        </td>
                         <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{row.thesis_presence}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{row.active_note_presence}</td>
                         <td style={{ borderBottom: '1px solid #eee', padding: '0.4rem' }}>{row.recent_alert_count}</td>
@@ -188,6 +203,13 @@ export default function ComparisonDetail() {
               </div>
               <div style={{ fontSize: '0.85rem', color: '#666' }}>
                 処理状態: <code>{item.latest_processing_status}</code>
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#333', marginTop: '6px' }}>
+                現在値: {item.current_snapshot ? formatNumber(item.current_snapshot.last_price, 3) : '-'} | 前日比:{' '}
+                {item.current_snapshot ? formatNumber(item.current_snapshot.change, 3) : '-'} | 変化率:{' '}
+                {item.current_snapshot && item.current_snapshot.change_percent !== null
+                  ? `${formatNumber(item.current_snapshot.change_percent, 2)}%`
+                  : '-'}
               </div>
             </header>
 

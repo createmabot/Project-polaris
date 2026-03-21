@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db';
 import { formatSuccess } from '../utils/response';
+import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
 
 export async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -31,11 +32,25 @@ export async function homeRoutes(fastify: FastifyInstance) {
       orderBy: { generatedAt: 'desc' },
     });
 
+    const alertSymbols = recentAlertsRaw
+      .map((alert: any) => alert.symbol)
+      .filter((symbol: any) => !!symbol && !!symbol.id)
+      .map((symbol: any) => ({
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        tradingviewSymbol: symbol.tradingviewSymbol,
+      }));
+
+    const snapshotMap = await getCurrentSnapshotsForSymbols(alertSymbols, fastify.log);
+
     // Map summaries to alerts (simplest: first matching summary is the latest due to orderBy)
     const recentAlerts = recentAlertsRaw.map((alert: any) => {
       const relatedSummary = summaries.find((s: any) => s.targetEntityId === alert.id) || null;
       return {
         ...alert,
+        current_snapshot: alert.symbolId ? (snapshotMap.get(alert.symbolId) ?? null) : null,
         related_ai_summary: relatedSummary,
       };
     });

@@ -297,3 +297,23 @@ MVP仕様 (docs/3, docs/19) に基づき、先日構築したバックエンドA
   - local 一時失敗だが条件非該当なら fallback しない
 - 実行コマンド:
   - `cd backend && npm run test:ai-router-fallback`
+## 追加: current_snapshot 実データ化 (2026-03-21)
+- 実装 source: `stooq` 日次CSV (`https://stooq.com/q/d/l/?s={symbol}&i=d`)
+- 追加モジュール: `backend/src/market/snapshot.ts`
+- API反映:
+  - `GET /api/symbols/:symbolId` の `current_snapshot`
+  - `GET /api/comparisons/:comparisonId` の `symbols[].current_snapshot`
+  - `GET /api/home` の `recent_alerts[].current_snapshot`（軽量反映）
+- 返却項目:
+  - `last_price`
+  - `change`
+  - `change_percent`
+  - `volume`
+  - `as_of`
+  - `market_status`
+  - `source_name`
+- 障害時挙動:
+  - snapshot 取得失敗時は API 全体を落とさず `current_snapshot: null`
+  - warning ログに `current_snapshot_fetch_failed` を出力
+- キャッシュ:
+  - in-memory 短寿命 cache (`SNAPSHOT_CACHE_TTL_MS`)

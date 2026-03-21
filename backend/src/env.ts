@@ -45,6 +45,13 @@ const envSchema = z.object({
   REFERENCE_EARNINGS_MAX_ITEMS: z.coerce.number().int().positive().default(5),
   REFERENCE_EARNINGS_ALERT_LOOKBACK_DAYS: z.coerce.number().int().positive().default(7),
   REFERENCE_EARNINGS_SYMBOL_LOOKBACK_DAYS: z.coerce.number().int().positive().default(30),
+
+  // Current snapshot source
+  SNAPSHOT_STOOQ_DAILY_URL_TEMPLATE: z
+    .string()
+    .default('https://stooq.com/q/d/l/?s={symbol}&i=d'),
+  SNAPSHOT_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  SNAPSHOT_CACHE_TTL_MS: z.coerce.number().int().positive().default(300000),
 });
 
 const _env = envSchema.safeParse(process.env);

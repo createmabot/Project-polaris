@@ -36,6 +36,15 @@ export type AlertEventDto = {
   receivedAt: string | null;
   processingStatus: string;
   symbol: SymbolDto | null;
+  current_snapshot?: {
+    last_price: number;
+    change: number | null;
+    change_percent: number | null;
+    volume: number | null;
+    as_of: string;
+    market_status: 'open' | 'closed' | 'unknown';
+    source_name: string;
+  } | null;
   related_ai_summary: AiSummaryDto | null;
 };
 
@@ -107,7 +116,15 @@ export type SymbolDetailData = {
     market_code: string | null;
     tradingview_symbol: string | null;
   };
-  current_snapshot: null;
+  current_snapshot: {
+    last_price: number;
+    change: number | null;
+    change_percent: number | null;
+    volume: number | null;
+    as_of: string;
+    market_status: 'open' | 'closed' | 'unknown';
+    source_name: string;
+  } | null;
   tradingview_symbol: string | null;
   recent_alerts: Array<{
     id: string;
@@ -170,6 +187,15 @@ export type ComparisonSymbolCard = {
     market_code: string | null;
     tradingview_symbol: string | null;
   };
+  current_snapshot: {
+    last_price: number;
+    change: number | null;
+    change_percent: number | null;
+    volume: number | null;
+    as_of: string;
+    market_status: 'open' | 'closed' | 'unknown';
+    source_name: string;
+  } | null;
   latest_ai_thesis_summary: {
     id: string;
     title: string | null;

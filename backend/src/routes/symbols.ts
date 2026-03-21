@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
+import { getCurrentSnapshotForSymbol } from '../market/snapshot';
 
 type JsonObject = Record<string, unknown>;
 
@@ -88,6 +89,17 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     if (!symbol) {
       throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
     }
+
+    const currentSnapshot = await getCurrentSnapshotForSymbol(
+      {
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        tradingviewSymbol: symbol.tradingviewSymbol,
+      },
+      fastify.log
+    );
 
     const recentAlertsRaw = await prisma.alertEvent.findMany({
       where: { symbolId },
@@ -189,7 +201,7 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         market_code: symbol.marketCode,
         tradingview_symbol: symbol.tradingviewSymbol,
       },
-      current_snapshot: null,
+      current_snapshot: currentSnapshot,
       tradingview_symbol: symbol.tradingviewSymbol,
       recent_alerts: recentAlerts,
       latest_ai_thesis_summary: latestAiThesisSummaryRaw

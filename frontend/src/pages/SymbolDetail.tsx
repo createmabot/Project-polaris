@@ -10,6 +10,11 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
+function formatNumber(value: number | null | undefined, digits = 2): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return '-';
+  return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
+}
+
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
   if (!payload || typeof payload !== 'object') {
@@ -74,6 +79,28 @@ export default function SymbolDetail() {
           比較対象に追加
         </Link>
       </div>
+
+      <section style={{ marginTop: '1.25rem' }}>
+        <h2>現在スナップショット</h2>
+        {data.current_snapshot ? (
+          <div style={{ background: '#f7f9fc', border: '1px solid #dde5ef', borderRadius: '6px', padding: '0.9rem' }}>
+            <div>
+              現在値: <strong>{formatNumber(data.current_snapshot.last_price, 3)}</strong>
+            </div>
+            <div>
+              前日比: {formatNumber(data.current_snapshot.change, 3)} (
+              {data.current_snapshot.change_percent === null ? '-' : `${formatNumber(data.current_snapshot.change_percent, 2)}%`})
+            </div>
+            <div>出来高: {formatNumber(data.current_snapshot.volume, 0)}</div>
+            <div style={{ fontSize: '0.85rem', color: '#666' }}>
+              取得元: {data.current_snapshot.source_name} | asOf: {formatDate(data.current_snapshot.as_of)} | 市場状態:{' '}
+              <code>{data.current_snapshot.market_status}</code>
+            </div>
+          </div>
+        ) : (
+          <p style={{ color: '#666' }}>スナップショットを取得できませんでした。</p>
+        )}
+      </section>
 
       <section style={{ marginTop: '2rem' }}>
         <h2>最近のアラート</h2>
