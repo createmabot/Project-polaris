@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "test:snapshot-failover": "vitest run test/snapshot-failover.test.ts",
     "test:ai-router-fallback": "vitest run test/ai-router.fallback.test.ts",
     "test:e2e:symbol-snapshot": "vitest run test/symbol-snapshot.e2e.test.ts",
     "test:e2e:collect-summary": "vitest run test/queue-handlers.e2e.test.ts",

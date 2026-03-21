@@ -50,6 +50,9 @@ const envSchema = z.object({
   SNAPSHOT_STOOQ_DAILY_URL_TEMPLATE: z
     .string()
     .default('https://stooq.com/q/d/l/?s={symbol}&i=d'),
+  SNAPSHOT_YAHOO_CHART_URL_TEMPLATE: z
+    .string()
+    .default('https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'),
   SNAPSHOT_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   SNAPSHOT_CACHE_TTL_MS: z.coerce.number().int().positive().default(300000),
 });
