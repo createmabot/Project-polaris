@@ -110,6 +110,52 @@ Operational guidance:
 - Tune by env values only; no code change needed for normal adjustments.
 - Prioritize investigation in this order: `freshness_invalid` -> `open_but_stale` -> `freshness_expired` -> `candidate_unknown`.
 
+### Weekly review runbook (`snapshot_reason_daily_metrics`)
+Purpose:
+- Review weekly trend of snapshot reason metrics and adjust threshold env values by environment (`local` / `staging` / `prod`) without code changes.
+- Keep public API unchanged; this is operations-only.
+
+Scope (primary reasons):
+- `open_but_stale`
+- `freshness_invalid`
+- `freshness_expired`
+- `candidate_unknown`
+
+Optional reference reasons:
+- `jp_market_holiday`, `jp_market_weekend`, `outside_jp_session`
+
+Cadence:
+- Run once per week (recommended: Monday JST morning).
+- Evaluate rolling 7 days and compare with the previous 7 days.
+
+How to review (minimum):
+1. Run the SQL in `backend/scripts/snapshot-weekly-review.sql`.
+2. Check 7-day daily counts by `source_name + reason_code`.
+3. Check week-over-week delta (`current_7d_count - previous_7d_count`).
+4. Check threshold reach ratio (`days_over_threshold / 7`).
+5. Decide per environment whether to keep/tighten/relax env thresholds.
+
+Decision hints:
+- `freshness_invalid` keeps increasing for multiple days:
+  - Investigate source/parser/timestamp handling first.
+  - Do not increase threshold before root cause analysis.
+- `open_but_stale` keeps increasing in `prod`:
+  - Check upstream source latency first.
+  - If no defect found and trend is stable, consider gradual threshold increase.
+- `candidate_unknown` grows week-over-week:
+  - Treat as signal of source quality degradation or status inference gap.
+  - Investigate source payload quality before threshold tuning.
+
+Threshold change principle:
+- Change via env only:
+  - `SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY`
+  - `SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY`
+  - `SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY`
+  - `SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY`
+- `.env.example` is baseline defaults.
+- Runtime environment values (`local/staging/prod`) are operational overrides.
+- `0` means warning disabled for that reason (metrics/logging remain enabled).
+
 ### Troubleshooting
 1. Docker daemon check:
    - `docker version`
