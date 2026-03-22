@@ -52,6 +52,9 @@ jobs:
       - name: Build backend
         run: pnpm --filter backend run build
 
+      - name: Run JP market holidays guard test
+        run: pnpm --filter backend run test:jp-market-holidays-guard
+
       - name: Apply migrations
         run: pnpm --filter backend run test:integration:symbol-snapshot-db:prepare
 
