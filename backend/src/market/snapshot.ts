@@ -1,4 +1,5 @@
 import { env } from '../env';
+import { prisma } from '../db';
 
 export type CurrentSnapshot = {
   last_price: number;
@@ -107,6 +108,16 @@ type SnapshotStatusEvaluation = {
   market_status: 'open' | 'closed' | 'unknown';
   reason_code: SnapshotReasonCode;
 };
+
+const SNAPSHOT_REASON_METRIC_TARGETS = new Set<SnapshotReasonCode>([
+  'freshness_invalid',
+  'freshness_expired',
+  'open_but_stale',
+  'jp_market_holiday',
+  'jp_market_weekend',
+  'outside_jp_session',
+  'candidate_unknown',
+]);
 
 function toJstDate(date: Date): Date {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
@@ -374,8 +385,16 @@ function logSnapshotEvaluation(
     evaluation: SnapshotStatusEvaluation;
   }
 ) {
-  if (!logger?.warn) return;
   if (!shouldLogSnapshotEvaluation(payload.evaluation)) return;
+  if (!logger?.warn) return;
+
+  void incrementSnapshotReasonMetric(
+    {
+      source_name: payload.source_name,
+      reason_code: payload.evaluation.reason_code,
+    },
+    logger
+  );
 
   logger.warn(
     {
@@ -391,6 +410,54 @@ function logSnapshotEvaluation(
     },
     'current_snapshot_status_evaluated'
   );
+}
+
+function toJstMetricDate(date = new Date()): Date {
+  return new Date(`${toJstDateKey(date)}T00:00:00+09:00`);
+}
+
+async function incrementSnapshotReasonMetric(
+  input: {
+    source_name: string;
+    reason_code: SnapshotReasonCode;
+  },
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  if (!SNAPSHOT_REASON_METRIC_TARGETS.has(input.reason_code)) return;
+
+  const metricDate = toJstMetricDate(new Date());
+  try {
+    await prisma.snapshotReasonDailyMetric.upsert({
+      where: {
+        metricDate_sourceName_reasonCode: {
+          metricDate,
+          sourceName: input.source_name,
+          reasonCode: input.reason_code,
+        },
+      },
+      create: {
+        metricDate,
+        sourceName: input.source_name,
+        reasonCode: input.reason_code,
+        count: 1,
+      },
+      update: {
+        count: {
+          increment: 1,
+        },
+      },
+    });
+  } catch (error) {
+    logger?.warn?.(
+      {
+        source_name: input.source_name,
+        reason_code: input.reason_code,
+        metric_date: metricDate.toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'current_snapshot_reason_metric_record_failed'
+    );
+  }
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {

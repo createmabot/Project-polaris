@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSnapshotCacheForTests, getCurrentSnapshotForSymbol } from '../src/market/snapshot';
+import { prisma } from '../src/db';
 
 const symbol = {
   id: 'sym-1',
@@ -14,6 +15,15 @@ describe('current_snapshot failover', () => {
     __resetSnapshotCacheForTests();
     vi.restoreAllMocks();
     vi.useRealTimers();
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockResolvedValue({
+      id: 'metric-1',
+      metricDate: new Date('2026-03-18T00:00:00+09:00'),
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      count: 1,
+      createdAt: new Date('2026-03-18T00:00:00Z'),
+      updatedAt: new Date('2026-03-18T00:00:00Z'),
+    } as any);
   });
 
   afterEach(() => {
@@ -214,6 +224,14 @@ describe('current_snapshot failover', () => {
       market_status: 'unknown',
       reason_code: 'open_but_stale',
     });
+    expect(prisma.snapshotReasonDailyMetric.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          sourceName: 'yahoo_chart',
+          reasonCode: 'open_but_stale',
+        }),
+      })
+    );
   });
 
   it('marks expired yahoo open state as unknown', async () => {
@@ -287,6 +305,14 @@ describe('current_snapshot failover', () => {
       market_status: 'unknown',
       reason_code: 'freshness_invalid',
     });
+    expect(prisma.snapshotReasonDailyMetric.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          sourceName: 'yahoo_chart',
+          reasonCode: 'freshness_invalid',
+        }),
+      })
+    );
   });
 
   it('logs reason_code=freshness_expired for expired yahoo timestamp', async () => {
@@ -327,6 +353,14 @@ describe('current_snapshot failover', () => {
       market_status: 'unknown',
       reason_code: 'freshness_expired',
     });
+    expect(prisma.snapshotReasonDailyMetric.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          sourceName: 'yahoo_chart',
+          reasonCode: 'freshness_expired',
+        }),
+      })
+    );
   });
 
   it('marks fresh yahoo REGULAR as open during JP trading session on a non-holiday weekday', async () => {
@@ -400,6 +434,47 @@ describe('current_snapshot failover', () => {
       reason_code: 'jp_market_holiday',
       market_status: 'closed',
     });
+    expect(prisma.snapshotReasonDailyMetric.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          sourceName: 'yahoo_chart',
+          reasonCode: 'jp_market_holiday',
+        }),
+      })
+    );
+  });
+
+  it('does not fail snapshot response when metrics persistence fails', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST
+
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockRejectedValueOnce(new Error('metric_write_failed'));
+    const warn = vi.fn();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: Math.floor((Date.now() - 40 * 60 * 1000) / 1000),
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+    const snapshot = await getCurrentSnapshotForSymbol(symbol, { warn });
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('unknown');
   });
 
   it('marks yahoo REGULAR as closed on weekend for JP market', async () => {

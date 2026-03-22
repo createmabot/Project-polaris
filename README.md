@@ -88,6 +88,7 @@ pnpm run dev
 - CI integration: `Symbol Snapshot DB Integration` also runs `test:jp-market-holidays-guard`, so holiday table coverage regressions fail PR checks.
 - Internal note: freshness (`fresh/stale/expired/invalid`) is evaluated separately from market phase and then folded into public `market_status` (`open/closed/unknown`) without adding API fields.
 - Reason observability: snapshot evaluator writes structured internal logs (e.g. `open_but_stale`, `freshness_invalid`, `freshness_expired`, `jp_market_holiday`) while keeping public API unchanged.
+- Daily internal metrics: selected `reason_code` values are aggregated in DB (`snapshot_reason_daily_metrics`) by JST date + source + reason; this is for ops monitoring only and is not exposed via public API.
 
 ### Troubleshooting
 1. Docker daemon check:
