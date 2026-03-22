@@ -1,4 +1,5 @@
 import { env } from '../env';
+import { prisma } from '../db';
 
 export type CurrentSnapshot = {
   last_price: number;
@@ -83,22 +84,160 @@ function toAsOf(dateText: string): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function inferMarketStatus(dateText: string): 'open' | 'closed' | 'unknown' {
-  const asOf = toAsOf(dateText);
-  if (!asOf) return 'unknown';
-  const now = new Date();
-  const asOfDate = new Date(asOf);
+const FIVE_MINUTES_MS = 5 * 60 * 1000;
+const INTRADAY_STALE_MS = 30 * 60 * 1000;
+const DAILY_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const DAILY_WARNING_STALE_MS = 24 * 60 * 60 * 1000;
 
-  const sameDay =
-    now.getUTCFullYear() === asOfDate.getUTCFullYear() &&
-    now.getUTCMonth() === asOfDate.getUTCMonth() &&
-    now.getUTCDate() === asOfDate.getUTCDate();
+type MarketStatusCandidate = 'open' | 'closed' | 'unknown';
+type FreshnessStatus = 'fresh' | 'stale' | 'expired' | 'invalid';
+type SnapshotReasonCode =
+  | 'daily_source_closed'
+  | 'candidate_unknown'
+  | 'freshness_invalid'
+  | 'freshness_expired'
+  | 'open_but_stale'
+  | 'jp_market_holiday'
+  | 'jp_market_weekend'
+  | 'outside_jp_session'
+  | 'closed_by_source';
 
-  if (!sameDay) return 'closed';
-  return 'open';
+type SnapshotStatusEvaluation = {
+  market_status_candidate: MarketStatusCandidate;
+  freshness_status: FreshnessStatus;
+  market_status: 'open' | 'closed' | 'unknown';
+  reason_code: SnapshotReasonCode;
+};
+
+const SNAPSHOT_REASON_METRIC_TARGETS = new Set<SnapshotReasonCode>([
+  'freshness_invalid',
+  'freshness_expired',
+  'open_but_stale',
+  'jp_market_holiday',
+  'jp_market_weekend',
+  'outside_jp_session',
+  'candidate_unknown',
+]);
+
+function getSnapshotReasonDailyThresholds(): Partial<Record<SnapshotReasonCode, number>> {
+  return {
+    // Detect operational anomalies with low-noise reason codes.
+    open_but_stale: env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY,
+    freshness_invalid: env.SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY,
+    freshness_expired: env.SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY,
+    candidate_unknown: env.SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY,
+  };
 }
 
-function inferMarketStatusFromYahoo(stateRaw: unknown): 'open' | 'closed' | 'unknown' {
+function toJstDate(date: Date): Date {
+  return new Date(date.getTime() + 9 * 60 * 60 * 1000);
+}
+
+function toJstDateKey(date: Date): string {
+  const jst = toJstDate(date);
+  const y = jst.getUTCFullYear();
+  const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(jst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+const JP_MARKET_HOLIDAYS = new Set<string>([
+  // 2024
+  '2024-01-01', '2024-01-02', '2024-01-03', '2024-01-08', '2024-02-12', '2024-02-23',
+  '2024-03-20', '2024-04-29', '2024-05-03', '2024-05-06', '2024-07-15', '2024-08-12',
+  '2024-09-16', '2024-09-23', '2024-10-14', '2024-11-04', '2024-11-23', '2024-12-31',
+  // 2025
+  '2025-01-01', '2025-01-02', '2025-01-03', '2025-01-13', '2025-02-11', '2025-02-24',
+  '2025-03-20', '2025-04-29', '2025-05-05', '2025-05-06', '2025-07-21', '2025-08-11',
+  '2025-09-15', '2025-09-23', '2025-10-13', '2025-11-03', '2025-11-24', '2025-12-31',
+  // 2026
+  '2026-01-01', '2026-01-02', '2026-01-03', '2026-01-12', '2026-02-11', '2026-02-23',
+  '2026-03-20', '2026-04-29', '2026-05-04', '2026-05-05', '2026-05-06', '2026-07-20',
+  '2026-08-11', '2026-09-21', '2026-09-22', '2026-09-23', '2026-10-12', '2026-11-03',
+  '2026-11-23', '2026-12-31',
+  // 2027
+  '2027-01-01', '2027-01-02', '2027-01-03', '2027-01-11', '2027-02-11', '2027-02-23',
+  '2027-03-22', '2027-04-29', '2027-05-03', '2027-05-04', '2027-05-05', '2027-07-19',
+  '2027-08-11', '2027-09-20', '2027-09-23', '2027-10-11', '2027-11-03', '2027-11-23',
+  '2027-12-31',
+  // 2028
+  '2028-01-01', '2028-01-02', '2028-01-03', '2028-01-10', '2028-02-11', '2028-02-23',
+  '2028-03-20', '2028-04-29', '2028-05-03', '2028-05-04', '2028-05-05', '2028-07-17',
+  '2028-08-11', '2028-09-18', '2028-09-22', '2028-10-09', '2028-11-03', '2028-11-23',
+  '2028-12-31',
+]);
+
+const JP_MARKET_HOLIDAY_YEARS = Array.from(
+  new Set(
+    Array.from(JP_MARKET_HOLIDAYS)
+      .map((date) => Number(date.slice(0, 4)))
+      .filter((year) => Number.isInteger(year))
+  )
+).sort((a, b) => a - b);
+
+const JP_MARKET_HOLIDAY_MIN_YEAR = JP_MARKET_HOLIDAY_YEARS[0] ?? 0;
+const JP_MARKET_HOLIDAY_MAX_YEAR = JP_MARKET_HOLIDAY_YEARS[JP_MARKET_HOLIDAY_YEARS.length - 1] ?? 0;
+let jpHolidayCoverageWarned = false;
+
+function isJpMarketHoliday(now: Date): boolean {
+  return JP_MARKET_HOLIDAYS.has(toJstDateKey(now));
+}
+
+function warnIfJpHolidayCoverageNearingLimit(
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  if (jpHolidayCoverageWarned) return;
+  if (!logger?.warn) return;
+
+  const currentJstYear = Number(toJstDateKey(new Date()).slice(0, 4));
+  if (!Number.isInteger(currentJstYear)) return;
+
+  if (currentJstYear > JP_MARKET_HOLIDAY_MAX_YEAR) {
+    logger.warn(
+      {
+        current_jst_year: currentJstYear,
+        min_year: JP_MARKET_HOLIDAY_MIN_YEAR,
+        max_year: JP_MARKET_HOLIDAY_MAX_YEAR,
+      },
+      'jp_market_holidays_coverage_expired'
+    );
+    jpHolidayCoverageWarned = true;
+    return;
+  }
+
+  if (JP_MARKET_HOLIDAY_MAX_YEAR - currentJstYear <= 1) {
+    logger.warn(
+      {
+        current_jst_year: currentJstYear,
+        min_year: JP_MARKET_HOLIDAY_MIN_YEAR,
+        max_year: JP_MARKET_HOLIDAY_MAX_YEAR,
+      },
+      'jp_market_holidays_coverage_near_limit'
+    );
+    jpHolidayCoverageWarned = true;
+  }
+}
+
+function isWithinJpTradingSession(now: Date): boolean {
+  const jst = toJstDate(now);
+  const day = jst.getUTCDay();
+  if (day === 0 || day === 6) return false;
+  if (isJpMarketHoliday(now)) return false;
+  const minutes = jst.getUTCHours() * 60 + jst.getUTCMinutes();
+  const inMorning = minutes >= 9 * 60 && minutes < 11 * 60 + 30;
+  const inAfternoon = minutes >= 12 * 60 + 30 && minutes < 15 * 60;
+  return inMorning || inAfternoon;
+}
+
+function getJpSessionClosureReason(now: Date): Extract<SnapshotReasonCode, 'jp_market_holiday' | 'jp_market_weekend' | 'outside_jp_session'> {
+  const jst = toJstDate(now);
+  const day = jst.getUTCDay();
+  if (day === 0 || day === 6) return 'jp_market_weekend';
+  if (isJpMarketHoliday(now)) return 'jp_market_holiday';
+  return 'outside_jp_session';
+}
+
+function inferMarketStatusFromYahoo(stateRaw: unknown): MarketStatusCandidate {
   if (typeof stateRaw !== 'string') return 'unknown';
   const state = stateRaw.toUpperCase();
   if (state === 'REGULAR' || state === 'PRE' || state === 'PREPRE') return 'open';
@@ -106,10 +245,262 @@ function inferMarketStatusFromYahoo(stateRaw: unknown): 'open' | 'closed' | 'unk
   return 'unknown';
 }
 
+function evaluateFreshness(
+  asOf: string,
+  thresholds: { staleMs: number; expiredMs: number }
+): FreshnessStatus {
+  const asOfDate = new Date(asOf);
+  if (Number.isNaN(asOfDate.getTime())) return 'invalid';
+
+  const now = new Date();
+  const ageMs = now.getTime() - asOfDate.getTime();
+
+  if (ageMs < -FIVE_MINUTES_MS) return 'invalid';
+  if (ageMs > thresholds.expiredMs) return 'expired';
+  if (ageMs > thresholds.staleMs) return 'stale';
+  return 'fresh';
+}
+
+function foldMarketStatus(
+  candidate: MarketStatusCandidate,
+  freshness: FreshnessStatus
+): 'open' | 'closed' | 'unknown' {
+  if (candidate === 'unknown') return 'unknown';
+  if (freshness === 'invalid' || freshness === 'expired') return 'unknown';
+  if (candidate === 'open') {
+    if (freshness === 'fresh') return 'open';
+    return 'unknown';
+  }
+  // closed + stale keeps "closed" for conservative UX compatibility.
+  return 'closed';
+}
+
+function buildStooqEvaluation(asOf: string): SnapshotStatusEvaluation {
+  const freshness = evaluateFreshness(asOf, {
+    staleMs: DAILY_WARNING_STALE_MS,
+    expiredMs: DAILY_STALE_MS,
+  });
+
+  const market_status = foldMarketStatus('closed', freshness);
+  let reason_code: SnapshotReasonCode = 'daily_source_closed';
+  if (freshness === 'invalid') reason_code = 'freshness_invalid';
+  if (freshness === 'expired') reason_code = 'freshness_expired';
+
+  return {
+    market_status_candidate: 'closed',
+    freshness_status: freshness,
+    market_status,
+    reason_code,
+  };
+}
+
 function toAsOfFromUnixSeconds(epochRaw: unknown): string | null {
   if (typeof epochRaw !== 'number' || !Number.isFinite(epochRaw)) return null;
   const date = new Date(epochRaw * 1000);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function inferMarketStatusFromYahooMeta(
+  stateRaw: unknown,
+  asOf: string,
+  symbol: Pick<SymbolRef, 'marketCode'>
+): SnapshotStatusEvaluation {
+  const base = inferMarketStatusFromYahoo(stateRaw);
+  const freshness = evaluateFreshness(asOf, {
+    staleMs: INTRADAY_STALE_MS,
+    expiredMs: DAILY_STALE_MS,
+  });
+  const marketCode = (symbol.marketCode ?? '').toUpperCase();
+  const isJpEquity = marketCode === 'TSE' || marketCode === 'JP' || marketCode === 'TYO';
+  const now = new Date();
+  const asOfDate = new Date(asOf);
+
+  if (freshness === 'invalid') {
+    return {
+      market_status_candidate: base,
+      freshness_status: freshness,
+      market_status: 'unknown',
+      reason_code: 'freshness_invalid',
+    };
+  }
+  if (freshness === 'expired') {
+    return {
+      market_status_candidate: base,
+      freshness_status: freshness,
+      market_status: 'unknown',
+      reason_code: 'freshness_expired',
+    };
+  }
+
+  let candidate: MarketStatusCandidate = base;
+  let sessionReason: Extract<SnapshotReasonCode, 'jp_market_holiday' | 'jp_market_weekend' | 'outside_jp_session'> | null = null;
+
+  if (isJpEquity) {
+    if (candidate === 'open' && !isWithinJpTradingSession(now)) {
+      candidate = 'closed';
+      sessionReason = getJpSessionClosureReason(now);
+    } else if (candidate === 'unknown' && !isWithinJpTradingSession(now)) {
+      candidate = 'closed';
+      sessionReason = getJpSessionClosureReason(now);
+    }
+  }
+
+  if (candidate === 'unknown') {
+    const sameJstDay = toJstDateKey(now) === toJstDateKey(asOfDate);
+    if (sameJstDay && isJpEquity && isWithinJpTradingSession(now)) {
+      return {
+        market_status_candidate: candidate,
+        freshness_status: freshness,
+        market_status: 'unknown',
+        reason_code: 'candidate_unknown',
+      };
+    }
+  }
+
+  const finalMarketStatus = foldMarketStatus(candidate, freshness);
+  let reason_code: SnapshotReasonCode = 'closed_by_source';
+  if (candidate === 'unknown') reason_code = 'candidate_unknown';
+  if (candidate === 'open' && freshness === 'stale') reason_code = 'open_but_stale';
+  if (sessionReason) reason_code = sessionReason;
+
+  return {
+    market_status_candidate: candidate,
+    freshness_status: freshness,
+    market_status: finalMarketStatus,
+    reason_code,
+  };
+}
+
+function shouldLogSnapshotEvaluation(evaluation: SnapshotStatusEvaluation): boolean {
+  if (evaluation.market_status === 'unknown') return true;
+  if (evaluation.freshness_status !== 'fresh') return true;
+  if (
+    evaluation.reason_code === 'jp_market_holiday' ||
+    evaluation.reason_code === 'jp_market_weekend' ||
+    evaluation.reason_code === 'outside_jp_session'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function logSnapshotEvaluation(
+  logger: { warn: (obj: unknown, msg?: string) => void } | undefined,
+  payload: {
+    symbol_id: string;
+    symbol: string;
+    market_code: string | null;
+    source_name: string;
+    as_of: string;
+    evaluation: SnapshotStatusEvaluation;
+  }
+) {
+  if (!shouldLogSnapshotEvaluation(payload.evaluation)) return;
+
+  void incrementSnapshotReasonMetric(
+    {
+      source_name: payload.source_name,
+      reason_code: payload.evaluation.reason_code,
+    },
+    logger
+  );
+
+  if (!logger?.warn) return;
+  logger.warn(
+    {
+      symbol_id: payload.symbol_id,
+      symbol: payload.symbol,
+      market_code: payload.market_code,
+      source_name: payload.source_name,
+      as_of: payload.as_of,
+      market_status_candidate: payload.evaluation.market_status_candidate,
+      freshness_status: payload.evaluation.freshness_status,
+      market_status: payload.evaluation.market_status,
+      reason_code: payload.evaluation.reason_code,
+    },
+    'current_snapshot_status_evaluated'
+  );
+}
+
+function toJstMetricDate(date = new Date()): Date {
+  return new Date(`${toJstDateKey(date)}T00:00:00+09:00`);
+}
+
+async function incrementSnapshotReasonMetric(
+  input: {
+    source_name: string;
+    reason_code: SnapshotReasonCode;
+  },
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  if (!SNAPSHOT_REASON_METRIC_TARGETS.has(input.reason_code)) return;
+
+  const metricDate = toJstMetricDate(new Date());
+  try {
+    const metric = await prisma.snapshotReasonDailyMetric.upsert({
+      where: {
+        metricDate_sourceName_reasonCode: {
+          metricDate,
+          sourceName: input.source_name,
+          reasonCode: input.reason_code,
+        },
+      },
+      create: {
+        metricDate,
+        sourceName: input.source_name,
+        reasonCode: input.reason_code,
+        count: 1,
+      },
+      update: {
+        count: {
+          increment: 1,
+        },
+      },
+    });
+    evaluateSnapshotReasonThreshold({
+      metricDate,
+      sourceName: input.source_name,
+      reasonCode: input.reason_code,
+      count: metric.count,
+    }, logger);
+  } catch (error) {
+    logger?.warn?.(
+      {
+        source_name: input.source_name,
+        reason_code: input.reason_code,
+        metric_date: metricDate.toISOString(),
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'current_snapshot_reason_metric_record_failed'
+    );
+  }
+}
+
+function evaluateSnapshotReasonThreshold(
+  input: {
+    metricDate: Date;
+    sourceName: string;
+    reasonCode: SnapshotReasonCode;
+    count: number;
+  },
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  const threshold = getSnapshotReasonDailyThresholds()[input.reasonCode];
+  if (!threshold) return;
+  if (threshold <= 0) return;
+  if (input.count !== threshold) return;
+
+  logger?.warn?.(
+    {
+      metric_date: input.metricDate.toISOString(),
+      source_name: input.sourceName,
+      reason_code: input.reasonCode,
+      count: input.count,
+      threshold,
+      event_name: 'snapshot_reason_threshold_exceeded',
+    },
+    'snapshot_reason_threshold_exceeded'
+  );
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {
@@ -192,6 +583,15 @@ async function fetchStooqDailySnapshot(
     : null;
   const asOf = toAsOf(latest.date);
   if (!asOf) return null;
+  const evaluation = buildStooqEvaluation(asOf);
+  logSnapshotEvaluation(logger, {
+    symbol_id: symbol.id,
+    symbol: symbol.symbol,
+    market_code: symbol.marketCode,
+    source_name: 'stooq_daily',
+    as_of: asOf,
+    evaluation,
+  });
 
   return {
     last_price: latest.close,
@@ -199,12 +599,15 @@ async function fetchStooqDailySnapshot(
     change_percent: changePercent,
     volume: latest.volume,
     as_of: asOf,
-    market_status: inferMarketStatus(latest.date),
+    market_status: evaluation.market_status,
     source_name: 'stooq_daily',
   };
 }
 
-async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapshot | null> {
+async function fetchYahooChartSnapshot(
+  symbol: SymbolRef,
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+): Promise<CurrentSnapshot | null> {
   const yahooCode = toYahooCode(symbol);
   if (!yahooCode) return null;
 
@@ -231,6 +634,15 @@ async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapsh
   const volume = Number.isFinite(volumeRaw) ? volumeRaw : null;
   const asOf = toAsOfFromUnixSeconds(meta.regularMarketTime);
   if (!asOf) return null;
+  const evaluation = inferMarketStatusFromYahooMeta(meta.marketState, asOf, symbol);
+  logSnapshotEvaluation(logger, {
+    symbol_id: symbol.id,
+    symbol: symbol.symbol,
+    market_code: symbol.marketCode,
+    source_name: 'yahoo_chart',
+    as_of: asOf,
+    evaluation,
+  });
 
   return {
     last_price: price,
@@ -238,7 +650,7 @@ async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapsh
     change_percent: changePercent,
     volume,
     as_of: asOf,
-    market_status: inferMarketStatusFromYahoo(meta.marketState),
+    market_status: evaluation.market_status,
     source_name: 'yahoo_chart',
   };
 }
@@ -247,6 +659,8 @@ export async function getCurrentSnapshotForSymbol(
   symbol: SymbolRef,
   logger?: { warn: (obj: unknown, msg?: string) => void }
 ): Promise<CurrentSnapshot | null> {
+  warnIfJpHolidayCoverageNearingLimit(logger);
+
   const baseCode = symbol.symbolCode?.trim() || symbol.symbol?.trim() || symbol.id;
   const cacheKey = `snapshot:${baseCode.toLowerCase()}`;
   const cached = getCachedSnapshot(cacheKey);
@@ -280,7 +694,7 @@ export async function getCurrentSnapshotForSymbol(
   );
 
   try {
-    const secondary = await fetchYahooChartSnapshot(symbol);
+    const secondary = await fetchYahooChartSnapshot(symbol, logger);
     if (secondary) {
       logger?.warn?.(
         {
@@ -333,4 +747,13 @@ export async function getCurrentSnapshotsForSymbols(
 
 export function __resetSnapshotCacheForTests() {
   snapshotCache.clear();
+  jpHolidayCoverageWarned = false;
+}
+
+export function __getJpMarketHolidayCoverageForTests() {
+  return {
+    minYear: JP_MARKET_HOLIDAY_MIN_YEAR,
+    maxYear: JP_MARKET_HOLIDAY_MAX_YEAR,
+    years: [...JP_MARKET_HOLIDAY_YEARS],
+  };
 }

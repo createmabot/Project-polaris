@@ -1,100 +1,125 @@
-# Project-polaris (北極星)
+# Project-polaris（北極星）
 
-個人用の株価分析ツール「北極星」の開発用リポジトリ。
+株価評価AIツール「北極星」の開発用リポジトリです。  
+このリポジトリでは、詳細仕様の正本は `docs/` 配下のドキュメントです。
 
 ## 技術スタック
 - Node.js 22
-- pnpm workspaces (Monorepo)
+- pnpm workspaces（monorepo）
 - Frontend: Vite + React + TypeScript
 - Backend: Fastify + TypeScript
-- DB: PostgreSQL
-- Cache/Queue: Redis
+- DB: PostgreSQL（Prisma）
+- Queue/Cache: Redis（BullMQ）
 - Infra: Docker Compose
 
-## AI モデル運用方針 (docs/28 準拠)
-北極星は「常用処理のコスト最適化」と「高精度処理の精度確保」を両立するため、以下の2モデル体制を採用しています。
+## セットアップ
+1. リポジトリをクローン
+2. 依存関係をインストール
 
-- **Primary: ローカル Qwen3 (30B系)**
-  - 通常の要約、整理、比較など 95% 以上のタスクを担当。RTX 5090 環境等での高速動作を前提。
-- **Fallback: GPT-5 mini (API)**
-  - Pine Script 修正ループ失敗時や、仕様制約が極めて多い例外時のみ自動エスカレーション。
-
-## セットアップ手順
-1. **リポジトリをクローン**
-2. **依存関係のインストール**
-   ```bash
-   pnpm install
-   ```
-3. **環境変数の設定**
-   プロジェクトルートの `.env` がバックエンド、ワーカー、スクリプト全ての正本設定となります。
-   ```bash
-   cp .env.example .env
-   # .env を編集して DATABASE_URL, REDIS_URL, FALLBACK_API_KEY 等を入力
-   ```
-4. **データベースとRedisの起動**
-   ```bash
-   docker compose up -d
-   ```
-5. **DBマイグレーションとシード投入**
-   ```bash
-   cd backend
-   pnpm exec prisma migrate dev
-   pnpm exec prisma db seed
-   ```
-6. **ローカルLLM疎通確認** (docs/24 準拠)
-   ローカルLLMサーバー（Ollama等）が起動しており、.env の設定で推論可能か確認します。
-   ```bash
-   pnpm --filter backend exec tsx ../scripts/check-local-llm.ts
-   ```
-
-## 起動手順
-フロントエンド・バックエンドを並列起動：
 ```bash
-pnpm run dev
+pnpm install
+```
+
+3. 環境変数を作成
+
+```bash
+cp .env.example .env
+```
+
+4. Docker で PostgreSQL / Redis を起動
+
+```bash
+docker compose up -d
+```
+
+5. DB マイグレーションと seed（必要時）
+
+```bash
+cd backend
+pnpm exec prisma migrate dev
+pnpm exec prisma db seed
 ```
 
 ## よく使うコマンド
-- `pnpm run up`: DBとRedisをDockerで起動
-- `pnpm --filter backend exec tsx ../scripts/check-local-llm.ts`: ローカルLLMの診断
-- `pnpm run dev`: 全パッケージの開発サーバーを起動
-- `pnpm run build`: 全パッケージのビルド
-- `pnpm run test`: 全パッケージのテスト
+```bash
+pnpm run dev
+pnpm run build
+pnpm run test
+pnpm run up
+pnpm run down
+```
 
+### Snapshot 週次レビュー記録
+- 生成（当週/JST）
+  - `pnpm run create:snapshot-weekly-review`
+- 任意週生成（JST日付指定）
+  - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD`
+- 上書き（明示時のみ）
+  - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force`
+- 事前確認（書き込みなし）
+  - `pnpm run create:snapshot-weekly-review -- --dry-run`
+- 機械可読（JSON）
+  - `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
+- JSON契約チェック
+  - `pnpm run check:snapshot-weekly-review-json`
 
-## Integration test (DB required)
-- `pnpm run test:integration:symbol-snapshot-db`
-  - starts Docker `postgres`
-  - runs `prisma migrate deploy` in backend
-  - runs `backend/test/symbol-snapshot.db.integration.test.ts`
+## current_snapshot 関連の運用要点
+- 公開API契約は維持
+  - `last_price`
+  - `change`
+  - `change_percent`
+  - `volume`
+  - `as_of`
+  - `market_status`（`open | closed | unknown`）
+  - `source_name`
+- failover
+  - primary: `stooq_daily`
+  - secondary: `yahoo_chart`
+  - 全失敗時: `current_snapshot: null`
+- `market_status` は日本市場の休日判定を考慮（外部休日APIには依存しない）
 
-### Preconditions
-- Docker Desktop (daemon) is running
-- `.env` has valid `DATABASE_URL` pointing to `localhost:5432` (or your mapped port)
+## Integration test（DB 必須）
+```bash
+pnpm run test:integration:symbol-snapshot-db
+```
 
-### What this test verifies
-- `GET /api/symbols/:symbolId` with real DB symbol seed
-- snapshot failover contract (3 cases):
-  - primary success (`stooq_daily`)
-  - primary failure + secondary success (`yahoo_chart`)
-  - primary failure + secondary failure (`current_snapshot: null`)
-- snapshot shape contract:
+このテストでは次を確認します。
+- `GET /api/symbols/:symbolId` の snapshot failover 3ケース
+  - 主系成功
+  - 主系失敗 + 予備系成功
+  - 主系失敗 + 予備系失敗（`current_snapshot: null`）
+- snapshot shape 契約
   - `last_price`, `change`, `change_percent`, `volume`, `as_of`, `market_status`, `source_name`
 
-### Troubleshooting
-1. Docker daemon check:
-   - `docker version`
-   - If server connection fails, start Docker Desktop first.
-2. DB port check:
-   - PowerShell: `Test-NetConnection localhost -Port 5432`
-3. Migration check:
-   - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
-4. If migration history is broken in local DB:
-   - `cd backend && npx prisma migrate reset --force --skip-seed`
+## CI
+GitHub Actions の `Symbol Snapshot DB Integration` で以下を実行します。
+- `snapshot-review-generator-json-check`
+- `symbol-snapshot-db-integration`
 
-### CI
-- GitHub Actions job: `Symbol Snapshot DB Integration`
-- Uses Postgres service container, then runs:
-  - `npm --prefix backend run build`
-  - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
-  - `npm --prefix backend run test:integration:symbol-snapshot-db`
-- This job validates the same failover contract as local integration runs.
+`main` の required checks は ruleset 管理で、上記2件を必須化しています。
+
+## Required-check failure drill（定期監査）
+目的:
+- `snapshot-review-generator-json-check` が失敗したときに PR merge が確実に block されることを定期確認する
+
+推奨頻度:
+- 四半期に1回（または ruleset / branch protection 変更後）
+
+最小手順:
+1. `main` から検証ブランチを作成（例: `codex/ops-drill-snapshot-json-failure-YYYYMMDD`）
+2. `scripts/check-snapshot-weekly-review-json.mjs` の必須キー期待値を一時的に壊す
+3. PR を作成し、`snapshot-review-generator-json-check` が red になることを確認
+4. PR が required check 未通過で block されることを確認
+5. 破壊コミットを revert して復元
+6. 両 required checks が green 復帰することを確認
+7. 実施結果を `docs/snapshot-weekly-reviews/` の週次記録へ残す
+
+注意:
+- 検証変更は `main` に merge しない
+- 破壊は最小・可逆にする
+
+## 参考ドキュメント
+- 目次: `docs/0.目次.md`
+- セットアップ詳細: `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
+- ホーム供給仕様: `docs/25. 補助資料_1 北極星 ホームデータ供給仕様（MVP）.md`
+- API設計: `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`

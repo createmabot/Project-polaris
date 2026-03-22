@@ -6,7 +6,7 @@ import { __resetSnapshotCacheForTests } from '../src/market/snapshot';
 import { errorHandler } from '../src/utils/response';
 import { symbolRoutes } from '../src/routes/symbols';
 
-type FetchMode = 'primary_success' | 'secondary_success' | 'all_fail';
+type FetchMode = 'primary_success' | 'secondary_success' | 'secondary_stale_open' | 'all_fail';
 
 const TEST_SYMBOL_CODE = '7203';
 const TEST_MARKET_CODE = 'TSE';
@@ -27,6 +27,9 @@ function createFetchStub() {
     if (fetchMode === 'secondary_success' && isPrimary) {
       throw new Error('primary_down');
     }
+    if (fetchMode === 'secondary_stale_open' && isPrimary) {
+      throw new Error('primary_down');
+    }
 
     if (isPrimary) {
       return {
@@ -40,6 +43,27 @@ function createFetchStub() {
     }
 
     if (isSecondary) {
+      const staleEpoch = Math.floor((Date.now() - 40 * 60 * 1000) / 1000);
+      if (fetchMode === 'secondary_stale_open') {
+        return {
+          ok: true,
+          json: async () => ({
+            chart: {
+              result: [
+                {
+                  meta: {
+                    regularMarketPrice: 3412,
+                    previousClose: 3404,
+                    regularMarketVolume: 11111111,
+                    regularMarketTime: staleEpoch,
+                    marketState: 'REGULAR',
+                  },
+                },
+              ],
+            },
+          }),
+        };
+      }
       return {
         ok: true,
         json: async () => ({
@@ -82,6 +106,14 @@ function assertSnapshotShape(snapshot: any) {
   expect(snapshot).toHaveProperty('source_name');
 }
 
+function toMetricDateJst(now: Date): Date {
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const y = jst.getUTCFullYear();
+  const m = String(jst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(jst.getUTCDate()).padStart(2, '0');
+  return new Date(`${y}-${m}-${d}T00:00:00+09:00`);
+}
+
 describe('symbols route current_snapshot db integration', () => {
   beforeAll(async () => {
     await prisma.$queryRaw`SELECT 1`;
@@ -96,6 +128,11 @@ describe('symbols route current_snapshot db integration', () => {
       },
     });
     symbolId = created.id;
+    await prisma.snapshotReasonDailyMetric.deleteMany({
+      where: {
+        sourceName: 'yahoo_chart',
+      },
+    });
   });
 
   afterAll(async () => {
@@ -104,6 +141,11 @@ describe('symbols route current_snapshot db integration', () => {
         where: { id: symbolId },
       });
     }
+    await prisma.snapshotReasonDailyMetric.deleteMany({
+      where: {
+        sourceName: 'yahoo_chart',
+      },
+    });
     vi.unstubAllGlobals();
     await prisma.$disconnect();
   });
@@ -143,5 +185,54 @@ describe('symbols route current_snapshot db integration', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('increments same-day reason metric for same source + reason_code', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST
+    fetchMode = 'secondary_stale_open';
+    __resetSnapshotCacheForTests();
+    const metricDate = toMetricDateJst(new Date());
+
+    await prisma.snapshotReasonDailyMetric.deleteMany({
+      where: {
+        metricDate,
+        sourceName: 'yahoo_chart',
+        reasonCode: 'open_but_stale',
+      },
+    });
+
+    const app = await createApp();
+    vi.stubGlobal('fetch', createFetchStub());
+    try {
+      const res1 = await app.inject({
+        method: 'GET',
+        url: `/api/symbols/${symbolId}`,
+      });
+      expect(res1.statusCode).toBe(200);
+
+      __resetSnapshotCacheForTests();
+      const res2 = await app.inject({
+        method: 'GET',
+        url: `/api/symbols/${symbolId}`,
+      });
+      expect(res2.statusCode).toBe(200);
+    } finally {
+      await app.close();
+      vi.useRealTimers();
+    }
+
+    const metric = await prisma.snapshotReasonDailyMetric.findUnique({
+      where: {
+        metricDate_sourceName_reasonCode: {
+          metricDate,
+          sourceName: 'yahoo_chart',
+          reasonCode: 'open_but_stale',
+        },
+      },
+    });
+
+    expect(metric).toBeTruthy();
+    expect(metric?.count).toBe(2);
   });
 });

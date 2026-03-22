@@ -269,3 +269,18 @@ model ComparisonResult {
   @@index([comparisonSessionId, generatedAt])
   @@map("comparison_results")
 }
+
+model SnapshotReasonDailyMetric {
+  id         String   @id @default(uuid())
+  metricDate DateTime @map("metric_date")
+  sourceName String   @map("source_name")
+  reasonCode String   @map("reason_code")
+  count      Int      @default(0)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([metricDate, sourceName, reasonCode])
+  @@index([metricDate])
+  @@index([reasonCode])
+  @@map("snapshot_reason_daily_metrics")
+}
