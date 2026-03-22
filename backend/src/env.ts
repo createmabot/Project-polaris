@@ -55,6 +55,10 @@ const envSchema = z.object({
     .default('https://query1.finance.yahoo.com/v8/finance/chart/{symbol}'),
   SNAPSHOT_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   SNAPSHOT_CACHE_TTL_MS: z.coerce.number().int().positive().default(300000),
+  SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY: z.coerce.number().int().nonnegative().default(20),
+  SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY: z.coerce.number().int().nonnegative().default(5),
+  SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY: z.coerce.number().int().nonnegative().default(10),
+  SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY: z.coerce.number().int().nonnegative().default(30),
 });
 
 const _env = envSchema.safeParse(process.env);

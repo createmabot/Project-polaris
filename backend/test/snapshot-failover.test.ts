@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetSnapshotCacheForTests, getCurrentSnapshotForSymbol } from '../src/market/snapshot';
 import { prisma } from '../src/db';
+import { env } from '../src/env';
 
 const symbol = {
   id: 'sym-1',
@@ -8,6 +9,13 @@ const symbol = {
   symbolCode: '7203',
   marketCode: 'TSE',
   tradingviewSymbol: 'TSE:7203',
+};
+
+const defaultSnapshotThresholds = {
+  openButStale: env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY,
+  freshnessInvalid: env.SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY,
+  freshnessExpired: env.SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY,
+  candidateUnknown: env.SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY,
 };
 
 describe('current_snapshot failover', () => {
@@ -24,6 +32,10 @@ describe('current_snapshot failover', () => {
       createdAt: new Date('2026-03-18T00:00:00Z'),
       updatedAt: new Date('2026-03-18T00:00:00Z'),
     } as any);
+    env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY = defaultSnapshotThresholds.openButStale;
+    env.SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY = defaultSnapshotThresholds.freshnessInvalid;
+    env.SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY = defaultSnapshotThresholds.freshnessExpired;
+    env.SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY = defaultSnapshotThresholds.candidateUnknown;
   });
 
   afterEach(() => {
@@ -234,6 +246,13 @@ describe('current_snapshot failover', () => {
     );
   });
 
+  it('uses default env thresholds when not overridden', () => {
+    expect(env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY).toBe(20);
+    expect(env.SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY).toBe(5);
+    expect(env.SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY).toBe(10);
+    expect(env.SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY).toBe(30);
+  });
+
   it('does not emit threshold warning when open_but_stale is below threshold', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
@@ -321,6 +340,94 @@ describe('current_snapshot failover', () => {
       threshold: 20,
       event_name: 'snapshot_reason_threshold_exceeded',
     });
+  });
+
+  it('uses overridden env threshold for open_but_stale warning', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+    env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY = 3;
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockResolvedValueOnce({
+      id: 'metric-threshold-override',
+      metricDate: new Date('2026-03-18T00:00:00+09:00'),
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      count: 3,
+      createdAt: new Date('2026-03-18T00:00:00Z'),
+      updatedAt: new Date('2026-03-18T00:00:00Z'),
+    } as any);
+
+    const warn = vi.fn();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: Math.floor((Date.now() - 40 * 60 * 1000) / 1000),
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const thresholdLog = warn.mock.calls.find((call) => call[1] === 'snapshot_reason_threshold_exceeded');
+    expect(thresholdLog?.[0]).toMatchObject({
+      reason_code: 'open_but_stale',
+      count: 3,
+      threshold: 3,
+    });
+  });
+
+  it('does not emit threshold warning when env threshold is disabled with 0', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+    env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY = 0;
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockResolvedValueOnce({
+      id: 'metric-threshold-disabled',
+      metricDate: new Date('2026-03-18T00:00:00+09:00'),
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      count: 1,
+      createdAt: new Date('2026-03-18T00:00:00Z'),
+      updatedAt: new Date('2026-03-18T00:00:00Z'),
+    } as any);
+
+    const warn = vi.fn();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: Math.floor((Date.now() - 40 * 60 * 1000) / 1000),
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const thresholdLog = warn.mock.calls.find((call) => call[1] === 'snapshot_reason_threshold_exceeded');
+    expect(thresholdLog).toBeUndefined();
   });
 
   it('marks expired yahoo open state as unknown', async () => {

@@ -90,6 +90,7 @@ pnpm run dev
 - Reason observability: snapshot evaluator writes structured internal logs (e.g. `open_but_stale`, `freshness_invalid`, `freshness_expired`, `jp_market_holiday`) while keeping public API unchanged.
 - Daily internal metrics: selected `reason_code` values are aggregated in DB (`snapshot_reason_daily_metrics`) by JST date + source + reason; this is for ops monitoring only and is not exposed via public API.
 - Lightweight threshold warning: selected reasons (`open_but_stale`, `freshness_invalid`, `freshness_expired`, `candidate_unknown`) emit `snapshot_reason_threshold_exceeded` when daily count reaches configured threshold.
+- Threshold env overrides (defaults): `SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY=20`, `SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY=5`, `SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY=10`, `SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY=30` (`0` disables that reason's warning).
 
 ### Troubleshooting
 1. Docker daemon check:

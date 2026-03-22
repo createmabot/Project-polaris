@@ -119,13 +119,15 @@ const SNAPSHOT_REASON_METRIC_TARGETS = new Set<SnapshotReasonCode>([
   'candidate_unknown',
 ]);
 
-const SNAPSHOT_REASON_DAILY_THRESHOLDS: Partial<Record<SnapshotReasonCode, number>> = {
-  // Detect operational anomalies with low-noise reason codes.
-  open_but_stale: 20,
-  freshness_invalid: 5,
-  freshness_expired: 10,
-  candidate_unknown: 30,
-};
+function getSnapshotReasonDailyThresholds(): Partial<Record<SnapshotReasonCode, number>> {
+  return {
+    // Detect operational anomalies with low-noise reason codes.
+    open_but_stale: env.SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY,
+    freshness_invalid: env.SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY,
+    freshness_expired: env.SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY,
+    candidate_unknown: env.SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY,
+  };
+}
 
 function toJstDate(date: Date): Date {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
@@ -483,8 +485,9 @@ function evaluateSnapshotReasonThreshold(
   },
   logger?: { warn: (obj: unknown, msg?: string) => void }
 ) {
-  const threshold = SNAPSHOT_REASON_DAILY_THRESHOLDS[input.reasonCode];
+  const threshold = getSnapshotReasonDailyThresholds()[input.reasonCode];
   if (!threshold) return;
+  if (threshold <= 0) return;
   if (input.count !== threshold) return;
 
   logger?.warn?.(
