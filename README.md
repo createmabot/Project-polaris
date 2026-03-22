@@ -201,4 +201,34 @@ Review record template:
   - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
   - `npm --prefix backend run test:integration:symbol-snapshot-db`
 - This job validates the same failover contract as local integration runs.
-- Required status check on `main`: `symbol-snapshot-db-integration`
+- Required status checks on `main` (ruleset-managed):
+  - `symbol-snapshot-db-integration`
+  - `snapshot-review-generator-json-check`
+
+### Required-check failure drill (`snapshot-review-generator-json-check`)
+Purpose:
+- Verify regularly that PR merge is blocked when review-generator JSON contract breaks.
+- Detect accidental ruleset/check drift early.
+
+Recommended cadence:
+- Once per quarter (or after branch protection/ruleset changes).
+
+Runbook (minimal):
+1. Create a drill branch from latest `main` (example: `codex/ops-drill-snapshot-json-failure-YYYYMMDD`).
+2. Add a temporary break that makes `snapshot-review-generator-json-check` fail quickly:
+   - preferred: in `scripts/check-snapshot-weekly-review-json.mjs`, change one expected key name in `assertRequiredKeys`.
+3. Commit and open a PR with clear title (example: `Ops drill: force snapshot-review-generator-json-check failure`).
+4. Confirm on PR:
+   - check `snapshot-review-generator-json-check` is `failed` (red)
+   - merge is blocked by required checks
+   - required check names match ruleset entries exactly
+5. Revert the temporary break on the same branch (or add a restore commit), push again.
+6. Confirm both required checks return to green:
+   - `snapshot-review-generator-json-check`
+   - `symbol-snapshot-db-integration`
+7. Close the drill PR after evidence capture (do not merge drill breakage).
+
+Safety notes:
+- Keep drill change minimal and fully reversible.
+- Do not run drill directly on `main`.
+- Store drill outcome in weekly ops record if relevant.
