@@ -160,6 +160,10 @@ Review record template:
 - Use `docs/snapshot-weekly-review-record-template.md` for weekly record keeping.
 - Save completed records under `docs/snapshot-weekly-reviews/`.
 - File naming rule (JST week): `YYYY-Www-snapshot-review.md` (example: `2026-W12-snapshot-review.md`).
+- Use generator script to create a new weekly file:
+  - `pnpm run create:snapshot-weekly-review`
+  - The script creates the file from template using JST ISO week naming.
+  - If the target file already exists, it exits without overwriting.
 - Record every week even when there is no threshold change (`no change` must be explicit).
 - If env was changed, always record before/after values and rationale.
 - Role split:
