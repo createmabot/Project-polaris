@@ -31,12 +31,17 @@ function getCurrentJstDateParts(now = new Date()) {
 function parseArgs(argv) {
   let dateArg;
   let force = false;
+  let dryRun = false;
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       printHelpAndExit(0);
     }
     if (arg === '--force') {
       force = true;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      dryRun = true;
       continue;
     }
     if (arg.startsWith('--date=')) {
@@ -51,7 +56,7 @@ function parseArgs(argv) {
     console.error(`Unknown argument: ${arg}`);
     printHelpAndExit(1);
   }
-  return { dateArg, force };
+  return { dateArg, force, dryRun };
 }
 
 function parseJstDateArg(dateArg) {
@@ -90,16 +95,20 @@ function printHelpAndExit(code = 0) {
   console.log('  pnpm run create:snapshot-weekly-review');
   console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD');
   console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force');
+  console.log('  pnpm run create:snapshot-weekly-review -- --dry-run');
+  console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --dry-run');
+  console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force --dry-run');
   console.log('');
   console.log('Notes:');
   console.log('  --date is interpreted as JST calendar date.');
   console.log('  --force overwrites existing target file explicitly.');
+  console.log('  --dry-run does not write files; it only prints expected result.');
   console.log('  File naming rule: YYYY-Www-snapshot-review.md');
   process.exit(code);
 }
 
 function main() {
-  const { dateArg, force } = parseArgs(process.argv.slice(2));
+  const { dateArg, force, dryRun } = parseArgs(process.argv.slice(2));
   const baseJstDate = dateArg ? parseJstDateArg(dateArg) : getCurrentJstDateParts(new Date());
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
@@ -108,6 +117,8 @@ function main() {
   const outputDir = path.join(repoRoot, 'docs', 'snapshot-weekly-reviews');
   const filename = buildTargetFilename(baseJstDate);
   const outputPath = path.join(outputDir, filename);
+  const baseDateText = `${baseJstDate.year}-${String(baseJstDate.month).padStart(2, '0')}-${String(baseJstDate.day).padStart(2, '0')}`;
+  const weekKey = filename.replace('-snapshot-review.md', '');
 
   if (!fs.existsSync(templatePath)) {
     console.error(`Template not found: ${templatePath}`);
@@ -119,6 +130,23 @@ function main() {
   }
 
   const existed = fs.existsSync(outputPath);
+  console.log(`Base date (JST): ${baseDateText}`);
+  console.log(`Target week (JST ISO week): ${weekKey}`);
+  console.log(`Target file path: ${outputPath}`);
+  console.log(`Target file exists: ${existed ? 'yes' : 'no'}`);
+
+  if (dryRun) {
+    if (!existed) {
+      console.log('Dry-run result: Would create.');
+    } else if (force) {
+      console.log('Dry-run result: Would overwrite (--force).');
+    } else {
+      console.log('Dry-run result: Would fail because file already exists.');
+    }
+    console.log('Dry-run mode: no file was written.');
+    return;
+  }
+
   if (existed && !force) {
     console.error(`Review file already exists: ${outputPath}`);
     console.error('No file was overwritten. Re-run with --force to overwrite explicitly.');
@@ -128,10 +156,6 @@ function main() {
   const template = fs.readFileSync(templatePath, 'utf8');
   fs.writeFileSync(outputPath, template, 'utf8');
 
-  const baseDateText = `${baseJstDate.year}-${String(baseJstDate.month).padStart(2, '0')}-${String(baseJstDate.day).padStart(2, '0')}`;
-  const weekKey = filename.replace('-snapshot-review.md', '');
-  console.log(`Base date (JST): ${baseDateText}`);
-  console.log(`Target week (JST ISO week): ${weekKey}`);
   if (existed && force) {
     console.log(`Overwritten weekly review file (--force): ${outputPath}`);
   } else {
