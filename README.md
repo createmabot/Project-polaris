@@ -156,6 +156,15 @@ Threshold change principle:
 - Runtime environment values (`local/staging/prod`) are operational overrides.
 - `0` means warning disabled for that reason (metrics/logging remain enabled).
 
+Review record template:
+- Use `docs/snapshot-weekly-review-record-template.md` for weekly record keeping.
+- Record every week even when there is no threshold change (`no change` must be explicit).
+- If env was changed, always record before/after values and rationale.
+- Role split:
+  - `.env.example`: baseline defaults only
+  - `README.md`: runbook / decision policy
+  - review template: weekly evidence and audit trail
+
 ### Troubleshooting
 1. Docker daemon check:
    - `docker version`
