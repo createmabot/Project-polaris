@@ -234,6 +234,95 @@ describe('current_snapshot failover', () => {
     );
   });
 
+  it('does not emit threshold warning when open_but_stale is below threshold', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockResolvedValueOnce({
+      id: 'metric-below',
+      metricDate: new Date('2026-03-18T00:00:00+09:00'),
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      count: 19,
+      createdAt: new Date('2026-03-18T00:00:00Z'),
+      updatedAt: new Date('2026-03-18T00:00:00Z'),
+    } as any);
+
+    const warn = vi.fn();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: Math.floor((Date.now() - 40 * 60 * 1000) / 1000),
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const thresholdLog = warn.mock.calls.find((call) => call[1] === 'snapshot_reason_threshold_exceeded');
+    expect(thresholdLog).toBeUndefined();
+  });
+
+  it('emits threshold warning when open_but_stale reaches threshold', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+    vi.spyOn(prisma.snapshotReasonDailyMetric, 'upsert').mockResolvedValueOnce({
+      id: 'metric-threshold',
+      metricDate: new Date('2026-03-18T00:00:00+09:00'),
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      count: 20,
+      createdAt: new Date('2026-03-18T00:00:00Z'),
+      updatedAt: new Date('2026-03-18T00:00:00Z'),
+    } as any);
+
+    const warn = vi.fn();
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: Math.floor((Date.now() - 40 * 60 * 1000) / 1000),
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const thresholdLog = warn.mock.calls.find((call) => call[1] === 'snapshot_reason_threshold_exceeded');
+    expect(thresholdLog).toBeTruthy();
+    expect(thresholdLog?.[0]).toMatchObject({
+      source_name: 'yahoo_chart',
+      reason_code: 'open_but_stale',
+      count: 20,
+      threshold: 20,
+      event_name: 'snapshot_reason_threshold_exceeded',
+    });
+  });
+
   it('marks expired yahoo open state as unknown', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST

@@ -89,6 +89,7 @@ pnpm run dev
 - Internal note: freshness (`fresh/stale/expired/invalid`) is evaluated separately from market phase and then folded into public `market_status` (`open/closed/unknown`) without adding API fields.
 - Reason observability: snapshot evaluator writes structured internal logs (e.g. `open_but_stale`, `freshness_invalid`, `freshness_expired`, `jp_market_holiday`) while keeping public API unchanged.
 - Daily internal metrics: selected `reason_code` values are aggregated in DB (`snapshot_reason_daily_metrics`) by JST date + source + reason; this is for ops monitoring only and is not exposed via public API.
+- Lightweight threshold warning: selected reasons (`open_but_stale`, `freshness_invalid`, `freshness_expired`, `candidate_unknown`) emit `snapshot_reason_threshold_exceeded` when daily count reaches configured threshold.
 
 ### Troubleshooting
 1. Docker daemon check:

@@ -119,6 +119,14 @@ const SNAPSHOT_REASON_METRIC_TARGETS = new Set<SnapshotReasonCode>([
   'candidate_unknown',
 ]);
 
+const SNAPSHOT_REASON_DAILY_THRESHOLDS: Partial<Record<SnapshotReasonCode, number>> = {
+  // Detect operational anomalies with low-noise reason codes.
+  open_but_stale: 20,
+  freshness_invalid: 5,
+  freshness_expired: 10,
+  candidate_unknown: 30,
+};
+
 function toJstDate(date: Date): Date {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
 }
@@ -386,7 +394,6 @@ function logSnapshotEvaluation(
   }
 ) {
   if (!shouldLogSnapshotEvaluation(payload.evaluation)) return;
-  if (!logger?.warn) return;
 
   void incrementSnapshotReasonMetric(
     {
@@ -396,6 +403,7 @@ function logSnapshotEvaluation(
     logger
   );
 
+  if (!logger?.warn) return;
   logger.warn(
     {
       symbol_id: payload.symbol_id,
@@ -427,7 +435,7 @@ async function incrementSnapshotReasonMetric(
 
   const metricDate = toJstMetricDate(new Date());
   try {
-    await prisma.snapshotReasonDailyMetric.upsert({
+    const metric = await prisma.snapshotReasonDailyMetric.upsert({
       where: {
         metricDate_sourceName_reasonCode: {
           metricDate,
@@ -447,6 +455,12 @@ async function incrementSnapshotReasonMetric(
         },
       },
     });
+    evaluateSnapshotReasonThreshold({
+      metricDate,
+      sourceName: input.source_name,
+      reasonCode: input.reason_code,
+      count: metric.count,
+    }, logger);
   } catch (error) {
     logger?.warn?.(
       {
@@ -458,6 +472,32 @@ async function incrementSnapshotReasonMetric(
       'current_snapshot_reason_metric_record_failed'
     );
   }
+}
+
+function evaluateSnapshotReasonThreshold(
+  input: {
+    metricDate: Date;
+    sourceName: string;
+    reasonCode: SnapshotReasonCode;
+    count: number;
+  },
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  const threshold = SNAPSHOT_REASON_DAILY_THRESHOLDS[input.reasonCode];
+  if (!threshold) return;
+  if (input.count !== threshold) return;
+
+  logger?.warn?.(
+    {
+      metric_date: input.metricDate.toISOString(),
+      source_name: input.sourceName,
+      reason_code: input.reasonCode,
+      count: input.count,
+      threshold,
+      event_name: 'snapshot_reason_threshold_exceeded',
+    },
+    'snapshot_reason_threshold_exceeded'
+  );
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {
