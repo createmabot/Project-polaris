@@ -125,8 +125,55 @@ const JP_MARKET_HOLIDAYS = new Set<string>([
   '2028-12-31',
 ]);
 
+const JP_MARKET_HOLIDAY_YEARS = Array.from(
+  new Set(
+    Array.from(JP_MARKET_HOLIDAYS)
+      .map((date) => Number(date.slice(0, 4)))
+      .filter((year) => Number.isInteger(year))
+  )
+).sort((a, b) => a - b);
+
+const JP_MARKET_HOLIDAY_MIN_YEAR = JP_MARKET_HOLIDAY_YEARS[0] ?? 0;
+const JP_MARKET_HOLIDAY_MAX_YEAR = JP_MARKET_HOLIDAY_YEARS[JP_MARKET_HOLIDAY_YEARS.length - 1] ?? 0;
+let jpHolidayCoverageWarned = false;
+
 function isJpMarketHoliday(now: Date): boolean {
   return JP_MARKET_HOLIDAYS.has(toJstDateKey(now));
+}
+
+function warnIfJpHolidayCoverageNearingLimit(
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+) {
+  if (jpHolidayCoverageWarned) return;
+  if (!logger?.warn) return;
+
+  const currentJstYear = Number(toJstDateKey(new Date()).slice(0, 4));
+  if (!Number.isInteger(currentJstYear)) return;
+
+  if (currentJstYear > JP_MARKET_HOLIDAY_MAX_YEAR) {
+    logger.warn(
+      {
+        current_jst_year: currentJstYear,
+        min_year: JP_MARKET_HOLIDAY_MIN_YEAR,
+        max_year: JP_MARKET_HOLIDAY_MAX_YEAR,
+      },
+      'jp_market_holidays_coverage_expired'
+    );
+    jpHolidayCoverageWarned = true;
+    return;
+  }
+
+  if (JP_MARKET_HOLIDAY_MAX_YEAR - currentJstYear <= 1) {
+    logger.warn(
+      {
+        current_jst_year: currentJstYear,
+        min_year: JP_MARKET_HOLIDAY_MIN_YEAR,
+        max_year: JP_MARKET_HOLIDAY_MAX_YEAR,
+      },
+      'jp_market_holidays_coverage_near_limit'
+    );
+    jpHolidayCoverageWarned = true;
+  }
 }
 
 function isWithinJpTradingSession(now: Date): boolean {
@@ -341,6 +388,8 @@ export async function getCurrentSnapshotForSymbol(
   symbol: SymbolRef,
   logger?: { warn: (obj: unknown, msg?: string) => void }
 ): Promise<CurrentSnapshot | null> {
+  warnIfJpHolidayCoverageNearingLimit(logger);
+
   const baseCode = symbol.symbolCode?.trim() || symbol.symbol?.trim() || symbol.id;
   const cacheKey = `snapshot:${baseCode.toLowerCase()}`;
   const cached = getCachedSnapshot(cacheKey);
@@ -427,4 +476,13 @@ export async function getCurrentSnapshotsForSymbols(
 
 export function __resetSnapshotCacheForTests() {
   snapshotCache.clear();
+  jpHolidayCoverageWarned = false;
+}
+
+export function __getJpMarketHolidayCoverageForTests() {
+  return {
+    minYear: JP_MARKET_HOLIDAY_MIN_YEAR,
+    maxYear: JP_MARKET_HOLIDAY_MAX_YEAR,
+    years: [...JP_MARKET_HOLIDAY_YEARS],
+  };
 }
