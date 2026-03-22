@@ -174,6 +174,39 @@ describe('current_snapshot failover', () => {
     expect(snapshot?.market_status).toBe('unknown');
   });
 
+  it('marks expired yahoo open state as unknown', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
+
+    const expiredEpochSec = Math.floor(new Date('2026-03-10T01:00:00.000Z').getTime() / 1000); // > 7 days old
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: expiredEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    expect(snapshot?.source_name).toBe('yahoo_chart');
+    expect(snapshot?.market_status).toBe('unknown');
+  });
+
   it('marks fresh yahoo REGULAR as open during JP trading session on a non-holiday weekday', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)

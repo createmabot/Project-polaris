@@ -86,6 +86,10 @@ function toAsOf(dateText: string): string | null {
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const INTRADAY_STALE_MS = 30 * 60 * 1000;
 const DAILY_STALE_MS = 7 * 24 * 60 * 60 * 1000;
+const DAILY_WARNING_STALE_MS = 24 * 60 * 60 * 1000;
+
+type MarketStatusCandidate = 'open' | 'closed' | 'unknown';
+type FreshnessStatus = 'fresh' | 'stale' | 'expired' | 'invalid';
 
 function toJstDate(date: Date): Date {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
@@ -187,25 +191,42 @@ function isWithinJpTradingSession(now: Date): boolean {
   return inMorning || inAfternoon;
 }
 
-function inferMarketStatusFromStooqDaily(asOf: string): 'open' | 'closed' | 'unknown' {
-  const asOfDate = new Date(asOf);
-  if (Number.isNaN(asOfDate.getTime())) return 'unknown';
-  const now = new Date();
-  const ageMs = now.getTime() - asOfDate.getTime();
-
-  // Future daily close timestamps are not trustworthy as "current" state.
-  if (ageMs < -FIVE_MINUTES_MS) return 'unknown';
-  // Very old daily data should not be presented as active closed session.
-  if (ageMs > DAILY_STALE_MS) return 'unknown';
-  return 'closed';
-}
-
-function inferMarketStatusFromYahoo(stateRaw: unknown): 'open' | 'closed' | 'unknown' {
+function inferMarketStatusFromYahoo(stateRaw: unknown): MarketStatusCandidate {
   if (typeof stateRaw !== 'string') return 'unknown';
   const state = stateRaw.toUpperCase();
   if (state === 'REGULAR' || state === 'PRE' || state === 'PREPRE') return 'open';
   if (state === 'POST' || state === 'POSTPOST' || state === 'CLOSED') return 'closed';
   return 'unknown';
+}
+
+function evaluateFreshness(
+  asOf: string,
+  thresholds: { staleMs: number; expiredMs: number }
+): FreshnessStatus {
+  const asOfDate = new Date(asOf);
+  if (Number.isNaN(asOfDate.getTime())) return 'invalid';
+
+  const now = new Date();
+  const ageMs = now.getTime() - asOfDate.getTime();
+
+  if (ageMs < -FIVE_MINUTES_MS) return 'invalid';
+  if (ageMs > thresholds.expiredMs) return 'expired';
+  if (ageMs > thresholds.staleMs) return 'stale';
+  return 'fresh';
+}
+
+function foldMarketStatus(
+  candidate: MarketStatusCandidate,
+  freshness: FreshnessStatus
+): 'open' | 'closed' | 'unknown' {
+  if (candidate === 'unknown') return 'unknown';
+  if (freshness === 'invalid' || freshness === 'expired') return 'unknown';
+  if (candidate === 'open') {
+    if (freshness === 'fresh') return 'open';
+    return 'unknown';
+  }
+  // closed + stale keeps "closed" for conservative UX compatibility.
+  return 'closed';
 }
 
 function toAsOfFromUnixSeconds(epochRaw: unknown): string | null {
@@ -220,37 +241,41 @@ function inferMarketStatusFromYahooMeta(
   symbol: Pick<SymbolRef, 'marketCode'>
 ): 'open' | 'closed' | 'unknown' {
   const base = inferMarketStatusFromYahoo(stateRaw);
-  const asOfDate = new Date(asOf);
-  if (Number.isNaN(asOfDate.getTime())) return 'unknown';
-
-  const now = new Date();
-  const ageMs = now.getTime() - asOfDate.getTime();
+  const freshness = evaluateFreshness(asOf, {
+    staleMs: INTRADAY_STALE_MS,
+    expiredMs: DAILY_STALE_MS,
+  });
   const marketCode = (symbol.marketCode ?? '').toUpperCase();
   const isJpEquity = marketCode === 'TSE' || marketCode === 'JP' || marketCode === 'TYO';
+  const now = new Date();
+  const asOfDate = new Date(asOf);
 
-  if (ageMs < -FIVE_MINUTES_MS) return 'unknown';
+  if (freshness === 'invalid' || freshness === 'expired') return 'unknown';
 
-  if (base === 'open') {
-    if (ageMs > INTRADAY_STALE_MS) return 'unknown';
-    if (isJpEquity && !isWithinJpTradingSession(now)) return 'closed';
-    return 'open';
+  let candidate: MarketStatusCandidate = base;
+
+  if (isJpEquity) {
+    if (candidate === 'open' && !isWithinJpTradingSession(now)) {
+      candidate = 'closed';
+    } else if (candidate === 'unknown' && !isWithinJpTradingSession(now)) {
+      candidate = 'closed';
+    }
   }
 
-  if (base === 'closed') {
-    if (ageMs > DAILY_STALE_MS) return 'unknown';
-    return 'closed';
+  if (candidate === 'unknown') {
+    const sameJstDay = toJstDateKey(now) === toJstDateKey(asOfDate);
+    if (sameJstDay && isJpEquity && isWithinJpTradingSession(now)) return 'unknown';
   }
 
-  if (ageMs > DAILY_STALE_MS) return 'unknown';
+  return foldMarketStatus(candidate, freshness);
+}
 
-  // For JP equities, unknown state outside trading session can be safely treated as closed.
-  if (isJpEquity && !isWithinJpTradingSession(now)) return 'closed';
-
-  // Same-day unknown state from intraday source remains unknown.
-  const sameJstDay = toJstDateKey(now) === toJstDateKey(asOfDate);
-  if (sameJstDay && isWithinJpTradingSession(now)) return 'unknown';
-
-  return 'closed';
+function inferMarketStatusFromStooqDaily(asOf: string): 'open' | 'closed' | 'unknown' {
+  const freshness = evaluateFreshness(asOf, {
+    staleMs: DAILY_WARNING_STALE_MS,
+    expiredMs: DAILY_STALE_MS,
+  });
+  return foldMarketStatus('closed', freshness);
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {

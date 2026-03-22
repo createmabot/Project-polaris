@@ -86,6 +86,7 @@ pnpm run dev
 - JP equities (`TSE/JP/TYO`) also apply a built-in JP market holiday calendar (2024-2028, no external API dependency), so holidays are treated as non-trading days.
 - Holiday table maintenance guard: `npm --prefix backend run test:jp-market-holidays-guard` checks that the current JST year and next year are covered, and verifies near-limit / expired warnings.
 - CI integration: `Symbol Snapshot DB Integration` also runs `test:jp-market-holidays-guard`, so holiday table coverage regressions fail PR checks.
+- Internal note: freshness (`fresh/stale/expired/invalid`) is evaluated separately from market phase and then folded into public `market_status` (`open/closed/unknown`) without adding API fields.
 
 ### Troubleshooting
 1. Docker daemon check:
