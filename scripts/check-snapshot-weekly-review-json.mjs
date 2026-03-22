@@ -37,7 +37,7 @@ function assertRequiredKeys(payload, label) {
   const requiredKeys = [
     'baseDateJst',
     'targetWeek',
-    'targetFilePathBroken',
+    'targetFilePath',
     'targetFileExists',
     'force',
     'dryRun',
