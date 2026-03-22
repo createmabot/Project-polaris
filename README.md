@@ -172,6 +172,7 @@ Review record template:
   - `--dry-run` does not write files. It prints target week/file and whether it would create/overwrite/fail.
   - `--output-format=json` is intended mainly for `--dry-run` automation (CI/ops scripts).
   - JSON keys: `baseDateJst`, `targetWeek`, `targetFilePath`, `targetFileExists`, `force`, `dryRun`, `result` (`create|overwrite|fail_exists` for dry-run).
+  - CI also validates this dry-run JSON contract via `pnpm run check:snapshot-weekly-review-json`.
   - Default is safe non-overwrite. If the target file already exists, it exits.
   - Use `--force` only for explicit regeneration/overwrite (recommended flow: `--dry-run` first).
 - Record every week even when there is no threshold change (`no change` must be explicit).

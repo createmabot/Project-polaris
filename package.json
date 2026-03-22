@@ -8,6 +8,7 @@
     "build": "pnpm --recursive build",
     "test": "pnpm --recursive test",
     "create:snapshot-weekly-review": "node scripts/create-snapshot-weekly-review.mjs",
+    "check:snapshot-weekly-review-json": "node scripts/check-snapshot-weekly-review-json.mjs",
     "test:integration:symbol-snapshot-db": "docker compose up -d postgres && npm --prefix backend run test:integration:symbol-snapshot-db:prepare && npm --prefix backend run test:integration:symbol-snapshot-db",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
