@@ -92,6 +92,24 @@ pnpm run dev
 - Lightweight threshold warning: selected reasons (`open_but_stale`, `freshness_invalid`, `freshness_expired`, `candidate_unknown`) emit `snapshot_reason_threshold_exceeded` when daily count reaches configured threshold.
 - Threshold env overrides (defaults): `SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY=20`, `SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY=5`, `SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY=10`, `SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY=30` (`0` disables that reason's warning).
 
+### Threshold profiles (recommended)
+`.env.example` keeps safe baseline defaults. Use environment-specific overrides in each deployment environment.
+
+| Reason code | local | staging | prod |
+| --- | ---: | ---: | ---: |
+| `open_but_stale` | 8 | 12 | 20 |
+| `freshness_invalid` | 2 | 3 | 5 |
+| `freshness_expired` | 5 | 7 | 10 |
+| `candidate_unknown` | 12 | 20 | 30 |
+
+Operational guidance:
+- Local: keep thresholds low to catch regressions quickly during development.
+- Staging: slightly less sensitive than local; used for pre-production stability checks.
+- Prod: reduce noise, alert only on meaningful sustained increases.
+- `0` disables warning for that reason (metrics/logging still continue).
+- Tune by env values only; no code change needed for normal adjustments.
+- Prioritize investigation in this order: `freshness_invalid` -> `open_but_stale` -> `freshness_expired` -> `candidate_unknown`.
+
 ### Troubleshooting
 1. Docker daemon check:
    - `docker version`
