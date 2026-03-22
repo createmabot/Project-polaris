@@ -27,7 +27,7 @@ describe('JP market holiday coverage guard', () => {
     );
 
     expect(coverage.minYear).toBeGreaterThan(0);
-    expect(coverage.maxYear).toBeGreaterThanOrEqual(currentJstYear + 1);
+    expect(coverage.maxYear).toBeGreaterThanOrEqual(currentJstYear + 100);
     expect(coverage.years).toContain(currentJstYear);
   });
 
