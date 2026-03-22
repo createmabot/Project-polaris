@@ -49,6 +49,19 @@ pnpm run up
 pnpm run down
 ```
 
+## ルール検証ラボ（MVP最小）
+- 画面: `/strategy-lab`
+- 今回の到達点:
+  - 自然言語入力
+  - strategy 作成
+  - strategy version 作成
+  - Pine 生成
+  - generated pine / warnings / assumptions の表示
+- まだ未対応（次フェーズ）:
+  - CSV取込
+  - 検証レポート表示
+  - 比較高度化
+
 ### Snapshot 週次レビュー記録
 - 生成（当週/JST）
   - `pnpm run create:snapshot-weekly-review`

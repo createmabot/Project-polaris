@@ -18,6 +18,7 @@ model User {
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
   comparisonSessions ComparisonSession[]
+  strategyRules StrategyRule[]
 
   @@map("users")
 }
@@ -283,4 +284,40 @@ model SnapshotReasonDailyMetric {
   @@index([metricDate])
   @@index([reasonCode])
   @@map("snapshot_reason_daily_metrics")
+}
+
+model StrategyRule {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  title     String
+  status    String   @default("active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  versions StrategyRuleVersion[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("strategy_rules")
+}
+
+model StrategyRuleVersion {
+  id                  String       @id @default(uuid())
+  strategyRuleId      String
+  strategyRule        StrategyRule @relation(fields: [strategyRuleId], references: [id])
+  naturalLanguageRule String       @db.Text
+  normalizedRuleJson  Json?
+  generatedPine       String?      @db.Text
+  warningsJson        Json?
+  assumptionsJson     Json?
+  market              String
+  timeframe           String
+  status              String       @default("draft")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([strategyRuleId, createdAt])
+  @@index([status])
+  @@map("strategy_rule_versions")
 }

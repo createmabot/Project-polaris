@@ -271,3 +271,30 @@ export type ComparisonGenerateData = {
   } | null;
 };
 
+export type StrategyCreateData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type StrategyVersionData = {
+  strategy_version: {
+    id: string;
+    strategy_id: string;
+    natural_language_rule: string;
+    market: string;
+    timeframe: string;
+    status: 'draft' | 'generated' | 'failed' | string;
+    normalized_rule_json: any;
+    generated_pine: string | null;
+    warnings: string[];
+    assumptions: string[];
+    created_at: string;
+    updated_at: string;
+  };
+};
+

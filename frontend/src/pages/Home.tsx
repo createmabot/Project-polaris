@@ -26,6 +26,11 @@ export default function Home() {
           銘柄比較を開く
         </Link>
       </div>
+      <div style={{ marginBottom: '1.2rem' }}>
+        <Link href="/strategy-lab" style={{ color: '#0066cc', textDecoration: 'none' }}>
+          ルール検証ラボを開く
+        </Link>
+      </div>
 
       <section style={{ marginTop: '1.5rem' }}>
         <h2>デイリーサマリー</h2>
