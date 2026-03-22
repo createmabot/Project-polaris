@@ -174,6 +174,48 @@ describe('current_snapshot failover', () => {
     expect(snapshot?.market_status).toBe('unknown');
   });
 
+  it('logs reason_code=open_but_stale for yahoo regular stale snapshot', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-18T01:00:00.000Z')); // 10:00 JST (Wednesday)
+
+    const staleEpochSec = Math.floor((Date.now() - 40 * 60 * 1000) / 1000); // 40 min stale
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: staleEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    const warn = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const statusLog = warn.mock.calls.find((call) => call[1] === 'current_snapshot_status_evaluated');
+    expect(statusLog).toBeTruthy();
+    expect(statusLog?.[0]).toMatchObject({
+      source_name: 'yahoo_chart',
+      market_status_candidate: 'open',
+      freshness_status: 'stale',
+      market_status: 'unknown',
+      reason_code: 'open_but_stale',
+    });
+  });
+
   it('marks expired yahoo open state as unknown', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
@@ -205,6 +247,86 @@ describe('current_snapshot failover', () => {
     const snapshot = await getCurrentSnapshotForSymbol(symbol);
     expect(snapshot?.source_name).toBe('yahoo_chart');
     expect(snapshot?.market_status).toBe('unknown');
+  });
+
+  it('logs reason_code=freshness_invalid for future yahoo timestamp', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
+
+    const futureEpochSec = Math.floor(new Date('2026-03-21T02:00:00.000Z').getTime() / 1000); // +1h in future
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: futureEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    const warn = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const statusLog = warn.mock.calls.find((call) => call[1] === 'current_snapshot_status_evaluated');
+    expect(statusLog).toBeTruthy();
+    expect(statusLog?.[0]).toMatchObject({
+      source_name: 'yahoo_chart',
+      freshness_status: 'invalid',
+      market_status: 'unknown',
+      reason_code: 'freshness_invalid',
+    });
+  });
+
+  it('logs reason_code=freshness_expired for expired yahoo timestamp', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-21T01:00:00.000Z')); // 10:00 JST
+
+    const expiredEpochSec = Math.floor(new Date('2026-03-10T01:00:00.000Z').getTime() / 1000); // > 7 days old
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error('primary_down'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          chart: {
+            result: [
+              {
+                meta: {
+                  regularMarketPrice: 3412,
+                  previousClose: 3404,
+                  regularMarketVolume: 11111111,
+                  regularMarketTime: expiredEpochSec,
+                  marketState: 'REGULAR',
+                },
+              },
+            ],
+          },
+        }),
+      });
+
+    const warn = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await getCurrentSnapshotForSymbol(symbol, { warn });
+
+    const statusLog = warn.mock.calls.find((call) => call[1] === 'current_snapshot_status_evaluated');
+    expect(statusLog).toBeTruthy();
+    expect(statusLog?.[0]).toMatchObject({
+      source_name: 'yahoo_chart',
+      freshness_status: 'expired',
+      market_status: 'unknown',
+      reason_code: 'freshness_expired',
+    });
   });
 
   it('marks fresh yahoo REGULAR as open during JP trading session on a non-holiday weekday', async () => {
@@ -266,11 +388,18 @@ describe('current_snapshot failover', () => {
         }),
       });
 
+    const warn = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const snapshot = await getCurrentSnapshotForSymbol(symbol);
+    const snapshot = await getCurrentSnapshotForSymbol(symbol, { warn });
     expect(snapshot?.source_name).toBe('yahoo_chart');
     expect(snapshot?.market_status).toBe('closed');
+    const statusLog = warn.mock.calls.find((call) => call[1] === 'current_snapshot_status_evaluated');
+    expect(statusLog?.[0]).toMatchObject({
+      source_name: 'yahoo_chart',
+      reason_code: 'jp_market_holiday',
+      market_status: 'closed',
+    });
   });
 
   it('marks yahoo REGULAR as closed on weekend for JP market', async () => {

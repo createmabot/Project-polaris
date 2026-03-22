@@ -90,6 +90,23 @@ const DAILY_WARNING_STALE_MS = 24 * 60 * 60 * 1000;
 
 type MarketStatusCandidate = 'open' | 'closed' | 'unknown';
 type FreshnessStatus = 'fresh' | 'stale' | 'expired' | 'invalid';
+type SnapshotReasonCode =
+  | 'daily_source_closed'
+  | 'candidate_unknown'
+  | 'freshness_invalid'
+  | 'freshness_expired'
+  | 'open_but_stale'
+  | 'jp_market_holiday'
+  | 'jp_market_weekend'
+  | 'outside_jp_session'
+  | 'closed_by_source';
+
+type SnapshotStatusEvaluation = {
+  market_status_candidate: MarketStatusCandidate;
+  freshness_status: FreshnessStatus;
+  market_status: 'open' | 'closed' | 'unknown';
+  reason_code: SnapshotReasonCode;
+};
 
 function toJstDate(date: Date): Date {
   return new Date(date.getTime() + 9 * 60 * 60 * 1000);
@@ -191,6 +208,14 @@ function isWithinJpTradingSession(now: Date): boolean {
   return inMorning || inAfternoon;
 }
 
+function getJpSessionClosureReason(now: Date): Extract<SnapshotReasonCode, 'jp_market_holiday' | 'jp_market_weekend' | 'outside_jp_session'> {
+  const jst = toJstDate(now);
+  const day = jst.getUTCDay();
+  if (day === 0 || day === 6) return 'jp_market_weekend';
+  if (isJpMarketHoliday(now)) return 'jp_market_holiday';
+  return 'outside_jp_session';
+}
+
 function inferMarketStatusFromYahoo(stateRaw: unknown): MarketStatusCandidate {
   if (typeof stateRaw !== 'string') return 'unknown';
   const state = stateRaw.toUpperCase();
@@ -229,6 +254,25 @@ function foldMarketStatus(
   return 'closed';
 }
 
+function buildStooqEvaluation(asOf: string): SnapshotStatusEvaluation {
+  const freshness = evaluateFreshness(asOf, {
+    staleMs: DAILY_WARNING_STALE_MS,
+    expiredMs: DAILY_STALE_MS,
+  });
+
+  const market_status = foldMarketStatus('closed', freshness);
+  let reason_code: SnapshotReasonCode = 'daily_source_closed';
+  if (freshness === 'invalid') reason_code = 'freshness_invalid';
+  if (freshness === 'expired') reason_code = 'freshness_expired';
+
+  return {
+    market_status_candidate: 'closed',
+    freshness_status: freshness,
+    market_status,
+    reason_code,
+  };
+}
+
 function toAsOfFromUnixSeconds(epochRaw: unknown): string | null {
   if (typeof epochRaw !== 'number' || !Number.isFinite(epochRaw)) return null;
   const date = new Date(epochRaw * 1000);
@@ -239,7 +283,7 @@ function inferMarketStatusFromYahooMeta(
   stateRaw: unknown,
   asOf: string,
   symbol: Pick<SymbolRef, 'marketCode'>
-): 'open' | 'closed' | 'unknown' {
+): SnapshotStatusEvaluation {
   const base = inferMarketStatusFromYahoo(stateRaw);
   const freshness = evaluateFreshness(asOf, {
     staleMs: INTRADAY_STALE_MS,
@@ -250,32 +294,103 @@ function inferMarketStatusFromYahooMeta(
   const now = new Date();
   const asOfDate = new Date(asOf);
 
-  if (freshness === 'invalid' || freshness === 'expired') return 'unknown';
+  if (freshness === 'invalid') {
+    return {
+      market_status_candidate: base,
+      freshness_status: freshness,
+      market_status: 'unknown',
+      reason_code: 'freshness_invalid',
+    };
+  }
+  if (freshness === 'expired') {
+    return {
+      market_status_candidate: base,
+      freshness_status: freshness,
+      market_status: 'unknown',
+      reason_code: 'freshness_expired',
+    };
+  }
 
   let candidate: MarketStatusCandidate = base;
+  let sessionReason: Extract<SnapshotReasonCode, 'jp_market_holiday' | 'jp_market_weekend' | 'outside_jp_session'> | null = null;
 
   if (isJpEquity) {
     if (candidate === 'open' && !isWithinJpTradingSession(now)) {
       candidate = 'closed';
+      sessionReason = getJpSessionClosureReason(now);
     } else if (candidate === 'unknown' && !isWithinJpTradingSession(now)) {
       candidate = 'closed';
+      sessionReason = getJpSessionClosureReason(now);
     }
   }
 
   if (candidate === 'unknown') {
     const sameJstDay = toJstDateKey(now) === toJstDateKey(asOfDate);
-    if (sameJstDay && isJpEquity && isWithinJpTradingSession(now)) return 'unknown';
+    if (sameJstDay && isJpEquity && isWithinJpTradingSession(now)) {
+      return {
+        market_status_candidate: candidate,
+        freshness_status: freshness,
+        market_status: 'unknown',
+        reason_code: 'candidate_unknown',
+      };
+    }
   }
 
-  return foldMarketStatus(candidate, freshness);
+  const finalMarketStatus = foldMarketStatus(candidate, freshness);
+  let reason_code: SnapshotReasonCode = 'closed_by_source';
+  if (candidate === 'unknown') reason_code = 'candidate_unknown';
+  if (candidate === 'open' && freshness === 'stale') reason_code = 'open_but_stale';
+  if (sessionReason) reason_code = sessionReason;
+
+  return {
+    market_status_candidate: candidate,
+    freshness_status: freshness,
+    market_status: finalMarketStatus,
+    reason_code,
+  };
 }
 
-function inferMarketStatusFromStooqDaily(asOf: string): 'open' | 'closed' | 'unknown' {
-  const freshness = evaluateFreshness(asOf, {
-    staleMs: DAILY_WARNING_STALE_MS,
-    expiredMs: DAILY_STALE_MS,
-  });
-  return foldMarketStatus('closed', freshness);
+function shouldLogSnapshotEvaluation(evaluation: SnapshotStatusEvaluation): boolean {
+  if (evaluation.market_status === 'unknown') return true;
+  if (evaluation.freshness_status !== 'fresh') return true;
+  if (
+    evaluation.reason_code === 'jp_market_holiday' ||
+    evaluation.reason_code === 'jp_market_weekend' ||
+    evaluation.reason_code === 'outside_jp_session'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function logSnapshotEvaluation(
+  logger: { warn: (obj: unknown, msg?: string) => void } | undefined,
+  payload: {
+    symbol_id: string;
+    symbol: string;
+    market_code: string | null;
+    source_name: string;
+    as_of: string;
+    evaluation: SnapshotStatusEvaluation;
+  }
+) {
+  if (!logger?.warn) return;
+  if (!shouldLogSnapshotEvaluation(payload.evaluation)) return;
+
+  logger.warn(
+    {
+      symbol_id: payload.symbol_id,
+      symbol: payload.symbol,
+      market_code: payload.market_code,
+      source_name: payload.source_name,
+      as_of: payload.as_of,
+      market_status_candidate: payload.evaluation.market_status_candidate,
+      freshness_status: payload.evaluation.freshness_status,
+      market_status: payload.evaluation.market_status,
+      reason_code: payload.evaluation.reason_code,
+    },
+    'current_snapshot_status_evaluated'
+  );
 }
 
 function getCachedSnapshot(key: string): CurrentSnapshot | undefined {
@@ -358,6 +473,15 @@ async function fetchStooqDailySnapshot(
     : null;
   const asOf = toAsOf(latest.date);
   if (!asOf) return null;
+  const evaluation = buildStooqEvaluation(asOf);
+  logSnapshotEvaluation(logger, {
+    symbol_id: symbol.id,
+    symbol: symbol.symbol,
+    market_code: symbol.marketCode,
+    source_name: 'stooq_daily',
+    as_of: asOf,
+    evaluation,
+  });
 
   return {
     last_price: latest.close,
@@ -365,12 +489,15 @@ async function fetchStooqDailySnapshot(
     change_percent: changePercent,
     volume: latest.volume,
     as_of: asOf,
-    market_status: inferMarketStatusFromStooqDaily(asOf),
+    market_status: evaluation.market_status,
     source_name: 'stooq_daily',
   };
 }
 
-async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapshot | null> {
+async function fetchYahooChartSnapshot(
+  symbol: SymbolRef,
+  logger?: { warn: (obj: unknown, msg?: string) => void }
+): Promise<CurrentSnapshot | null> {
   const yahooCode = toYahooCode(symbol);
   if (!yahooCode) return null;
 
@@ -397,6 +524,15 @@ async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapsh
   const volume = Number.isFinite(volumeRaw) ? volumeRaw : null;
   const asOf = toAsOfFromUnixSeconds(meta.regularMarketTime);
   if (!asOf) return null;
+  const evaluation = inferMarketStatusFromYahooMeta(meta.marketState, asOf, symbol);
+  logSnapshotEvaluation(logger, {
+    symbol_id: symbol.id,
+    symbol: symbol.symbol,
+    market_code: symbol.marketCode,
+    source_name: 'yahoo_chart',
+    as_of: asOf,
+    evaluation,
+  });
 
   return {
     last_price: price,
@@ -404,7 +540,7 @@ async function fetchYahooChartSnapshot(symbol: SymbolRef): Promise<CurrentSnapsh
     change_percent: changePercent,
     volume,
     as_of: asOf,
-    market_status: inferMarketStatusFromYahooMeta(meta.marketState, asOf, symbol),
+    market_status: evaluation.market_status,
     source_name: 'yahoo_chart',
   };
 }
@@ -448,7 +584,7 @@ export async function getCurrentSnapshotForSymbol(
   );
 
   try {
-    const secondary = await fetchYahooChartSnapshot(symbol);
+    const secondary = await fetchYahooChartSnapshot(symbol, logger);
     if (secondary) {
       logger?.warn?.(
         {
