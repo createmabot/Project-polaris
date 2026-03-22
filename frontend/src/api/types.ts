@@ -10,6 +10,7 @@ export type ApiResponse<T> = {
 export type SymbolDto = {
   id: string;
   symbol: string;
+  symbolCode?: string | null;
   tradingviewSymbol: string | null;
   displayName: string | null;
 };

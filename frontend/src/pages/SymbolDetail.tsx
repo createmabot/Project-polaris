@@ -75,7 +75,10 @@ export default function SymbolDetail() {
         処理状態: <code>{data.latest_processing_status}</code>
       </p>
       <div style={{ marginBottom: '1rem' }}>
-        <Link href={`/compare?symbolIds=${data.symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+        <Link
+          href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}
+          style={{ color: '#0066cc', textDecoration: 'none' }}
+        >
           比較対象に追加
         </Link>
       </div>

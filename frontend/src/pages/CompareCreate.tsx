@@ -72,15 +72,15 @@ export default function CompareCreate() {
         </label>
 
         <label style={{ display: 'grid', gap: '0.5rem' }}>
-          <span>銘柄ID（必須）</span>
+          <span>銘柄指定（必須）</span>
           <textarea
             value={symbolIdsText}
             onChange={(event) => setSymbolIdsText(event.target.value)}
             rows={4}
-            placeholder='例: sym_7203, sym_6758'
+            placeholder='例: 7203, 6758 または TSE:7203'
             style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px', resize: 'vertical' }}
           />
-          <small style={{ color: '#666' }}>カンマ、スペース、改行区切りで入力できます。</small>
+          <small style={{ color: '#666' }}>symbol_code / symbol / tradingview_symbol / 内部ID を入力できます。</small>
         </label>
 
         {error && (
@@ -109,8 +109,8 @@ export default function CompareCreate() {
       <section style={{ marginTop: '2rem', color: '#555' }}>
         <h2 style={{ fontSize: '1.1rem' }}>空状態の扱い</h2>
         <ul>
-          <li>銘柄ID未入力または件数不正: 送信前にバリデーションエラー表示</li>
-          <li>存在しない銘柄ID: APIエラー内容を表示</li>
+          <li>銘柄指定未入力または件数不正: 送信前にバリデーションエラー表示</li>
+          <li>存在しない銘柄指定: APIエラー内容を表示</li>
         </ul>
       </section>
     </div>

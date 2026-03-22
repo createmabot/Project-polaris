@@ -128,7 +128,7 @@ const MAX_COMPARE_SYMBOLS = 4;
 const RECENT_ALERT_LIMIT = 3;
 const RECENT_REFERENCE_LIMIT = 5;
 
-function normalizeSymbolIds(symbolIds: unknown): string[] {
+function normalizeSymbolInputs(symbolIds: unknown): string[] {
   if (!Array.isArray(symbolIds)) {
     throw new AppError(400, 'VALIDATION_ERROR', 'symbol_ids must be an array.');
   }
@@ -148,6 +148,70 @@ function normalizeSymbolIds(symbolIds: unknown): string[] {
   }
 
   return unique;
+}
+
+async function resolveSymbolInputsToIds(symbolInputs: string[]): Promise<{
+  resolvedSymbolIds: string[];
+  missingSymbolInputs: string[];
+}> {
+  const symbols = await prisma.symbol.findMany({
+    where: {
+      OR: [
+        { id: { in: symbolInputs } },
+        { symbolCode: { in: symbolInputs } },
+        { symbol: { in: symbolInputs } },
+        { tradingviewSymbol: { in: symbolInputs } },
+        { displayName: { in: symbolInputs } },
+      ],
+    },
+    select: {
+      id: true,
+      symbol: true,
+      symbolCode: true,
+      tradingviewSymbol: true,
+      displayName: true,
+    },
+  });
+
+  const byId = new Map<string, string>();
+  const bySymbolCode = new Map<string, string>();
+  const bySymbol = new Map<string, string>();
+  const byTradingviewSymbol = new Map<string, string>();
+  const byDisplayName = new Map<string, string>();
+
+  for (const symbol of symbols) {
+    byId.set(symbol.id, symbol.id);
+    if (symbol.symbolCode) bySymbolCode.set(symbol.symbolCode, symbol.id);
+    bySymbol.set(symbol.symbol, symbol.id);
+    if (symbol.tradingviewSymbol) byTradingviewSymbol.set(symbol.tradingviewSymbol, symbol.id);
+    if (symbol.displayName) byDisplayName.set(symbol.displayName, symbol.id);
+  }
+
+  const resolvedOrdered: string[] = [];
+  const missingInputs: string[] = [];
+
+  for (const input of symbolInputs) {
+    const resolved =
+      byId.get(input) ??
+      bySymbolCode.get(input) ??
+      bySymbol.get(input) ??
+      byTradingviewSymbol.get(input) ??
+      byDisplayName.get(input);
+
+    if (!resolved) {
+      missingInputs.push(input);
+      continue;
+    }
+
+    if (!resolvedOrdered.includes(resolved)) {
+      resolvedOrdered.push(resolved);
+    }
+  }
+
+  return {
+    resolvedSymbolIds: resolvedOrdered,
+    missingSymbolInputs: missingInputs,
+  };
 }
 
 function normalizeName(name: unknown, fallback: string): string {
@@ -476,10 +540,25 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
     request: FastifyRequest<{ Body: { name?: string; symbol_ids?: string[] } }>,
     reply: FastifyReply
   ) => {
-    const symbolIds = normalizeSymbolIds(request.body?.symbol_ids);
+    const symbolInputs = normalizeSymbolInputs(request.body?.symbol_ids);
+    const { resolvedSymbolIds, missingSymbolInputs } = await resolveSymbolInputsToIds(symbolInputs);
+
+    if (missingSymbolInputs.length > 0) {
+      throw new AppError(404, 'NOT_FOUND', 'Some symbols were not found.', {
+        missing_symbol_ids: missingSymbolInputs,
+      });
+    }
+
+    if (resolvedSymbolIds.length < MIN_COMPARE_SYMBOLS || resolvedSymbolIds.length > MAX_COMPARE_SYMBOLS) {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        `symbol_ids must resolve to between ${MIN_COMPARE_SYMBOLS} and ${MAX_COMPARE_SYMBOLS} unique symbols.`
+      );
+    }
 
     const symbols = await prisma.symbol.findMany({
-      where: { id: { in: symbolIds } },
+      where: { id: { in: resolvedSymbolIds } },
       select: {
         id: true,
         symbol: true,
@@ -489,14 +568,14 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
     });
 
     const symbolMap = new Map(symbols.map((symbol) => [symbol.id, symbol]));
-    const missingSymbolIds = symbolIds.filter((symbolId) => !symbolMap.has(symbolId));
+    const missingSymbolIds = resolvedSymbolIds.filter((symbolId) => !symbolMap.has(symbolId));
     if (missingSymbolIds.length > 0) {
       throw new AppError(404, 'NOT_FOUND', 'Some symbols were not found.', {
         missing_symbol_ids: missingSymbolIds,
       });
     }
 
-    const orderedSymbols = symbolIds.map((symbolId) => symbolMap.get(symbolId)!);
+    const orderedSymbols = resolvedSymbolIds.map((symbolId) => symbolMap.get(symbolId)!);
     const fallbackName = orderedSymbols
       .map((symbol) => symbol.displayName ?? symbol.symbolCode ?? symbol.symbol)
       .join(' vs ');
@@ -509,7 +588,7 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
         comparisonType: 'symbol',
         status: 'ready',
         comparisonSymbols: {
-          create: symbolIds.map((symbolId, index) => ({
+          create: resolvedSymbolIds.map((symbolId, index) => ({
             symbolId,
             sortOrder: index,
           })),

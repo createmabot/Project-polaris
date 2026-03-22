@@ -62,7 +62,10 @@ export default function AlertDetail() {
       </p>
       {symbol?.id && (
         <div style={{ marginBottom: '1rem' }}>
-          <Link href={`/compare?symbolIds=${symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+          <Link
+            href={`/compare?symbolIds=${encodeURIComponent(symbol.symbolCode || symbol.symbol || symbol.id)}`}
+            style={{ color: '#0066cc', textDecoration: 'none' }}
+          >
             この銘柄を比較に追加
           </Link>
         </div>
