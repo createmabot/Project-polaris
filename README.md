@@ -1,234 +1,125 @@
-# Project-polaris (北極星)
+# Project-polaris（北極星）
 
-個人用の株価分析ツール「北極星」の開発用リポジトリ。
+株価評価AIツール「北極星」の開発用リポジトリです。  
+このリポジトリでは、詳細仕様の正本は `docs/` 配下のドキュメントです。
 
 ## 技術スタック
 - Node.js 22
-- pnpm workspaces (Monorepo)
+- pnpm workspaces（monorepo）
 - Frontend: Vite + React + TypeScript
 - Backend: Fastify + TypeScript
-- DB: PostgreSQL
-- Cache/Queue: Redis
+- DB: PostgreSQL（Prisma）
+- Queue/Cache: Redis（BullMQ）
 - Infra: Docker Compose
 
-## AI モデル運用方針 (docs/28 準拠)
-北極星は「常用処理のコスト最適化」と「高精度処理の精度確保」を両立するため、以下の2モデル体制を採用しています。
+## セットアップ
+1. リポジトリをクローン
+2. 依存関係をインストール
 
-- **Primary: ローカル Qwen3 (30B系)**
-  - 通常の要約、整理、比較など 95% 以上のタスクを担当。RTX 5090 環境等での高速動作を前提。
-- **Fallback: GPT-5 mini (API)**
-  - Pine Script 修正ループ失敗時や、仕様制約が極めて多い例外時のみ自動エスカレーション。
-
-## セットアップ手順
-1. **リポジトリをクローン**
-2. **依存関係のインストール**
-   ```bash
-   pnpm install
-   ```
-3. **環境変数の設定**
-   プロジェクトルートの `.env` がバックエンド、ワーカー、スクリプト全ての正本設定となります。
-   ```bash
-   cp .env.example .env
-   # .env を編集して DATABASE_URL, REDIS_URL, FALLBACK_API_KEY 等を入力
-   ```
-4. **データベースとRedisの起動**
-   ```bash
-   docker compose up -d
-   ```
-5. **DBマイグレーションとシード投入**
-   ```bash
-   cd backend
-   pnpm exec prisma migrate dev
-   pnpm exec prisma db seed
-   ```
-6. **ローカルLLM疎通確認** (docs/24 準拠)
-   ローカルLLMサーバー（Ollama等）が起動しており、.env の設定で推論可能か確認します。
-   ```bash
-   pnpm --filter backend exec tsx ../scripts/check-local-llm.ts
-   ```
-
-## 起動手順
-フロントエンド・バックエンドを並列起動：
 ```bash
-pnpm run dev
+pnpm install
+```
+
+3. 環境変数を作成
+
+```bash
+cp .env.example .env
+```
+
+4. Docker で PostgreSQL / Redis を起動
+
+```bash
+docker compose up -d
+```
+
+5. DB マイグレーションと seed（必要時）
+
+```bash
+cd backend
+pnpm exec prisma migrate dev
+pnpm exec prisma db seed
 ```
 
 ## よく使うコマンド
-- `pnpm run up`: DBとRedisをDockerで起動
-- `pnpm --filter backend exec tsx ../scripts/check-local-llm.ts`: ローカルLLMの診断
-- `pnpm run dev`: 全パッケージの開発サーバーを起動
-- `pnpm run build`: 全パッケージのビルド
-- `pnpm run test`: 全パッケージのテスト
+```bash
+pnpm run dev
+pnpm run build
+pnpm run test
+pnpm run up
+pnpm run down
+```
 
+### Snapshot 週次レビュー記録
+- 生成（当週/JST）
+  - `pnpm run create:snapshot-weekly-review`
+- 任意週生成（JST日付指定）
+  - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD`
+- 上書き（明示時のみ）
+  - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force`
+- 事前確認（書き込みなし）
+  - `pnpm run create:snapshot-weekly-review -- --dry-run`
+- 機械可読（JSON）
+  - `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
+- JSON契約チェック
+  - `pnpm run check:snapshot-weekly-review-json`
 
-## Integration test (DB required)
-- `pnpm run test:integration:symbol-snapshot-db`
-  - starts Docker `postgres`
-  - runs `prisma migrate deploy` in backend
-  - runs `backend/test/symbol-snapshot.db.integration.test.ts`
+## current_snapshot 関連の運用要点
+- 公開API契約は維持
+  - `last_price`
+  - `change`
+  - `change_percent`
+  - `volume`
+  - `as_of`
+  - `market_status`（`open | closed | unknown`）
+  - `source_name`
+- failover
+  - primary: `stooq_daily`
+  - secondary: `yahoo_chart`
+  - 全失敗時: `current_snapshot: null`
+- `market_status` は日本市場の休日判定を考慮（外部休日APIには依存しない）
 
-### Preconditions
-- Docker Desktop (daemon) is running
-- `.env` has valid `DATABASE_URL` pointing to `localhost:5432` (or your mapped port)
+## Integration test（DB 必須）
+```bash
+pnpm run test:integration:symbol-snapshot-db
+```
 
-### What this test verifies
-- `GET /api/symbols/:symbolId` with real DB symbol seed
-- snapshot failover contract (3 cases):
-  - primary success (`stooq_daily`)
-  - primary failure + secondary success (`yahoo_chart`)
-  - primary failure + secondary failure (`current_snapshot: null`)
-- snapshot shape contract:
+このテストでは次を確認します。
+- `GET /api/symbols/:symbolId` の snapshot failover 3ケース
+  - 主系成功
+  - 主系失敗 + 予備系成功
+  - 主系失敗 + 予備系失敗（`current_snapshot: null`）
+- snapshot shape 契約
   - `last_price`, `change`, `change_percent`, `volume`, `as_of`, `market_status`, `source_name`
 
-### `market_status` policy (MVP)
-- `stooq_daily`: daily close source, reported as `closed` (or `unknown` when stale/future-inconsistent)
-- `yahoo_chart`: uses `marketState` + `as_of` freshness + JP trading session guard for conservative `open/closed/unknown`
-- JP equities (`TSE/JP/TYO`) also apply a built-in JP market holiday calendar (2024-2028, no external API dependency), so holidays are treated as non-trading days.
-- Holiday table maintenance guard: `npm --prefix backend run test:jp-market-holidays-guard` checks that the current JST year and next year are covered, and verifies near-limit / expired warnings.
-- CI integration: `Symbol Snapshot DB Integration` also runs `test:jp-market-holidays-guard`, so holiday table coverage regressions fail PR checks.
-- Internal note: freshness (`fresh/stale/expired/invalid`) is evaluated separately from market phase and then folded into public `market_status` (`open/closed/unknown`) without adding API fields.
-- Reason observability: snapshot evaluator writes structured internal logs (e.g. `open_but_stale`, `freshness_invalid`, `freshness_expired`, `jp_market_holiday`) while keeping public API unchanged.
-- Daily internal metrics: selected `reason_code` values are aggregated in DB (`snapshot_reason_daily_metrics`) by JST date + source + reason; this is for ops monitoring only and is not exposed via public API.
-- Lightweight threshold warning: selected reasons (`open_but_stale`, `freshness_invalid`, `freshness_expired`, `candidate_unknown`) emit `snapshot_reason_threshold_exceeded` when daily count reaches configured threshold.
-- Threshold env overrides (defaults): `SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY=20`, `SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY=5`, `SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY=10`, `SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY=30` (`0` disables that reason's warning).
+## CI
+GitHub Actions の `Symbol Snapshot DB Integration` で以下を実行します。
+- `snapshot-review-generator-json-check`
+- `symbol-snapshot-db-integration`
 
-### Threshold profiles (recommended)
-`.env.example` keeps safe baseline defaults. Use environment-specific overrides in each deployment environment.
+`main` の required checks は ruleset 管理で、上記2件を必須化しています。
 
-| Reason code | local | staging | prod |
-| --- | ---: | ---: | ---: |
-| `open_but_stale` | 8 | 12 | 20 |
-| `freshness_invalid` | 2 | 3 | 5 |
-| `freshness_expired` | 5 | 7 | 10 |
-| `candidate_unknown` | 12 | 20 | 30 |
+## Required-check failure drill（定期監査）
+目的:
+- `snapshot-review-generator-json-check` が失敗したときに PR merge が確実に block されることを定期確認する
 
-Operational guidance:
-- Local: keep thresholds low to catch regressions quickly during development.
-- Staging: slightly less sensitive than local; used for pre-production stability checks.
-- Prod: reduce noise, alert only on meaningful sustained increases.
-- `0` disables warning for that reason (metrics/logging still continue).
-- Tune by env values only; no code change needed for normal adjustments.
-- Prioritize investigation in this order: `freshness_invalid` -> `open_but_stale` -> `freshness_expired` -> `candidate_unknown`.
+推奨頻度:
+- 四半期に1回（または ruleset / branch protection 変更後）
 
-### Weekly review runbook (`snapshot_reason_daily_metrics`)
-Purpose:
-- Review weekly trend of snapshot reason metrics and adjust threshold env values by environment (`local` / `staging` / `prod`) without code changes.
-- Keep public API unchanged; this is operations-only.
+最小手順:
+1. `main` から検証ブランチを作成（例: `codex/ops-drill-snapshot-json-failure-YYYYMMDD`）
+2. `scripts/check-snapshot-weekly-review-json.mjs` の必須キー期待値を一時的に壊す
+3. PR を作成し、`snapshot-review-generator-json-check` が red になることを確認
+4. PR が required check 未通過で block されることを確認
+5. 破壊コミットを revert して復元
+6. 両 required checks が green 復帰することを確認
+7. 実施結果を `docs/snapshot-weekly-reviews/` の週次記録へ残す
 
-Scope (primary reasons):
-- `open_but_stale`
-- `freshness_invalid`
-- `freshness_expired`
-- `candidate_unknown`
+注意:
+- 検証変更は `main` に merge しない
+- 破壊は最小・可逆にする
 
-Optional reference reasons:
-- `jp_market_holiday`, `jp_market_weekend`, `outside_jp_session`
-
-Cadence:
-- Run once per week (recommended: Monday JST morning).
-- Evaluate rolling 7 days and compare with the previous 7 days.
-
-How to review (minimum):
-1. Run the SQL in `backend/scripts/snapshot-weekly-review.sql`.
-2. Check 7-day daily counts by `source_name + reason_code`.
-3. Check week-over-week delta (`current_7d_count - previous_7d_count`).
-4. Check threshold reach ratio (`days_over_threshold / 7`).
-5. Decide per environment whether to keep/tighten/relax env thresholds.
-
-Decision hints:
-- `freshness_invalid` keeps increasing for multiple days:
-  - Investigate source/parser/timestamp handling first.
-  - Do not increase threshold before root cause analysis.
-- `open_but_stale` keeps increasing in `prod`:
-  - Check upstream source latency first.
-  - If no defect found and trend is stable, consider gradual threshold increase.
-- `candidate_unknown` grows week-over-week:
-  - Treat as signal of source quality degradation or status inference gap.
-  - Investigate source payload quality before threshold tuning.
-
-Threshold change principle:
-- Change via env only:
-  - `SNAPSHOT_THRESHOLD_OPEN_BUT_STALE_DAILY`
-  - `SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY`
-  - `SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY`
-  - `SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY`
-- `.env.example` is baseline defaults.
-- Runtime environment values (`local/staging/prod`) are operational overrides.
-- `0` means warning disabled for that reason (metrics/logging remain enabled).
-
-Review record template:
-- Use `docs/snapshot-weekly-review-record-template.md` for weekly record keeping.
-- Save completed records under `docs/snapshot-weekly-reviews/`.
-- File naming rule (JST week): `YYYY-Www-snapshot-review.md` (example: `2026-W12-snapshot-review.md`).
-- Use generator script to create a new weekly file:
-  - `pnpm run create:snapshot-weekly-review -- --dry-run`
-  - `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
-  - `pnpm run create:snapshot-weekly-review`
-  - `pnpm run create:snapshot-weekly-review -- --date=2026-03-30`
-  - `pnpm run create:snapshot-weekly-review -- --date=2026-03-30 --force`
-  - `pnpm run create:snapshot-weekly-review -- --date=2026-03-30 --force --dry-run`
-  - The script creates the file from template using JST ISO week naming.
-  - `--date` is interpreted as JST calendar date (`YYYY-MM-DD` only). Invalid format/date fails fast.
-  - `--dry-run` does not write files. It prints target week/file and whether it would create/overwrite/fail.
-  - `--output-format=json` is intended mainly for `--dry-run` automation (CI/ops scripts).
-  - JSON keys: `baseDateJst`, `targetWeek`, `targetFilePath`, `targetFileExists`, `force`, `dryRun`, `result` (`create|overwrite|fail_exists` for dry-run).
-  - CI also validates this dry-run JSON contract via `pnpm run check:snapshot-weekly-review-json`.
-  - Default is safe non-overwrite. If the target file already exists, it exits.
-  - Use `--force` only for explicit regeneration/overwrite (recommended flow: `--dry-run` first).
-- Record every week even when there is no threshold change (`no change` must be explicit).
-- If env was changed, always record before/after values and rationale.
-- Role split:
-  - `.env.example`: baseline defaults only
-  - `README.md`: runbook / decision policy
-  - `docs/snapshot-weekly-review-record-template.md`: empty template
-  - `docs/snapshot-weekly-reviews/`: weekly evidence and audit trail (keep all history, do not delete)
-
-### Troubleshooting
-1. Docker daemon check:
-   - `docker version`
-   - If server connection fails, start Docker Desktop first.
-2. DB port check:
-   - PowerShell: `Test-NetConnection localhost -Port 5432`
-3. Migration check:
-   - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
-4. If migration history is broken in local DB:
-   - `cd backend && npx prisma migrate reset --force --skip-seed`
-
-### CI
-- GitHub Actions job: `Symbol Snapshot DB Integration`
-- Uses Postgres service container, then runs:
-  - `npm --prefix backend run build`
-  - `npm --prefix backend run test:integration:symbol-snapshot-db:prepare`
-  - `npm --prefix backend run test:integration:symbol-snapshot-db`
-- This job validates the same failover contract as local integration runs.
-- Required status checks on `main` (ruleset-managed):
-  - `symbol-snapshot-db-integration`
-  - `snapshot-review-generator-json-check`
-
-### Required-check failure drill (`snapshot-review-generator-json-check`)
-Purpose:
-- Verify regularly that PR merge is blocked when review-generator JSON contract breaks.
-- Detect accidental ruleset/check drift early.
-
-Recommended cadence:
-- Once per quarter (or after branch protection/ruleset changes).
-
-Runbook (minimal):
-1. Create a drill branch from latest `main` (example: `codex/ops-drill-snapshot-json-failure-YYYYMMDD`).
-2. Add a temporary break that makes `snapshot-review-generator-json-check` fail quickly:
-   - preferred: in `scripts/check-snapshot-weekly-review-json.mjs`, change one expected key name in `assertRequiredKeys`.
-3. Commit and open a PR with clear title (example: `Ops drill: force snapshot-review-generator-json-check failure`).
-4. Confirm on PR:
-   - check `snapshot-review-generator-json-check` is `failed` (red)
-   - merge is blocked by required checks
-   - required check names match ruleset entries exactly
-5. Revert the temporary break on the same branch (or add a restore commit), push again.
-6. Confirm both required checks return to green:
-   - `snapshot-review-generator-json-check`
-   - `symbol-snapshot-db-integration`
-7. Close the drill PR after evidence capture (do not merge drill breakage).
-
-Safety notes:
-- Keep drill change minimal and fully reversible.
-- Do not run drill directly on `main`.
-- Store drill outcome in weekly ops record if relevant.
+## 参考ドキュメント
+- 目次: `docs/0.目次.md`
+- セットアップ詳細: `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
+- ホーム供給仕様: `docs/25. 補助資料_1 北極星 ホームデータ供給仕様（MVP）.md`
+- API設計: `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`
