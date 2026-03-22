@@ -162,6 +162,7 @@ Review record template:
 - File naming rule (JST week): `YYYY-Www-snapshot-review.md` (example: `2026-W12-snapshot-review.md`).
 - Use generator script to create a new weekly file:
   - `pnpm run create:snapshot-weekly-review -- --dry-run`
+  - `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
   - `pnpm run create:snapshot-weekly-review`
   - `pnpm run create:snapshot-weekly-review -- --date=2026-03-30`
   - `pnpm run create:snapshot-weekly-review -- --date=2026-03-30 --force`
@@ -169,6 +170,8 @@ Review record template:
   - The script creates the file from template using JST ISO week naming.
   - `--date` is interpreted as JST calendar date (`YYYY-MM-DD` only). Invalid format/date fails fast.
   - `--dry-run` does not write files. It prints target week/file and whether it would create/overwrite/fail.
+  - `--output-format=json` is intended mainly for `--dry-run` automation (CI/ops scripts).
+  - JSON keys: `baseDateJst`, `targetWeek`, `targetFilePath`, `targetFileExists`, `force`, `dryRun`, `result` (`create|overwrite|fail_exists` for dry-run).
   - Default is safe non-overwrite. If the target file already exists, it exits.
   - Use `--force` only for explicit regeneration/overwrite (recommended flow: `--dry-run` first).
 - Record every week even when there is no threshold change (`no change` must be explicit).

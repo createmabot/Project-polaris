@@ -13,6 +13,7 @@ This directory stores completed weekly review records for `snapshot_reason_daily
 ## How to create a new record
 1. Run:
    - `pnpm run create:snapshot-weekly-review -- --dry-run`
+   - machine-readable preview: `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
    - `pnpm run create:snapshot-weekly-review`
    - optional: `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD` (JST)
    - overwrite only when explicit: `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force`

@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const OUTPUT_FORMAT_TEXT = 'text';
+const OUTPUT_FORMAT_JSON = 'json';
+
 function toJstDate(base = new Date()) {
   return new Date(base.getTime() + 9 * 60 * 60 * 1000);
 }
@@ -32,6 +35,7 @@ function parseArgs(argv) {
   let dateArg;
   let force = false;
   let dryRun = false;
+  let outputFormat = OUTPUT_FORMAT_TEXT;
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       printHelpAndExit(0);
@@ -53,10 +57,19 @@ function parseArgs(argv) {
       console.error('Use: --date=YYYY-MM-DD');
       process.exit(1);
     }
+    if (arg.startsWith('--output-format=')) {
+      outputFormat = arg.slice('--output-format='.length).trim();
+      continue;
+    }
+    if (arg.startsWith('--output-format')) {
+      console.error(`Unsupported --output-format usage: "${arg}"`);
+      console.error('Use: --output-format=json');
+      process.exit(1);
+    }
     console.error(`Unknown argument: ${arg}`);
     printHelpAndExit(1);
   }
-  return { dateArg, force, dryRun };
+  return { dateArg, force, dryRun, outputFormat };
 }
 
 function parseJstDateArg(dateArg) {
@@ -98,18 +111,60 @@ function printHelpAndExit(code = 0) {
   console.log('  pnpm run create:snapshot-weekly-review -- --dry-run');
   console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --dry-run');
   console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force --dry-run');
+  console.log('  pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json');
   console.log('');
   console.log('Notes:');
   console.log('  --date is interpreted as JST calendar date.');
   console.log('  --force overwrites existing target file explicitly.');
   console.log('  --dry-run does not write files; it only prints expected result.');
+  console.log('  --output-format=json prints machine-readable JSON output.');
   console.log('  File naming rule: YYYY-Www-snapshot-review.md');
   process.exit(code);
 }
 
+function emitJson(payload) {
+  console.log(JSON.stringify(payload));
+}
+
+function exitWithError({ outputFormat, error, message, context = {} }) {
+  if (outputFormat === OUTPUT_FORMAT_JSON) {
+    emitJson({
+      ...context,
+      result: 'error',
+      error,
+      message,
+    });
+  } else {
+    console.error(message);
+  }
+  process.exit(1);
+}
+
 function main() {
-  const { dateArg, force, dryRun } = parseArgs(process.argv.slice(2));
-  const baseJstDate = dateArg ? parseJstDateArg(dateArg) : getCurrentJstDateParts(new Date());
+  const { dateArg, force, dryRun, outputFormat } = parseArgs(process.argv.slice(2));
+  if (outputFormat !== OUTPUT_FORMAT_TEXT && outputFormat !== OUTPUT_FORMAT_JSON) {
+    exitWithError({
+      outputFormat: OUTPUT_FORMAT_TEXT,
+      error: 'invalid_output_format',
+      message: `Invalid --output-format: "${outputFormat}". Supported: json`,
+    });
+  }
+
+  let baseJstDate;
+  try {
+    baseJstDate = dateArg ? parseJstDateArg(dateArg) : getCurrentJstDateParts(new Date());
+  } catch (error) {
+    exitWithError({
+      outputFormat,
+      error: 'invalid_date',
+      message: error instanceof Error ? error.message : String(error),
+      context: {
+        force,
+        dryRun,
+      },
+    });
+  }
+
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const repoRoot = path.resolve(__dirname, '..');
@@ -121,8 +176,19 @@ function main() {
   const weekKey = filename.replace('-snapshot-review.md', '');
 
   if (!fs.existsSync(templatePath)) {
-    console.error(`Template not found: ${templatePath}`);
-    process.exit(1);
+    exitWithError({
+      outputFormat,
+      error: 'template_not_found',
+      message: `Template not found: ${templatePath}`,
+      context: {
+        baseDateJst: baseDateText,
+        targetWeek: weekKey,
+        targetFilePath: outputPath,
+        targetFileExists: fs.existsSync(outputPath),
+        force,
+        dryRun,
+      },
+    });
   }
 
   if (!fs.existsSync(outputDir)) {
@@ -130,43 +196,80 @@ function main() {
   }
 
   const existed = fs.existsSync(outputPath);
-  console.log(`Base date (JST): ${baseDateText}`);
-  console.log(`Target week (JST ISO week): ${weekKey}`);
-  console.log(`Target file path: ${outputPath}`);
-  console.log(`Target file exists: ${existed ? 'yes' : 'no'}`);
+  const basePayload = {
+    baseDateJst: baseDateText,
+    targetWeek: weekKey,
+    targetFilePath: outputPath,
+    targetFileExists: existed,
+    force,
+    dryRun,
+  };
 
   if (dryRun) {
+    let result = 'create';
     if (!existed) {
-      console.log('Dry-run result: Would create.');
+      result = 'create';
     } else if (force) {
-      console.log('Dry-run result: Would overwrite (--force).');
+      result = 'overwrite';
     } else {
-      console.log('Dry-run result: Would fail because file already exists.');
+      result = 'fail_exists';
     }
-    console.log('Dry-run mode: no file was written.');
+
+    if (outputFormat === OUTPUT_FORMAT_JSON) {
+      emitJson({
+        ...basePayload,
+        result,
+      });
+    } else {
+      console.log(`Base date (JST): ${baseDateText}`);
+      console.log(`Target week (JST ISO week): ${weekKey}`);
+      console.log(`Target file path: ${outputPath}`);
+      console.log(`Target file exists: ${existed ? 'yes' : 'no'}`);
+      if (result === 'create') {
+        console.log('Dry-run result: Would create.');
+      } else if (result === 'overwrite') {
+        console.log('Dry-run result: Would overwrite (--force).');
+      } else {
+        console.log('Dry-run result: Would fail because file already exists.');
+      }
+      console.log('Dry-run mode: no file was written.');
+    }
     return;
   }
 
   if (existed && !force) {
-    console.error(`Review file already exists: ${outputPath}`);
-    console.error('No file was overwritten. Re-run with --force to overwrite explicitly.');
-    process.exit(1);
+    exitWithError({
+      outputFormat,
+      error: 'file_exists',
+      message: `Review file already exists: ${outputPath}. Re-run with --force to overwrite explicitly.`,
+      context: {
+        ...basePayload,
+        result: 'fail_exists',
+      },
+    });
   }
 
   const template = fs.readFileSync(templatePath, 'utf8');
   fs.writeFileSync(outputPath, template, 'utf8');
 
-  if (existed && force) {
-    console.log(`Overwritten weekly review file (--force): ${outputPath}`);
+  const result = existed && force ? 'overwritten' : 'created';
+  if (outputFormat === OUTPUT_FORMAT_JSON) {
+    emitJson({
+      ...basePayload,
+      result,
+    });
   } else {
-    console.log(`Created weekly review file: ${outputPath}`);
+    console.log(`Base date (JST): ${baseDateText}`);
+    console.log(`Target week (JST ISO week): ${weekKey}`);
+    console.log(`Target file path: ${outputPath}`);
+    console.log(`Target file exists: ${existed ? 'yes' : 'no'}`);
+    if (result === 'overwritten') {
+      console.log(`Overwritten weekly review file (--force): ${outputPath}`);
+    } else {
+      console.log(`Created weekly review file: ${outputPath}`);
+    }
+    console.log(`Naming rule (JST ISO week): ${filename}`);
   }
-  console.log(`Naming rule (JST ISO week): ${filename}`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-}
+main();
