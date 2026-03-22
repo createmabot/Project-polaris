@@ -158,12 +158,15 @@ Threshold change principle:
 
 Review record template:
 - Use `docs/snapshot-weekly-review-record-template.md` for weekly record keeping.
+- Save completed records under `docs/snapshot-weekly-reviews/`.
+- File naming rule (JST week): `YYYY-Www-snapshot-review.md` (example: `2026-W12-snapshot-review.md`).
 - Record every week even when there is no threshold change (`no change` must be explicit).
 - If env was changed, always record before/after values and rationale.
 - Role split:
   - `.env.example`: baseline defaults only
   - `README.md`: runbook / decision policy
-  - review template: weekly evidence and audit trail
+  - `docs/snapshot-weekly-review-record-template.md`: empty template
+  - `docs/snapshot-weekly-reviews/`: weekly evidence and audit trail (keep all history, do not delete)
 
 ### Troubleshooting
 1. Docker daemon check:

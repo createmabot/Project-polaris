@@ -2,6 +2,8 @@
 
 This template is for operational records of `snapshot_reason_daily_metrics`.
 Public API contracts are unchanged. Threshold tuning is done via env values only.
+Save filled records to `docs/snapshot-weekly-reviews/` with:
+`YYYY-Www-snapshot-review.md` (JST week, e.g. `2026-W12-snapshot-review.md`).
 
 ## 1) Review Metadata
 - Review date (JST):
