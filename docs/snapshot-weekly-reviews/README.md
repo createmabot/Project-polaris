@@ -14,10 +14,12 @@ This directory stores completed weekly review records for `snapshot_reason_daily
 1. Run:
    - `pnpm run create:snapshot-weekly-review`
    - optional: `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD` (JST)
+   - overwrite only when explicit: `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force`
 2. Confirm generated file in this directory (`YYYY-Www-snapshot-review.md`, JST ISO week).
 3. Fill all required sections.
 4. If threshold env changed, record `before / after / reason`.
-5. If the target file already exists, the script exits without overwrite.
+5. By default, if the target file already exists, the script exits without overwrite.
+6. Use `--force` only when explicit regeneration is intended.
 
 Manual fallback:
 1. Copy `docs/snapshot-weekly-review-record-template.md`

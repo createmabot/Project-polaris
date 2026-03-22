@@ -30,9 +30,14 @@ function getCurrentJstDateParts(now = new Date()) {
 
 function parseArgs(argv) {
   let dateArg;
+  let force = false;
   for (const arg of argv) {
     if (arg === '--help' || arg === '-h') {
       printHelpAndExit(0);
+    }
+    if (arg === '--force') {
+      force = true;
+      continue;
     }
     if (arg.startsWith('--date=')) {
       dateArg = arg.slice('--date='.length).trim();
@@ -46,7 +51,7 @@ function parseArgs(argv) {
     console.error(`Unknown argument: ${arg}`);
     printHelpAndExit(1);
   }
-  return { dateArg };
+  return { dateArg, force };
 }
 
 function parseJstDateArg(dateArg) {
@@ -84,15 +89,17 @@ function printHelpAndExit(code = 0) {
   console.log('Usage:');
   console.log('  pnpm run create:snapshot-weekly-review');
   console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD');
+  console.log('  pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force');
   console.log('');
   console.log('Notes:');
   console.log('  --date is interpreted as JST calendar date.');
+  console.log('  --force overwrites existing target file explicitly.');
   console.log('  File naming rule: YYYY-Www-snapshot-review.md');
   process.exit(code);
 }
 
 function main() {
-  const { dateArg } = parseArgs(process.argv.slice(2));
+  const { dateArg, force } = parseArgs(process.argv.slice(2));
   const baseJstDate = dateArg ? parseJstDateArg(dateArg) : getCurrentJstDateParts(new Date());
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
@@ -111,9 +118,10 @@ function main() {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  if (fs.existsSync(outputPath)) {
+  const existed = fs.existsSync(outputPath);
+  if (existed && !force) {
     console.error(`Review file already exists: ${outputPath}`);
-    console.error('No file was overwritten.');
+    console.error('No file was overwritten. Re-run with --force to overwrite explicitly.');
     process.exit(1);
   }
 
@@ -124,7 +132,11 @@ function main() {
   const weekKey = filename.replace('-snapshot-review.md', '');
   console.log(`Base date (JST): ${baseDateText}`);
   console.log(`Target week (JST ISO week): ${weekKey}`);
-  console.log(`Created weekly review file: ${outputPath}`);
+  if (existed && force) {
+    console.log(`Overwritten weekly review file (--force): ${outputPath}`);
+  } else {
+    console.log(`Created weekly review file: ${outputPath}`);
+  }
   console.log(`Naming rule (JST ISO week): ${filename}`);
 }
 
