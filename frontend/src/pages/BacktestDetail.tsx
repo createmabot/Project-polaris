@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestDetailData } from '../api/types';
 
@@ -55,9 +55,52 @@ function metricCard(label: string, value: string) {
   );
 }
 
+function normalizeBacktestsReturnPath(decodedPath: string): string | null {
+  const trimmed = decodedPath.trim();
+  if (!trimmed.startsWith('/')) return null;
+
+  const [pathPart, queryPart = ''] = trimmed.split('?', 2);
+  if (pathPart !== '/backtests') return null;
+
+  const params = new URLSearchParams(queryPart);
+  const normalized = new URLSearchParams();
+
+  const q = (params.get('q') ?? '').trim();
+  if (q) normalized.set('q', q);
+
+  const rawPage = params.get('page');
+  if (rawPage !== null) {
+    const page = Number(rawPage);
+    if (Number.isInteger(page) && page > 0) {
+      normalized.set('page', String(page));
+    }
+  }
+
+  const query = normalized.toString();
+  return query ? `/backtests?${query}` : '/backtests';
+}
+
+export function parseBacktestsReturnPath(locationPath: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const encodedReturn = params.get('return');
+  if (!encodedReturn) return null;
+
+  let decodedReturn = '';
+  try {
+    decodedReturn = decodeURIComponent(encodedReturn);
+  } catch {
+    return null;
+  }
+
+  return normalizeBacktestsReturnPath(decodedReturn);
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
+  const [location] = useLocation();
   const { data, error, isLoading } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
+  const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
@@ -73,7 +116,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
         <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href='/backtests' style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
+        <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
       </div>
 
       <h1>検証レポート（最小）</h1>

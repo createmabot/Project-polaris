@@ -93,6 +93,7 @@ pnpm run down
 - 直近の検証履歴を createdAt 降順で表示（最小ページネーション対応）
 - title 部分一致の最小検索対応（`q`）
 - 一覧状態の URL クエリ同期（`/backtests?q=...&page=...`）
+- 一覧→詳細→一覧の戻り先は `return` クエリで保持（`/backtests` の `q/page` のみ許可・再構成）
 - 表示項目:
   - タイトル / 作成日時
   - market / timeframe / executionSource / backtest status
