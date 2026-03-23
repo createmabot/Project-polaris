@@ -298,3 +298,45 @@ export type StrategyVersionData = {
   };
 };
 
+export type BacktestCreateData = {
+  backtest: {
+    id: string;
+    strategy_version_id: string;
+    title: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type BacktestImportData = {
+  import: {
+    id: string;
+    backtest_id: string;
+    file_name: string;
+    file_size: number;
+    content_type: string | null;
+    parse_status: 'pending' | 'parsed' | 'failed' | string;
+    parse_error: string | null;
+    parsed_summary: {
+      totalTrades: number | null;
+      winRate: number | null;
+      profitFactor: number | null;
+      maxDrawdown: number | null;
+      netProfit: number | null;
+      periodFrom: string | null;
+      periodTo: string | null;
+    } | null;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type BacktestDetailData = {
+  backtest: BacktestCreateData['backtest'];
+  imports: BacktestImportData['import'][];
+};
+

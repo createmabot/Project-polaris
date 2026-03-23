@@ -320,4 +320,44 @@ model StrategyRuleVersion {
   @@index([strategyRuleId, createdAt])
   @@index([status])
   @@map("strategy_rule_versions")
+
+  backtests Backtest[]
+}
+
+model Backtest {
+  id                    String              @id @default(uuid())
+  strategyRuleVersionId String
+  strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id])
+  title                 String
+  executionSource       String              @default("tradingview")
+  market                String
+  timeframe             String
+  status                String              @default("pending")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  imports BacktestImport[]
+
+  @@index([strategyRuleVersionId, createdAt])
+  @@index([status])
+  @@map("backtests")
+}
+
+model BacktestImport {
+  id                String   @id @default(uuid())
+  backtestId        String
+  backtest          Backtest @relation(fields: [backtestId], references: [id])
+  fileName          String
+  fileSize          Int
+  contentType       String?
+  rawCsvText        String   @db.Text
+  parseStatus       String   @default("pending")
+  parseError        String?
+  parsedSummaryJson Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([backtestId, createdAt])
+  @@index([parseStatus])
+  @@map("backtest_imports")
 }

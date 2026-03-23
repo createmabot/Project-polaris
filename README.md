@@ -57,10 +57,27 @@ pnpm run down
   - strategy version 作成
   - Pine 生成
   - generated pine / warnings / assumptions の表示
-- まだ未対応（次フェーズ）:
+  - backtest 作成
   - CSV取込
+  - parseStatus / parseError / 最小summary表示
+- まだ未対応（次フェーズ）:
   - 検証レポート表示
   - 比較高度化
+
+### CSV取込（MVPでサポートする形式）
+- 1行ヘッダ + 1行データの CSV
+- 必須列:
+  - `Net Profit`
+  - `Total Closed Trades`
+  - `Percent Profitable`
+  - `Profit Factor`
+  - `Max Drawdown`
+  - `From`
+  - `To`
+- 主要ステータス:
+  - `pending`: 受理直後
+  - `parsed`: パース成功
+  - `failed`: パース失敗（`parseError` に理由）
 
 ### Snapshot 週次レビュー記録
 - 生成（当週/JST）

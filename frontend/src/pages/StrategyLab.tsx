@@ -1,7 +1,12 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'wouter';
 import { postApi } from '../api/client';
-import { StrategyCreateData, StrategyVersionData } from '../api/types';
+import {
+  BacktestCreateData,
+  BacktestImportData,
+  StrategyCreateData,
+  StrategyVersionData,
+} from '../api/types';
 
 const MARKET_OPTIONS = ['JP_STOCK'];
 const TIMEFRAME_OPTIONS = ['D'];
@@ -16,12 +21,20 @@ export default function StrategyLab() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StrategyVersionData['strategy_version'] | null>(null);
+  const [backtest, setBacktest] = useState<BacktestCreateData['backtest'] | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importState, setImportState] = useState<BacktestImportData['import'] | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
     setResult(null);
+    setBacktest(null);
+    setImportState(null);
+    setImportError(null);
 
     try {
       const strategy = await postApi<StrategyCreateData>('/api/strategies', {
@@ -43,10 +56,49 @@ export default function StrategyLab() {
       );
 
       setResult(generated.strategy_version);
+      if (generated.strategy_version.status === 'generated') {
+        const createdBacktest = await postApi<BacktestCreateData>('/api/backtests', {
+          strategy_version_id: generated.strategy_version.id,
+          title: `${title.trim()} / ${market} / ${timeframe}`,
+          execution_source: 'tradingview',
+          market,
+          timeframe,
+        });
+        setBacktest(createdBacktest.backtest);
+      }
     } catch (submitError: any) {
       setError(submitError?.message ?? 'ルール生成に失敗しました。');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const onImportCsv = async () => {
+    if (!backtest) {
+      setImportError('先にルール生成を実行して backtest を作成してください。');
+      return;
+    }
+    if (!csvFile) {
+      setImportError('CSVファイルを選択してください。');
+      return;
+    }
+
+    setImporting(true);
+    setImportError(null);
+    setImportState(null);
+
+    try {
+      const csvText = await csvFile.text();
+      const imported = await postApi<BacktestImportData>(`/api/backtests/${backtest.id}/imports`, {
+        file_name: csvFile.name,
+        content_type: csvFile.type || 'text/csv',
+        csv_text: csvText,
+      });
+      setImportState(imported.import);
+    } catch (requestError: any) {
+      setImportError(requestError?.message ?? 'CSV取込に失敗しました。');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -134,6 +186,10 @@ export default function StrategyLab() {
           <div style={{ fontSize: '0.95rem', color: '#333' }}>
             <div><strong>version_id:</strong> <code>{result.id}</code></div>
             <div><strong>status:</strong> <code>{result.status}</code></div>
+            <div><strong>backtest_id:</strong> <code>{backtest?.id ?? '-'}</code></div>
+            {result.status !== 'generated' && (
+              <div style={{ color: '#8a5b00' }}>Pine生成が失敗しているため backtest は未作成です。</div>
+            )}
           </div>
 
           <div>
@@ -168,6 +224,65 @@ export default function StrategyLab() {
               <p style={{ color: '#666' }}>生成に失敗しました。warnings を確認してください。</p>
             )}
           </div>
+        </section>
+      )}
+
+      {backtest && (
+        <section style={{ marginTop: '2rem', display: 'grid', gap: '0.8rem' }}>
+          <h2>CSV取込（MVP）</h2>
+          <p style={{ margin: 0, color: '#666' }}>
+            対応CSV: 1行ヘッダ + 1行データ（列: Net Profit, Total Closed Trades, Percent Profitable, Profit Factor, Max Drawdown, From, To）
+          </p>
+
+          <input
+            type='file'
+            accept='.csv,text/csv'
+            onChange={(event) => setCsvFile(event.target.files?.[0] ?? null)}
+          />
+
+          <button
+            type='button'
+            onClick={onImportCsv}
+            disabled={importing}
+            style={{
+              width: 'fit-content',
+              padding: '0.6rem 1rem',
+              border: 'none',
+              borderRadius: '4px',
+              background: importing ? '#9cbbe0' : '#0a5bb5',
+              color: '#fff',
+              cursor: importing ? 'default' : 'pointer',
+            }}
+          >
+            {importing ? '取込中...' : 'CSVを取込'}
+          </button>
+
+          {importError && (
+            <div style={{ padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+              {importError}
+            </div>
+          )}
+
+          {importState && (
+            <div style={{ padding: '1rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px' }}>
+              <div><strong>import_id:</strong> <code>{importState.id}</code></div>
+              <div><strong>parse_status:</strong> <code>{importState.parse_status}</code></div>
+              {importState.parse_error && (
+                <div style={{ color: '#a10000' }}><strong>parse_error:</strong> {importState.parse_error}</div>
+              )}
+              {importState.parsed_summary && (
+                <div style={{ marginTop: '0.6rem' }}>
+                  <div><strong>totalTrades:</strong> {String(importState.parsed_summary.totalTrades)}</div>
+                  <div><strong>winRate:</strong> {String(importState.parsed_summary.winRate)}</div>
+                  <div><strong>profitFactor:</strong> {String(importState.parsed_summary.profitFactor)}</div>
+                  <div><strong>maxDrawdown:</strong> {String(importState.parsed_summary.maxDrawdown)}</div>
+                  <div><strong>netProfit:</strong> {String(importState.parsed_summary.netProfit)}</div>
+                  <div><strong>periodFrom:</strong> {importState.parsed_summary.periodFrom ?? '-'}</div>
+                  <div><strong>periodTo:</strong> {importState.parsed_summary.periodTo ?? '-'}</div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
     </div>
