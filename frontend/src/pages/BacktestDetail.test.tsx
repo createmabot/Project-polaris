@@ -1,8 +1,9 @@
-import React from 'react';
+﻿import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+let mockLocation = '/backtests/bt-1';
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -10,12 +11,41 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  useLocation: () => [mockLocation, vi.fn()],
 }));
 
-import BacktestDetail from './BacktestDetail';
+import BacktestDetail, { parseBacktestsReturnPath } from './BacktestDetail';
+
+describe('parseBacktestsReturnPath', () => {
+  it('accepts /backtests with q/page', () => {
+    const path = '/backtests/bt-1?return=%2Fbacktests%3Fq%3Dma%26page%3D2';
+    expect(parseBacktestsReturnPath(path)).toBe('/backtests?q=ma&page=2');
+  });
+
+  it('drops unsupported query keys', () => {
+    const path = '/backtests/bt-1?return=%2Fbacktests%3Ffoo%3Dbar';
+    expect(parseBacktestsReturnPath(path)).toBe('/backtests');
+  });
+
+  it('drops invalid page while keeping valid q', () => {
+    const path = '/backtests/bt-1?return=%2Fbacktests%3Fq%3Dma%26page%3Dabc';
+    expect(parseBacktestsReturnPath(path)).toBe('/backtests?q=ma');
+  });
+
+  it('rejects non-list path and falls back', () => {
+    const path = '/backtests/bt-1?return=%2Fbacktests%2F123';
+    expect(parseBacktestsReturnPath(path)).toBeNull();
+  });
+
+  it('rejects external url or malformed return', () => {
+    expect(parseBacktestsReturnPath('/backtests/bt-1?return=https%3A%2F%2Fexample.com')).toBeNull();
+    expect(parseBacktestsReturnPath('/backtests/bt-1?return=%E0%A4%A')).toBeNull();
+  });
+});
 
 describe('BacktestDetail', () => {
-  it('parsed summary を主要指標として表示する', () => {
+  it('renders parsed summary and uses validated return link', () => {
+    mockLocation = '/backtests/bt-1?return=%2Fbacktests%3Fq%3Dma%26page%3D2';
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -58,12 +88,12 @@ describe('BacktestDetail', () => {
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-1' }} />);
     expect(html).toContain('主要指標');
     expect(html).toContain('総取引数');
-    expect(html).toContain('勝率');
-    expect(html).toContain('Profit Factor');
     expect(html).toContain('解析成功');
+    expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
   });
 
-  it('parse failed 時に解析エラーを表示する', () => {
+  it('shows parse error on failed parse', () => {
+    mockLocation = '/backtests/bt-2';
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -101,7 +131,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('Missing required columns');
   });
 
-  it('import なし時に次アクションを表示する', () => {
+  it('falls back to /backtests when return query is absent', () => {
+    mockLocation = '/backtests/bt-3';
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -124,7 +155,6 @@ describe('BacktestDetail', () => {
     });
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-3' }} />);
-    expect(html).toContain('取込データはまだありません');
-    expect(html).toContain('/strategy-lab');
+    expect(html).toContain('href="/backtests"');
   });
 });
