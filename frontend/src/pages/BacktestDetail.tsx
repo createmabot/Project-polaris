@@ -73,6 +73,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
         <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
+        <Link href='/backtests' style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
       </div>
 
       <h1>検証レポート（最小）</h1>

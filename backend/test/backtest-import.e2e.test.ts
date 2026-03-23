@@ -89,6 +89,27 @@ vi.mock('../src/db', () => {
         }
         return backtest;
       },
+      findMany: async ({ include, orderBy, take }: any) => {
+        let rows = [...runtime.backtests.values()];
+        if (orderBy?.createdAt === 'desc') {
+          rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+        if (typeof take === 'number') {
+          rows = rows.slice(0, take);
+        }
+        if (include?.imports) {
+          return rows.map((backtest) => {
+            let imports = [...runtime.imports.values()]
+              .filter((item) => item.backtestId === backtest.id)
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+            if (typeof include.imports.take === 'number') {
+              imports = imports.slice(0, include.imports.take);
+            }
+            return { ...backtest, imports };
+          });
+        }
+        return rows;
+      },
       update: async ({ where, data }: any) => {
         const row = runtime.backtests.get(where.id);
         if (!row) throw new Error(`backtest_not_found:${where.id}`);
@@ -236,6 +257,84 @@ describe('backtest import vertical slice', () => {
     const detailBody = detail.json();
     expect(detailBody.data.latest_import.parse_status).toBe('failed');
     expect(detailBody.data.latest_import.parse_error).toContain('Missing required columns');
+
+    await app.close();
+  });
+
+  it('returns recent backtest list with latest parse status', async () => {
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'A',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const firstId = first.json().data.backtest.id as string;
+    await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${firstId}/imports`,
+      payload: {
+        file_name: 'ok.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV,
+      },
+    });
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'B',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const secondId = second.json().data.backtest.id as string;
+    await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${secondId}/imports`,
+      payload: {
+        file_name: 'ng.csv',
+        content_type: 'text/csv',
+        csv_text: UNSUPPORTED_CSV,
+      },
+    });
+
+    const third = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'C',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const thirdId = third.json().data.backtest.id as string;
+    expect(thirdId).toBeDefined();
+
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/backtests',
+    });
+    expect(listed.statusCode).toBe(200);
+    const body = listed.json();
+    expect(body.data.backtests).toHaveLength(3);
+    expect(body.data.backtests[0].id).toBe(thirdId);
+    expect(body.data.backtests[0].latest_import).toBeNull();
+    expect(body.data.backtests[1].id).toBe(secondId);
+    expect(body.data.backtests[1].latest_import.parse_status).toBe('failed');
+    expect(body.data.backtests[2].id).toBe(firstId);
+    expect(body.data.backtests[2].latest_import.parse_status).toBe('parsed');
 
     await app.close();
   });

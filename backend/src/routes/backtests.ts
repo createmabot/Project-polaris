@@ -19,6 +19,41 @@ type CreateImportBody = {
 };
 
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get('/', async (request, reply) => {
+    const backtests = await prisma.backtest.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: {
+        imports: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      backtests: backtests.map((item) => ({
+        id: item.id,
+        strategy_version_id: item.strategyRuleVersionId,
+        title: item.title,
+        execution_source: item.executionSource,
+        market: item.market,
+        timeframe: item.timeframe,
+        status: item.status,
+        created_at: item.createdAt,
+        updated_at: item.updatedAt,
+        latest_import: item.imports[0]
+          ? {
+              id: item.imports[0].id,
+              parse_status: item.imports[0].parseStatus,
+              parse_error: item.imports[0].parseError,
+              created_at: item.imports[0].createdAt,
+            }
+          : null,
+      })),
+    }));
+  });
+
   fastify.post<{ Body: CreateBacktestBody }>('/', async (request, reply) => {
     const strategyVersionId = typeof request.body.strategy_version_id === 'string'
       ? request.body.strategy_version_id.trim()
