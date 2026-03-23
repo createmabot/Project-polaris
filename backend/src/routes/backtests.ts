@@ -19,10 +19,22 @@ type CreateImportBody = {
 };
 
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/', async (request, reply) => {
+  fastify.get<{ Querystring: { page?: string; limit?: string } }>('/', async (request, reply) => {
+    const parsedPage = Number(request.query.page ?? 1);
+    const parsedLimit = Number(request.query.limit ?? 20);
+    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50 ? parsedLimit : NaN;
+
+    if (!Number.isFinite(page) || !Number.isFinite(limit)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
+    }
+
+    const skip = (page - 1) * limit;
+    const total = await prisma.backtest.count();
     const backtests = await prisma.backtest.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      skip,
+      take: limit,
       include: {
         imports: {
           orderBy: { createdAt: 'desc' },
@@ -51,6 +63,13 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
             }
           : null,
       })),
+      pagination: {
+        page,
+        limit,
+        total,
+        has_next: skip + backtests.length < total,
+        has_prev: page > 1,
+      },
     }));
   });
 

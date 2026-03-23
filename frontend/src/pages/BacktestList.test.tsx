@@ -20,12 +20,16 @@ describe('BacktestList', () => {
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
-      data: { backtests: [] },
+      data: {
+        backtests: [],
+        pagination: { page: 1, limit: 20, total: 0, has_next: false, has_prev: false },
+      },
     });
 
     const html = renderToStaticMarkup(<BacktestList />);
     expect(html).toContain('検証履歴一覧（直近）');
     expect(html).toContain('まだ検証履歴はありません');
+    expect(html).toContain('1 / 1 ページ');
   });
 
   it('一覧から詳細遷移リンクを表示する', () => {
@@ -53,6 +57,7 @@ describe('BacktestList', () => {
             },
           },
         ],
+        pagination: { page: 1, limit: 20, total: 21, has_next: true, has_prev: false },
       },
     });
 
@@ -60,6 +65,8 @@ describe('BacktestList', () => {
     expect(html).toContain('トヨタ日足');
     expect(html).toContain('解析成功');
     expect(html).toContain('/backtests/bt-1');
+    expect(html).toContain('次へ');
+    expect(html).toContain('1 / 2 ページ');
   });
 });
 

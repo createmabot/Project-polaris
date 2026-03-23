@@ -2,6 +2,7 @@ import useSWR from 'swr';
 import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestListData } from '../api/types';
+import { useState } from 'react';
 
 function parseStatusText(status: string | null | undefined): string {
   if (status === 'parsed') return '解析成功';
@@ -19,7 +20,12 @@ function parseStatusStyle(status: string | null | undefined): { background: stri
 }
 
 export default function BacktestList() {
-  const { data, error, isLoading } = useSWR<BacktestListData>('/api/backtests', swrFetcher);
+  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const { data, error, isLoading } = useSWR<BacktestListData>(
+    `/api/backtests?page=${page}&limit=${PAGE_SIZE}`,
+    swrFetcher
+  );
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
@@ -99,6 +105,42 @@ export default function BacktestList() {
           })}
         </div>
       )}
+
+      <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+        <button
+          type='button'
+          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          disabled={!data.pagination.has_prev}
+          style={{
+            padding: '0.45rem 0.85rem',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            background: data.pagination.has_prev ? '#fff' : '#f3f3f3',
+            color: '#333',
+            cursor: data.pagination.has_prev ? 'pointer' : 'default',
+          }}
+        >
+          前へ
+        </button>
+        <button
+          type='button'
+          onClick={() => setPage((current) => current + 1)}
+          disabled={!data.pagination.has_next}
+          style={{
+            padding: '0.45rem 0.85rem',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            background: data.pagination.has_next ? '#fff' : '#f3f3f3',
+            color: '#333',
+            cursor: data.pagination.has_next ? 'pointer' : 'default',
+          }}
+        >
+          次へ
+        </button>
+        <span style={{ color: '#666', fontSize: '0.9rem' }}>
+          {data.pagination.page} / {Math.max(1, Math.ceil(data.pagination.total / data.pagination.limit))} ページ
+        </span>
+      </div>
     </div>
   );
 }
