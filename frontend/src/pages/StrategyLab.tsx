@@ -105,7 +105,10 @@ export default function StrategyLab() {
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem' }}>
-        <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
+          <Link href='/backtests' style={{ color: '#666', textDecoration: 'none' }}>履歴一覧を見る</Link>
+        </div>
       </div>
 
       <h1>ルール検証ラボ（MVP）</h1>

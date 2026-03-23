@@ -341,3 +341,23 @@ export type BacktestDetailData = {
   imports: Array<BacktestImportData['import']>;
 };
 
+export type BacktestListData = {
+  backtests: Array<{
+    id: string;
+    strategy_version_id: string;
+    title: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    latest_import: {
+      id: string;
+      parse_status: 'pending' | 'parsed' | 'failed' | string;
+      parse_error: string | null;
+      created_at: string;
+    } | null;
+  }>;
+};
+
