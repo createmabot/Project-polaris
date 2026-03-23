@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+const mockSetLocation = vi.fn();
+let mockLocation = '/backtests';
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -10,9 +12,14 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  useLocation: () => [mockLocation, mockSetLocation],
 }));
 
-import BacktestList, { buildBacktestListPath } from './BacktestList';
+import BacktestList, {
+  buildBacktestListPath,
+  buildBacktestsListUrl,
+  parseBacktestsListQuery,
+} from './BacktestList';
 
 describe('buildBacktestListPath', () => {
   it('q なしで page/limit を組み立てる', () => {
@@ -24,8 +31,23 @@ describe('buildBacktestListPath', () => {
   });
 });
 
+describe('backtests list query helpers', () => {
+  it('URL クエリから q/page を復元できる', () => {
+    expect(parseBacktestsListQuery('/backtests?q=toyota&page=3')).toEqual({ q: 'toyota', page: 3 });
+    expect(parseBacktestsListQuery('/backtests')).toEqual({ q: '', page: 1 });
+    expect(parseBacktestsListQuery('/backtests?page=abc')).toEqual({ q: '', page: 1 });
+  });
+
+  it('q/page から一覧URLを構築できる', () => {
+    expect(buildBacktestsListUrl('toyota', 2)).toBe('/backtests?q=toyota&page=2');
+    expect(buildBacktestsListUrl('', 1)).toBe('/backtests?page=1');
+  });
+});
+
 describe('BacktestList', () => {
   it('一覧ゼロ件の空状態を表示する', () => {
+    mockLocation = '/backtests';
+    mockSetLocation.mockReset();
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -43,6 +65,8 @@ describe('BacktestList', () => {
   });
 
   it('一覧から詳細遷移リンクを表示する', () => {
+    mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&page=1';
+    mockSetLocation.mockReset();
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -77,6 +101,8 @@ describe('BacktestList', () => {
     expect(html).toContain('/backtests/bt-1');
     expect(html).toContain('次へ');
     expect(html).toContain('1 / 2 ページ');
+    expect(html).toContain('検索条件:');
+    expect(html).toContain('トヨタ');
   });
 });
 

@@ -1,8 +1,8 @@
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestListData } from '../api/types';
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 function parseStatusText(status: string | null | undefined): string {
   if (status === 'parsed') return '解析成功';
@@ -29,26 +29,45 @@ export function buildBacktestListPath(page: number, limit: number, q: string): s
   return `/api/backtests?${params.toString()}`;
 }
 
+export function parseBacktestsListQuery(locationPath: string): { q: string; page: number } {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const q = (params.get('q') ?? '').trim();
+  const rawPage = Number(params.get('page') ?? '1');
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  return { q, page };
+}
+
+export function buildBacktestsListUrl(q: string, page: number): string {
+  const params = new URLSearchParams();
+  const normalizedQ = q.trim();
+  if (normalizedQ) params.set('q', normalizedQ);
+  params.set('page', String(page > 0 ? page : 1));
+  const query = params.toString();
+  return query ? `/backtests?${query}` : '/backtests';
+}
+
 export default function BacktestList() {
   const PAGE_SIZE = 20;
-  const [page, setPage] = useState(1);
+  const [location, setLocation] = useLocation();
+  const { q: appliedQ, page } = parseBacktestsListQuery(location);
   const [inputQ, setInputQ] = useState('');
-  const [appliedQ, setAppliedQ] = useState('');
   const { data, error, isLoading } = useSWR<BacktestListData>(
     buildBacktestListPath(page, PAGE_SIZE, appliedQ),
     swrFetcher
   );
 
+  useEffect(() => {
+    setInputQ(appliedQ);
+  }, [appliedQ]);
+
   const onSubmitSearch = (event: FormEvent) => {
     event.preventDefault();
-    setPage(1);
-    setAppliedQ(inputQ.trim());
+    setLocation(buildBacktestsListUrl(inputQ, 1));
   };
 
   const onClearSearch = () => {
-    setInputQ('');
-    setAppliedQ('');
-    setPage(1);
+    setLocation('/backtests');
   };
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
@@ -177,7 +196,7 @@ export default function BacktestList() {
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
         <button
           type='button'
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, Math.max(1, page - 1)))}
           disabled={!data.pagination.has_prev}
           style={{
             padding: '0.45rem 0.85rem',
@@ -192,7 +211,7 @@ export default function BacktestList() {
         </button>
         <button
           type='button'
-          onClick={() => setPage((current) => current + 1)}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, page + 1))}
           disabled={!data.pagination.has_next}
           style={{
             padding: '0.45rem 0.85rem',
