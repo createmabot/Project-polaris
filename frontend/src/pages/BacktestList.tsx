@@ -47,6 +47,11 @@ export function buildBacktestsListUrl(q: string, page: number): string {
   return query ? `/backtests?${query}` : '/backtests';
 }
 
+export function buildBacktestDetailUrl(backtestId: string, q: string, page: number): string {
+  const returnPath = buildBacktestsListUrl(q, page);
+  return `/backtests/${backtestId}?return=${encodeURIComponent(returnPath)}`;
+}
+
 export default function BacktestList() {
   const PAGE_SIZE = 20;
   const [location, setLocation] = useLocation();
@@ -183,7 +188,10 @@ export default function BacktestList() {
                 </div>
 
                 <div>
-                  <Link href={`/backtests/${item.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+                  <Link
+                    href={buildBacktestDetailUrl(item.id, appliedQ, page)}
+                    style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
+                  >
                     詳細を開く
                   </Link>
                 </div>

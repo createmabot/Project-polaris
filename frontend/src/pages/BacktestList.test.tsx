@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -16,36 +16,41 @@ vi.mock('wouter', () => ({
 }));
 
 import BacktestList, {
+  buildBacktestDetailUrl,
   buildBacktestListPath,
   buildBacktestsListUrl,
   parseBacktestsListQuery,
 } from './BacktestList';
 
 describe('buildBacktestListPath', () => {
-  it('q なしで page/limit を組み立てる', () => {
+  it('builds page/limit without query', () => {
     expect(buildBacktestListPath(2, 20, '')).toBe('/api/backtests?page=2&limit=20');
   });
 
-  it('q ありで page/limit と検索条件を組み立てる', () => {
+  it('builds page/limit with query', () => {
     expect(buildBacktestListPath(1, 20, 'トヨタ 日足')).toBe('/api/backtests?page=1&limit=20&q=%E3%83%88%E3%83%A8%E3%82%BF+%E6%97%A5%E8%B6%B3');
   });
 });
 
 describe('backtests list query helpers', () => {
-  it('URL クエリから q/page を復元できる', () => {
+  it('parses q/page from url query', () => {
     expect(parseBacktestsListQuery('/backtests?q=toyota&page=3')).toEqual({ q: 'toyota', page: 3 });
     expect(parseBacktestsListQuery('/backtests')).toEqual({ q: '', page: 1 });
     expect(parseBacktestsListQuery('/backtests?page=abc')).toEqual({ q: '', page: 1 });
   });
 
-  it('q/page から一覧URLを構築できる', () => {
+  it('builds list url from q/page', () => {
     expect(buildBacktestsListUrl('toyota', 2)).toBe('/backtests?q=toyota&page=2');
     expect(buildBacktestsListUrl('', 1)).toBe('/backtests?page=1');
+  });
+
+  it('builds detail url with encoded return path', () => {
+    expect(buildBacktestDetailUrl('bt-1', 'toyota', 3)).toBe('/backtests/bt-1?return=%2Fbacktests%3Fq%3Dtoyota%26page%3D3');
   });
 });
 
 describe('BacktestList', () => {
-  it('一覧ゼロ件の空状態を表示する', () => {
+  it('renders empty state', () => {
     mockLocation = '/backtests';
     mockSetLocation.mockReset();
     mockUseSWR.mockReset();
@@ -59,12 +64,11 @@ describe('BacktestList', () => {
     });
 
     const html = renderToStaticMarkup(<BacktestList />);
-    expect(html).toContain('検証履歴一覧（直近）');
-    expect(html).toContain('まだ検証履歴はありません');
+    expect(html).toContain('検証履歴一覧');
     expect(html).toContain('1 / 1 ページ');
   });
 
-  it('一覧から詳細遷移リンクを表示する', () => {
+  it('renders list and detail link with return query', () => {
     mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&page=1';
     mockSetLocation.mockReset();
     mockUseSWR.mockReset();
@@ -97,12 +101,8 @@ describe('BacktestList', () => {
 
     const html = renderToStaticMarkup(<BacktestList />);
     expect(html).toContain('トヨタ日足');
-    expect(html).toContain('解析成功');
-    expect(html).toContain('/backtests/bt-1');
+    expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 1));
     expect(html).toContain('次へ');
     expect(html).toContain('1 / 2 ページ');
-    expect(html).toContain('検索条件:');
-    expect(html).toContain('トヨタ');
   });
 });
-

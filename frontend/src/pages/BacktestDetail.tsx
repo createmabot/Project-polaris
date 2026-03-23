@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestDetailData } from '../api/types';
 
@@ -55,9 +55,28 @@ function metricCard(label: string, value: string) {
   );
 }
 
+export function parseBacktestsReturnPath(locationPath: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const encodedReturn = params.get('return');
+  if (!encodedReturn) return null;
+
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(encodedReturn).trim();
+  } catch {
+    return null;
+  }
+
+  if (!decoded.startsWith('/backtests')) return null;
+  return decoded;
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
+  const [location] = useLocation();
   const { data, error, isLoading } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
+  const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
@@ -73,7 +92,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
         <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href='/backtests' style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
+        <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
       </div>
 
       <h1>検証レポート（最小）</h1>
