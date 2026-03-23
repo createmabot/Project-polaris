@@ -10,6 +10,7 @@ export type ApiResponse<T> = {
 export type SymbolDto = {
   id: string;
   symbol: string;
+  symbolCode?: string | null;
   tradingviewSymbol: string | null;
   displayName: string | null;
 };
@@ -268,5 +269,75 @@ export type ComparisonGenerateData = {
     model_name: string | null;
     prompt_version: string | null;
   } | null;
+};
+
+export type StrategyCreateData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type StrategyVersionData = {
+  strategy_version: {
+    id: string;
+    strategy_id: string;
+    natural_language_rule: string;
+    market: string;
+    timeframe: string;
+    status: 'draft' | 'generated' | 'failed' | string;
+    normalized_rule_json: any;
+    generated_pine: string | null;
+    warnings: string[];
+    assumptions: string[];
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type BacktestCreateData = {
+  backtest: {
+    id: string;
+    strategy_version_id: string;
+    title: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type BacktestImportData = {
+  import: {
+    id: string;
+    backtest_id: string;
+    file_name: string;
+    file_size: number;
+    content_type: string | null;
+    parse_status: 'pending' | 'parsed' | 'failed' | string;
+    parse_error: string | null;
+    parsed_summary: {
+      totalTrades: number | null;
+      winRate: number | null;
+      profitFactor: number | null;
+      maxDrawdown: number | null;
+      netProfit: number | null;
+      periodFrom: string | null;
+      periodTo: string | null;
+    } | null;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type BacktestDetailData = {
+  backtest: BacktestCreateData['backtest'];
+  latest_import: BacktestImportData['import'] | null;
+  imports: Array<BacktestImportData['import']>;
 };
 

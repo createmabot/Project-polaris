@@ -45,8 +45,43 @@ vi.mock('../src/db', () => {
   const prisma = {
     symbol: {
       findMany: async ({ where }: any) => {
-        const ids: string[] = where?.id?.in ?? [];
-        return [...runtime.symbols.values()].filter((symbol) => ids.includes(symbol.id));
+        const symbols = [...runtime.symbols.values()];
+
+        if (where?.id?.in) {
+          const ids: string[] = where.id.in;
+          return symbols.filter((symbol) => ids.includes(symbol.id));
+        }
+
+        const orConditions: any[] = Array.isArray(where?.OR) ? where.OR : [];
+        if (orConditions.length === 0) {
+          return [];
+        }
+
+        const matched = new Map<string, any>();
+        for (const condition of orConditions) {
+          if (condition?.id?.in) {
+            const ids: string[] = condition.id.in;
+            symbols.filter((symbol) => ids.includes(symbol.id)).forEach((symbol) => matched.set(symbol.id, symbol));
+          }
+          if (condition?.symbolCode?.in) {
+            const values: string[] = condition.symbolCode.in;
+            symbols.filter((symbol) => symbol.symbolCode && values.includes(symbol.symbolCode)).forEach((symbol) => matched.set(symbol.id, symbol));
+          }
+          if (condition?.symbol?.in) {
+            const values: string[] = condition.symbol.in;
+            symbols.filter((symbol) => symbol.symbol && values.includes(symbol.symbol)).forEach((symbol) => matched.set(symbol.id, symbol));
+          }
+          if (condition?.tradingviewSymbol?.in) {
+            const values: string[] = condition.tradingviewSymbol.in;
+            symbols.filter((symbol) => symbol.tradingviewSymbol && values.includes(symbol.tradingviewSymbol)).forEach((symbol) => matched.set(symbol.id, symbol));
+          }
+          if (condition?.displayName?.in) {
+            const values: string[] = condition.displayName.in;
+            symbols.filter((symbol) => symbol.displayName && values.includes(symbol.displayName)).forEach((symbol) => matched.set(symbol.id, symbol));
+          }
+        }
+
+        return [...matched.values()];
       },
     },
     alertEvent: {

@@ -8,6 +8,9 @@ import { alertRoutes } from './routes/alerts';
 import { symbolRoutes } from './routes/symbols';
 import { noteRoutes } from './routes/notes';
 import { comparisonRoutes } from './routes/comparisons';
+import { strategyRoutes } from './routes/strategies';
+import { strategyVersionRoutes } from './routes/strategy-versions';
+import { backtestRoutes } from './routes/backtests';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import crypto from 'crypto';
@@ -36,6 +39,9 @@ fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
 fastify.register(noteRoutes, { prefix: '/api/notes' });
 fastify.register(comparisonRoutes, { prefix: '/api/comparisons' });
+fastify.register(strategyRoutes, { prefix: '/api/strategies' });
+fastify.register(strategyVersionRoutes, { prefix: '/api/strategy-versions' });
+fastify.register(backtestRoutes, { prefix: '/api/backtests' });
 
 const start = async () => {
   try {

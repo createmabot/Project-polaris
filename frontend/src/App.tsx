@@ -5,6 +5,8 @@ import SymbolDetail from "./pages/SymbolDetail";
 import NoteDetail from "./pages/NoteDetail";
 import CompareCreate from "./pages/CompareCreate";
 import ComparisonDetail from "./pages/ComparisonDetail";
+import StrategyLab from "./pages/StrategyLab";
+import BacktestDetail from "./pages/BacktestDetail";
 
 function App() {
   return (
@@ -15,6 +17,8 @@ function App() {
       <Route path="/notes/:noteId" component={NoteDetail} />
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
       <Route path="/compare" component={CompareCreate} />
+      <Route path="/strategy-lab" component={StrategyLab} />
+      <Route path="/backtests/:backtestId" component={BacktestDetail} />
       <Route path="/comparisons/:comparisonId" component={ComparisonDetail} />
       <Route>404: No such page!</Route>
     </Switch>

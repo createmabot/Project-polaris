@@ -17,7 +17,9 @@
     "test:e2e:symbol-snapshot": "vitest run test/symbol-snapshot.e2e.test.ts",
     "test:e2e:collect-summary": "vitest run test/queue-handlers.e2e.test.ts",
     "test:e2e:webhook-summary": "vitest run test/webhook-route.e2e.test.ts",
-    "test:e2e:comparison-generate": "vitest run test/comparison-generate.e2e.test.ts"
+    "test:e2e:comparison-generate": "vitest run test/comparison-generate.e2e.test.ts",
+    "test:e2e:strategy-lab": "vitest run test/strategy-lab.e2e.test.ts",
+    "test:e2e:backtest-import": "vitest run test/backtest-import.e2e.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
