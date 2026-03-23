@@ -89,10 +89,14 @@ vi.mock('../src/db', () => {
         }
         return backtest;
       },
-      findMany: async ({ include, orderBy, take }: any) => {
+      count: async () => runtime.backtests.size,
+      findMany: async ({ include, orderBy, take, skip }: any) => {
         let rows = [...runtime.backtests.values()];
         if (orderBy?.createdAt === 'desc') {
           rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+        if (typeof skip === 'number') {
+          rows = rows.slice(skip);
         }
         if (typeof take === 'number') {
           rows = rows.slice(0, take);
@@ -324,17 +328,33 @@ describe('backtest import vertical slice', () => {
 
     const listed = await app.inject({
       method: 'GET',
-      url: '/api/backtests',
+      url: '/api/backtests?page=1&limit=2',
     });
     expect(listed.statusCode).toBe(200);
     const body = listed.json();
-    expect(body.data.backtests).toHaveLength(3);
+    expect(body.data.backtests).toHaveLength(2);
+    expect(body.data.pagination.page).toBe(1);
+    expect(body.data.pagination.limit).toBe(2);
+    expect(body.data.pagination.total).toBe(3);
+    expect(body.data.pagination.has_next).toBe(true);
+    expect(body.data.pagination.has_prev).toBe(false);
     expect(body.data.backtests[0].id).toBe(thirdId);
     expect(body.data.backtests[0].latest_import).toBeNull();
     expect(body.data.backtests[1].id).toBe(secondId);
     expect(body.data.backtests[1].latest_import.parse_status).toBe('failed');
-    expect(body.data.backtests[2].id).toBe(firstId);
-    expect(body.data.backtests[2].latest_import.parse_status).toBe('parsed');
+
+    const listedPage2 = await app.inject({
+      method: 'GET',
+      url: '/api/backtests?page=2&limit=2',
+    });
+    expect(listedPage2.statusCode).toBe(200);
+    const bodyPage2 = listedPage2.json();
+    expect(bodyPage2.data.backtests).toHaveLength(1);
+    expect(bodyPage2.data.pagination.page).toBe(2);
+    expect(bodyPage2.data.pagination.has_next).toBe(false);
+    expect(bodyPage2.data.pagination.has_prev).toBe(true);
+    expect(bodyPage2.data.backtests[0].id).toBe(firstId);
+    expect(bodyPage2.data.backtests[0].latest_import.parse_status).toBe('parsed');
 
     await app.close();
   });
