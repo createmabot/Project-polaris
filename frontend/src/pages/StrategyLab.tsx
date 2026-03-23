@@ -268,7 +268,7 @@ export default function StrategyLab() {
                 cursor: 'pointer',
               }}
             >
-              backtest詳細を開く
+              検証レポートを開く
             </button>
           </div>
 

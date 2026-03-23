@@ -62,7 +62,7 @@ pnpm run down
   - parseStatus / parseError / 最小summary表示
   - backtest詳細表示（`/backtests/:backtestId`）
 - まだ未対応（次フェーズ）:
-  - 検証レポート表示
+  - 本格レポート分析（比較・可視化）
   - 比較高度化
 
 ### CSV取込（MVPでサポートする形式）
@@ -83,9 +83,10 @@ pnpm run down
 ### backtest 詳細（最小表示）
 - URL: `/backtests/:backtestId`
 - 表示項目:
-  - backtest header（id / strategy_version_id / execution_source / market / timeframe / status）
-  - 最新 import の `parse_status` / `parse_error`
-  - parsed summary（`totalTrades`, `winRate`, `profitFactor`, `maxDrawdown`, `netProfit`, `periodFrom`, `periodTo`）
+  - 基本情報（id / strategy_version_id / execution_source / market / timeframe / status）
+  - 取込状態（`parsed` / `failed` / `pending` / 未取込）
+  - parse failed 時は `parse_error` を強調表示
+  - 主要指標カード（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
 
 ### Snapshot 週次レビュー記録
 - 生成（当週/JST）
