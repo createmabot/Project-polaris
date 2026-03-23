@@ -12,7 +12,17 @@ vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-import BacktestList from './BacktestList';
+import BacktestList, { buildBacktestListPath } from './BacktestList';
+
+describe('buildBacktestListPath', () => {
+  it('q なしで page/limit を組み立てる', () => {
+    expect(buildBacktestListPath(2, 20, '')).toBe('/api/backtests?page=2&limit=20');
+  });
+
+  it('q ありで page/limit と検索条件を組み立てる', () => {
+    expect(buildBacktestListPath(1, 20, 'トヨタ 日足')).toBe('/api/backtests?page=1&limit=20&q=%E3%83%88%E3%83%A8%E3%82%BF+%E6%97%A5%E8%B6%B3');
+  });
+});
 
 describe('BacktestList', () => {
   it('一覧ゼロ件の空状態を表示する', () => {
@@ -22,7 +32,7 @@ describe('BacktestList', () => {
       error: null,
       data: {
         backtests: [],
-        pagination: { page: 1, limit: 20, total: 0, has_next: false, has_prev: false },
+        pagination: { page: 1, limit: 20, q: '', total: 0, has_next: false, has_prev: false },
       },
     });
 
@@ -57,7 +67,7 @@ describe('BacktestList', () => {
             },
           },
         ],
-        pagination: { page: 1, limit: 20, total: 21, has_next: true, has_prev: false },
+        pagination: { page: 1, limit: 20, q: '', total: 21, has_next: true, has_prev: false },
       },
     });
 

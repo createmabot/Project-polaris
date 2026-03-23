@@ -91,6 +91,7 @@ pnpm run down
 ### backtest 履歴一覧（直近）
 - URL: `/backtests`
 - 直近の検証履歴を createdAt 降順で表示（最小ページネーション対応）
+- title 部分一致の最小検索対応（`q`）
 - 表示項目:
   - タイトル / 作成日時
   - market / timeframe / executionSource / backtest status
@@ -99,7 +100,8 @@ pnpm run down
 - ページ移動:
   - `前へ` / `次へ` ボタンで履歴を遡る
 - 今回未対応:
-  - 検索、フィルタ、高度ソート、比較分析
+  - market / timeframe / status の複合フィルタ
+  - 高度ソート、比較分析
 
 ### Snapshot 週次レビュー記録
 - 生成（当週/JST）
