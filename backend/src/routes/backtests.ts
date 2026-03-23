@@ -169,6 +169,19 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         created_at: backtest.createdAt,
         updated_at: backtest.updatedAt,
       },
+      latest_import: backtest.imports[0]
+        ? {
+            id: backtest.imports[0].id,
+            file_name: backtest.imports[0].fileName,
+            file_size: backtest.imports[0].fileSize,
+            content_type: backtest.imports[0].contentType,
+            parse_status: backtest.imports[0].parseStatus,
+            parse_error: backtest.imports[0].parseError,
+            parsed_summary: backtest.imports[0].parsedSummaryJson,
+            created_at: backtest.imports[0].createdAt,
+            updated_at: backtest.imports[0].updatedAt,
+          }
+        : null,
       imports: backtest.imports.map((item) => ({
         id: item.id,
         file_name: item.fileName,

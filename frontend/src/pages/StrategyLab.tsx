@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { postApi } from '../api/client';
 import {
   BacktestCreateData,
@@ -12,16 +12,19 @@ const MARKET_OPTIONS = ['JP_STOCK'];
 const TIMEFRAME_OPTIONS = ['D'];
 
 export default function StrategyLab() {
+  const [, setLocation] = useLocation();
   const [title, setTitle] = useState('押し目買い戦略');
   const [naturalLanguageRule, setNaturalLanguageRule] = useState(
     '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が25日線を下回ったら手仕舞い。'
   );
   const [market, setMarket] = useState('JP_STOCK');
   const [timeframe, setTimeframe] = useState('D');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StrategyVersionData['strategy_version'] | null>(null);
   const [backtest, setBacktest] = useState<BacktestCreateData['backtest'] | null>(null);
+
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importState, setImportState] = useState<BacktestImportData['import'] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
@@ -41,21 +44,18 @@ export default function StrategyLab() {
         title: title.trim(),
       });
 
-      const version = await postApi<StrategyVersionData>(
-        `/api/strategies/${strategy.strategy.id}/versions`,
-        {
-          natural_language_rule: naturalLanguageRule.trim(),
-          market,
-          timeframe,
-        }
-      );
+      const version = await postApi<StrategyVersionData>(`/api/strategies/${strategy.strategy.id}/versions`, {
+        natural_language_rule: naturalLanguageRule.trim(),
+        market,
+        timeframe,
+      });
 
       const generated = await postApi<StrategyVersionData>(
         `/api/strategy-versions/${version.strategy_version.id}/pine/generate`,
         {}
       );
-
       setResult(generated.strategy_version);
+
       if (generated.strategy_version.status === 'generated') {
         const createdBacktest = await postApi<BacktestCreateData>('/api/backtests', {
           strategy_version_id: generated.strategy_version.id,
@@ -103,14 +103,14 @@ export default function StrategyLab() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '880px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
       </div>
 
       <h1>ルール検証ラボ（MVP）</h1>
       <p style={{ color: '#666' }}>
-        自然言語ルールを保存し、version を作成して Pine を生成します。TradingView での一次検証は生成後に実施します。
+        自然言語入力から Pine 生成まで実行し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
       </p>
 
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem', marginTop: '1.2rem' }}>
@@ -187,8 +187,16 @@ export default function StrategyLab() {
             <div><strong>version_id:</strong> <code>{result.id}</code></div>
             <div><strong>status:</strong> <code>{result.status}</code></div>
             <div><strong>backtest_id:</strong> <code>{backtest?.id ?? '-'}</code></div>
-            {result.status !== 'generated' && (
-              <div style={{ color: '#8a5b00' }}>Pine生成が失敗しているため backtest は未作成です。</div>
+          </div>
+
+          <div>
+            <h3 style={{ marginBottom: '0.5rem' }}>warnings</h3>
+            {result.warnings.length > 0 ? (
+              <ul style={{ color: '#8a5b00' }}>
+                {result.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+              </ul>
+            ) : (
+              <p style={{ color: '#666' }}>なし</p>
             )}
           </div>
 
@@ -197,17 +205,6 @@ export default function StrategyLab() {
             {result.assumptions.length > 0 ? (
               <ul>
                 {result.assumptions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
-              </ul>
-            ) : (
-              <p style={{ color: '#666' }}>なし</p>
-            )}
-          </div>
-
-          <div>
-            <h3 style={{ marginBottom: '0.5rem' }}>warnings</h3>
-            {result.warnings.length > 0 ? (
-              <ul style={{ color: '#8a5b00' }}>
-                {result.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
               </ul>
             ) : (
               <p style={{ color: '#666' }}>なし</p>
@@ -240,22 +237,40 @@ export default function StrategyLab() {
             onChange={(event) => setCsvFile(event.target.files?.[0] ?? null)}
           />
 
-          <button
-            type='button'
-            onClick={onImportCsv}
-            disabled={importing}
-            style={{
-              width: 'fit-content',
-              padding: '0.6rem 1rem',
-              border: 'none',
-              borderRadius: '4px',
-              background: importing ? '#9cbbe0' : '#0a5bb5',
-              color: '#fff',
-              cursor: importing ? 'default' : 'pointer',
-            }}
-          >
-            {importing ? '取込中...' : 'CSVを取込'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <button
+              type='button'
+              onClick={onImportCsv}
+              disabled={importing}
+              style={{
+                width: 'fit-content',
+                padding: '0.6rem 1rem',
+                border: 'none',
+                borderRadius: '4px',
+                background: importing ? '#9cbbe0' : '#0a5bb5',
+                color: '#fff',
+                cursor: importing ? 'default' : 'pointer',
+              }}
+            >
+              {importing ? '取込中...' : 'CSVを取込'}
+            </button>
+
+            <button
+              type='button'
+              onClick={() => setLocation(`/backtests/${backtest.id}`)}
+              style={{
+                width: 'fit-content',
+                padding: '0.6rem 1rem',
+                border: '1px solid #0a5bb5',
+                borderRadius: '4px',
+                background: '#fff',
+                color: '#0a5bb5',
+                cursor: 'pointer',
+              }}
+            >
+              backtest詳細を開く
+            </button>
+          </div>
 
           {importError && (
             <div style={{ padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>

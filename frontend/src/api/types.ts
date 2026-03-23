@@ -337,6 +337,7 @@ export type BacktestImportData = {
 
 export type BacktestDetailData = {
   backtest: BacktestCreateData['backtest'];
-  imports: BacktestImportData['import'][];
+  latest_import: BacktestImportData['import'] | null;
+  imports: Array<BacktestImportData['import']>;
 };
 

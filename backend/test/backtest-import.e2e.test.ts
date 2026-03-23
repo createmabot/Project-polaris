@@ -185,6 +185,15 @@ describe('backtest import vertical slice', () => {
     expect(body.data.import.parse_status).toBe('parsed');
     expect(body.data.import.parsed_summary.totalTrades).toBe(120);
 
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const detailBody = detail.json();
+    expect(detailBody.data.latest_import.parse_status).toBe('parsed');
+    expect(detailBody.data.latest_import.parsed_summary.profitFactor).toBe(1.42);
+
     await app.close();
   });
 
@@ -218,6 +227,15 @@ describe('backtest import vertical slice', () => {
     expect(body.data.import.parse_status).toBe('failed');
     expect(body.data.import.parse_error).toContain('Missing required columns');
     expect(runtime.imports.size).toBe(1);
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const detailBody = detail.json();
+    expect(detailBody.data.latest_import.parse_status).toBe('failed');
+    expect(detailBody.data.latest_import.parse_error).toContain('Missing required columns');
 
     await app.close();
   });
