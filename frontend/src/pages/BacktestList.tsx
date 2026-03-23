@@ -1,8 +1,8 @@
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestListData } from '../api/types';
-import { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 function parseStatusText(status: string | null | undefined): string {
   if (status === 'parsed') return '解析成功';
@@ -19,13 +19,56 @@ function parseStatusStyle(status: string | null | undefined): { background: stri
   return { background: '#f2f2f2', color: '#444' };
 }
 
+export function buildBacktestListPath(page: number, limit: number, q: string): string {
+  const params = new URLSearchParams();
+  params.set('page', String(page));
+  params.set('limit', String(limit));
+  if (q.trim()) {
+    params.set('q', q.trim());
+  }
+  return `/api/backtests?${params.toString()}`;
+}
+
+export function parseBacktestsListQuery(locationPath: string): { q: string; page: number } {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const q = (params.get('q') ?? '').trim();
+  const rawPage = Number(params.get('page') ?? '1');
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  return { q, page };
+}
+
+export function buildBacktestsListUrl(q: string, page: number): string {
+  const params = new URLSearchParams();
+  const normalizedQ = q.trim();
+  if (normalizedQ) params.set('q', normalizedQ);
+  params.set('page', String(page > 0 ? page : 1));
+  const query = params.toString();
+  return query ? `/backtests?${query}` : '/backtests';
+}
+
 export default function BacktestList() {
   const PAGE_SIZE = 20;
-  const [page, setPage] = useState(1);
+  const [location, setLocation] = useLocation();
+  const { q: appliedQ, page } = parseBacktestsListQuery(location);
+  const [inputQ, setInputQ] = useState('');
   const { data, error, isLoading } = useSWR<BacktestListData>(
-    `/api/backtests?page=${page}&limit=${PAGE_SIZE}`,
+    buildBacktestListPath(page, PAGE_SIZE, appliedQ),
     swrFetcher
   );
+
+  useEffect(() => {
+    setInputQ(appliedQ);
+  }, [appliedQ]);
+
+  const onSubmitSearch = (event: FormEvent) => {
+    event.preventDefault();
+    setLocation(buildBacktestsListUrl(inputQ, 1));
+  };
+
+  const onClearSearch = () => {
+    setLocation('/backtests');
+  };
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
@@ -43,9 +86,53 @@ export default function BacktestList() {
         直近の backtest を表示します。詳細分析は各 backtest 詳細画面で確認してください。
       </p>
 
+      <form onSubmit={onSubmitSearch} style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <input
+          value={inputQ}
+          onChange={(event) => setInputQ(event.target.value)}
+          placeholder='タイトルで検索（部分一致）'
+          style={{ minWidth: '260px', padding: '0.5rem 0.6rem', borderRadius: '4px', border: '1px solid #ccc' }}
+        />
+        <button
+          type='submit'
+          style={{
+            padding: '0.45rem 0.85rem',
+            border: '1px solid #0a5bb5',
+            borderRadius: '4px',
+            background: '#0a5bb5',
+            color: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          検索
+        </button>
+        <button
+          type='button'
+          onClick={onClearSearch}
+          style={{
+            padding: '0.45rem 0.85rem',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            background: '#fff',
+            color: '#333',
+            cursor: 'pointer',
+          }}
+        >
+          クリア
+        </button>
+      </form>
+
+      {appliedQ && (
+        <div style={{ marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
+          検索条件: <code>{appliedQ}</code>
+        </div>
+      )}
+
       {data.backtests.length === 0 ? (
         <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', color: '#666' }}>
-          まだ検証履歴はありません。`/strategy-lab` からルール生成とCSV取込を実行してください。
+          {appliedQ
+            ? '検索条件に一致する履歴はありません。'
+            : 'まだ検証履歴はありません。`/strategy-lab` からルール生成とCSV取込を実行してください。'}
         </div>
       ) : (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
@@ -109,7 +196,7 @@ export default function BacktestList() {
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
         <button
           type='button'
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, Math.max(1, page - 1)))}
           disabled={!data.pagination.has_prev}
           style={{
             padding: '0.45rem 0.85rem',
@@ -124,7 +211,7 @@ export default function BacktestList() {
         </button>
         <button
           type='button'
-          onClick={() => setPage((current) => current + 1)}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, page + 1))}
           disabled={!data.pagination.has_next}
           style={{
             padding: '0.45rem 0.85rem',

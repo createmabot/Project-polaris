@@ -56,6 +56,12 @@ function createRuntime(): Runtime {
 }
 
 vi.mock('../src/db', () => {
+  const applyWhere = (rows: BacktestRow[], where: any): BacktestRow[] => {
+    if (!where?.title?.contains) return rows;
+    const contains = String(where.title.contains).toLowerCase();
+    return rows.filter((row) => row.title.toLowerCase().includes(contains));
+  };
+
   const prisma = {
     strategyRuleVersion: {
       findUnique: async ({ where }: any) => runtime.strategyVersions.get(where.id) ?? null,
@@ -89,9 +95,10 @@ vi.mock('../src/db', () => {
         }
         return backtest;
       },
-      count: async () => runtime.backtests.size,
-      findMany: async ({ include, orderBy, take, skip }: any) => {
+      count: async ({ where }: any = {}) => applyWhere([...runtime.backtests.values()], where).length,
+      findMany: async ({ include, orderBy, take, skip, where }: any) => {
         let rows = [...runtime.backtests.values()];
+        rows = applyWhere(rows, where);
         if (orderBy?.createdAt === 'desc') {
           rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         }
@@ -355,6 +362,69 @@ describe('backtest import vertical slice', () => {
     expect(bodyPage2.data.pagination.has_prev).toBe(true);
     expect(bodyPage2.data.backtests[0].id).toBe(firstId);
     expect(bodyPage2.data.backtests[0].latest_import.parse_status).toBe('parsed');
+
+    await app.close();
+  });
+
+  it('filters backtests by title partial match with pagination', async () => {
+    const app = await createApp();
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'トヨタ日足',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'ソニー日足',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'トヨタ週足',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/backtests?page=1&limit=1&q=トヨタ',
+    });
+    expect(listed.statusCode).toBe(200);
+    const body = listed.json();
+    expect(body.data.backtests).toHaveLength(1);
+    expect(body.data.backtests[0].title).toContain('トヨタ');
+    expect(body.data.pagination.q).toBe('トヨタ');
+    expect(body.data.pagination.total).toBe(2);
+    expect(body.data.pagination.has_next).toBe(true);
+
+    const page2 = await app.inject({
+      method: 'GET',
+      url: '/api/backtests?page=2&limit=1&q=トヨタ',
+    });
+    expect(page2.statusCode).toBe(200);
+    const bodyPage2 = page2.json();
+    expect(bodyPage2.data.backtests).toHaveLength(1);
+    expect(bodyPage2.data.backtests[0].title).toContain('トヨタ');
+    expect(bodyPage2.data.pagination.has_prev).toBe(true);
+    expect(bodyPage2.data.pagination.has_next).toBe(false);
 
     await app.close();
   });

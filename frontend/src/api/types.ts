@@ -362,6 +362,7 @@ export type BacktestListData = {
   pagination: {
     page: number;
     limit: number;
+    q: string;
     total: number;
     has_next: boolean;
     has_prev: boolean;
