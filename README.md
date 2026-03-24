@@ -149,10 +149,11 @@ pnpm run test:integration:symbol-snapshot-db
 
 ## CI
 GitHub Actions の `Symbol Snapshot DB Integration` で以下を実行します。
+- `backtests-return-flow-e2e-check`
 - `snapshot-review-generator-json-check`
 - `symbol-snapshot-db-integration`
 
-`main` の required checks は ruleset 管理で、上記2件を必須化しています。
+`main` の required checks は ruleset 管理で、上記3件を必須化しています。
 
 ## Required-check failure drill（定期監査）
 目的:

@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e:backtests-return-flow": "vitest run src/pages/BacktestsReturnFlow.e2e.test.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
