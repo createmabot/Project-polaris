@@ -101,7 +101,7 @@ vi.mock('../src/db', () => {
         }
         return row;
       },
-      findMany: async ({ where, orderBy }: any) => {
+      findMany: async ({ where, orderBy, include }: any) => {
         let rows = Array.from(runtime.versions.values());
         if (where?.strategyRuleId) {
           rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
@@ -111,6 +111,12 @@ vi.mock('../src/db', () => {
         }
         if (orderBy?.createdAt === 'asc') {
           rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        if (include?.clonedFromVersion) {
+          return rows.map((row) => ({
+            ...row,
+            clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
+          }));
         }
         return rows;
       },
@@ -230,6 +236,8 @@ describe('strategy lab vertical slice', () => {
     const listBody = listResponse.json();
     expect(Array.isArray(listBody.data.strategy_versions)).toBe(true);
     expect(listBody.data.strategy_versions.length).toBe(2);
+    expect(typeof listBody.data.strategy_versions[0].is_derived).toBe('boolean');
+    expect(listBody.data.strategy_versions[0]).toHaveProperty('has_diff_from_clone');
 
     const detailResponse = await app.inject({
       method: 'GET',
@@ -433,6 +441,12 @@ describe('strategy lab vertical slice', () => {
     const ids = listBody.data.strategy_versions.map((item: any) => item.id);
     expect(ids).toContain(sourceVersionId);
     expect(ids).toContain(clonedVersionId);
+    const sourceListItem = listBody.data.strategy_versions.find((item: any) => item.id === sourceVersionId);
+    const clonedListItem = listBody.data.strategy_versions.find((item: any) => item.id === clonedVersionId);
+    expect(sourceListItem.is_derived).toBe(false);
+    expect(sourceListItem.has_diff_from_clone).toBeNull();
+    expect(clonedListItem.is_derived).toBe(true);
+    expect(clonedListItem.has_diff_from_clone).toBe(false);
 
     const clonedDetail = await app.inject({
       method: 'GET',
@@ -517,6 +531,16 @@ describe('strategy lab vertical slice', () => {
     });
     expect(sourceDetail.statusCode).toBe(200);
     expect(sourceDetail.json().data.strategy_version.generated_pine).toBe(sourceGeneratedPine);
+
+    const listAfterEdit = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(listAfterEdit.statusCode).toBe(200);
+    const listAfterEditBody = listAfterEdit.json();
+    const editedCloneListItem = listAfterEditBody.data.strategy_versions.find((item: any) => item.id === cloneVersionId);
+    expect(editedCloneListItem.is_derived).toBe(true);
+    expect(editedCloneListItem.has_diff_from_clone).toBe(true);
 
     await app.close();
   });

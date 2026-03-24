@@ -18,6 +18,37 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
   if (!data) return null;
 
+  const statusLabel = (status: string) => {
+    if (status === 'generated') return '生成済み';
+    if (status === 'draft') return '下書き';
+    if (status === 'failed') return '生成失敗';
+    return status;
+  };
+
+  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status') => {
+    const style = {
+      display: 'inline-block',
+      padding: '0.2rem 0.5rem',
+      borderRadius: '999px',
+      fontSize: '0.78rem',
+      fontWeight: 600,
+    };
+
+    if (kind === 'derived') {
+      return { ...style, background: '#eef4ff', color: '#1849a9' };
+    }
+    if (kind === 'diff') {
+      return { ...style, background: '#fff3e6', color: '#9a4d00' };
+    }
+    if (kind === 'no-diff') {
+      return { ...style, background: '#eef8ee', color: '#1f6a1f' };
+    }
+    if (kind === 'no-base') {
+      return { ...style, background: '#f3f3f3', color: '#666' };
+    }
+    return { ...style, background: '#f0f1f5', color: '#333' };
+  };
+
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
@@ -55,10 +86,23 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                   作成: {new Date(version.created_at).toLocaleString('ja-JP')}
                 </div>
               </div>
+              <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                {version.is_derived ? (
+                  <span style={badgeStyle('derived')}>派生</span>
+                ) : (
+                  <span style={badgeStyle('no-base')}>比較元なし</span>
+                )}
+                {version.has_diff_from_clone === true && (
+                  <span style={badgeStyle('diff')}>差分あり</span>
+                )}
+                {version.has_diff_from_clone === false && (
+                  <span style={badgeStyle('no-diff')}>差分なし</span>
+                )}
+                <span style={badgeStyle('status')}>status: {statusLabel(version.status)}</span>
+              </div>
               <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', fontSize: '0.95rem' }}>
                 <span><strong>市場:</strong> {version.market}</span>
                 <span><strong>時間足:</strong> {version.timeframe}</span>
-                <span><strong>状態:</strong> <code>{version.status}</code></span>
                 <span><strong>warnings:</strong> {version.has_warnings ? 'あり' : 'なし'}</span>
               </div>
               <div>
@@ -76,4 +120,3 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     </div>
   );
 }
-
