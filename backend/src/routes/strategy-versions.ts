@@ -81,4 +81,34 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       strategy_version: toStrategyVersionResponse(updated),
     }));
   });
+
+  fastify.post<{ Params: { versionId: string } }>('/:versionId/clone', async (request, reply) => {
+    const { versionId } = request.params;
+    const sourceVersion = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+    });
+
+    if (!sourceVersion) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    const cloned = await prisma.strategyRuleVersion.create({
+      data: {
+        strategyRuleId: sourceVersion.strategyRuleId,
+        naturalLanguageRule: sourceVersion.naturalLanguageRule,
+        normalizedRuleJson: (sourceVersion.normalizedRuleJson ?? undefined) as Prisma.InputJsonValue | undefined,
+        generatedPine: sourceVersion.generatedPine,
+        warningsJson: (sourceVersion.warningsJson ?? undefined) as Prisma.InputJsonValue | undefined,
+        assumptionsJson: (sourceVersion.assumptionsJson ?? undefined) as Prisma.InputJsonValue | undefined,
+        market: sourceVersion.market,
+        timeframe: sourceVersion.timeframe,
+        status: sourceVersion.status,
+      },
+    });
+
+    return reply.status(201).send(formatSuccess(request, {
+      strategy_version: toStrategyVersionResponse(cloned),
+      cloned_from_version_id: sourceVersion.id,
+    }));
+  });
 };

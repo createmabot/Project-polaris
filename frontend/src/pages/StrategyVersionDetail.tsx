@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
 import { StrategyVersionData } from '../api/types';
 
@@ -10,12 +10,15 @@ type StrategyVersionDetailProps = {
 
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
+  const [, setLocation] = useLocation();
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(
     `/api/strategy-versions/${versionId}`,
     swrFetcher
   );
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
 
   const onRegenerate = async () => {
     setRegenerating(true);
@@ -27,6 +30,20 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setRegenerateError(requestError?.message ?? '再生成に失敗しました。');
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const onCloneAsNewVersion = async () => {
+    setCloning(true);
+    setCloneError(null);
+    try {
+      const response = await postApi<StrategyVersionData>(`/api/strategy-versions/${versionId}/clone`, {});
+      const nextVersionId = response.strategy_version.id;
+      setLocation(`/strategy-versions/${nextVersionId}`);
+    } catch (requestError: any) {
+      setCloneError(requestError?.message ?? '新しい version 作成に失敗しました。');
+    } finally {
+      setCloning(false);
     }
   };
 
@@ -60,26 +77,52 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       </div>
 
       <div style={{ marginTop: '1rem' }}>
-        <button
-          type='button'
-          onClick={onRegenerate}
-          disabled={regenerating}
-          style={{
-            padding: '0.55rem 0.95rem',
-            border: 'none',
-            borderRadius: '4px',
-            background: regenerating ? '#9cbbe0' : '#0a5bb5',
-            color: '#fff',
-            cursor: regenerating ? 'default' : 'pointer',
-          }}
-        >
-          {regenerating ? '再生成中...' : 'Pine を再生成'}
-        </button>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            type='button'
+            onClick={onRegenerate}
+            disabled={regenerating}
+            style={{
+              padding: '0.55rem 0.95rem',
+              border: 'none',
+              borderRadius: '4px',
+              background: regenerating ? '#9cbbe0' : '#0a5bb5',
+              color: '#fff',
+              cursor: regenerating ? 'default' : 'pointer',
+            }}
+          >
+            {regenerating ? '再生成中...' : 'Pine を再生成'}
+          </button>
+
+          <button
+            type='button'
+            onClick={onCloneAsNewVersion}
+            disabled={cloning}
+            style={{
+              padding: '0.55rem 0.95rem',
+              border: '1px solid #0a5bb5',
+              borderRadius: '4px',
+              background: '#fff',
+              color: '#0a5bb5',
+              cursor: cloning ? 'default' : 'pointer',
+            }}
+          >
+            {cloning ? '作成中...' : '新しい version を作る'}
+          </button>
+        </div>
+        <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+          「Pine を再生成」はこの version を更新します。「新しい version を作る」は元を残して派生版を作成します。
+        </div>
       </div>
 
       {regenerateError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
           {regenerateError}
+        </div>
+      )}
+      {cloneError && (
+        <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+          {cloneError}
         </div>
       )}
 
@@ -129,4 +172,3 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     </div>
   );
 }
-

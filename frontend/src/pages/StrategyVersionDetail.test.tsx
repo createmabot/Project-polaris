@@ -11,6 +11,7 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  useLocation: () => ['/strategy-versions/ver-1', vi.fn()],
 }));
 
 vi.mock('../api/client', async () => {
@@ -57,4 +58,3 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('strategy(&quot;Hokkyokusei Generated Strategy&quot;)');
   });
 });
-

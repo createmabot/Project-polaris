@@ -73,10 +73,10 @@ vi.mock('../src/db', () => {
           id,
           strategyRuleId: data.strategyRuleId,
           naturalLanguageRule: data.naturalLanguageRule,
-          normalizedRuleJson: null,
-          generatedPine: null,
-          warningsJson: null,
-          assumptionsJson: null,
+          normalizedRuleJson: data.normalizedRuleJson ?? null,
+          generatedPine: data.generatedPine ?? null,
+          warningsJson: data.warningsJson ?? null,
+          assumptionsJson: data.assumptionsJson ?? null,
           market: data.market,
           timeframe: data.timeframe,
           status: data.status ?? 'draft',
@@ -348,6 +348,76 @@ describe('strategy lab vertical slice', () => {
     const storedVersion = runtime.versions.get(versionId);
     expect(storedVersion).toBeTruthy();
     expect(storedVersion?.status).toBe('failed');
+
+    await app.close();
+  });
+
+  it('clones an existing version into a new version while keeping source unchanged', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '複製テスト' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule:
+          '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const sourceVersionId = createVersion.json().data.strategy_version.id as string;
+
+    const generatedSource = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${sourceVersionId}/pine/generate`,
+      payload: {},
+    });
+    expect(generatedSource.statusCode).toBe(200);
+    const sourceBody = generatedSource.json();
+    const sourcePine = sourceBody.data.strategy_version.generated_pine as string;
+    const sourceWarnings = sourceBody.data.strategy_version.warnings as string[];
+    const sourceAssumptions = sourceBody.data.strategy_version.assumptions as string[];
+    const sourceStatus = sourceBody.data.strategy_version.status as string;
+
+    const cloneResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${sourceVersionId}/clone`,
+      payload: {},
+    });
+    expect(cloneResponse.statusCode).toBe(201);
+    const cloneBody = cloneResponse.json();
+    const clonedVersionId = cloneBody.data.strategy_version.id as string;
+    expect(clonedVersionId).not.toBe(sourceVersionId);
+    expect(cloneBody.data.cloned_from_version_id).toBe(sourceVersionId);
+    expect(cloneBody.data.strategy_version.generated_pine).toBe(sourcePine);
+    expect(cloneBody.data.strategy_version.status).toBe(sourceStatus);
+    expect(cloneBody.data.strategy_version.warnings).toEqual(sourceWarnings);
+    expect(cloneBody.data.strategy_version.assumptions).toEqual(sourceAssumptions);
+
+    const sourceDetail = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${sourceVersionId}`,
+    });
+    expect(sourceDetail.statusCode).toBe(200);
+    expect(sourceDetail.json().data.strategy_version.id).toBe(sourceVersionId);
+    expect(sourceDetail.json().data.strategy_version.generated_pine).toBe(sourcePine);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const listBody = listResponse.json();
+    const ids = listBody.data.strategy_versions.map((item: any) => item.id);
+    expect(ids).toContain(sourceVersionId);
+    expect(ids).toContain(clonedVersionId);
 
     await app.close();
   });
