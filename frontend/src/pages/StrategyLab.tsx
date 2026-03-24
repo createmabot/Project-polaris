@@ -1,11 +1,13 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
-import { postApi } from '../api/client';
+import { postApi, swrFetcher } from '../api/client';
 import {
   BacktestCreateData,
   BacktestImportData,
   StrategyCreateData,
   StrategyVersionData,
+  StrategyVersionListData,
 } from '../api/types';
 
 const MARKET_OPTIONS = ['JP_STOCK'];
@@ -13,9 +15,9 @@ const TIMEFRAME_OPTIONS = ['D'];
 
 export default function StrategyLab() {
   const [, setLocation] = useLocation();
-  const [title, setTitle] = useState('押し目買い戦略');
+  const [title, setTitle] = useState('監視銘柄比較ルール');
   const [naturalLanguageRule, setNaturalLanguageRule] = useState(
-    '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が25日線を下回ったら手仕舞い。'
+    '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。'
   );
   const [market, setMarket] = useState('JP_STOCK');
   const [timeframe, setTimeframe] = useState('D');
@@ -23,12 +25,20 @@ export default function StrategyLab() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<StrategyVersionData['strategy_version'] | null>(null);
+  const [strategyId, setStrategyId] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<BacktestCreateData['backtest'] | null>(null);
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importState, setImportState] = useState<BacktestImportData['import'] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+
+  const { data: versionsData } = useSWR<StrategyVersionListData>(
+    strategyId ? `/api/strategies/${strategyId}/versions` : null,
+    swrFetcher
+  );
+
+  const latestVersion = useMemo(() => versionsData?.strategy_versions?.[0] ?? null, [versionsData]);
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -43,6 +53,8 @@ export default function StrategyLab() {
       const strategy = await postApi<StrategyCreateData>('/api/strategies', {
         title: title.trim(),
       });
+
+      setStrategyId(strategy.strategy.id);
 
       const version = await postApi<StrategyVersionData>(`/api/strategies/${strategy.strategy.id}/versions`, {
         natural_language_rule: naturalLanguageRule.trim(),
@@ -75,7 +87,7 @@ export default function StrategyLab() {
 
   const onImportCsv = async () => {
     if (!backtest) {
-      setImportError('先にルール生成を実行して backtest を作成してください。');
+      setImportError('先にルール生成を完了して backtest を作成してください。');
       return;
     }
     if (!csvFile) {
@@ -113,12 +125,12 @@ export default function StrategyLab() {
 
       <h1>ルール検証ラボ（MVP）</h1>
       <p style={{ color: '#666' }}>
-        自然言語入力から Pine 生成まで実行し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
+        自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
       </p>
 
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem', marginTop: '1.2rem' }}>
         <label style={{ display: 'grid', gap: '0.4rem' }}>
-          <span>戦略名</span>
+          <span>戦略タイトル</span>
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -139,7 +151,11 @@ export default function StrategyLab() {
         <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
           <label style={{ display: 'grid', gap: '0.4rem' }}>
             <span>市場</span>
-            <select value={market} onChange={(event) => setMarket(event.target.value)} style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+            <select
+              value={market}
+              onChange={(event) => setMarket(event.target.value)}
+              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            >
               {MARKET_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
@@ -148,7 +164,11 @@ export default function StrategyLab() {
 
           <label style={{ display: 'grid', gap: '0.4rem' }}>
             <span>時間足</span>
-            <select value={timeframe} onChange={(event) => setTimeframe(event.target.value)} style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}>
+            <select
+              value={timeframe}
+              onChange={(event) => setTimeframe(event.target.value)}
+              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            >
               {TIMEFRAME_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
@@ -157,7 +177,7 @@ export default function StrategyLab() {
         </div>
 
         <div style={{ fontSize: '0.9rem', color: '#666' }}>
-          MVP制約: 日本語中心 / 日足(D)中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
+          MVP制約: 日本語入力中心 / 日足(D)中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
         </div>
 
         {error && (
@@ -187,9 +207,27 @@ export default function StrategyLab() {
         <section style={{ marginTop: '2rem', display: 'grid', gap: '1rem' }}>
           <h2>生成結果</h2>
           <div style={{ fontSize: '0.95rem', color: '#333' }}>
+            <div><strong>strategy_id:</strong> <code>{strategyId ?? '-'}</code></div>
             <div><strong>version_id:</strong> <code>{result.id}</code></div>
             <div><strong>status:</strong> <code>{result.status}</code></div>
             <div><strong>backtest_id:</strong> <code>{backtest?.id ?? '-'}</code></div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+            {strategyId && (
+              <Link
+                href={`/strategies/${strategyId}/versions`}
+                style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
+              >
+                version 一覧を開く
+              </Link>
+            )}
+            <Link
+              href={`/strategy-versions/${result.id}`}
+              style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
+            >
+              この version 詳細を開く
+            </Link>
           </div>
 
           <div>
@@ -223,6 +261,19 @@ export default function StrategyLab() {
             ) : (
               <p style={{ color: '#666' }}>生成に失敗しました。warnings を確認してください。</p>
             )}
+          </div>
+        </section>
+      )}
+
+      {latestVersion && (
+        <section style={{ marginTop: '1.5rem', border: '1px solid #ddd', borderRadius: '6px', padding: '1rem' }}>
+          <h2 style={{ marginTop: 0 }}>保存済み version（最新）</h2>
+          <div style={{ fontSize: '0.95rem', display: 'flex', flexWrap: 'wrap', gap: '0.8rem' }}>
+            <span><strong>id:</strong> <code>{latestVersion.id}</code></span>
+            <span><strong>市場:</strong> {latestVersion.market}</span>
+            <span><strong>時間足:</strong> {latestVersion.timeframe}</span>
+            <span><strong>状態:</strong> <code>{latestVersion.status}</code></span>
+            <span><strong>warnings:</strong> {latestVersion.has_warnings ? 'あり' : 'なし'}</span>
           </div>
         </section>
       )}
@@ -306,3 +357,4 @@ export default function StrategyLab() {
     </div>
   );
 }
+
