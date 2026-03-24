@@ -23,6 +23,39 @@ function normalizeTitle(body: CreateStrategyBody): string {
 }
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get<{ Params: { strategyId: string } }>('/:strategyId/versions', async (request, reply) => {
+    const { strategyId } = request.params;
+    const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
+    if (!strategy) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
+    }
+
+    const versions = await prisma.strategyRuleVersion.findMany({
+      where: { strategyRuleId: strategy.id },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      strategy: {
+        id: strategy.id,
+        title: strategy.title,
+        status: strategy.status,
+        created_at: strategy.createdAt,
+        updated_at: strategy.updatedAt,
+      },
+      strategy_versions: versions.map((version) => ({
+        id: version.id,
+        strategy_id: version.strategyRuleId,
+        market: version.market,
+        timeframe: version.timeframe,
+        status: version.status,
+        has_warnings: Array.isArray(version.warningsJson) && version.warningsJson.length > 0,
+        created_at: version.createdAt,
+        updated_at: version.updatedAt,
+      })),
+    }));
+  });
+
   fastify.post<{ Body: CreateStrategyBody }>('/', async (request, reply) => {
     const title = normalizeTitle(request.body);
 

@@ -8,6 +8,8 @@ import ComparisonDetail from "./pages/ComparisonDetail";
 import StrategyLab from "./pages/StrategyLab";
 import BacktestDetail from "./pages/BacktestDetail";
 import BacktestList from "./pages/BacktestList";
+import StrategyVersionList from "./pages/StrategyVersionList";
+import StrategyVersionDetail from "./pages/StrategyVersionDetail";
 
 function App() {
   return (
@@ -19,6 +21,8 @@ function App() {
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
       <Route path="/compare" component={CompareCreate} />
       <Route path="/strategy-lab" component={StrategyLab} />
+      <Route path="/strategies/:strategyId/versions" component={StrategyVersionList} />
+      <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
       <Route path="/backtests" component={BacktestList} />
       <Route path="/backtests/:backtestId" component={BacktestDetail} />
       <Route path="/comparisons/:comparisonId" component={ComparisonDetail} />

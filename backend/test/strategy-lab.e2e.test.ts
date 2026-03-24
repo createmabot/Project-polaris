@@ -89,6 +89,19 @@ vi.mock('../src/db', () => {
       findUnique: async ({ where }: any) => {
         return runtime.versions.get(where.id) ?? null;
       },
+      findMany: async ({ where, orderBy }: any) => {
+        let rows = Array.from(runtime.versions.values());
+        if (where?.strategyRuleId) {
+          rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
+        }
+        if (orderBy?.createdAt === 'desc') {
+          rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+        if (orderBy?.createdAt === 'asc') {
+          rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        return rows;
+      },
       update: async ({ where, data }: any) => {
         const row = runtime.versions.get(where.id);
         if (!row) {
@@ -164,6 +177,62 @@ describe('strategy lab vertical slice', () => {
     await app.close();
   });
 
+  it('lists strategy versions and fetches a version detail', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '版管理テスト' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion1 = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上回ったら買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createVersion1.statusCode).toBe(201);
+
+    const createVersion2 = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'RSIが30以下で買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createVersion2.statusCode).toBe(201);
+    const version2Id = createVersion2.json().data.strategy_version.id as string;
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const listBody = listResponse.json();
+    expect(Array.isArray(listBody.data.strategy_versions)).toBe(true);
+    expect(listBody.data.strategy_versions.length).toBe(2);
+
+    const detailResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${version2Id}`,
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    const detailBody = detailResponse.json();
+    expect(detailBody.data.strategy_version.id).toBe(version2Id);
+    expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
+    expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
+    expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
+
+    await app.close();
+  });
+
   it('returns warnings for unsupported expressions while keeping generation result', async () => {
     const app = await createApp();
 
@@ -197,6 +266,49 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.strategy_version.status).toBe('generated');
     const warnings: string[] = body.data.strategy_version.warnings;
     expect(warnings.some((item) => item.includes('空売り/ショート'))).toBe(true);
+
+    await app.close();
+  });
+
+  it('regenerates pine for an existing version', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '再生成テスト' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule:
+          '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const versionId = createVersion.json().data.strategy_version.id as string;
+
+    const firstGenerate = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${versionId}/pine/generate`,
+      payload: {},
+    });
+    expect(firstGenerate.statusCode).toBe(200);
+
+    const secondGenerate = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${versionId}/pine/generate`,
+      payload: {},
+    });
+    expect(secondGenerate.statusCode).toBe(200);
+    const secondBody = secondGenerate.json();
+    expect(secondBody.data.strategy_version.id).toBe(versionId);
+    expect(secondBody.data.strategy_version.status).toBe('generated');
+    expect(secondBody.data.strategy_version.generated_pine).toContain('strategy(');
 
     await app.close();
   });

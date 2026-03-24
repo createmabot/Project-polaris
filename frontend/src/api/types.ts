@@ -298,6 +298,26 @@ export type StrategyVersionData = {
   };
 };
 
+export type StrategyVersionListData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  strategy_versions: Array<{
+    id: string;
+    strategy_id: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    has_warnings: boolean;
+    created_at: string;
+    updated_at: string;
+  }>;
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;

@@ -1,7 +1,7 @@
-# Project-polaris（北極星）
+﻿# Project Polaris（北極星）
 
-株価評価AIツール「北極星」の開発用リポジトリです。  
-このリポジトリでは、詳細仕様の正本は `docs/` 配下のドキュメントです。
+株価評価AIツール「北極星」の開発リポジトリです。  
+仕様の正本は `docs/` 配下のドキュメントです。
 
 ## 技術スタック
 - Node.js 22
@@ -20,7 +20,7 @@
 pnpm install
 ```
 
-3. 環境変数を作成
+3. 環境変数を準備
 
 ```bash
 cp .env.example .env
@@ -49,21 +49,31 @@ pnpm run up
 pnpm run down
 ```
 
-## ルール検証ラボ（MVP最小）
+## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
-- 今回の到達点:
-  - 自然言語入力
+- 現在の対応範囲:
+  - 自然言語ルール入力
   - strategy 作成
   - strategy version 作成
   - Pine 生成
-  - generated pine / warnings / assumptions の表示
+  - generated pine / warnings / assumptions 表示
   - backtest 作成
-  - CSV取込
-  - parseStatus / parseError / 最小summary表示
-  - backtest詳細表示（`/backtests/:backtestId`）
-- まだ未対応（次フェーズ）:
-  - 本格レポート分析（比較・可視化）
-  - 比較高度化
+  - CSV 取込
+  - parseStatus / parseError / 最小 summary 表示
+  - backtest 詳細表示（`/backtests/:backtestId`）
+- まだ未対応:
+  - 本格レポート分析（グラフ等）
+  - 高度な比較機能
+
+### ルール version 再閲覧（MVP最小）
+- API:
+  - `GET /api/strategies/:strategyId/versions`
+  - `GET /api/strategy-versions/:versionId`
+  - `POST /api/strategy-versions/:versionId/pine/generate`（既存 version の再生成）
+- 画面:
+  - `/strategies/:strategyId/versions` で version 一覧表示
+  - `/strategy-versions/:versionId` で version 詳細（自然言語原文 / generated pine / warnings / assumptions / status）表示
+  - `/strategy-lab` から一覧・詳細へ遷移可能
 
 ### CSV取込（MVPでサポートする形式）
 - 1行ヘッダ + 1行データの CSV
@@ -75,52 +85,49 @@ pnpm run down
   - `Max Drawdown`
   - `From`
   - `To`
-- 主要ステータス:
-  - `pending`: 受理直後
-  - `parsed`: パース成功
-  - `failed`: パース失敗（`parseError` に理由）
+- 主なステータス:
+  - `pending`: 解析待ち
+  - `parsed`: 解析成功
+  - `failed`: 解析失敗（`parseError` に理由）
 
-### backtest 詳細（最小表示）
+### backtest 詳細（最小レポート表示）
 - URL: `/backtests/:backtestId`
 - 表示項目:
   - 基本情報（id / strategy_version_id / execution_source / market / timeframe / status）
-  - 取込状態（`parsed` / `failed` / `pending` / 未取込）
-  - parse failed 時は `parse_error` を強調表示
-  - 主要指標カード（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
+  - 取込状態（parsed / failed / pending / 未取込）
+  - parse failed 時の `parse_error`
+  - 主要指標（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
 
-### backtest 履歴一覧（直近）
+### backtest 履歴一覧
 - URL: `/backtests`
-- 直近の検証履歴を createdAt 降順で表示（最小ページネーション対応）
-- title 部分一致の最小検索対応（`q`）
-- 一覧状態の URL クエリ同期（`/backtests?q=...&page=...`）
-- 一覧→詳細→一覧の戻り先は `return` クエリで保持（`/backtests` の `q/page` のみ許可・再構成）
+- createdAt 降順の直近一覧
+- title 部分一致検索（`q`）
+- ページネーション
+- URL クエリ同期（`/backtests?q=...&page=...`）
+- 一覧→詳細の遷移は `return` クエリで復帰先を保持
+  - 許可する戻り先は `/backtests` の `q/page` のみ
 - 表示項目:
   - タイトル / 作成日時
   - market / timeframe / executionSource / backtest status
-  - 最新 parse 状態（parsed / failed / pending / 取込なし）
-  - 詳細画面へのリンク
-- ページ移動:
-  - `前へ` / `次へ` ボタンで履歴を遡る
-- 今回未対応:
-  - market / timeframe / status の複合フィルタ
-  - 高度ソート、比較分析
+  - 最新 parse 状態（parsed / failed / pending / 未取込）
+  - 詳細リンク
 
-### Snapshot 週次レビュー記録
+## Snapshot 運用コマンド
 - 生成（当週/JST）
   - `pnpm run create:snapshot-weekly-review`
-- 任意週生成（JST日付指定）
+- 日付指定生成（JST日付）
   - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD`
-- 上書き（明示時のみ）
+- 明示上書き
   - `pnpm run create:snapshot-weekly-review -- --date=YYYY-MM-DD --force`
-- 事前確認（書き込みなし）
+- dry-run（書き込みなし）
   - `pnpm run create:snapshot-weekly-review -- --dry-run`
-- 機械可読（JSON）
+- dry-run JSON 出力
   - `pnpm run create:snapshot-weekly-review -- --dry-run --output-format=json`
-- JSON契約チェック
+- JSON 出力契約チェック
   - `pnpm run check:snapshot-weekly-review-json`
 
-## current_snapshot 関連の運用要点
-- 公開API契約は維持
+## current_snapshot 契約（公開API）
+- 返却フィールド:
   - `last_price`
   - `change`
   - `change_percent`
@@ -128,18 +135,17 @@ pnpm run down
   - `as_of`
   - `market_status`（`open | closed | unknown`）
   - `source_name`
-- failover
+- failover:
   - primary: `stooq_daily`
   - secondary: `yahoo_chart`
   - 全失敗時: `current_snapshot: null`
-- `market_status` は日本市場の休日判定を考慮（外部休日APIには依存しない）
 
-## Integration test（DB 必須）
+## Integration test（DB 実接続）
 ```bash
 pnpm run test:integration:symbol-snapshot-db
 ```
 
-このテストでは次を確認します。
+このテストでは以下を確認します。
 - `GET /api/symbols/:symbolId` の snapshot failover 3ケース
   - 主系成功
   - 主系失敗 + 予備系成功
@@ -148,47 +154,48 @@ pnpm run test:integration:symbol-snapshot-db
   - `last_price`, `change`, `change_percent`, `volume`, `as_of`, `market_status`, `source_name`
 
 ## CI
-GitHub Actions の `Symbol Snapshot DB Integration` で以下を実行します。
+GitHub Actions で以下のチェックを運用しています。
 - `backtests-return-flow-e2e-check`
 - `snapshot-review-generator-json-check`
 - `symbol-snapshot-db-integration`
 
-`main` の required checks は ruleset 管理で、上記3件を必須化しています。
+`main` の required checks は ruleset で管理しています。
 
-## Required-check failure drill（定期監査）
+## Required-check failure drill（運用確認）
 目的:
-- required checks が失敗時に確実に merge block することを定期確認する
-- 対象:
-  - `snapshot-review-generator-json-check`
-  - `backtests-return-flow-e2e-check`
+- required check failure 時に merge が block されることを定期確認する
+
+対象:
+- `snapshot-review-generator-json-check`
+- `backtests-return-flow-e2e-check`
 
 推奨頻度:
-- 四半期に1回（または ruleset / branch protection 変更後）
+- 四半期に1回（または ruleset / branch protection 変更時）
 
-最小手順（共通）:
+最小手順:
 1. `main` から検証ブランチを作成（例: `ops/drill-<check-name>-YYYYMMDD`）
 2. 対象 check が確実に落ちる最小の一時破壊を入れる
-3. PR を作成し、対象 check が `pending -> failure` になることを確認
-4. PR が `required check` 未通過で `BLOCKED` になることを確認
-5. 一時破壊コミットを revert または修正コミットで復元する
-6. 同じ PR で対象 check が `pending -> success` に戻ることを確認
-7. 実施結果を `docs/snapshot-weekly-reviews/` の週次記録へ残す
+3. PR を作成し、`pending -> failure` を確認
+4. required check 未通過で PR が BLOCKED になることを確認
+5. 一時破壊コミットを revert して復元
+6. `pending -> success` に戻ることを確認
+7. 結果を `docs/snapshot-weekly-reviews/` の運用記録へ残す
 
 ### Drill: `snapshot-review-generator-json-check`
 一時破壊例:
-- `scripts/check-snapshot-weekly-review-json.mjs` の必須キー期待値を1項目だけ意図的に崩す
+- `scripts/check-snapshot-weekly-review-json.mjs` の必須キー期待を 1 箇所だけ崩す
 
 ### Drill: `backtests-return-flow-e2e-check`
 一時破壊例:
-- `frontend/src/pages/BacktestsReturnFlow.e2e.test.ts` の期待値を1か所だけ意図的に崩す
-- 例: `page: 2` の期待を `page: 999` に変更して失敗を発生させる
+- `frontend/src/pages/BacktestsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
+- 例: `page: 2` の期待を `page: 999` に変更して failure を発生させる
 
-注意:
-- 検証変更は `main` に merge しない
-- 破壊は最小・可逆にする
+注意事項:
+- 検証用の破壊コミットは `main` に merge しない
+- 復元後に check が success に戻ることを確認する
 
-## 参考ドキュメント
+## 参照ドキュメント
 - 目次: `docs/0.目次.md`
-- セットアップ詳細: `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
-- ホーム供給仕様: `docs/25. 補助資料_1 北極星 ホームデータ供給仕様（MVP）.md`
+- セットアップ手順: `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
+- ホーム供給仕様: `docs/25.補助資料_1 北極星 ホームデータ供給仕様（MVP）.md`
 - API設計: `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`
