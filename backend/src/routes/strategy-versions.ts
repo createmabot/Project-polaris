@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 function toStrategyVersionResponse(version: {
   id: string;
   strategyRuleId: string;
+  clonedFromVersionId: string | null;
   status: string;
   naturalLanguageRule: string;
   normalizedRuleJson: unknown;
@@ -21,6 +22,7 @@ function toStrategyVersionResponse(version: {
   return {
     id: version.id,
     strategy_id: version.strategyRuleId,
+    cloned_from_version_id: version.clonedFromVersionId,
     status: version.status,
     natural_language_rule: version.naturalLanguageRule,
     normalized_rule_json: version.normalizedRuleJson,
@@ -34,11 +36,82 @@ function toStrategyVersionResponse(version: {
   };
 }
 
+function toStrategyVersionCompareBase(version: {
+  id: string;
+  status: string;
+  naturalLanguageRule: string;
+  updatedAt: Date;
+}) {
+  return {
+    id: version.id,
+    status: version.status,
+    natural_language_rule: version.naturalLanguageRule,
+    updated_at: version.updatedAt,
+  };
+}
+
 export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.patch<{ Params: { versionId: string }; Body: { natural_language_rule?: string; market?: string; timeframe?: string } }>(
+    '/:versionId',
+    async (request, reply) => {
+      const { versionId } = request.params;
+      const version = await prisma.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
+
+      if (!version) {
+        throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      }
+
+      const hasNaturalLanguageRule = typeof request.body.natural_language_rule === 'string';
+      const hasMarket = typeof request.body.market === 'string';
+      const hasTimeframe = typeof request.body.timeframe === 'string';
+      if (!hasNaturalLanguageRule && !hasMarket && !hasTimeframe) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'at least one of natural_language_rule, market, timeframe is required.');
+      }
+
+      const nextNaturalLanguageRule = hasNaturalLanguageRule ? request.body.natural_language_rule!.trim() : version.naturalLanguageRule;
+      const nextMarket = hasMarket ? request.body.market!.trim() : version.market;
+      const nextTimeframe = hasTimeframe ? request.body.timeframe!.trim() : version.timeframe;
+
+      if (!nextNaturalLanguageRule) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule must not be empty.');
+      }
+      if (!nextMarket) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'market must not be empty.');
+      }
+      if (!nextTimeframe) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'timeframe must not be empty.');
+      }
+
+      const updated = await prisma.strategyRuleVersion.update({
+        where: { id: version.id },
+        data: {
+          naturalLanguageRule: nextNaturalLanguageRule,
+          market: nextMarket,
+          timeframe: nextTimeframe,
+          // Rule text edits invalidate previous generation artifacts.
+          normalizedRuleJson: Prisma.JsonNull,
+          generatedPine: null,
+          warningsJson: Prisma.JsonNull,
+          assumptionsJson: Prisma.JsonNull,
+          status: 'draft',
+        },
+      });
+
+      return reply.status(200).send(formatSuccess(request, {
+        strategy_version: toStrategyVersionResponse(updated),
+      }));
+    }
+  );
+
   fastify.get<{ Params: { versionId: string } }>('/:versionId', async (request, reply) => {
     const { versionId } = request.params;
     const version = await prisma.strategyRuleVersion.findUnique({
       where: { id: versionId },
+      include: {
+        clonedFromVersion: true,
+      },
     });
 
     if (!version) {
@@ -47,6 +120,9 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send(formatSuccess(request, {
       strategy_version: toStrategyVersionResponse(version),
+      compare_base: version.clonedFromVersion
+        ? toStrategyVersionCompareBase(version.clonedFromVersion)
+        : null,
     }));
   });
 
@@ -95,6 +171,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     const cloned = await prisma.strategyRuleVersion.create({
       data: {
         strategyRuleId: sourceVersion.strategyRuleId,
+        clonedFromVersionId: sourceVersion.id,
         naturalLanguageRule: sourceVersion.naturalLanguageRule,
         normalizedRuleJson: (sourceVersion.normalizedRuleJson ?? undefined) as Prisma.InputJsonValue | undefined,
         generatedPine: sourceVersion.generatedPine,

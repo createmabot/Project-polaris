@@ -15,6 +15,7 @@ type StrategyRuleRow = {
 type StrategyRuleVersionRow = {
   id: string;
   strategyRuleId: string;
+  clonedFromVersionId: string | null;
   naturalLanguageRule: string;
   normalizedRuleJson: unknown;
   generatedPine: string | null;
@@ -72,6 +73,7 @@ vi.mock('../src/db', () => {
         const row: StrategyRuleVersionRow = {
           id,
           strategyRuleId: data.strategyRuleId,
+          clonedFromVersionId: data.clonedFromVersionId ?? null,
           naturalLanguageRule: data.naturalLanguageRule,
           normalizedRuleJson: data.normalizedRuleJson ?? null,
           generatedPine: data.generatedPine ?? null,
@@ -86,8 +88,18 @@ vi.mock('../src/db', () => {
         runtime.versions.set(id, row);
         return row;
       },
-      findUnique: async ({ where }: any) => {
-        return runtime.versions.get(where.id) ?? null;
+      findUnique: async ({ where, include }: any) => {
+        const row = runtime.versions.get(where.id) ?? null;
+        if (!row) {
+          return null;
+        }
+        if (include?.clonedFromVersion) {
+          return {
+            ...row,
+            clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
+          };
+        }
+        return row;
       },
       findMany: async ({ where, orderBy }: any) => {
         let rows = Array.from(runtime.versions.values());
@@ -226,6 +238,8 @@ describe('strategy lab vertical slice', () => {
     expect(detailResponse.statusCode).toBe(200);
     const detailBody = detailResponse.json();
     expect(detailBody.data.strategy_version.id).toBe(version2Id);
+    expect(detailBody.data.strategy_version.cloned_from_version_id).toBeNull();
+    expect(detailBody.data.compare_base).toBeNull();
     expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
     expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
     expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
@@ -396,6 +410,7 @@ describe('strategy lab vertical slice', () => {
     const clonedVersionId = cloneBody.data.strategy_version.id as string;
     expect(clonedVersionId).not.toBe(sourceVersionId);
     expect(cloneBody.data.cloned_from_version_id).toBe(sourceVersionId);
+    expect(cloneBody.data.strategy_version.cloned_from_version_id).toBe(sourceVersionId);
     expect(cloneBody.data.strategy_version.generated_pine).toBe(sourcePine);
     expect(cloneBody.data.strategy_version.status).toBe(sourceStatus);
     expect(cloneBody.data.strategy_version.warnings).toEqual(sourceWarnings);
@@ -418,6 +433,90 @@ describe('strategy lab vertical slice', () => {
     const ids = listBody.data.strategy_versions.map((item: any) => item.id);
     expect(ids).toContain(sourceVersionId);
     expect(ids).toContain(clonedVersionId);
+
+    const clonedDetail = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${clonedVersionId}`,
+    });
+    expect(clonedDetail.statusCode).toBe(200);
+    const clonedDetailBody = clonedDetail.json();
+    expect(clonedDetailBody.data.strategy_version.cloned_from_version_id).toBe(sourceVersionId);
+    expect(clonedDetailBody.data.compare_base.id).toBe(sourceVersionId);
+    expect(clonedDetailBody.data.compare_base.status).toBe(sourceStatus);
+
+    await app.close();
+  });
+
+  it('updates cloned version rule and regenerates pine without mutating source version', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'edit-regenerate-test' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule:
+          '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const sourceVersionId = createVersion.json().data.strategy_version.id as string;
+
+    const generateSource = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${sourceVersionId}/pine/generate`,
+      payload: {},
+    });
+    expect(generateSource.statusCode).toBe(200);
+    const sourceGeneratedPine = generateSource.json().data.strategy_version.generated_pine as string;
+
+    const cloneResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${sourceVersionId}/clone`,
+      payload: {},
+    });
+    expect(cloneResponse.statusCode).toBe(201);
+    const cloneVersionId = cloneResponse.json().data.strategy_version.id as string;
+
+    const patchResponse = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${cloneVersionId}`,
+      payload: {
+        natural_language_rule:
+          '25日移動平均線の上で、RSIが55以上、出来高が20日平均の1.8倍以上で買い。終値が10日線を下回ったら手仕舞い。',
+      },
+    });
+    expect(patchResponse.statusCode).toBe(200);
+    const patchedVersion = patchResponse.json().data.strategy_version;
+    expect(patchedVersion.id).toBe(cloneVersionId);
+    expect(patchedVersion.status).toBe('draft');
+    expect(patchedVersion.generated_pine).toBeNull();
+    expect(Array.isArray(patchedVersion.warnings)).toBe(true);
+    expect(patchedVersion.warnings.length).toBe(0);
+
+    const regenerateCloned = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${cloneVersionId}/pine/generate`,
+      payload: {},
+    });
+    expect(regenerateCloned.statusCode).toBe(200);
+    const regeneratedVersion = regenerateCloned.json().data.strategy_version;
+    expect(regeneratedVersion.status).toBe('generated');
+    expect(regeneratedVersion.generated_pine).toContain('strategy("Hokkyokusei Generated Strategy"');
+
+    const sourceDetail = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${sourceVersionId}`,
+    });
+    expect(sourceDetail.statusCode).toBe(200);
+    expect(sourceDetail.json().data.strategy_version.generated_pine).toBe(sourceGeneratedPine);
 
     await app.close();
   });

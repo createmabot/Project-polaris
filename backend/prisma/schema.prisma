@@ -306,6 +306,9 @@ model StrategyRuleVersion {
   id                  String       @id @default(uuid())
   strategyRuleId      String
   strategyRule        StrategyRule @relation(fields: [strategyRuleId], references: [id])
+  clonedFromVersionId String?
+  clonedFromVersion   StrategyRuleVersion?  @relation("StrategyVersionClones", fields: [clonedFromVersionId], references: [id])
+  clonedVersions      StrategyRuleVersion[] @relation("StrategyVersionClones")
   naturalLanguageRule String       @db.Text
   normalizedRuleJson  Json?
   generatedPine       String?      @db.Text
@@ -319,6 +322,7 @@ model StrategyRuleVersion {
 
   @@index([strategyRuleId, createdAt])
   @@index([status])
+  @@index([clonedFromVersionId])
   @@map("strategy_rule_versions")
 
   backtests Backtest[]

@@ -46,6 +46,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       strategy_versions: versions.map((version) => ({
         id: version.id,
         strategy_id: version.strategyRuleId,
+        cloned_from_version_id: version.clonedFromVersionId,
         market: version.market,
         timeframe: version.timeframe,
         status: version.status,
@@ -114,6 +115,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       strategy_version: {
         id: version.id,
         strategy_id: version.strategyRuleId,
+        cloned_from_version_id: version.clonedFromVersionId,
         natural_language_rule: version.naturalLanguageRule,
         market: version.market,
         timeframe: version.timeframe,

@@ -285,6 +285,7 @@ export type StrategyVersionData = {
   strategy_version: {
     id: string;
     strategy_id: string;
+    cloned_from_version_id?: string | null;
     natural_language_rule: string;
     market: string;
     timeframe: string;
@@ -296,6 +297,12 @@ export type StrategyVersionData = {
     created_at: string;
     updated_at: string;
   };
+  compare_base?: {
+    id: string;
+    natural_language_rule: string;
+    status: string;
+    updated_at: string;
+  } | null;
 };
 
 export type StrategyVersionListData = {

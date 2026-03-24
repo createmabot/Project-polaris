@@ -1,24 +1,101 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
-import { postApi, swrFetcher } from '../api/client';
+import { patchApi, postApi, swrFetcher } from '../api/client';
 import { StrategyVersionData } from '../api/types';
 
 type StrategyVersionDetailProps = {
   params: { versionId: string };
 };
 
+type DiffLine = {
+  type: 'equal' | 'removed' | 'added';
+  text: string;
+};
+
+function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
+  const before = beforeText.split(/\r?\n/);
+  const after = afterText.split(/\r?\n/);
+  const dp: number[][] = Array.from({ length: before.length + 1 }, () => Array(after.length + 1).fill(0));
+
+  for (let i = before.length - 1; i >= 0; i -= 1) {
+    for (let j = after.length - 1; j >= 0; j -= 1) {
+      if (before[i] === after[j]) {
+        dp[i][j] = dp[i + 1][j + 1] + 1;
+      } else {
+        dp[i][j] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+  }
+
+  const lines: DiffLine[] = [];
+  let i = 0;
+  let j = 0;
+
+  while (i < before.length && j < after.length) {
+    if (before[i] === after[j]) {
+      lines.push({ type: 'equal', text: before[i] });
+      i += 1;
+      j += 1;
+      continue;
+    }
+
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      lines.push({ type: 'removed', text: before[i] });
+      i += 1;
+    } else {
+      lines.push({ type: 'added', text: after[j] });
+      j += 1;
+    }
+  }
+
+  while (i < before.length) {
+    lines.push({ type: 'removed', text: before[i] });
+    i += 1;
+  }
+
+  while (j < after.length) {
+    lines.push({ type: 'added', text: after[j] });
+    j += 1;
+  }
+
+  return lines;
+}
+
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
   const [, setLocation] = useLocation();
-  const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(
-    `/api/strategy-versions/${versionId}`,
-    swrFetcher
-  );
+  const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(`/api/strategy-versions/${versionId}`, swrFetcher);
+
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
+
+  const [savingRule, setSavingRule] = useState(false);
+  const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
+  const [saveRuleMessage, setSaveRuleMessage] = useState<string | null>(null);
+
+  const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
+
+  const version = data?.strategy_version ?? null;
+  const compareBase = data?.compare_base ?? null;
+  const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
+  const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
+
+  useEffect(() => {
+    if (version) {
+      setEditingNaturalLanguageRule(version.natural_language_rule);
+    }
+  }, [version?.id, version?.natural_language_rule]);
+
+  const ruleDiff = useMemo(() => {
+    if (!version || !compareBase) {
+      return [];
+    }
+    return buildLineDiff(compareBase.natural_language_rule, version.natural_language_rule);
+  }, [version?.natural_language_rule, compareBase?.natural_language_rule]);
 
   const onRegenerate = async () => {
     setRegenerating(true);
@@ -26,8 +103,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     try {
       const response = await postApi<StrategyVersionData>(`/api/strategy-versions/${versionId}/pine/generate`, {});
       await mutate(response, false);
+      setSaveRuleMessage(null);
     } catch (requestError: any) {
-      setRegenerateError(requestError?.message ?? '再生成に失敗しました。');
+      setRegenerateError(requestError?.message ?? 'Pine の再生成に失敗しました。');
     } finally {
       setRegenerating(false);
     }
@@ -41,19 +119,40 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       const nextVersionId = response.strategy_version.id;
       setLocation(`/strategy-versions/${nextVersionId}`);
     } catch (requestError: any) {
-      setCloneError(requestError?.message ?? '新しい version 作成に失敗しました。');
+      setCloneError(requestError?.message ?? '新しい version の作成に失敗しました。');
     } finally {
       setCloning(false);
     }
   };
 
-  if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
-  if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
-  if (!data) return null;
+  const onSaveRule = async () => {
+    setSavingRule(true);
+    setSaveRuleError(null);
+    setSaveRuleMessage(null);
+    try {
+      const response = await patchApi<StrategyVersionData>(`/api/strategy-versions/${versionId}`, {
+        natural_language_rule: editingNaturalLanguageRule,
+      });
+      await mutate(response, false);
+      setSaveRuleMessage('ルール本文を保存しました。必要に応じて Pine を再生成してください。');
+    } catch (requestError: any) {
+      setSaveRuleError(requestError?.message ?? 'ルール保存に失敗しました。');
+    } finally {
+      setSavingRule(false);
+    }
+  };
 
-  const version = data.strategy_version;
-  const warnings = Array.isArray(version.warnings) ? version.warnings : [];
-  const assumptions = Array.isArray(version.assumptions) ? version.assumptions : [];
+  if (isLoading) {
+    return <div style={{ padding: '2rem' }}>読み込み中...</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
+  }
+
+  if (!version) {
+    return null;
+  }
 
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -69,6 +168,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       <div style={{ marginTop: '1rem', display: 'grid', gap: '0.4rem', fontSize: '0.95rem' }}>
         <div><strong>version_id:</strong> <code>{version.id}</code></div>
         <div><strong>strategy_id:</strong> <code>{version.strategy_id}</code></div>
+        <div><strong>clone元 version:</strong> <code>{version.cloned_from_version_id ?? '-'}</code></div>
         <div><strong>市場:</strong> {version.market}</div>
         <div><strong>時間足:</strong> {version.timeframe}</div>
         <div><strong>status:</strong> <code>{version.status}</code></div>
@@ -76,8 +176,32 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div><strong>更新:</strong> {new Date(version.updated_at).toLocaleString('ja-JP')}</div>
       </div>
 
-      <div style={{ marginTop: '1rem' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+      <section style={{ marginTop: '1.2rem' }}>
+        <h2 style={{ marginBottom: '0.5rem' }}>自然言語ルール（編集）</h2>
+        <textarea
+          value={editingNaturalLanguageRule}
+          onChange={(event) => setEditingNaturalLanguageRule(event.target.value)}
+          rows={7}
+          style={{ width: '100%', padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+        />
+
+        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            type='button'
+            onClick={onSaveRule}
+            disabled={savingRule}
+            style={{
+              padding: '0.55rem 0.95rem',
+              border: 'none',
+              borderRadius: '4px',
+              background: savingRule ? '#9cbbe0' : '#0a5bb5',
+              color: '#fff',
+              cursor: savingRule ? 'default' : 'pointer',
+            }}
+          >
+            {savingRule ? '保存中...' : '保存'}
+          </button>
+
           <button
             type='button'
             onClick={onRegenerate}
@@ -110,11 +234,22 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             {cloning ? '作成中...' : '新しい version を作る'}
           </button>
         </div>
-        <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
-          「Pine を再生成」はこの version を更新します。「新しい version を作る」は元を残して派生版を作成します。
-        </div>
-      </div>
 
+        <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
+          保存はルール本文のみ更新します。再生成ボタンで更新済みルールから Pine を作り直します。
+        </div>
+      </section>
+
+      {saveRuleError && (
+        <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+          {saveRuleError}
+        </div>
+      )}
+      {saveRuleMessage && (
+        <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f', borderRadius: '4px' }}>
+          {saveRuleMessage}
+        </div>
+      )}
       {regenerateError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
           {regenerateError}
@@ -127,10 +262,40 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       )}
 
       <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>自然言語ルール</h2>
-        <pre style={{ margin: 0, padding: '1rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-          {version.natural_language_rule}
-        </pre>
+        <h2 style={{ marginBottom: '0.5rem' }}>比較元との差分（最小）</h2>
+        {!compareBase ? (
+          <p style={{ color: '#666' }}>比較元の version はありません。</p>
+        ) : (
+          <div>
+            <div style={{ display: 'grid', gap: '0.35rem', marginBottom: '0.8rem' }}>
+              <div><strong>比較元 version_id:</strong> <code>{compareBase.id}</code></div>
+              <div><strong>status:</strong> <code>{compareBase.status}</code> → <code>{version.status}</code></div>
+              <div>
+                <strong>updatedAt:</strong> {new Date(compareBase.updated_at).toLocaleString('ja-JP')} → {new Date(version.updated_at).toLocaleString('ja-JP')}
+              </div>
+            </div>
+            <div style={{ border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ padding: '0.6rem 0.75rem', background: '#f7f7f7', borderBottom: '1px solid #ddd', fontWeight: 600 }}>
+                自然言語ルール差分
+              </div>
+              <pre style={{ margin: 0, padding: '0.75rem', overflowX: 'auto', background: '#fff' }}>
+                {ruleDiff.length === 0
+                  ? '差分はありません。'
+                  : ruleDiff.map((line, index) => {
+                      const prefix = line.type === 'added' ? '+ ' : line.type === 'removed' ? '- ' : '  ';
+                      const color = line.type === 'added' ? '#1f6a1f' : line.type === 'removed' ? '#a10000' : '#444';
+                      const bg = line.type === 'added' ? '#f0fff0' : line.type === 'removed' ? '#fff5f5' : 'transparent';
+                      return (
+                        <div key={`${line.type}-${index}`} style={{ color, background: bg, whiteSpace: 'pre-wrap' }}>
+                          {prefix}
+                          {line.text || ' '}
+                        </div>
+                      );
+                    })}
+              </pre>
+            </div>
+          </div>
+        )}
       </section>
 
       <section style={{ marginTop: '1.2rem' }}>
@@ -166,7 +331,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             <code>{version.generated_pine}</code>
           </pre>
         ) : (
-          <p style={{ color: '#666' }}>まだ生成されていません。</p>
+          <p style={{ color: '#666' }}>まだ生成されていません。ルールを確認後に再生成してください。</p>
         )}
       </section>
     </div>

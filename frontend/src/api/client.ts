@@ -59,6 +59,13 @@ export async function postApi<T>(url: string, body: unknown): Promise<T> {
   });
 }
 
+export async function patchApi<T>(url: string, body: unknown): Promise<T> {
+  return fetchApi<T>(url, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * SWR fetcher wrapper to easily use `fetchApi` with `useSWR`
  */
