@@ -301,6 +301,7 @@ export type StrategyVersionData = {
     id: string;
     natural_language_rule: string;
     status: string;
+    generated_pine: string | null;
     updated_at: string;
   } | null;
 };

@@ -443,6 +443,7 @@ describe('strategy lab vertical slice', () => {
     expect(clonedDetailBody.data.strategy_version.cloned_from_version_id).toBe(sourceVersionId);
     expect(clonedDetailBody.data.compare_base.id).toBe(sourceVersionId);
     expect(clonedDetailBody.data.compare_base.status).toBe(sourceStatus);
+    expect(clonedDetailBody.data.compare_base.generated_pine).toBe(sourcePine);
 
     await app.close();
   });

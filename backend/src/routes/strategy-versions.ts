@@ -40,12 +40,14 @@ function toStrategyVersionCompareBase(version: {
   id: string;
   status: string;
   naturalLanguageRule: string;
+  generatedPine: string | null;
   updatedAt: Date;
 }) {
   return {
     id: version.id,
     status: version.status,
     natural_language_rule: version.naturalLanguageRule,
+    generated_pine: version.generatedPine,
     updated_at: version.updatedAt,
   };
 }

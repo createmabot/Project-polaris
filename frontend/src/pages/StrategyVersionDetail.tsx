@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -11,6 +11,15 @@ type StrategyVersionDetailProps = {
 type DiffLine = {
   type: 'equal' | 'removed' | 'added';
   text: string;
+};
+
+type PineDiffSummary = {
+  hasBase: boolean;
+  currentExists: boolean;
+  baseExists: boolean;
+  changed: boolean;
+  lineDelta: number;
+  charDelta: number;
 };
 
 function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
@@ -62,6 +71,34 @@ function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
   return lines;
 }
 
+function summarizePineDiff(compareBasePine: string | null | undefined, currentPine: string | null | undefined): PineDiffSummary {
+  const baseExists = typeof compareBasePine === 'string' && compareBasePine.length > 0;
+  const currentExists = typeof currentPine === 'string' && currentPine.length > 0;
+
+  if (!baseExists && !currentExists) {
+    return {
+      hasBase: true,
+      baseExists,
+      currentExists,
+      changed: false,
+      lineDelta: 0,
+      charDelta: 0,
+    };
+  }
+
+  const base = compareBasePine ?? '';
+  const current = currentPine ?? '';
+
+  return {
+    hasBase: true,
+    baseExists,
+    currentExists,
+    changed: base !== current,
+    lineDelta: current.split(/\r?\n/).length - base.split(/\r?\n/).length,
+    charDelta: current.length - base.length,
+  };
+}
+
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
   const [, setLocation] = useLocation();
@@ -97,6 +134,20 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     return buildLineDiff(compareBase.natural_language_rule, version.natural_language_rule);
   }, [version?.natural_language_rule, compareBase?.natural_language_rule]);
 
+  const pineDiff = useMemo(() => {
+    if (!compareBase) {
+      return {
+        hasBase: false,
+        baseExists: false,
+        currentExists: Boolean(version?.generated_pine),
+        changed: false,
+        lineDelta: 0,
+        charDelta: 0,
+      } satisfies PineDiffSummary;
+    }
+    return summarizePineDiff(compareBase.generated_pine, version?.generated_pine);
+  }, [compareBase, version?.generated_pine]);
+
   const onRegenerate = async () => {
     setRegenerating(true);
     setRegenerateError(null);
@@ -116,8 +167,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     setCloneError(null);
     try {
       const response = await postApi<StrategyVersionData>(`/api/strategy-versions/${versionId}/clone`, {});
-      const nextVersionId = response.strategy_version.id;
-      setLocation(`/strategy-versions/${nextVersionId}`);
+      setLocation(`/strategy-versions/${response.strategy_version.id}`);
     } catch (requestError: any) {
       setCloneError(requestError?.message ?? '新しい version の作成に失敗しました。');
     } finally {
@@ -293,6 +343,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                       );
                     })}
               </pre>
+            </div>
+            <div style={{ marginTop: '0.85rem', border: '1px solid #ddd', borderRadius: '4px', padding: '0.75rem', background: '#fafafa' }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 差分（最小）</div>
+              <div><strong>比較元 Pine:</strong> {pineDiff.baseExists ? 'あり' : 'なし'}</div>
+              <div><strong>現 version Pine:</strong> {pineDiff.currentExists ? 'あり' : 'なし'}</div>
+              <div>
+                <strong>変更有無:</strong> {pineDiff.changed ? '変更あり' : '変更なし'}
+              </div>
+              {pineDiff.baseExists && pineDiff.currentExists && pineDiff.changed && (
+                <div style={{ marginTop: '0.35rem', color: '#444' }}>
+                  行差分: {pineDiff.lineDelta > 0 ? `+${pineDiff.lineDelta}` : pineDiff.lineDelta} / 文字差分: {pineDiff.charDelta > 0 ? `+${pineDiff.charDelta}` : pineDiff.charDelta}
+                </div>
+              )}
             </div>
           </div>
         )}
