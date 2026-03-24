@@ -22,6 +22,11 @@ type PineDiffSummary = {
   charDelta: number;
 };
 
+type PineDiffExcerpt = {
+  baseLine: string;
+  currentLine: string;
+};
+
 function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
   const before = beforeText.split(/\r?\n/);
   const after = afterText.split(/\r?\n/);
@@ -99,6 +104,41 @@ function summarizePineDiff(compareBasePine: string | null | undefined, currentPi
   };
 }
 
+function buildPineDiffExcerpt(
+  compareBasePine: string | null | undefined,
+  currentPine: string | null | undefined,
+  limit = 5,
+): PineDiffExcerpt[] {
+  if (!compareBasePine && !currentPine) {
+    return [];
+  }
+
+  const diffLines = buildLineDiff(compareBasePine ?? '', currentPine ?? '');
+  const excerpts: PineDiffExcerpt[] = [];
+
+  for (let i = 0; i < diffLines.length && excerpts.length < limit; i += 1) {
+    const line = diffLines[i];
+    if (line.type === 'equal') {
+      continue;
+    }
+
+    if (line.type === 'removed') {
+      const next = diffLines[i + 1];
+      if (next?.type === 'added') {
+        excerpts.push({ baseLine: line.text, currentLine: next.text });
+        i += 1;
+        continue;
+      }
+      excerpts.push({ baseLine: line.text, currentLine: '' });
+      continue;
+    }
+
+    excerpts.push({ baseLine: '', currentLine: line.text });
+  }
+
+  return excerpts;
+}
+
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
   const [, setLocation] = useLocation();
@@ -147,6 +187,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
     return summarizePineDiff(compareBase.generated_pine, version?.generated_pine);
   }, [compareBase, version?.generated_pine]);
+
+  const pineDiffExcerpt = useMemo(() => {
+    if (!compareBase || !pineDiff.changed) {
+      return [];
+    }
+    return buildPineDiffExcerpt(compareBase.generated_pine, version?.generated_pine);
+  }, [compareBase, pineDiff.changed, version?.generated_pine]);
 
   const onRegenerate = async () => {
     setRegenerating(true);
@@ -354,6 +401,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               {pineDiff.baseExists && pineDiff.currentExists && pineDiff.changed && (
                 <div style={{ marginTop: '0.35rem', color: '#444' }}>
                   行差分: {pineDiff.lineDelta > 0 ? `+${pineDiff.lineDelta}` : pineDiff.lineDelta} / 文字差分: {pineDiff.charDelta > 0 ? `+${pineDiff.charDelta}` : pineDiff.charDelta}
+                </div>
+              )}
+              {pineDiff.changed && pineDiffExcerpt.length > 0 && (
+                <div style={{ marginTop: '0.7rem' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>差分抜粋（先頭{pineDiffExcerpt.length}件）</div>
+                  <div style={{ display: 'grid', gap: '0.35rem' }}>
+                    {pineDiffExcerpt.map((excerpt, index) => (
+                      <div key={`${excerpt.baseLine}-${excerpt.currentLine}-${index}`} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: '4px', padding: '0.5rem' }}>
+                        <div style={{ color: '#a10000', whiteSpace: 'pre-wrap' }}>
+                          <strong>- base:</strong> {excerpt.baseLine || '(なし)'}
+                        </div>
+                        <div style={{ color: '#1f6a1f', whiteSpace: 'pre-wrap', marginTop: '0.2rem' }}>
+                          <strong>+ current:</strong> {excerpt.currentLine || '(なし)'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
