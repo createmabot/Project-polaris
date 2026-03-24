@@ -31,6 +31,10 @@ function createPayload(params: {
   samePine?: boolean;
 }) {
   const samePine = params.samePine ?? false;
+  const basePine = 'strategy("A")\nentryCondition = close > sma(close, 25)\nif (entryCondition)\n    strategy.entry("L", strategy.long)';
+  const currentPine = samePine
+    ? basePine
+    : 'strategy("B")\nentryCondition = close > sma(close, 20)\nif (entryCondition)\n    strategy.entry("L", strategy.long)';
   return {
     strategy_version: {
       id: 'ver-1',
@@ -41,7 +45,7 @@ function createPayload(params: {
       timeframe: 'D',
       status: 'generated',
       normalized_rule_json: {},
-      generated_pine: samePine ? 'strategy("A")' : 'strategy("B")',
+      generated_pine: currentPine,
       warnings: ['未対応条件を無視しました'],
       assumptions: ['long_only を前提にしました'],
       created_at: new Date().toISOString(),
@@ -52,7 +56,7 @@ function createPayload(params: {
           id: 'ver-0',
           natural_language_rule: '25日移動平均を上抜けたら買い',
           status: 'draft',
-          generated_pine: 'strategy("A")',
+          generated_pine: basePine,
           updated_at: new Date(Date.now() - 60_000).toISOString(),
         }
       : null,
@@ -78,6 +82,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('自然言語ルール差分');
     expect(html).toContain('Pine 差分（最小）');
     expect(html).toContain('変更有無:</strong> 変更あり');
+    expect(html).toContain('差分抜粋（先頭');
+    expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
+    expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
   });
 
   it('shows pine unchanged when generated pine is identical', () => {
@@ -91,6 +98,7 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('変更有無:</strong> 変更なし');
+    expect(html).not.toContain('差分抜粋（先頭');
   });
 
   it('renders fallback message when compare base does not exist', () => {
