@@ -14,7 +14,7 @@ describe('backtests list -> detail -> list return flow (E2E-like)', () => {
     expect(resolvedReturn).toBe('/backtests?q=ma&page=2');
 
     const restored = parseBacktestsListQuery(resolvedReturn ?? '/backtests');
-    expect(restored).toEqual({ q: 'ma', page: 999 });
+    expect(restored).toEqual({ q: 'ma', page: 2 });
   });
 
   it('falls back to /backtests when return is invalid', () => {
