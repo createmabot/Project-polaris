@@ -155,6 +155,7 @@ pnpm run test:integration:symbol-snapshot-db
 
 ## CI
 GitHub Actions で以下のチェックを運用しています。
+- `strategy-versions-return-flow-e2e-check`
 - `backtests-return-flow-e2e-check`
 - `snapshot-review-generator-json-check`
 - `symbol-snapshot-db-integration`
