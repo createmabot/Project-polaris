@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+const mockSetLocation = vi.fn();
+const mockUseLocation = vi.fn();
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -10,6 +12,7 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
+  useLocation: () => mockUseLocation(),
 }));
 
 import StrategyVersionList from './StrategyVersionList';
@@ -17,6 +20,8 @@ import StrategyVersionList from './StrategyVersionList';
 describe('StrategyVersionList', () => {
   it('renders version rows', () => {
     mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?page=1', mockSetLocation]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -53,10 +58,13 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('派生');
     expect(html).toContain('差分あり');
     expect(html).toContain('status: 生成済み');
+    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions');
   });
 
   it('renders no-base badge when version has no compare source', () => {
     mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategies/str-2/versions?page=1', mockSetLocation]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,

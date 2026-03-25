@@ -13,6 +13,48 @@ type DiffLine = {
   text: string;
 };
 
+function buildDefaultVersionsReturnPath(strategyId: string): string {
+  return `/strategies/${strategyId}/versions`;
+}
+
+function normalizeStrategyVersionsReturnPath(decodedPath: string, strategyId: string): string | null {
+  const trimmed = decodedPath.trim();
+  if (!trimmed.startsWith('/')) return null;
+
+  const [pathPart, queryPart = ''] = trimmed.split('?', 2);
+  const expectedPath = buildDefaultVersionsReturnPath(strategyId);
+  if (pathPart !== expectedPath) return null;
+
+  const queryParams = new URLSearchParams(queryPart);
+  const normalized = new URLSearchParams();
+  const rawPage = queryParams.get('page');
+  if (rawPage !== null) {
+    const page = Number(rawPage);
+    if (Number.isInteger(page) && page > 0 && page !== 1) {
+      normalized.set('page', String(page));
+    }
+  }
+
+  const query = normalized.toString();
+  return query ? `${expectedPath}?${query}` : expectedPath;
+}
+
+export function parseStrategyVersionsReturnPath(locationPath: string, strategyId: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const encodedReturn = params.get('return');
+  if (!encodedReturn) return null;
+
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(encodedReturn);
+  } catch {
+    return null;
+  }
+
+  return normalizeStrategyVersionsReturnPath(decoded, strategyId);
+}
+
 function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
   const before = beforeText.split(/\r?\n/);
   const after = afterText.split(/\r?\n/);
@@ -64,7 +106,7 @@ function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
 
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(`/api/strategy-versions/${versionId}`, swrFetcher);
 
   const [regenerating, setRegenerating] = useState(false);
@@ -154,12 +196,14 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     return null;
   }
 
+  const returnPath = parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id);
+
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
         <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href={`/strategies/${version.strategy_id}/versions`} style={{ color: '#666', textDecoration: 'none' }}>
+        <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>
           version 一覧へ
         </Link>
       </div>

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const mockUseSWR = vi.fn();
 const mockPostApi = vi.fn();
 const mockPatchApi = vi.fn();
+const mockUseLocation = vi.fn();
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -12,7 +13,7 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
-  useLocation: () => ['/strategy-versions/ver-1', vi.fn()],
+  useLocation: () => mockUseLocation(),
 }));
 
 vi.mock('../api/client', async () => {
@@ -59,6 +60,8 @@ describe('StrategyVersionDetail', () => {
     mockUseSWR.mockReset();
     mockPostApi.mockReset();
     mockPatchApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fpage%3D2', vi.fn()]);
 
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -74,10 +77,13 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('status:');
     expect(html).toContain('自然言語ルール差分');
     expect(html).toContain('RSIが50以上');
+    expect(html).toContain('href="/strategies/str-1/versions?page=2"');
   });
 
   it('renders fallback message when compare base does not exist', () => {
     mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fexternal', vi.fn()]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -87,5 +93,6 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較元の version はありません。');
+    expect(html).toContain('href="/strategies/str-1/versions"');
   });
 });

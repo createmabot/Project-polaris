@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { StrategyVersionListData } from '../api/types';
 
@@ -7,8 +7,33 @@ type StrategyVersionListProps = {
   params: { strategyId: string };
 };
 
+const PAGE_SIZE = 10;
+
+export function parseStrategyVersionsListQuery(locationPath: string): { page: number } {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const rawPage = Number(params.get('page') ?? '1');
+  const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+  return { page };
+}
+
+export function buildStrategyVersionsListUrl(strategyId: string, page: number): string {
+  const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
+  if (normalizedPage === 1) {
+    return `/strategies/${strategyId}/versions`;
+  }
+  return `/strategies/${strategyId}/versions?page=${normalizedPage}`;
+}
+
+export function buildStrategyVersionDetailUrl(strategyId: string, versionId: string, page: number): string {
+  const returnPath = buildStrategyVersionsListUrl(strategyId, page);
+  return `/strategy-versions/${versionId}?return=${encodeURIComponent(returnPath)}`;
+}
+
 export default function StrategyVersionList({ params }: StrategyVersionListProps) {
   const { strategyId } = params;
+  const [location, setLocation] = useLocation();
+  const { page } = parseStrategyVersionsListQuery(location);
   const { data, error, isLoading } = useSWR<StrategyVersionListData>(
     `/api/strategies/${strategyId}/versions`,
     swrFetcher
@@ -17,6 +42,11 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
   if (!data) return null;
+  const total = data.strategy_versions.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const normalizedPage = Math.min(page, totalPages);
+  const start = (normalizedPage - 1) * PAGE_SIZE;
+  const paginatedVersions = data.strategy_versions.slice(start, start + PAGE_SIZE);
 
   const statusLabel = (status: string) => {
     if (status === 'generated') return '生成済み';
@@ -67,7 +97,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         </div>
       ) : (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
-          {data.strategy_versions.map((version) => (
+          {paginatedVersions.map((version) => (
             <div
               key={version.id}
               style={{
@@ -107,7 +137,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
               </div>
               <div>
                 <Link
-                  href={`/strategy-versions/${version.id}`}
+                  href={buildStrategyVersionDetailUrl(strategyId, version.id, normalizedPage)}
                   style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
                 >
                   version 詳細を開く
@@ -115,6 +145,44 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {data.strategy_versions.length > 0 && (
+        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <button
+            type='button'
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1)))}
+            disabled={normalizedPage <= 1}
+            style={{
+              padding: '0.45rem 0.85rem',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              background: normalizedPage > 1 ? '#fff' : '#f3f3f3',
+              color: '#333',
+              cursor: normalizedPage > 1 ? 'pointer' : 'default',
+            }}
+          >
+            前へ
+          </button>
+          <button
+            type='button'
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1))}
+            disabled={normalizedPage >= totalPages}
+            style={{
+              padding: '0.45rem 0.85rem',
+              border: '1px solid #ccc',
+              borderRadius: '4px',
+              background: normalizedPage < totalPages ? '#fff' : '#f3f3f3',
+              color: '#333',
+              cursor: normalizedPage < totalPages ? 'pointer' : 'default',
+            }}
+          >
+            次へ
+          </button>
+          <span style={{ color: '#666', fontSize: '0.9rem' }}>
+            {normalizedPage} / {totalPages} ページ
+          </span>
         </div>
       )}
     </div>
