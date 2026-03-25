@@ -33,6 +33,15 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     const versions = await prisma.strategyRuleVersion.findMany({
       where: { strategyRuleId: strategy.id },
       orderBy: { createdAt: 'desc' },
+      include: {
+        clonedFromVersion: {
+          select: {
+            id: true,
+            naturalLanguageRule: true,
+            generatedPine: true,
+          },
+        },
+      },
     });
 
     return reply.status(200).send(formatSuccess(request, {
@@ -47,6 +56,11 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         id: version.id,
         strategy_id: version.strategyRuleId,
         cloned_from_version_id: version.clonedFromVersionId,
+        is_derived: Boolean(version.clonedFromVersionId),
+        has_diff_from_clone: version.clonedFromVersion
+          ? version.naturalLanguageRule !== version.clonedFromVersion.naturalLanguageRule ||
+            (version.generatedPine ?? '') !== (version.clonedFromVersion.generatedPine ?? '')
+          : null,
         market: version.market,
         timeframe: version.timeframe,
         status: version.status,
