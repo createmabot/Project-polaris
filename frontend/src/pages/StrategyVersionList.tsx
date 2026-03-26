@@ -8,7 +8,7 @@ type StrategyVersionListProps = {
   params: { strategyId: string };
 };
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 export function parseStrategyVersionsListQuery(locationPath: string): { page: number; q: string } {
   const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
@@ -49,9 +49,14 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   }, [q, strategyId]);
 
   const listApiPath = useMemo(() => {
-    const base = `/api/strategies/${strategyId}/versions`;
-    return q ? `${base}?q=${encodeURIComponent(q)}` : base;
-  }, [strategyId, q]);
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('limit', String(PAGE_SIZE));
+    if (q) {
+      params.set('q', q);
+    }
+    return `/api/strategies/${strategyId}/versions?${params.toString()}`;
+  }, [strategyId, page, q]);
 
   const { data, error, isLoading } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
 
@@ -59,11 +64,8 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
   if (!data) return null;
 
-  const total = data.strategy_versions.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const normalizedPage = Math.min(page, totalPages);
-  const start = (normalizedPage - 1) * PAGE_SIZE;
-  const paginatedVersions = data.strategy_versions.slice(start, start + PAGE_SIZE);
+  const normalizedPage = data.pagination.page;
+  const totalPages = Math.max(1, Math.ceil(data.pagination.total / data.pagination.limit));
 
   const statusLabel = (status: string) => {
     if (status === 'generated') return '生成済み';
@@ -165,7 +167,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         </div>
       ) : (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
-          {paginatedVersions.map((version) => (
+          {data.strategy_versions.map((version) => (
             <div
               key={version.id}
               style={{
@@ -217,14 +219,14 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           <button
             type='button'
             onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1), q))}
-            disabled={normalizedPage <= 1}
+            disabled={!data.pagination.has_prev}
             style={{
               padding: '0.45rem 0.85rem',
               border: '1px solid #ccc',
               borderRadius: '4px',
-              background: normalizedPage > 1 ? '#fff' : '#f3f3f3',
+              background: data.pagination.has_prev ? '#fff' : '#f3f3f3',
               color: '#333',
-              cursor: normalizedPage > 1 ? 'pointer' : 'default',
+              cursor: data.pagination.has_prev ? 'pointer' : 'default',
             }}
           >
             前へ
@@ -232,14 +234,14 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           <button
             type='button'
             onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1, q))}
-            disabled={normalizedPage >= totalPages}
+            disabled={!data.pagination.has_next}
             style={{
               padding: '0.45rem 0.85rem',
               border: '1px solid #ccc',
               borderRadius: '4px',
-              background: normalizedPage < totalPages ? '#fff' : '#f3f3f3',
+              background: data.pagination.has_next ? '#fff' : '#f3f3f3',
               color: '#333',
-              cursor: normalizedPage < totalPages ? 'pointer' : 'default',
+              cursor: data.pagination.has_next ? 'pointer' : 'default',
             }}
           >
             次へ

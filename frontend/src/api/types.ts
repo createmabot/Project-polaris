@@ -317,6 +317,14 @@ export type StrategyVersionListData = {
   query?: {
     q: string;
   };
+  pagination: {
+    page: number;
+    limit: number;
+    q: string;
+    total: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
   strategy_versions: Array<{
     id: string;
     strategy_id: string;

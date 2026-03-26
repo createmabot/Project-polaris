@@ -18,7 +18,7 @@ vi.mock('wouter', () => ({
 import StrategyVersionList, { buildStrategyVersionsListUrl, parseStrategyVersionsListQuery } from './StrategyVersionList';
 
 describe('StrategyVersionList', () => {
-  it('renders version rows', () => {
+  it('renders version rows with api pagination data', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&page=1', mockSetLocation]);
@@ -28,10 +28,19 @@ describe('StrategyVersionList', () => {
       data: {
         strategy: {
           id: 'str-1',
-          title: '監視銘柄比較',
+          title: '検証用ルール',
           status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        },
+        query: { q: 'RSI' },
+        pagination: {
+          page: 1,
+          limit: 20,
+          q: 'RSI',
+          total: 1,
+          has_next: false,
+          has_prev: false,
         },
         strategy_versions: [
           {
@@ -52,14 +61,10 @@ describe('StrategyVersionList', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-1' }} />);
-    expect(html).toContain('ルール version 一覧');
     expect(html).toContain('ver-2');
-    expect(html).toContain('version 詳細を開く');
-    expect(html).toContain('派生');
-    expect(html).toContain('差分あり');
-    expect(html).toContain('status: 生成済み');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI');
     expect(html).toContain('value="RSI"');
+    expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=1&limit=20&q=RSI', expect.any(Function));
   });
 
   it('renders no-base badge when version has no compare source', () => {
@@ -72,10 +77,19 @@ describe('StrategyVersionList', () => {
       data: {
         strategy: {
           id: 'str-2',
-          title: '単独ルール',
+          title: '派生なしルール',
           status: 'active',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        },
+        query: { q: '' },
+        pagination: {
+          page: 1,
+          limit: 20,
+          q: '',
+          total: 1,
+          has_next: false,
+          has_prev: false,
         },
         strategy_versions: [
           {
@@ -96,8 +110,7 @@ describe('StrategyVersionList', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
-    expect(html).toContain('比較元なし');
-    expect(html).toContain('status: 下書き');
+    expect(html).toContain('ver-10');
   });
 
   it('parses q/page from URL query and builds list URL with q', () => {

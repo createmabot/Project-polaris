@@ -23,7 +23,7 @@ function normalizeTitle(body: CreateStrategyBody): string {
 }
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get<{ Params: { strategyId: string }; Querystring: { q?: string } }>('/:strategyId/versions', async (request, reply) => {
+  fastify.get<{ Params: { strategyId: string }; Querystring: { q?: string; page?: string; limit?: string } }>('/:strategyId/versions', async (request, reply) => {
     const { strategyId } = request.params;
     const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
     if (!strategy) {
@@ -31,6 +31,14 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const q = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+    const parsedPage = Number(request.query.page ?? 1);
+    const parsedLimit = Number(request.query.limit ?? 20);
+    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50 ? parsedLimit : NaN;
+    if (!Number.isFinite(page) || !Number.isFinite(limit)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
+    }
+
     const where = q
       ? {
           strategyRuleId: strategy.id,
@@ -43,9 +51,13 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
           strategyRuleId: strategy.id,
         };
 
+    const skip = (page - 1) * limit;
+    const total = await prisma.strategyRuleVersion.count({ where });
     const versions = await prisma.strategyRuleVersion.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
       include: {
         clonedFromVersion: {
           select: {
@@ -67,6 +79,14 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       },
       query: {
         q,
+      },
+      pagination: {
+        page,
+        limit,
+        q,
+        total,
+        has_next: skip + versions.length < total,
+        has_prev: page > 1,
       },
       strategy_versions: versions.map((version) => ({
         id: version.id,
