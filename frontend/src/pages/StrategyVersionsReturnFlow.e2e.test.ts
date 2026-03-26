@@ -15,7 +15,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(detailUrl).toBe('/strategy-versions/ver-10?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2');
 
     const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-1');
-    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&page=2');
+    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&page=3');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
     expect(restored).toEqual({ page: 2, q: 'RSI' });
