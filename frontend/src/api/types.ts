@@ -314,6 +314,9 @@ export type StrategyVersionListData = {
     created_at: string;
     updated_at: string;
   };
+  query?: {
+    q: string;
+  };
   strategy_versions: Array<{
     id: string;
     strategy_id: string;

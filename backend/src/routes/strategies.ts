@@ -23,15 +23,28 @@ function normalizeTitle(body: CreateStrategyBody): string {
 }
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get<{ Params: { strategyId: string } }>('/:strategyId/versions', async (request, reply) => {
+  fastify.get<{ Params: { strategyId: string }; Querystring: { q?: string } }>('/:strategyId/versions', async (request, reply) => {
     const { strategyId } = request.params;
     const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
     if (!strategy) {
       throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
     }
 
+    const q = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+    const where = q
+      ? {
+          strategyRuleId: strategy.id,
+          naturalLanguageRule: {
+            contains: q,
+            mode: 'insensitive' as const,
+          },
+        }
+      : {
+          strategyRuleId: strategy.id,
+        };
+
     const versions = await prisma.strategyRuleVersion.findMany({
-      where: { strategyRuleId: strategy.id },
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         clonedFromVersion: {
@@ -51,6 +64,9 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         status: strategy.status,
         created_at: strategy.createdAt,
         updated_at: strategy.updatedAt,
+      },
+      query: {
+        q,
       },
       strategy_versions: versions.map((version) => ({
         id: version.id,

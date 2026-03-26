@@ -70,7 +70,7 @@ describe('StrategyVersionDetail', () => {
     mockPostApi.mockReset();
     mockPatchApi.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fpage%3D2', vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2', vi.fn()]);
 
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -88,7 +88,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('差分抜粋（先頭');
     expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
     expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
-    expect(html).toContain('href="/strategies/str-1/versions?page=2"');
+    expect(html).toContain('href="/strategies/str-1/versions?q=RSI&amp;page=2"');
   });
 
   it('shows pine unchanged when generated pine is identical', () => {
