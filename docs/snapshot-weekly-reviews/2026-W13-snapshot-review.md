@@ -71,3 +71,24 @@ Rules:
 - Recovery run: [Actions run 23408564546](https://github.com/createmabot/Project-polaris/actions/runs/23408564546)
   - `snapshot-review-generator-json-check`: PASS
   - `symbol-snapshot-db-integration`: PASS
+
+## 7) Required-check Failure Drill Evidence (`strategy-versions-return-flow-e2e-check`)
+- Target PR: [#23 Drill: strategy versions required check (pending/failure/restore/success)](https://github.com/createmabot/Project-polaris/pull/23)
+- Ruleset: `protect-main-required-checks`
+- Required checks in scope:
+  - `strategy-versions-return-flow-e2e-check`
+  - `backtests-return-flow-e2e-check`
+  - `snapshot-review-generator-json-check`
+  - `symbol-snapshot-db-integration`
+- Baseline commit: `3d8bb38` (empty commit to start drill)
+- Baseline run: [Actions run 23608794591](https://github.com/createmabot/Project-polaris/actions/runs/23608794591)
+  - `strategy-versions-return-flow-e2e-check`: pending -> PASS
+- Temporary break commit: `1e1e332` (`frontend/src/pages/StrategyVersionsReturnFlow.e2e.test.ts` expected return URL intentionally changed)
+- Failure run: [Actions run 23608842171](https://github.com/createmabot/Project-polaris/actions/runs/23608842171)
+  - `strategy-versions-return-flow-e2e-check`: FAIL
+  - Other required checks: PASS
+  - PR merge state observed: `BLOCKED`
+- Restore commit: `09bc782` (revert of temporary break)
+- Recovery run: [Actions run 23608888781](https://github.com/createmabot/Project-polaris/actions/runs/23608888781)
+  - `strategy-versions-return-flow-e2e-check`: pending -> PASS
+  - PR merge state observed: `CLEAN`
