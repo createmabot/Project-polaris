@@ -15,13 +15,13 @@ vi.mock('wouter', () => ({
   useLocation: () => mockUseLocation(),
 }));
 
-import StrategyVersionList from './StrategyVersionList';
+import StrategyVersionList, { buildStrategyVersionsListUrl, parseStrategyVersionsListQuery } from './StrategyVersionList';
 
 describe('StrategyVersionList', () => {
   it('renders version rows', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?page=1', mockSetLocation]);
+    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&page=1', mockSetLocation]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -58,7 +58,8 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('派生');
     expect(html).toContain('差分あり');
     expect(html).toContain('status: 生成済み');
-    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions');
+    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI');
+    expect(html).toContain('value="RSI"');
   });
 
   it('renders no-base badge when version has no compare source', () => {
@@ -97,5 +98,20 @@ describe('StrategyVersionList', () => {
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
     expect(html).toContain('比較元なし');
     expect(html).toContain('status: 下書き');
+  });
+
+  it('parses q/page from URL query and builds list URL with q', () => {
+    expect(parseStrategyVersionsListQuery('/strategies/str-1/versions?q=MA&page=3')).toEqual({
+      q: 'MA',
+      page: 3,
+    });
+    expect(parseStrategyVersionsListQuery('/strategies/str-1/versions?page=abc&q=')).toEqual({
+      q: '',
+      page: 1,
+    });
+
+    expect(buildStrategyVersionsListUrl('str-1', 1, '')).toBe('/strategies/str-1/versions');
+    expect(buildStrategyVersionsListUrl('str-1', 1, 'RSI')).toBe('/strategies/str-1/versions?q=RSI');
+    expect(buildStrategyVersionsListUrl('str-1', 2, 'RSI')).toBe('/strategies/str-1/versions?q=RSI&page=2');
   });
 });

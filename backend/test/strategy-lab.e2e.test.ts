@@ -106,6 +106,16 @@ vi.mock('../src/db', () => {
         if (where?.strategyRuleId) {
           rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
         }
+        if (where?.naturalLanguageRule?.contains) {
+          const keyword = String(where.naturalLanguageRule.contains);
+          const insensitive = where.naturalLanguageRule.mode === 'insensitive';
+          rows = rows.filter((row) => {
+            if (insensitive) {
+              return row.naturalLanguageRule.toLowerCase().includes(keyword.toLowerCase());
+            }
+            return row.naturalLanguageRule.includes(keyword);
+          });
+        }
         if (orderBy?.createdAt === 'desc') {
           rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         }
@@ -251,6 +261,57 @@ describe('strategy lab vertical slice', () => {
     expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
     expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
     expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
+
+    await app.close();
+  });
+
+  it('filters strategy versions by natural language rule keyword with q', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '検索テスト' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'RSIが30以下で買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上抜けたら買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?q=rsi`,
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.data.query.q).toBe('rsi');
+    expect(body.data.strategy_versions.length).toBe(1);
+    expect(body.data.strategy_versions[0].id).toBeDefined();
+
+    const unfiltered = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(unfiltered.statusCode).toBe(200);
+    expect(unfiltered.json().data.strategy_versions.length).toBe(2);
 
     await app.close();
   });
