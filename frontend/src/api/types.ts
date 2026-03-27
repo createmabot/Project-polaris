@@ -379,6 +379,21 @@ export type BacktestImportData = {
 
 export type BacktestDetailData = {
   backtest: BacktestCreateData['backtest'];
+  used_strategy: {
+    strategy_id: string | null;
+    strategy_version_id: string | null;
+    snapshot: {
+      strategy_id: string;
+      strategy_version_id: string;
+      natural_language_rule: string;
+      generated_pine: string | null;
+      market: string;
+      timeframe: string;
+      warnings: string[];
+      assumptions: string[];
+      captured_at: string | null;
+    } | null;
+  };
   latest_import: BacktestImportData['import'] | null;
   imports: Array<BacktestImportData['import']>;
 };

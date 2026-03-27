@@ -110,6 +110,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const latestStatus = parseStatusText(latestImport?.parse_status);
   const latestStatusStyle = parseStatusStyle(latestImport?.parse_status);
   const summary = latestImport?.parsed_summary;
+  const usedStrategy = data.used_strategy;
+  const snapshot = usedStrategy.snapshot;
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -130,6 +132,50 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         <div><strong>市場:</strong> {data.backtest.market}</div>
         <div><strong>時間足:</strong> {data.backtest.timeframe}</div>
         <div><strong>状態:</strong> <code>{data.backtest.status}</code></div>
+      </section>
+
+      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+        <h2 style={{ marginTop: 0 }}>使用した Strategy</h2>
+        <div><strong>Strategy ID:</strong> <code>{usedStrategy.strategy_id ?? '-'}</code></div>
+        <div><strong>Strategy Version ID:</strong> <code>{usedStrategy.strategy_version_id ?? '-'}</code></div>
+        {snapshot ? (
+          <>
+            <div><strong>市場:</strong> {snapshot.market}</div>
+            <div><strong>時間足:</strong> {snapshot.timeframe}</div>
+            <div><strong>snapshot captured at:</strong> {snapshot.captured_at ?? '-'}</div>
+            <div style={{ marginTop: '0.6rem' }}>
+              <strong>実行時ルール（自然言語）:</strong>
+              <pre style={{ margin: '0.4rem 0 0', padding: '0.8rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                <code>{snapshot.natural_language_rule}</code>
+              </pre>
+            </div>
+            <div style={{ marginTop: '0.6rem' }}>
+              <strong>実行時 Pine:</strong>
+              {snapshot.generated_pine ? (
+                <pre style={{ margin: '0.4rem 0 0', padding: '0.8rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+                  <code>{snapshot.generated_pine}</code>
+                </pre>
+              ) : (
+                <div style={{ marginTop: '0.4rem', color: '#666' }}>-</div>
+              )}
+            </div>
+          </>
+        ) : (
+          <p style={{ marginBottom: 0, color: '#666' }}>実行時 strategy snapshot はありません。</p>
+        )}
+
+        <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
+          {usedStrategy.strategy_version_id && (
+            <Link href={`/strategy-versions/${usedStrategy.strategy_version_id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              現在の version 詳細を見る
+            </Link>
+          )}
+          {usedStrategy.strategy_id && (
+            <Link href={`/strategies/${usedStrategy.strategy_id}/versions`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              同一 Strategy の version 一覧を見る
+            </Link>
+          )}
+        </div>
       </section>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
