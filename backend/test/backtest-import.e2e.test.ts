@@ -406,8 +406,10 @@ describe('backtest import vertical slice', () => {
     expect(body.data.pagination.has_next).toBe(true);
     expect(body.data.pagination.has_prev).toBe(false);
     expect(body.data.backtests[0].id).toBe(thirdId);
+    expect(body.data.backtests[0].strategy_id).toBe('str-1');
     expect(body.data.backtests[0].latest_import).toBeNull();
     expect(body.data.backtests[1].id).toBe(secondId);
+    expect(body.data.backtests[1].strategy_id).toBe('str-1');
     expect(body.data.backtests[1].latest_import.parse_status).toBe('failed');
 
     const listedPage2 = await app.inject({
@@ -421,6 +423,7 @@ describe('backtest import vertical slice', () => {
     expect(bodyPage2.data.pagination.has_next).toBe(false);
     expect(bodyPage2.data.pagination.has_prev).toBe(true);
     expect(bodyPage2.data.backtests[0].id).toBe(firstId);
+    expect(bodyPage2.data.backtests[0].strategy_id).toBe('str-1');
     expect(bodyPage2.data.backtests[0].latest_import.parse_status).toBe('parsed');
 
     await app.close();

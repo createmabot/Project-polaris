@@ -101,6 +101,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send(formatSuccess(request, {
       backtests: backtests.map((item) => ({
+        strategy_id: normalizeBacktestStrategySnapshot(item.strategySnapshotJson)?.strategy_id ?? null,
         id: item.id,
         strategy_version_id: item.strategyRuleVersionId,
         title: item.title,
