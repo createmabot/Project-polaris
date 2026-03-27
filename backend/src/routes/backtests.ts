@@ -171,17 +171,29 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
       captured_at: new Date().toISOString(),
     };
 
-    const backtest = await prisma.backtest.create({
-      data: {
-        strategyRuleVersionId: strategyVersionId,
-        strategySnapshotJson: strategySnapshot as Prisma.InputJsonValue,
-        title,
-        executionSource,
-        market,
-        timeframe,
-        status: 'pending',
-      },
-    });
+    let backtest;
+    try {
+      backtest = await prisma.backtest.create({
+        data: {
+          strategyRuleVersionId: strategyVersionId,
+          strategySnapshotJson: strategySnapshot as Prisma.InputJsonValue,
+          title,
+          executionSource,
+          market,
+          timeframe,
+          status: 'pending',
+        },
+      });
+    } catch (error: any) {
+      if (error?.code === 'P2022' || error?.code === 'P2021') {
+        throw new AppError(
+          500,
+          'DB_SCHEMA_MISMATCH',
+          'Database schema is outdated. Run prisma migrate deploy and restart backend.',
+        );
+      }
+      throw error;
+    }
 
     return reply.status(201).send(formatSuccess(request, {
       backtest: {
