@@ -78,6 +78,7 @@ describe('BacktestList', () => {
       data: {
         backtests: [
           {
+            strategy_id: 'str-1',
             id: 'bt-1',
             strategy_version_id: 'ver-1',
             title: 'トヨタ日足',
@@ -101,6 +102,10 @@ describe('BacktestList', () => {
 
     const html = renderToStaticMarkup(<BacktestList />);
     expect(html).toContain('トヨタ日足');
+    expect(html).toContain('実行時Strategy');
+    expect(html).toContain('str-1');
+    expect(html).toContain('実行時Version');
+    expect(html).toContain('ver-1');
     expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 1));
     expect(html).toContain('次へ');
     expect(html).toContain('1 / 2 ページ');

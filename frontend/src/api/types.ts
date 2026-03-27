@@ -400,6 +400,7 @@ export type BacktestDetailData = {
 
 export type BacktestListData = {
   backtests: Array<{
+    strategy_id: string | null;
     id: string;
     strategy_version_id: string;
     title: string;

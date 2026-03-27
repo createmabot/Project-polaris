@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+﻿import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestListData } from '../api/types';
@@ -17,6 +17,12 @@ function parseStatusStyle(status: string | null | undefined): { background: stri
   if (status === 'failed') return { background: '#fdeaea', color: '#9f1c1c' };
   if (status === 'pending') return { background: '#eef4ff', color: '#144b9a' };
   return { background: '#f2f2f2', color: '#444' };
+}
+
+function shortId(value: string | null | undefined): string {
+  if (!value) return '-';
+  if (value.length <= 14) return value;
+  return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
 export function buildBacktestListPath(page: number, limit: number, q: string): string {
@@ -88,7 +94,7 @@ export default function BacktestList() {
 
       <h1>検証履歴一覧（直近）</h1>
       <p style={{ color: '#666' }}>
-        直近の backtest を表示します。詳細分析は各 backtest 詳細画面で確認してください。
+        直近の backtest を表示します。詳細確認は各 backtest 詳細画面で確認してください。
       </p>
 
       <form onSubmit={onSubmitSearch} style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -137,7 +143,7 @@ export default function BacktestList() {
         <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', color: '#666' }}>
           {appliedQ
             ? '検索条件に一致する履歴はありません。'
-            : 'まだ検証履歴はありません。`/strategy-lab` からルール生成とCSV取込を実行してください。'}
+            : 'まだ検証履歴はありません。`/strategy-lab` からルール作成とCSV取込を実行してください。'}
         </div>
       ) : (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
@@ -167,6 +173,15 @@ export default function BacktestList() {
                   <span><strong>時間足:</strong> {item.timeframe}</span>
                   <span><strong>ソース:</strong> {item.execution_source}</span>
                   <span><strong>状態:</strong> <code>{item.status}</code></span>
+                </div>
+
+                <div style={{ fontSize: '0.92rem', color: '#333', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+                  <span title={item.strategy_id ?? ''}>
+                    <strong>実行時Strategy:</strong> <code>{shortId(item.strategy_id)}</code>
+                  </span>
+                  <span title={item.strategy_version_id}>
+                    <strong>実行時Version:</strong> <code>{shortId(item.strategy_version_id)}</code>
+                  </span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
@@ -239,4 +254,3 @@ export default function BacktestList() {
     </div>
   );
 }
-
