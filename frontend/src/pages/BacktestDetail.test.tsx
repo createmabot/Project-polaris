@@ -62,6 +62,21 @@ describe('BacktestDetail', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-1',
+            natural_language_rule: '25日移動平均を上抜けで買い',
+            generated_pine: 'strategy(\"base\")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            warnings: [],
+            assumptions: [],
+            captured_at: new Date().toISOString(),
+          },
+        },
         latest_import: {
           id: 'imp-1',
           file_name: 'result.csv',
@@ -90,6 +105,9 @@ describe('BacktestDetail', () => {
     expect(html).toContain('総取引数');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
+    expect(html).toContain('使用した Strategy');
+    expect(html).toContain('href="/strategy-versions/ver-1"');
+    expect(html).toContain('href="/strategies/str-1/versions"');
   });
 
   it('shows parse error on failed parse', () => {
@@ -109,6 +127,21 @@ describe('BacktestDetail', () => {
           status: 'ready',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-2',
+          snapshot: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-2',
+            natural_language_rule: 'RSIで買い',
+            generated_pine: null,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            warnings: ['unsupported'],
+            assumptions: [],
+            captured_at: new Date().toISOString(),
+          },
         },
         latest_import: {
           id: 'imp-2',
@@ -148,6 +181,11 @@ describe('BacktestDetail', () => {
           status: 'ready',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: null,
+          strategy_version_id: null,
+          snapshot: null,
         },
         latest_import: null,
         imports: [],

@@ -74,6 +74,8 @@ pnpm run down
   - `/strategies/:strategyId/versions` で version 一覧表示
   - `/strategy-versions/:versionId` で version 詳細（自然言語原文 / generated pine / warnings / assumptions / status）表示
   - `/strategy-lab` から一覧・詳細へ遷移可能
+  - version 一覧は `natural_language_rule` の部分一致検索に対応（`q`）
+  - 一覧URLは `q/page` をクエリ同期し、詳細から `return` で同じ一覧状態に復帰可能
 
 ### CSV取込（MVPでサポートする形式）
 - 1行ヘッダ + 1行データの CSV
@@ -169,6 +171,13 @@ GitHub Actions で以下のチェックを運用しています。
 対象:
 - `snapshot-review-generator-json-check`
 - `backtests-return-flow-e2e-check`
+- `strategy-versions-return-flow-e2e-check`
+
+対象 workflow:
+- `Symbol Snapshot DB Integration`
+
+対象 ruleset:
+- `protect-main-required-checks`
 
 推奨頻度:
 - 四半期に1回（または ruleset / branch protection 変更時）
@@ -190,6 +199,30 @@ GitHub Actions で以下のチェックを運用しています。
 一時破壊例:
 - `frontend/src/pages/BacktestsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
 - 例: `page: 2` の期待を `page: 999` に変更して failure を発生させる
+
+### Drill: `strategy-versions-return-flow-e2e-check`
+一時破壊例:
+- `frontend/src/pages/StrategyVersionsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
+- 例: 一覧復帰 URL の期待を `/strategies/xxx/versions?page=2` から存在しない値に変更して failure を発生させる
+
+確認ポイント:
+1. PR checks で `strategy-versions-return-flow-e2e-check` が `pending` になる
+2. 一時破壊コミット後、同 check が `failure` になる
+3. PR 画面が `BLOCKED`（required checks 未通過）になる
+4. restore 後、同 check が `success` に戻る
+
+実施記録テンプレート（運用メモへ記録）:
+- 実施日:
+- 実施者:
+- 対象PR:
+- 対象check:
+- failure run URL:
+- success run URL:
+- pending確認: yes / no
+- failure確認: yes / no
+- blocked確認: yes / no
+- restore確認: yes / no
+- 備考:
 
 注意事項:
 - 検証用の破壊コミットは `main` に merge しない

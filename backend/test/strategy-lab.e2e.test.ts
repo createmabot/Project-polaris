@@ -67,6 +67,23 @@ vi.mock('../src/db', () => {
       },
     },
     strategyRuleVersion: {
+      count: async ({ where }: any) => {
+        let rows = Array.from(runtime.versions.values());
+        if (where?.strategyRuleId) {
+          rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
+        }
+        if (where?.naturalLanguageRule?.contains) {
+          const keyword = String(where.naturalLanguageRule.contains);
+          const insensitive = where.naturalLanguageRule.mode === 'insensitive';
+          rows = rows.filter((row) => {
+            if (insensitive) {
+              return row.naturalLanguageRule.toLowerCase().includes(keyword.toLowerCase());
+            }
+            return row.naturalLanguageRule.includes(keyword);
+          });
+        }
+        return rows.length;
+      },
       create: async ({ data }: any) => {
         const id = `ver-${runtime.versionSeq++}`;
         const now = new Date();
@@ -101,10 +118,20 @@ vi.mock('../src/db', () => {
         }
         return row;
       },
-      findMany: async ({ where, orderBy, include }: any) => {
+      findMany: async ({ where, orderBy, include, skip, take }: any) => {
         let rows = Array.from(runtime.versions.values());
         if (where?.strategyRuleId) {
           rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
+        }
+        if (where?.naturalLanguageRule?.contains) {
+          const keyword = String(where.naturalLanguageRule.contains);
+          const insensitive = where.naturalLanguageRule.mode === 'insensitive';
+          rows = rows.filter((row) => {
+            if (insensitive) {
+              return row.naturalLanguageRule.toLowerCase().includes(keyword.toLowerCase());
+            }
+            return row.naturalLanguageRule.includes(keyword);
+          });
         }
         if (orderBy?.createdAt === 'desc') {
           rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
@@ -112,6 +139,9 @@ vi.mock('../src/db', () => {
         if (orderBy?.createdAt === 'asc') {
           rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         }
+        const offset = Number.isInteger(skip) && skip > 0 ? skip : 0;
+        const limit = Number.isInteger(take) && take >= 0 ? take : rows.length;
+        rows = rows.slice(offset, offset + limit);
         if (include?.clonedFromVersion) {
           return rows.map((row) => ({
             ...row,
@@ -230,14 +260,30 @@ describe('strategy lab vertical slice', () => {
 
     const listResponse = await app.inject({
       method: 'GET',
-      url: `/api/strategies/${strategyId}/versions`,
+      url: `/api/strategies/${strategyId}/versions?page=1&limit=1`,
     });
     expect(listResponse.statusCode).toBe(200);
     const listBody = listResponse.json();
     expect(Array.isArray(listBody.data.strategy_versions)).toBe(true);
-    expect(listBody.data.strategy_versions.length).toBe(2);
+    expect(listBody.data.strategy_versions.length).toBe(1);
+    expect(listBody.data.pagination.page).toBe(1);
+    expect(listBody.data.pagination.limit).toBe(1);
+    expect(listBody.data.pagination.total).toBe(2);
+    expect(listBody.data.pagination.has_next).toBe(true);
+    expect(listBody.data.pagination.has_prev).toBe(false);
     expect(typeof listBody.data.strategy_versions[0].is_derived).toBe('boolean');
     expect(listBody.data.strategy_versions[0]).toHaveProperty('has_diff_from_clone');
+
+    const page2Response = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?page=2&limit=1`,
+    });
+    expect(page2Response.statusCode).toBe(200);
+    const page2Body = page2Response.json();
+    expect(page2Body.data.strategy_versions.length).toBe(1);
+    expect(page2Body.data.pagination.page).toBe(2);
+    expect(page2Body.data.pagination.has_next).toBe(false);
+    expect(page2Body.data.pagination.has_prev).toBe(true);
 
     const detailResponse = await app.inject({
       method: 'GET',
@@ -251,6 +297,59 @@ describe('strategy lab vertical slice', () => {
     expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
     expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
     expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
+
+    await app.close();
+  });
+
+  it('filters strategy versions by natural language rule keyword with q', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '検索テスト' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'RSIが30以下で買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上抜けたら買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?q=rsi&page=1&limit=1`,
+    });
+
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.data.query.q).toBe('rsi');
+    expect(body.data.pagination.q).toBe('rsi');
+    expect(body.data.pagination.total).toBe(1);
+    expect(body.data.strategy_versions.length).toBe(1);
+    expect(body.data.strategy_versions[0].id).toBeDefined();
+
+    const unfiltered = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(unfiltered.statusCode).toBe(200);
+    expect(unfiltered.json().data.strategy_versions.length).toBe(2);
 
     await app.close();
   });

@@ -41,6 +41,10 @@ function normalizeStrategyVersionsReturnPath(decodedPath: string, strategyId: st
 
   const queryParams = new URLSearchParams(queryPart);
   const normalized = new URLSearchParams();
+  const rawQ = (queryParams.get('q') ?? '').trim();
+  if (rawQ) {
+    normalized.set('q', rawQ);
+  }
   const rawPage = queryParams.get('page');
   if (rawPage !== null) {
     const page = Number(rawPage);

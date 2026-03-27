@@ -5,6 +5,11 @@ import { backtestRoutes } from '../src/routes/backtests';
 
 type StrategyVersionRow = {
   id: string;
+  strategyRuleId: string;
+  naturalLanguageRule: string;
+  generatedPine: string | null;
+  warningsJson: string[];
+  assumptionsJson: string[];
   market: string;
   timeframe: string;
 };
@@ -12,6 +17,7 @@ type StrategyVersionRow = {
 type BacktestRow = {
   id: string;
   strategyRuleVersionId: string;
+  strategySnapshotJson: any;
   title: string;
   executionSource: string;
   market: string;
@@ -38,6 +44,7 @@ type BacktestImportRow = {
 type Runtime = {
   backtestSeq: number;
   importSeq: number;
+  nowSeq: number;
   strategyVersions: Map<string, StrategyVersionRow>;
   backtests: Map<string, BacktestRow>;
   imports: Map<string, BacktestImportRow>;
@@ -49,6 +56,7 @@ function createRuntime(): Runtime {
   return {
     backtestSeq: 1,
     importSeq: 1,
+    nowSeq: 1,
     strategyVersions: new Map(),
     backtests: new Map(),
     imports: new Map(),
@@ -69,10 +77,11 @@ vi.mock('../src/db', () => {
     backtest: {
       create: async ({ data }: any) => {
         const id = `run-${runtime.backtestSeq++}`;
-        const now = new Date();
+        const now = new Date(Date.now() + runtime.nowSeq++);
         const row: BacktestRow = {
           id,
           strategyRuleVersionId: data.strategyRuleVersionId,
+          strategySnapshotJson: data.strategySnapshotJson ?? null,
           title: data.title,
           executionSource: data.executionSource,
           market: data.market,
@@ -87,13 +96,14 @@ vi.mock('../src/db', () => {
       findUnique: async ({ where, include }: any) => {
         const backtest = runtime.backtests.get(where.id) ?? null;
         if (!backtest) return null;
+        const strategyRuleVersion = runtime.strategyVersions.get(backtest.strategyRuleVersionId) ?? null;
         if (include?.imports) {
           const imports = [...runtime.imports.values()]
             .filter((item) => item.backtestId === backtest.id)
             .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-          return { ...backtest, imports };
+          return { ...backtest, imports, strategyRuleVersion };
         }
-        return backtest;
+        return { ...backtest, strategyRuleVersion };
       },
       count: async ({ where }: any = {}) => applyWhere([...runtime.backtests.values()], where).length,
       findMany: async ({ include, orderBy, take, skip, where }: any) => {
@@ -132,7 +142,7 @@ vi.mock('../src/db', () => {
     backtestImport: {
       create: async ({ data }: any) => {
         const id = `imp-${runtime.importSeq++}`;
-        const now = new Date();
+        const now = new Date(Date.now() + runtime.nowSeq++);
         const row: BacktestImportRow = {
           id,
           backtestId: data.backtestId,
@@ -181,6 +191,11 @@ describe('backtest import vertical slice', () => {
     runtime = createRuntime();
     runtime.strategyVersions.set('ver-1', {
       id: 'ver-1',
+      strategyRuleId: 'str-1',
+      naturalLanguageRule: '25日移動平均を上抜けたら買い',
+      generatedPine: 'strategy("base")',
+      warningsJson: [],
+      assumptionsJson: [],
       market: 'JP_STOCK',
       timeframe: 'D',
     });
@@ -225,6 +240,10 @@ describe('backtest import vertical slice', () => {
     const detailBody = detail.json();
     expect(detailBody.data.latest_import.parse_status).toBe('parsed');
     expect(detailBody.data.latest_import.parsed_summary.profitFactor).toBe(1.42);
+    expect(detailBody.data.used_strategy.strategy_id).toBe('str-1');
+    expect(detailBody.data.used_strategy.strategy_version_id).toBe('ver-1');
+    expect(detailBody.data.used_strategy.snapshot.natural_language_rule).toContain('25日移動平均');
+    expect(detailBody.data.used_strategy.snapshot.generated_pine).toBe('strategy("base")');
 
     await app.close();
   });
@@ -268,6 +287,47 @@ describe('backtest import vertical slice', () => {
     const detailBody = detail.json();
     expect(detailBody.data.latest_import.parse_status).toBe('failed');
     expect(detailBody.data.latest_import.parse_error).toContain('Missing required columns');
+    expect(detailBody.data.used_strategy.snapshot.strategy_version_id).toBe('ver-1');
+
+    await app.close();
+  });
+
+  it('keeps strategy snapshot immutable even if current version is updated later', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'snapshot check',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    runtime.strategyVersions.set('ver-1', {
+      id: 'ver-1',
+      strategyRuleId: 'str-1',
+      naturalLanguageRule: 'RSIが30以下で買い',
+      generatedPine: 'strategy("updated")',
+      warningsJson: ['updated'],
+      assumptionsJson: ['updated'],
+      market: 'JP_STOCK',
+      timeframe: 'D',
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    expect(body.data.used_strategy.strategy_version_id).toBe('ver-1');
+    expect(body.data.used_strategy.snapshot.natural_language_rule).toContain('25日移動平均');
+    expect(body.data.used_strategy.snapshot.generated_pine).toBe('strategy("base")');
 
     await app.close();
   });

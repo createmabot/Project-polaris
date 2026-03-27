@@ -332,6 +332,7 @@ model Backtest {
   id                    String              @id @default(uuid())
   strategyRuleVersionId String
   strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id])
+  strategySnapshotJson  Json?
   title                 String
   executionSource       String              @default("tradingview")
   market                String

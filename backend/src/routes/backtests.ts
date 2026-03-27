@@ -18,6 +18,51 @@ type CreateImportBody = {
   csv_text?: string;
 };
 
+type BacktestStrategySnapshot = {
+  strategy_id: string;
+  strategy_version_id: string;
+  natural_language_rule: string;
+  generated_pine: string | null;
+  market: string;
+  timeframe: string;
+  warnings: string[];
+  assumptions: string[];
+  captured_at: string;
+};
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item) => typeof item === 'string');
+}
+
+function normalizeBacktestStrategySnapshot(value: unknown): BacktestStrategySnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  const row = value as Record<string, unknown>;
+  const strategyId = typeof row.strategy_id === 'string' ? row.strategy_id : '';
+  const strategyVersionId = typeof row.strategy_version_id === 'string' ? row.strategy_version_id : '';
+  const naturalLanguageRule = typeof row.natural_language_rule === 'string' ? row.natural_language_rule : '';
+  const market = typeof row.market === 'string' ? row.market : '';
+  const timeframe = typeof row.timeframe === 'string' ? row.timeframe : '';
+
+  if (!strategyId || !strategyVersionId || !naturalLanguageRule || !market || !timeframe) {
+    return null;
+  }
+
+  return {
+    strategy_id: strategyId,
+    strategy_version_id: strategyVersionId,
+    natural_language_rule: naturalLanguageRule,
+    generated_pine: typeof row.generated_pine === 'string' ? row.generated_pine : null,
+    market,
+    timeframe,
+    warnings: toStringArray(row.warnings),
+    assumptions: toStringArray(row.assumptions),
+    captured_at: typeof row.captured_at === 'string' ? row.captured_at : '',
+  };
+}
+
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { page?: string; limit?: string; q?: string } }>('/', async (request, reply) => {
     const parsedPage = Number(request.query.page ?? 1);
@@ -109,16 +154,27 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, 'VALIDATION_ERROR', 'timeframe is required.');
     }
 
-    const version = await prisma.strategyRuleVersion.findUnique({
-      where: { id: strategyVersionId },
-    });
+    const version = await prisma.strategyRuleVersion.findUnique({ where: { id: strategyVersionId } });
     if (!version) {
       throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
     }
 
+    const strategySnapshot: BacktestStrategySnapshot = {
+      strategy_id: version.strategyRuleId,
+      strategy_version_id: version.id,
+      natural_language_rule: version.naturalLanguageRule,
+      generated_pine: version.generatedPine,
+      market: version.market,
+      timeframe: version.timeframe,
+      warnings: toStringArray(version.warningsJson),
+      assumptions: toStringArray(version.assumptionsJson),
+      captured_at: new Date().toISOString(),
+    };
+
     const backtest = await prisma.backtest.create({
       data: {
         strategyRuleVersionId: strategyVersionId,
+        strategySnapshotJson: strategySnapshot as Prisma.InputJsonValue,
         title,
         executionSource,
         market,
@@ -213,6 +269,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
     const backtest = await prisma.backtest.findUnique({
       where: { id: backtestId },
       include: {
+        strategyRuleVersion: true,
         imports: {
           orderBy: { createdAt: 'desc' },
         },
@@ -222,6 +279,9 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
     if (!backtest) {
       throw new AppError(404, 'NOT_FOUND', 'backtest was not found.');
     }
+
+    const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
+    const strategyVersion = backtest.strategyRuleVersion;
 
     return reply.status(200).send(formatSuccess(request, {
       backtest: {
@@ -234,6 +294,23 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         status: backtest.status,
         created_at: backtest.createdAt,
         updated_at: backtest.updatedAt,
+      },
+      used_strategy: {
+        strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
+        strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
+        snapshot: snapshot
+          ? {
+              strategy_id: snapshot.strategy_id,
+              strategy_version_id: snapshot.strategy_version_id,
+              natural_language_rule: snapshot.natural_language_rule,
+              generated_pine: snapshot.generated_pine,
+              market: snapshot.market,
+              timeframe: snapshot.timeframe,
+              warnings: snapshot.warnings,
+              assumptions: snapshot.assumptions,
+              captured_at: snapshot.captured_at || backtest.createdAt.toISOString(),
+            }
+          : null,
       },
       latest_import: backtest.imports[0]
         ? {
