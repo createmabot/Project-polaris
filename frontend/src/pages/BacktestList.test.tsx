@@ -69,7 +69,7 @@ describe('BacktestList', () => {
   });
 
   it('renders list and detail link with return query', () => {
-    mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&page=1';
+    mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&page=2';
     mockSetLocation.mockReset();
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
@@ -96,18 +96,20 @@ describe('BacktestList', () => {
             },
           },
         ],
-        pagination: { page: 1, limit: 20, q: '', total: 21, has_next: true, has_prev: false },
+        pagination: { page: 2, limit: 20, q: 'トヨタ', total: 21, has_next: false, has_prev: true },
       },
     });
 
     const html = renderToStaticMarkup(<BacktestList />);
     expect(html).toContain('トヨタ日足');
+    expect(html).toContain('検索条件:');
+    expect(html).toContain('<code>トヨタ</code>');
     expect(html).toContain('実行時Strategy');
     expect(html).toContain('str-1');
     expect(html).toContain('実行時Version');
     expect(html).toContain('ver-1');
-    expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 1));
-    expect(html).toContain('次へ');
-    expect(html).toContain('1 / 2 ページ');
+    expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 2));
+    expect(html).toContain('前へ');
+    expect(html).toContain('2 / 2 ページ');
   });
 });

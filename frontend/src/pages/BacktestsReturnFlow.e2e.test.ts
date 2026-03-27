@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBacktestDetailUrl, buildBacktestsListUrl, parseBacktestsListQuery } from './BacktestList';
+import { buildBacktestDetailUrl, buildBacktestListPath, buildBacktestsListUrl, parseBacktestsListQuery } from './BacktestList';
 import { parseBacktestsReturnPath } from './BacktestDetail';
 
 describe('backtests list -> detail -> list return flow (E2E-like)', () => {
@@ -15,6 +15,9 @@ describe('backtests list -> detail -> list return flow (E2E-like)', () => {
 
     const restored = parseBacktestsListQuery(resolvedReturn ?? '/backtests');
     expect(restored).toEqual({ q: 'ma', page: 2 });
+
+    const apiPath = buildBacktestListPath(restored.page, 20, restored.q);
+    expect(apiPath).toBe('/api/backtests?page=2&limit=20&q=ma');
   });
 
   it('falls back to /backtests when return is invalid', () => {
