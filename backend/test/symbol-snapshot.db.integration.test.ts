@@ -114,6 +114,47 @@ function toMetricDateJst(now: Date): Date {
   return new Date(`${y}-${m}-${d}T00:00:00+09:00`);
 }
 
+async function waitForReasonMetricCount(input: {
+  metricDate: Date;
+  sourceName: string;
+  reasonCode: string;
+  expectedCount: number;
+  timeoutMs?: number;
+  intervalMs?: number;
+}) {
+  const timeoutMs = input.timeoutMs ?? 1500;
+  const intervalMs = input.intervalMs ?? 50;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const metric = await prisma.snapshotReasonDailyMetric.findUnique({
+      where: {
+        metricDate_sourceName_reasonCode: {
+          metricDate: input.metricDate,
+          sourceName: input.sourceName,
+          reasonCode: input.reasonCode,
+        },
+      },
+    });
+
+    if (metric?.count === input.expectedCount) {
+      return metric;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return prisma.snapshotReasonDailyMetric.findUnique({
+    where: {
+      metricDate_sourceName_reasonCode: {
+        metricDate: input.metricDate,
+        sourceName: input.sourceName,
+        reasonCode: input.reasonCode,
+      },
+    },
+  });
+}
+
 describe('symbols route current_snapshot db integration', () => {
   beforeAll(async () => {
     await prisma.$queryRaw`SELECT 1`;
@@ -222,14 +263,11 @@ describe('symbols route current_snapshot db integration', () => {
       vi.useRealTimers();
     }
 
-    const metric = await prisma.snapshotReasonDailyMetric.findUnique({
-      where: {
-        metricDate_sourceName_reasonCode: {
-          metricDate,
-          sourceName: 'yahoo_chart',
-          reasonCode: 'open_but_stale',
-        },
-      },
+    const metric = await waitForReasonMetricCount({
+      metricDate,
+      sourceName: 'yahoo_chart',
+      reasonCode: 'open_but_stale',
+      expectedCount: 2,
     });
 
     expect(metric).toBeTruthy();
