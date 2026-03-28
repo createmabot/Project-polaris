@@ -27,6 +27,12 @@ type PineDiffExcerpt = {
   currentLine: string;
 };
 
+type RuleDiffSummary = {
+  hasChanges: boolean;
+  addedLines: number;
+  removedLines: number;
+};
+
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
 }
@@ -134,6 +140,16 @@ function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
   return lines;
 }
 
+function summarizeRuleDiff(diffLines: DiffLine[]): RuleDiffSummary {
+  const addedLines = diffLines.filter((line) => line.type === 'added').length;
+  const removedLines = diffLines.filter((line) => line.type === 'removed').length;
+  return {
+    hasChanges: addedLines > 0 || removedLines > 0,
+    addedLines,
+    removedLines,
+  };
+}
+
 function summarizePineDiff(compareBasePine: string | null | undefined, currentPine: string | null | undefined): PineDiffSummary {
   const baseExists = typeof compareBasePine === 'string' && compareBasePine.length > 0;
   const currentExists = typeof currentPine === 'string' && currentPine.length > 0;
@@ -231,6 +247,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
     return buildLineDiff(compareBase.natural_language_rule, version.natural_language_rule);
   }, [version?.natural_language_rule, compareBase?.natural_language_rule]);
+
+  const ruleDiffSummary = useMemo(() => summarizeRuleDiff(ruleDiff), [ruleDiff]);
 
   const pineDiff = useMemo(() => {
     if (!compareBase) {
@@ -424,6 +442,27 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           <p style={{ color: '#666' }}>比較元の version はありません。</p>
         ) : (
           <div>
+            <div style={{ marginBottom: '0.8rem', border: '1px solid #ddd', borderRadius: '4px', padding: '0.75rem', background: '#fafafa' }}>
+              <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>比較サマリ</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.45rem' }}>
+                <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', borderRadius: '999px', background: (ruleDiffSummary.hasChanges || pineDiff.changed || compareBase.status !== version.status) ? '#fff3e6' : '#eef8ee', color: (ruleDiffSummary.hasChanges || pineDiff.changed || compareBase.status !== version.status) ? '#9a4d00' : '#1f6a1f', fontWeight: 600, fontSize: '0.8rem' }}>
+                  全体: {(ruleDiffSummary.hasChanges || pineDiff.changed || compareBase.status !== version.status) ? '変更あり' : '変更なし'}
+                </span>
+                <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', borderRadius: '999px', background: ruleDiffSummary.hasChanges ? '#fff3e6' : '#eef8ee', color: ruleDiffSummary.hasChanges ? '#9a4d00' : '#1f6a1f', fontWeight: 600, fontSize: '0.8rem' }}>
+                  ルール文: {ruleDiffSummary.hasChanges ? '変更あり' : '変更なし'}
+                </span>
+                <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', borderRadius: '999px', background: compareBase.status !== version.status ? '#fff3e6' : '#eef8ee', color: compareBase.status !== version.status ? '#9a4d00' : '#1f6a1f', fontWeight: 600, fontSize: '0.8rem' }}>
+                  status: {compareBase.status !== version.status ? '変更あり' : '変更なし'}
+                </span>
+                <span style={{ display: 'inline-block', padding: '0.2rem 0.5rem', borderRadius: '999px', background: pineDiff.changed ? '#fff3e6' : '#eef8ee', color: pineDiff.changed ? '#9a4d00' : '#1f6a1f', fontWeight: 600, fontSize: '0.8rem' }}>
+                  Pine: {pineDiff.changed ? '変更あり' : '変更なし'}
+                </span>
+              </div>
+              <div style={{ color: '#444', fontSize: '0.9rem' }}>
+                ルール差分: +{ruleDiffSummary.addedLines} / -{ruleDiffSummary.removedLines}
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gap: '0.35rem', marginBottom: '0.8rem' }}>
               <div><strong>比較元 version_id:</strong> <code>{compareBase.id}</code></div>
               <div><strong>status:</strong> <code>{compareBase.status}</code> → <code>{version.status}</code></div>
