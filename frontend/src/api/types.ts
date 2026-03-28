@@ -337,6 +337,7 @@ export type StrategyVersionListData = {
     strategy_id: string;
     cloned_from_version_id: string | null;
     is_derived: boolean;
+    has_forward_validation_note: boolean;
     has_diff_from_clone: boolean | null;
     market: string;
     timeframe: string;

@@ -117,6 +117,9 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         strategy_id: version.strategyRuleId,
         cloned_from_version_id: version.clonedFromVersionId,
         is_derived: Boolean(version.clonedFromVersionId),
+        has_forward_validation_note:
+          typeof version.forwardValidationNote === 'string' &&
+          version.forwardValidationNote.trim().length > 0,
         has_diff_from_clone: version.clonedFromVersion
           ? version.naturalLanguageRule !== version.clonedFromVersion.naturalLanguageRule ||
             (version.generatedPine ?? '') !== (version.clonedFromVersion.generatedPine ?? '')

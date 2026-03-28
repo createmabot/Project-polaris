@@ -132,7 +132,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const isNeedsReviewDiff = (version: StrategyVersionListData['strategy_versions'][number]) =>
     version.is_derived && version.has_diff_from_clone === true;
 
-  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status') => {
+  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note') => {
     const style = {
       display: 'inline-block',
       padding: '0.2rem 0.5rem',
@@ -145,6 +145,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (kind === 'diff') return { ...style, background: '#fff3e6', color: '#9a4d00' };
     if (kind === 'no-diff') return { ...style, background: '#eef8ee', color: '#1f6a1f' };
     if (kind === 'no-base') return { ...style, background: '#f3f3f3', color: '#666' };
+    if (kind === 'note') return { ...style, background: '#fff7dd', color: '#755200' };
     return { ...style, background: '#f0f1f5', color: '#333' };
   };
 
@@ -305,6 +306,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 {isNeedsReviewDiff(version) && <span style={{ ...badgeStyle('diff'), background: '#ffedd4' }}>要確認差分</span>}
                 {version.has_diff_from_clone === true && <span style={badgeStyle('diff')}>差分あり</span>}
                 {version.has_diff_from_clone === false && <span style={badgeStyle('no-diff')}>差分なし</span>}
+                {version.has_forward_validation_note && <span style={badgeStyle('note')}>検証ノートあり</span>}
                 <span style={badgeStyle('status')}>status: {statusLabel(version.status)}</span>
               </div>
               <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', fontSize: '0.95rem' }}>

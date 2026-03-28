@@ -286,6 +286,7 @@ describe('strategy lab vertical slice', () => {
     expect(listBody.data.pagination.has_next).toBe(true);
     expect(listBody.data.pagination.has_prev).toBe(false);
     expect(typeof listBody.data.strategy_versions[0].is_derived).toBe('boolean');
+    expect(typeof listBody.data.strategy_versions[0].has_forward_validation_note).toBe('boolean');
     expect(listBody.data.strategy_versions[0]).toHaveProperty('has_diff_from_clone');
 
     const page2Response = await app.inject({
@@ -764,6 +765,14 @@ describe('strategy lab vertical slice', () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().data.strategy_version.forward_validation_note).toContain('RSI');
 
+    const listedWithNote = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(listedWithNote.statusCode).toBe(200);
+    const listedWithNoteRow = listedWithNote.json().data.strategy_versions.find((item: any) => item.id === versionId);
+    expect(listedWithNoteRow.has_forward_validation_note).toBe(true);
+
     const clearNote = await app.inject({
       method: 'PATCH',
       url: `/api/strategy-versions/${versionId}`,
@@ -773,6 +782,14 @@ describe('strategy lab vertical slice', () => {
     });
     expect(clearNote.statusCode).toBe(200);
     expect(clearNote.json().data.strategy_version.forward_validation_note).toBeNull();
+
+    const listedWithoutNote = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(listedWithoutNote.statusCode).toBe(200);
+    const listedWithoutNoteRow = listedWithoutNote.json().data.strategy_versions.find((item: any) => item.id === versionId);
+    expect(listedWithoutNoteRow.has_forward_validation_note).toBe(false);
 
     await app.close();
   });
