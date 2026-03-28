@@ -132,4 +132,21 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('href="/strategies/str-1/versions"');
     expect(html).toContain('現在のノート: 未設定');
   });
+
+  it('renders forward validation note editor controls', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+      data: createPayload({ withCompareBase: true, samePine: false }),
+    });
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('次の検証ノート');
+    expect(html).toContain('placeholder="次に検証したい条件や見直し方針を記録します"');
+    expect(html).toContain('ノートを保存');
+  });
 });
