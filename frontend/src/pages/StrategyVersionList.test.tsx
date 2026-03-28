@@ -67,6 +67,8 @@ describe('StrategyVersionList', () => {
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-1' }} />);
     expect(html).toContain('ver-2');
     expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
+    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
+    expect(html).toContain('href="#priority-version-ver-2"');
     expect(html).toContain('要確認差分');
     expect(html).toContain('検証ノートあり');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
@@ -124,6 +126,8 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('ver-10');
     expect(html).toContain('このページの要確認差分: <strong>0</strong> 件');
     expect(html).toContain('検証ノートあり: <strong>0</strong> 件');
+    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>0</strong> 件');
+    expect(html).not.toContain('最優先確認の先頭へ移動');
     expect(html).not.toContain('検証ノートあり</span>');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
@@ -242,6 +246,9 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('このページの要確認差分: <strong>2</strong> 件');
     expect(html).toContain('検証ノートあり: <strong>2</strong> 件');
     expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
+    expect(html).toContain('最優先確認の先頭へ移動');
+    expect(html).toContain('id="priority-version-ver-priority"');
+    expect(html).toContain('href="#priority-version-ver-priority"');
     expect(html).toContain('`最優先確認` バッジ付き version から確認してください');
     expect(html).toContain('ver-priority');
     expect(html).toContain('最優先確認');
