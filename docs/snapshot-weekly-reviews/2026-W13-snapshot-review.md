@@ -96,6 +96,9 @@ Rules:
   - PR: [#41](https://github.com/createmabot/Project-polaris/pull/41) (merged on 2026-03-28)
   - Update: `StrategyVersionList -> StrategyVersionDetail（forward_validation_note edit context）-> List` return-flow scenario added to `StrategyVersionsReturnFlow.e2e.test.ts`
   - Check result: `strategy-versions-return-flow-e2e-check` PASS in PR #41 required checks
+  - PR: [#45](https://github.com/createmabot/Project-polaris/pull/45) (merged on 2026-03-29 JST)
+  - Update: `検証ノートあり` 行を起点にした `StrategyVersionList -> StrategyVersionDetail -> List` return-flow scenario を追加
+  - Check result: [Actions run 23688550598](https://github.com/createmabot/Project-polaris/actions/runs/23688550598) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)
