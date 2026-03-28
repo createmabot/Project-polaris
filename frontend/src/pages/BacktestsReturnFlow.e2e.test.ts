@@ -16,7 +16,7 @@ describe('backtests list -> detail -> list return flow (E2E-like)', () => {
     const restored = parseBacktestsListQuery(resolvedReturn ?? '/backtests');
     expect(restored).toEqual({
       q: 'ma',
-      page: 999,
+      page: 2,
       status: 'imported',
       sort: 'updated_at',
       order: 'asc',
