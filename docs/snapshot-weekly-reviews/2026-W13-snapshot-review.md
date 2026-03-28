@@ -116,3 +116,29 @@ Rules:
   - PR merge state observed: `CLEAN`
 - PR cleanup:
   - Drill PR closed without merge after recovery confirmation.
+
+## 9) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`, re-run)
+- Target PR: [#38 ops: rerun drill backtests-return-flow-e2e-check](https://github.com/createmabot/Project-polaris/pull/38)
+- Ruleset: `protect-main-required-checks`
+- Required checks in scope:
+  - `backtests-return-flow-e2e-check`
+  - `strategy-versions-return-flow-e2e-check`
+  - `snapshot-review-generator-json-check`
+  - `symbol-snapshot-db-integration`
+- Baseline commit: `3e03d6a` (empty commit to start re-run drill)
+- Pending observation commits:
+  - `88ee476` (first pending observation push)
+  - `cda6929` (second push to capture target-check pending reliably)
+- Pending run: [Actions run 23683010309](https://github.com/createmabot/Project-polaris/actions/runs/23683010309)
+  - `backtests-return-flow-e2e-check`: pending observed
+- Temporary break commit: `da6e9f6` (`frontend/src/pages/BacktestsReturnFlow.e2e.test.ts` expected page intentionally changed to fail)
+- Failure run: [Actions run 23683017236](https://github.com/createmabot/Project-polaris/actions/runs/23683017236)
+  - `backtests-return-flow-e2e-check`: FAIL
+  - PR merge state observed: `BLOCKED`
+- Restore commit: `dd98ad6` (revert of temporary break)
+- Recovery run: [Actions run 23683035724](https://github.com/createmabot/Project-polaris/actions/runs/23683035724)
+  - `backtests-return-flow-e2e-check`: pending -> PASS
+  - Related required checks: PASS
+  - PR merge state observed: `CLEAN`
+- PR cleanup:
+  - Drill PR closed without merge after recovery confirmation.
