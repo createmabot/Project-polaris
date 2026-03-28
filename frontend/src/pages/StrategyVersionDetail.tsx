@@ -2,7 +2,11 @@
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
-import { StrategyVersionData } from '../api/types';
+import { StrategyVersionData, StrategyVersionListData } from '../api/types';
+import {
+  buildStrategyVersionDetailUrl,
+  parseStrategyVersionsListQuery,
+} from './StrategyVersionList';
 
 type StrategyVersionDetailProps = {
   params: { versionId: string };
@@ -35,6 +39,36 @@ type RuleDiffSummary = {
 
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
+}
+
+export function findNextPriorityVersionId(
+  currentVersionId: string,
+  strategyVersions: Array<{
+    id: string;
+    is_derived: boolean;
+    has_diff_from_clone: boolean | null;
+    has_forward_validation_note: boolean;
+  }>,
+): string | null {
+  const priorityIds = strategyVersions
+    .filter(
+      (version) =>
+        version.is_derived &&
+        version.has_diff_from_clone === true &&
+        version.has_forward_validation_note,
+    )
+    .map((version) => version.id);
+
+  if (priorityIds.length <= 1) {
+    return null;
+  }
+
+  const currentIndex = priorityIds.indexOf(currentVersionId);
+  if (currentIndex < 0) {
+    return priorityIds[0];
+  }
+
+  return priorityIds[(currentIndex + 1) % priorityIds.length];
 }
 
 function normalizeStrategyVersionsReturnPath(decodedPath: string, strategyId: string): string | null {
@@ -238,6 +272,30 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const compareBase = data?.compare_base ?? null;
   const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
   const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
+  const returnPath = version
+    ? parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id)
+    : null;
+  const returnQuery = parseStrategyVersionsListQuery(returnPath ?? '/strategies/_/versions');
+  const priorityListApiPath = version
+    ? `/api/strategies/${version.strategy_id}/versions?page=${returnQuery.page}&limit=20${
+        returnQuery.q ? `&q=${encodeURIComponent(returnQuery.q)}` : ''
+      }${returnQuery.status ? `&status=${encodeURIComponent(returnQuery.status)}` : ''}&sort=${returnQuery.sort}&order=${returnQuery.order}`
+    : null;
+  const { data: priorityListData } = useSWR<StrategyVersionListData>(priorityListApiPath, swrFetcher);
+  const nextPriorityVersionId = version
+    ? findNextPriorityVersionId(version.id, priorityListData?.strategy_versions ?? [])
+    : null;
+  const nextPriorityDetailUrl = version && nextPriorityVersionId
+    ? buildStrategyVersionDetailUrl(
+        version.strategy_id,
+        nextPriorityVersionId,
+        returnQuery.page,
+        returnQuery.q,
+        returnQuery.status,
+        returnQuery.sort,
+        returnQuery.order,
+      )
+    : null;
 
   useEffect(() => {
     if (version) {
@@ -348,17 +406,21 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   if (!version) {
     return null;
   }
-
-  const returnPath = parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id);
+  const resolvedReturnPath = returnPath ?? buildDefaultVersionsReturnPath(version.strategy_id);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
         <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
         <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>
+        <Link href={resolvedReturnPath} style={{ color: '#666', textDecoration: 'none' }}>
           version 一覧へ
         </Link>
+        {nextPriorityDetailUrl && (
+          <Link href={nextPriorityDetailUrl} style={{ color: '#8a1212', textDecoration: 'none', fontWeight: 600 }}>
+            次の最優先確認へ
+          </Link>
+        )}
       </div>
 
       <h1>rule version 詳細</h1>
