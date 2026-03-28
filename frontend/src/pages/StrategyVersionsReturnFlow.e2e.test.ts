@@ -45,7 +45,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&page=3&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
-    expect(restored).toEqual({ page: 999, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 3, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
   });
 });
 
