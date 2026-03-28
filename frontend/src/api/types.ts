@@ -292,6 +292,7 @@ export type StrategyVersionData = {
     status: 'draft' | 'generated' | 'failed' | string;
     normalized_rule_json: any;
     generated_pine: string | null;
+    forward_validation_note: string | null;
     warnings: string[];
     assumptions: string[];
     created_at: string;

@@ -42,6 +42,7 @@ function createPayload(params: {
       strategy_id: 'str-1',
       cloned_from_version_id: params.withCompareBase ? 'ver-0' : null,
       natural_language_rule: '25日移動平均を上抜けたら買い\nRSIが50以上',
+      forward_validation_note: params.withCompareBase ? '次回は RSI 55 以上で再検証' : null,
       market: 'JP_STOCK',
       timeframe: 'D',
       status: 'generated',
@@ -92,6 +93,8 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
     expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
     expect(html).toContain('href="/strategies/str-1/versions?q=RSI&amp;page=2"');
+    expect(html).toContain('次の検証ノート');
+    expect(html).toContain('現在のノート: 次回は RSI 55 以上で再検証');
   });
 
   it('shows pine unchanged when generated pine is identical', () => {
@@ -127,5 +130,6 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較元の version はありません。');
     expect(html).toContain('href="/strategies/str-1/versions"');
+    expect(html).toContain('現在のノート: 未設定');
   });
 });
