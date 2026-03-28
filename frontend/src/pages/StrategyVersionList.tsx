@@ -49,6 +49,10 @@ export function resolvePriorityVersionIdFromHash(
   return match ? match.id : null;
 }
 
+function buildPriorityVersionHash(versionId: string): string {
+  return `${PRIORITY_VERSION_HASH_PREFIX}${encodeURIComponent(versionId)}`;
+}
+
 function normalizeStrategyVersionsSort(value: string | null | undefined): 'created_at' | 'updated_at' {
   return value === 'updated_at' ? 'updated_at' : 'created_at';
 }
@@ -122,6 +126,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const [sortInput, setSortInput] = useState<'created_at' | 'updated_at'>(sort);
   const [orderInput, setOrderInput] = useState<'asc' | 'desc'>(order);
   const [highlightedPriorityVersionId, setHighlightedPriorityVersionId] = useState<string | null>(null);
+  const [priorityCursorVersionId, setPriorityCursorVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchInput(q);
@@ -202,6 +207,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const noteCount = data.strategy_versions.filter((version) => version.has_forward_validation_note).length;
   const needsReviewWithNoteCount = data.strategy_versions.filter(isNeedsReviewWithNote).length;
   const firstNeedsReviewWithNoteVersion = data.strategy_versions.find(isNeedsReviewWithNote);
+  const priorityVersionIds = data.strategy_versions.filter(isNeedsReviewWithNote).map((version) => version.id);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -213,6 +219,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     const applyHashHighlight = () => {
       const targetId = resolvePriorityVersionIdFromHash(window.location.hash, data.strategy_versions);
       setHighlightedPriorityVersionId(targetId);
+      setPriorityCursorVersionId((current) => targetId ?? current);
       if (timeoutId) {
         clearTimeout(timeoutId);
         timeoutId = null;
@@ -233,6 +240,25 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
       }
     };
   }, [data.strategy_versions]);
+
+  const moveToNextPriorityVersion = () => {
+    if (typeof window === 'undefined' || priorityVersionIds.length === 0) {
+      return;
+    }
+
+    const currentIndex = priorityCursorVersionId ? priorityVersionIds.indexOf(priorityCursorVersionId) : -1;
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % priorityVersionIds.length : 0;
+    const nextVersionId = priorityVersionIds[nextIndex];
+    const nextHash = buildPriorityVersionHash(nextVersionId);
+
+    if (window.location.hash === nextHash) {
+      setHighlightedPriorityVersionId(nextVersionId);
+      setPriorityCursorVersionId(nextVersionId);
+      return;
+    }
+
+    window.location.hash = nextHash;
+  };
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -351,11 +377,29 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
             </span>
             {firstNeedsReviewWithNoteVersion && (
               <a
-                href={`#priority-version-${firstNeedsReviewWithNoteVersion.id}`}
+                href={buildPriorityVersionHash(firstNeedsReviewWithNoteVersion.id)}
                 style={{ color: '#0a5bb5', fontSize: '0.85rem', textDecoration: 'none', fontWeight: 600 }}
               >
                 最優先確認の先頭へ移動
               </a>
+            )}
+            {needsReviewWithNoteCount > 1 && (
+              <button
+                type='button'
+                onClick={moveToNextPriorityVersion}
+                style={{
+                  padding: '0.2rem 0.55rem',
+                  border: '1px solid #d4d4d4',
+                  borderRadius: '999px',
+                  background: '#fff',
+                  color: '#333',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                }}
+              >
+                次の最優先確認へ
+              </button>
             )}
             {needsReviewWithNoteCount > 0 && (
               <span style={{ color: '#8a1212', fontSize: '0.85rem' }}>
