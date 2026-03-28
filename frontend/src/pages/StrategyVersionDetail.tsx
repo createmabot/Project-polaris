@@ -27,6 +27,7 @@ type PineDiffSummary = {
 };
 
 type PineDiffExcerpt = {
+  kind: 'modified' | 'removed' | 'added';
   baseLine: string;
   currentLine: string;
 };
@@ -233,15 +234,15 @@ function buildPineDiffExcerpt(
     if (line.type === 'removed') {
       const next = diffLines[i + 1];
       if (next?.type === 'added') {
-        excerpts.push({ baseLine: line.text, currentLine: next.text });
+        excerpts.push({ kind: 'modified', baseLine: line.text, currentLine: next.text });
         i += 1;
         continue;
       }
-      excerpts.push({ baseLine: line.text, currentLine: '' });
+      excerpts.push({ kind: 'removed', baseLine: line.text, currentLine: '' });
       continue;
     }
 
-    excerpts.push({ baseLine: '', currentLine: line.text });
+    excerpts.push({ kind: 'added', baseLine: '', currentLine: line.text });
   }
 
   return excerpts;
@@ -333,6 +334,26 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
     return buildPineDiffExcerpt(compareBase.generated_pine, version?.generated_pine);
   }, [compareBase, pineDiff.changed, version?.generated_pine]);
+
+  const comparisonFocusItems = useMemo(() => {
+    if (!version || !compareBase) {
+      return [] as string[];
+    }
+    const items: string[] = [];
+    if (ruleDiffSummary.hasChanges) {
+      items.push(`ルール文を確認（+${ruleDiffSummary.addedLines} / -${ruleDiffSummary.removedLines}）`);
+    }
+    if (pineDiff.changed) {
+      items.push('Pine 差分抜粋を確認（実装条件のズレ有無）');
+    }
+    if (compareBase.status !== version.status) {
+      items.push(`status 変化を確認（${compareBase.status} -> ${version.status}）`);
+    }
+    if (items.length === 0) {
+      items.push('差分は検出されていません');
+    }
+    return items;
+  }, [compareBase, pineDiff.changed, ruleDiffSummary, version]);
 
   const onRegenerate = async () => {
     setRegenerating(true);
@@ -586,6 +607,14 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               <div style={{ color: '#444', fontSize: '0.9rem' }}>
                 ルール差分: +{ruleDiffSummary.addedLines} / -{ruleDiffSummary.removedLines}
               </div>
+              <div style={{ marginTop: '0.5rem', padding: '0.6rem', borderRadius: '4px', background: '#fff' }}>
+                <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>優先確認ポイント</div>
+                <ol style={{ margin: 0, paddingLeft: '1.2rem', color: '#333', fontSize: '0.9rem' }}>
+                  {comparisonFocusItems.map((item, index) => (
+                    <li key={`${item}-${index}`} style={{ marginBottom: '0.2rem' }}>{item}</li>
+                  ))}
+                </ol>
+              </div>
             </div>
 
             <div style={{ display: 'grid', gap: '0.35rem', marginBottom: '0.8rem' }}>
@@ -633,6 +662,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                   <div style={{ display: 'grid', gap: '0.35rem' }}>
                     {pineDiffExcerpt.map((excerpt, index) => (
                       <div key={`${excerpt.baseLine}-${excerpt.currentLine}-${index}`} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: '4px', padding: '0.5rem' }}>
+                        <div style={{ marginBottom: '0.25rem', fontSize: '0.82rem', color: '#555' }}>
+                          区分: {excerpt.kind === 'modified' ? '変更' : excerpt.kind === 'added' ? '追加' : '削除'}
+                        </div>
                         <div style={{ color: '#a10000', whiteSpace: 'pre-wrap' }}>
                           <strong>- base:</strong> {excerpt.baseLine || '(なし)'}
                         </div>
