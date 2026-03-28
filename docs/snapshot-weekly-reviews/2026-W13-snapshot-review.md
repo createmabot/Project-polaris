@@ -92,6 +92,10 @@ Rules:
 - Recovery run: [Actions run 23608888781](https://github.com/createmabot/Project-polaris/actions/runs/23608888781)
   - `strategy-versions-return-flow-e2e-check`: pending -> PASS
   - PR merge state observed: `CLEAN`
+- Scope update note (post-drill):
+  - PR: [#41](https://github.com/createmabot/Project-polaris/pull/41) (merged on 2026-03-28)
+  - Update: `StrategyVersionList -> StrategyVersionDetail（forward_validation_note edit context）-> List` return-flow scenario added to `StrategyVersionsReturnFlow.e2e.test.ts`
+  - Check result: `strategy-versions-return-flow-e2e-check` PASS in PR #41 required checks
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)

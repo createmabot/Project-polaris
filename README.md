@@ -218,6 +218,11 @@ GitHub Actions で以下のチェックを運用しています。
 - `frontend/src/pages/StrategyVersionsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
 - 例: 一覧復帰 URL の期待を `/strategies/xxx/versions?page=2` から存在しない値に変更して failure を発生させる
 
+確認観点（最新）:
+- 一覧→詳細→一覧の `q/page/status/sort/order` 復帰
+- `要確認差分` を含む一覧状態の保持
+- `StrategyVersionDetail` でのフォワード検証ノート編集文脈を含む return-flow の保持
+
 確認ポイント:
 1. PR checks で対象 check が `pending` になる
 2. 一時破壊コミット後、対象 check が `failure` になる
