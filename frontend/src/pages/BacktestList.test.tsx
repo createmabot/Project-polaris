@@ -24,28 +24,34 @@ import BacktestList, {
 
 describe('buildBacktestListPath', () => {
   it('builds page/limit without query', () => {
-    expect(buildBacktestListPath(2, 20, '')).toBe('/api/backtests?page=2&limit=20');
+    expect(buildBacktestListPath(2, 20, '')).toBe('/api/backtests?page=2&limit=20&sort=created_at&order=desc');
   });
 
   it('builds page/limit with query', () => {
-    expect(buildBacktestListPath(1, 20, 'トヨタ 日足')).toBe('/api/backtests?page=1&limit=20&q=%E3%83%88%E3%83%A8%E3%82%BF+%E6%97%A5%E8%B6%B3');
+    expect(buildBacktestListPath(1, 20, 'トヨタ 日足', 'imported', 'updated_at', 'asc')).toBe('/api/backtests?page=1&limit=20&q=%E3%83%88%E3%83%A8%E3%82%BF+%E6%97%A5%E8%B6%B3&status=imported&sort=updated_at&order=asc');
   });
 });
 
 describe('backtests list query helpers', () => {
   it('parses q/page from url query', () => {
-    expect(parseBacktestsListQuery('/backtests?q=toyota&page=3')).toEqual({ q: 'toyota', page: 3 });
-    expect(parseBacktestsListQuery('/backtests')).toEqual({ q: '', page: 1 });
-    expect(parseBacktestsListQuery('/backtests?page=abc')).toEqual({ q: '', page: 1 });
+    expect(parseBacktestsListQuery('/backtests?q=toyota&page=3&status=imported&sort=updated_at&order=asc')).toEqual({
+      q: 'toyota',
+      page: 3,
+      status: 'imported',
+      sort: 'updated_at',
+      order: 'asc',
+    });
+    expect(parseBacktestsListQuery('/backtests')).toEqual({ q: '', page: 1, status: '', sort: 'created_at', order: 'desc' });
+    expect(parseBacktestsListQuery('/backtests?page=abc')).toEqual({ q: '', page: 1, status: '', sort: 'created_at', order: 'desc' });
   });
 
   it('builds list url from q/page', () => {
-    expect(buildBacktestsListUrl('toyota', 2)).toBe('/backtests?q=toyota&page=2');
+    expect(buildBacktestsListUrl('toyota', 2, 'imported', 'updated_at', 'asc')).toBe('/backtests?q=toyota&status=imported&sort=updated_at&order=asc&page=2');
     expect(buildBacktestsListUrl('', 1)).toBe('/backtests?page=1');
   });
 
   it('builds detail url with encoded return path', () => {
-    expect(buildBacktestDetailUrl('bt-1', 'toyota', 3)).toBe('/backtests/bt-1?return=%2Fbacktests%3Fq%3Dtoyota%26page%3D3');
+    expect(buildBacktestDetailUrl('bt-1', 'toyota', 3, 'imported', 'updated_at', 'asc')).toBe('/backtests/bt-1?return=%2Fbacktests%3Fq%3Dtoyota%26status%3Dimported%26sort%3Dupdated_at%26order%3Dasc%26page%3D3');
   });
 });
 
@@ -69,7 +75,7 @@ describe('BacktestList', () => {
   });
 
   it('renders list and detail link with return query', () => {
-    mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&page=2';
+    mockLocation = '/backtests?q=%E3%83%88%E3%83%A8%E3%82%BF&status=imported&sort=updated_at&order=asc&page=2';
     mockSetLocation.mockReset();
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
@@ -96,7 +102,17 @@ describe('BacktestList', () => {
             },
           },
         ],
-        pagination: { page: 2, limit: 20, q: 'トヨタ', total: 21, has_next: false, has_prev: true },
+        pagination: {
+          page: 2,
+          limit: 20,
+          q: 'トヨタ',
+          status: 'imported',
+          sort: 'updated_at',
+          order: 'asc',
+          total: 21,
+          has_next: false,
+          has_prev: true,
+        },
       },
     });
 
@@ -108,7 +124,7 @@ describe('BacktestList', () => {
     expect(html).toContain('str-1');
     expect(html).toContain('実行時Version');
     expect(html).toContain('ver-1');
-    expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 2));
+    expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 2, 'imported', 'updated_at', 'asc'));
     expect(html).toContain('前へ');
     expect(html).toContain('2 / 2 ページ');
   });

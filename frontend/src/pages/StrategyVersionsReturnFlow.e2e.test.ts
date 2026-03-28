@@ -8,17 +8,17 @@ import { parseStrategyVersionsReturnPath } from './StrategyVersionDetail';
 
 describe('strategy versions list -> detail -> list return flow (E2E-like)', () => {
   it('restores page state after explicit return navigation', () => {
-    const listUrl = buildStrategyVersionsListUrl('str-1', 2, 'RSI');
-    expect(listUrl).toBe('/strategies/str-1/versions?q=RSI&page=2');
+    const listUrl = buildStrategyVersionsListUrl('str-1', 2, 'RSI', 'generated', 'updated_at', 'asc');
+    expect(listUrl).toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2');
 
-    const detailUrl = buildStrategyVersionDetailUrl('str-1', 'ver-10', 2, 'RSI');
-    expect(detailUrl).toBe('/strategy-versions/ver-10?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2');
+    const detailUrl = buildStrategyVersionDetailUrl('str-1', 'ver-10', 2, 'RSI', 'generated', 'updated_at', 'asc');
+    expect(detailUrl).toBe('/strategy-versions/ver-10?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
 
     const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-1');
-    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&page=2');
+    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&page=2&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
-    expect(restored).toEqual({ page: 2, q: 'RSI' });
+    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
   });
 
   it('falls back to null when return path is invalid', () => {
@@ -28,9 +28,9 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
   });
 
   it('normalizes invalid page but preserves q when resolving return path', () => {
-    const detailUrl = '/strategy-versions/ver-10?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3Dabc%26foo%3Dbar';
+    const detailUrl = '/strategy-versions/ver-10?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3Dabc%26foo%3Dbar';
     const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-1');
-    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI');
+    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc');
   });
 });
 

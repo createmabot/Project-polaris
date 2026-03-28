@@ -316,11 +316,17 @@ export type StrategyVersionListData = {
   };
   query?: {
     q: string;
+    status?: string;
+    sort?: string;
+    order?: 'asc' | 'desc' | string;
   };
   pagination: {
     page: number;
     limit: number;
     q: string;
+    status?: string;
+    sort?: string;
+    order?: 'asc' | 'desc' | string;
     total: number;
     has_next: boolean;
     has_prev: boolean;
@@ -421,6 +427,9 @@ export type BacktestListData = {
     page: number;
     limit: number;
     q: string;
+    status?: string;
+    sort?: string;
+    order?: 'asc' | 'desc' | string;
     total: number;
     has_next: boolean;
     has_prev: boolean;

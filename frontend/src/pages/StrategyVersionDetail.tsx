@@ -45,12 +45,24 @@ function normalizeStrategyVersionsReturnPath(decodedPath: string, strategyId: st
   if (rawQ) {
     normalized.set('q', rawQ);
   }
+  const rawStatus = (queryParams.get('status') ?? '').trim();
+  if (rawStatus) {
+    normalized.set('status', rawStatus);
+  }
   const rawPage = queryParams.get('page');
   if (rawPage !== null) {
     const page = Number(rawPage);
     if (Number.isInteger(page) && page > 0 && page !== 1) {
       normalized.set('page', String(page));
     }
+  }
+  const rawSort = (queryParams.get('sort') ?? '').trim();
+  if (rawSort === 'updated_at') {
+    normalized.set('sort', rawSort);
+  }
+  const rawOrder = (queryParams.get('order') ?? '').trim().toLowerCase();
+  if (rawOrder === 'asc') {
+    normalized.set('order', rawOrder);
   }
 
   const query = normalized.toString();

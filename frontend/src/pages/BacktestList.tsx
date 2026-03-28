@@ -25,56 +25,100 @@ function shortId(value: string | null | undefined): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
-export function buildBacktestListPath(page: number, limit: number, q: string): string {
+export type BacktestListQueryState = {
+  q: string;
+  page: number;
+  status: string;
+  sort: 'created_at' | 'updated_at';
+  order: 'asc' | 'desc';
+};
+
+function normalizeBacktestSort(value: string | null | undefined): 'created_at' | 'updated_at' {
+  return value === 'updated_at' ? 'updated_at' : 'created_at';
+}
+
+function normalizeBacktestOrder(value: string | null | undefined): 'asc' | 'desc' {
+  return value === 'asc' ? 'asc' : 'desc';
+}
+
+export function buildBacktestListPath(page: number, limit: number, q: string, status = '', sort: 'created_at' | 'updated_at' = 'created_at', order: 'asc' | 'desc' = 'desc'): string {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('limit', String(limit));
   if (q.trim()) {
     params.set('q', q.trim());
   }
+  if (status.trim()) {
+    params.set('status', status.trim());
+  }
+  params.set('sort', sort);
+  params.set('order', order);
   return `/api/backtests?${params.toString()}`;
 }
 
-export function parseBacktestsListQuery(locationPath: string): { q: string; page: number } {
+export function parseBacktestsListQuery(locationPath: string): BacktestListQueryState {
   const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
   const params = new URLSearchParams(search);
   const q = (params.get('q') ?? '').trim();
   const rawPage = Number(params.get('page') ?? '1');
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
-  return { q, page };
+  const status = (params.get('status') ?? '').trim();
+  const sort = normalizeBacktestSort(params.get('sort'));
+  const order = normalizeBacktestOrder(params.get('order'));
+  return { q, page, status, sort, order };
 }
 
-export function buildBacktestsListUrl(q: string, page: number): string {
+export function buildBacktestsListUrl(
+  q: string,
+  page: number,
+  status = '',
+  sort: 'created_at' | 'updated_at' = 'created_at',
+  order: 'asc' | 'desc' = 'desc',
+): string {
   const params = new URLSearchParams();
   const normalizedQ = q.trim();
   if (normalizedQ) params.set('q', normalizedQ);
+  const normalizedStatus = status.trim();
+  if (normalizedStatus) params.set('status', normalizedStatus);
+  if (sort !== 'created_at') params.set('sort', sort);
+  if (order !== 'desc') params.set('order', order);
   params.set('page', String(page > 0 ? page : 1));
   const query = params.toString();
   return query ? `/backtests?${query}` : '/backtests';
 }
 
-export function buildBacktestDetailUrl(backtestId: string, q: string, page: number): string {
-  const returnPath = buildBacktestsListUrl(q, page);
+export function buildBacktestDetailUrl(
+  backtestId: string,
+  q: string,
+  page: number,
+  status = '',
+  sort: 'created_at' | 'updated_at' = 'created_at',
+  order: 'asc' | 'desc' = 'desc',
+): string {
+  const returnPath = buildBacktestsListUrl(q, page, status, sort, order);
   return `/backtests/${backtestId}?return=${encodeURIComponent(returnPath)}`;
 }
 
 export default function BacktestList() {
   const PAGE_SIZE = 20;
   const [location, setLocation] = useLocation();
-  const { q: appliedQ, page } = parseBacktestsListQuery(location);
+  const { q: appliedQ, page, status: appliedStatus, sort: appliedSort, order: appliedOrder } = parseBacktestsListQuery(location);
   const [inputQ, setInputQ] = useState('');
-  const { data, error, isLoading } = useSWR<BacktestListData>(
-    buildBacktestListPath(page, PAGE_SIZE, appliedQ),
-    swrFetcher
-  );
+  const [inputStatus, setInputStatus] = useState(appliedStatus);
+  const [inputSort, setInputSort] = useState<'created_at' | 'updated_at'>(appliedSort);
+  const [inputOrder, setInputOrder] = useState<'asc' | 'desc'>(appliedOrder);
+  const { data, error, isLoading } = useSWR<BacktestListData>(buildBacktestListPath(page, PAGE_SIZE, appliedQ, appliedStatus, appliedSort, appliedOrder), swrFetcher);
 
   useEffect(() => {
     setInputQ(appliedQ);
-  }, [appliedQ]);
+    setInputStatus(appliedStatus);
+    setInputSort(appliedSort);
+    setInputOrder(appliedOrder);
+  }, [appliedQ, appliedStatus, appliedSort, appliedOrder]);
 
   const onSubmitSearch = (event: FormEvent) => {
     event.preventDefault();
-    setLocation(buildBacktestsListUrl(inputQ, 1));
+    setLocation(buildBacktestsListUrl(inputQ, 1, inputStatus, inputSort, inputOrder));
   };
 
   const onClearSearch = () => {
@@ -131,11 +175,49 @@ export default function BacktestList() {
         >
           クリア
         </button>
+        <select
+          value={inputStatus}
+          onChange={(event) => setInputStatus(event.target.value)}
+          style={{ minWidth: '140px', padding: '0.5rem 0.6rem', borderRadius: '4px', border: '1px solid #ccc' }}
+        >
+          <option value=''>状態: すべて</option>
+          <option value='pending'>pending</option>
+          <option value='imported'>imported</option>
+          <option value='import_failed'>import_failed</option>
+        </select>
+        <select
+          value={inputSort}
+          onChange={(event) => setInputSort((event.target.value === 'updated_at' ? 'updated_at' : 'created_at'))}
+          style={{ minWidth: '140px', padding: '0.5rem 0.6rem', borderRadius: '4px', border: '1px solid #ccc' }}
+        >
+          <option value='created_at'>並び替え: 作成日時</option>
+          <option value='updated_at'>並び替え: 更新日時</option>
+        </select>
+        <select
+          value={inputOrder}
+          onChange={(event) => setInputOrder((event.target.value === 'asc' ? 'asc' : 'desc'))}
+          style={{ minWidth: '120px', padding: '0.5rem 0.6rem', borderRadius: '4px', border: '1px solid #ccc' }}
+        >
+          <option value='desc'>降順</option>
+          <option value='asc'>昇順</option>
+        </select>
       </form>
 
-      {appliedQ && (
-        <div style={{ marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
-          検索条件: <code>{appliedQ}</code>
+      {(appliedQ || appliedStatus || appliedSort !== 'created_at' || appliedOrder !== 'desc') && (
+        <div style={{ marginTop: '0.6rem', color: '#666', fontSize: '0.9rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+          {appliedQ && (
+            <span>
+              検索条件: <code>{appliedQ}</code>
+            </span>
+          )}
+          {appliedStatus && (
+            <span>
+              状態: <code>{appliedStatus}</code>
+            </span>
+          )}
+          <span>
+            並び: <code>{appliedSort}</code> / <code>{appliedOrder}</code>
+          </span>
         </div>
       )}
 
@@ -204,7 +286,7 @@ export default function BacktestList() {
 
                 <div>
                   <Link
-                    href={buildBacktestDetailUrl(item.id, appliedQ, page)}
+                    href={buildBacktestDetailUrl(item.id, appliedQ, page, appliedStatus, appliedSort, appliedOrder)}
                     style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
                   >
                     詳細を開く
@@ -219,7 +301,7 @@ export default function BacktestList() {
       <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
         <button
           type='button'
-          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, Math.max(1, page - 1)))}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, Math.max(1, page - 1), appliedStatus, appliedSort, appliedOrder))}
           disabled={!data.pagination.has_prev}
           style={{
             padding: '0.45rem 0.85rem',
@@ -234,7 +316,7 @@ export default function BacktestList() {
         </button>
         <button
           type='button'
-          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, page + 1))}
+          onClick={() => setLocation(buildBacktestsListUrl(appliedQ, page + 1, appliedStatus, appliedSort, appliedOrder))}
           disabled={!data.pagination.has_next}
           style={{
             padding: '0.45rem 0.85rem',

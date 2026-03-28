@@ -21,7 +21,7 @@ describe('StrategyVersionList', () => {
   it('renders version rows with api pagination data', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&page=1', mockSetLocation]);
+    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=1', mockSetLocation]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -33,11 +33,14 @@ describe('StrategyVersionList', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
-        query: { q: 'RSI' },
+        query: { q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' },
         pagination: {
           page: 1,
           limit: 20,
           q: 'RSI',
+          status: 'generated',
+          sort: 'updated_at',
+          order: 'asc',
           total: 1,
           has_next: false,
           has_prev: false,
@@ -62,9 +65,9 @@ describe('StrategyVersionList', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-1' }} />);
     expect(html).toContain('ver-2');
-    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI');
+    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc');
     expect(html).toContain('value="RSI"');
-    expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=1&limit=20&q=RSI', expect.any(Function));
+    expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=1&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
   });
 
   it('renders no-base badge when version has no compare source', () => {
@@ -82,11 +85,14 @@ describe('StrategyVersionList', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
-        query: { q: '' },
+        query: { q: '', status: '', sort: 'created_at', order: 'desc' },
         pagination: {
           page: 1,
           limit: 20,
           q: '',
+          status: '',
+          sort: 'created_at',
+          order: 'desc',
           total: 1,
           has_next: false,
           has_prev: false,
@@ -114,17 +120,24 @@ describe('StrategyVersionList', () => {
   });
 
   it('parses q/page from URL query and builds list URL with q', () => {
-    expect(parseStrategyVersionsListQuery('/strategies/str-1/versions?q=MA&page=3')).toEqual({
+    expect(parseStrategyVersionsListQuery('/strategies/str-1/versions?q=MA&status=generated&sort=updated_at&order=asc&page=3')).toEqual({
       q: 'MA',
       page: 3,
+      status: 'generated',
+      sort: 'updated_at',
+      order: 'asc',
     });
     expect(parseStrategyVersionsListQuery('/strategies/str-1/versions?page=abc&q=')).toEqual({
       q: '',
       page: 1,
+      status: '',
+      sort: 'created_at',
+      order: 'desc',
     });
 
     expect(buildStrategyVersionsListUrl('str-1', 1, '')).toBe('/strategies/str-1/versions');
     expect(buildStrategyVersionsListUrl('str-1', 1, 'RSI')).toBe('/strategies/str-1/versions?q=RSI');
-    expect(buildStrategyVersionsListUrl('str-1', 2, 'RSI')).toBe('/strategies/str-1/versions?q=RSI&page=2');
+    expect(buildStrategyVersionsListUrl('str-1', 2, 'RSI', 'generated', 'updated_at', 'asc'))
+      .toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2');
   });
 });

@@ -65,9 +65,15 @@ function createRuntime(): Runtime {
 
 vi.mock('../src/db', () => {
   const applyWhere = (rows: BacktestRow[], where: any): BacktestRow[] => {
-    if (!where?.title?.contains) return rows;
-    const contains = String(where.title.contains).toLowerCase();
-    return rows.filter((row) => row.title.toLowerCase().includes(contains));
+    let filtered = rows;
+    if (where?.title?.contains) {
+      const contains = String(where.title.contains).toLowerCase();
+      filtered = filtered.filter((row) => row.title.toLowerCase().includes(contains));
+    }
+    if (where?.status) {
+      filtered = filtered.filter((row) => row.status === where.status);
+    }
+    return filtered;
   };
 
   const prisma = {
@@ -111,6 +117,15 @@ vi.mock('../src/db', () => {
         rows = applyWhere(rows, where);
         if (orderBy?.createdAt === 'desc') {
           rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+        if (orderBy?.createdAt === 'asc') {
+          rows = rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'desc') {
+          rows = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'asc') {
+          rows = rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
         }
         if (typeof skip === 'number') {
           rows = rows.slice(skip);
@@ -488,6 +503,68 @@ describe('backtest import vertical slice', () => {
     expect(bodyPage2.data.backtests[0].title).toContain('トヨタ');
     expect(bodyPage2.data.pagination.has_prev).toBe(true);
     expect(bodyPage2.data.pagination.has_next).toBe(false);
+
+    await app.close();
+  });
+
+  it('filters and sorts backtests with status/sort/order while preserving pagination', async () => {
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'Draft target',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const firstId = first.json().data.backtest.id as string;
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'Imported target',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const secondId = second.json().data.backtest.id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${secondId}/imports`,
+      payload: {
+        file_name: 'ok.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV,
+      },
+    });
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: '/api/backtests?page=1&limit=20&status=pending&sort=updated_at&order=asc',
+    });
+    expect(filtered.statusCode).toBe(200);
+    const body = filtered.json();
+    expect(body.data.pagination.status).toBe('pending');
+    expect(body.data.pagination.sort).toBe('updated_at');
+    expect(body.data.pagination.order).toBe('asc');
+    expect(body.data.backtests).toHaveLength(1);
+    expect(body.data.backtests[0].id).toBe(firstId);
+    expect(body.data.backtests[0].status).toBe('pending');
+
+    const importedOnly = await app.inject({
+      method: 'GET',
+      url: '/api/backtests?page=1&limit=20&status=imported',
+    });
+    expect(importedOnly.statusCode).toBe(200);
+    expect(importedOnly.json().data.backtests[0].id).toBe(secondId);
 
     await app.close();
   });

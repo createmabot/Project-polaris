@@ -10,21 +10,57 @@ type StrategyVersionListProps = {
 
 const PAGE_SIZE = 20;
 
-export function parseStrategyVersionsListQuery(locationPath: string): { page: number; q: string } {
+export type StrategyVersionsListQueryState = {
+  page: number;
+  q: string;
+  status: string;
+  sort: 'created_at' | 'updated_at';
+  order: 'asc' | 'desc';
+};
+
+function normalizeStrategyVersionsSort(value: string | null | undefined): 'created_at' | 'updated_at' {
+  return value === 'updated_at' ? 'updated_at' : 'created_at';
+}
+
+function normalizeStrategyVersionsOrder(value: string | null | undefined): 'asc' | 'desc' {
+  return value === 'asc' ? 'asc' : 'desc';
+}
+
+export function parseStrategyVersionsListQuery(locationPath: string): StrategyVersionsListQueryState {
   const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
   const params = new URLSearchParams(search);
   const rawPage = Number(params.get('page') ?? '1');
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const q = (params.get('q') ?? '').trim();
-  return { page, q };
+  const status = (params.get('status') ?? '').trim();
+  const sort = normalizeStrategyVersionsSort(params.get('sort'));
+  const order = normalizeStrategyVersionsOrder(params.get('order'));
+  return { page, q, status, sort, order };
 }
 
-export function buildStrategyVersionsListUrl(strategyId: string, page: number, q = ''): string {
+export function buildStrategyVersionsListUrl(
+  strategyId: string,
+  page: number,
+  q = '',
+  status = '',
+  sort: 'created_at' | 'updated_at' = 'created_at',
+  order: 'asc' | 'desc' = 'desc',
+): string {
   const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
   const normalizedQ = q.trim();
+  const normalizedStatus = status.trim();
   const params = new URLSearchParams();
   if (normalizedQ) {
     params.set('q', normalizedQ);
+  }
+  if (normalizedStatus) {
+    params.set('status', normalizedStatus);
+  }
+  if (sort !== 'created_at') {
+    params.set('sort', sort);
+  }
+  if (order !== 'desc') {
+    params.set('order', order);
   }
   if (normalizedPage > 1) {
     params.set('page', String(normalizedPage));
@@ -33,20 +69,34 @@ export function buildStrategyVersionsListUrl(strategyId: string, page: number, q
   return query ? `/strategies/${strategyId}/versions?${query}` : `/strategies/${strategyId}/versions`;
 }
 
-export function buildStrategyVersionDetailUrl(strategyId: string, versionId: string, page: number, q = ''): string {
-  const returnPath = buildStrategyVersionsListUrl(strategyId, page, q);
+export function buildStrategyVersionDetailUrl(
+  strategyId: string,
+  versionId: string,
+  page: number,
+  q = '',
+  status = '',
+  sort: 'created_at' | 'updated_at' = 'created_at',
+  order: 'asc' | 'desc' = 'desc',
+): string {
+  const returnPath = buildStrategyVersionsListUrl(strategyId, page, q, status, sort, order);
   return `/strategy-versions/${versionId}?return=${encodeURIComponent(returnPath)}`;
 }
 
 export default function StrategyVersionList({ params }: StrategyVersionListProps) {
   const { strategyId } = params;
   const [location, setLocation] = useLocation();
-  const { page, q } = parseStrategyVersionsListQuery(location);
+  const { page, q, status, sort, order } = parseStrategyVersionsListQuery(location);
   const [searchInput, setSearchInput] = useState(q);
+  const [statusInput, setStatusInput] = useState(status);
+  const [sortInput, setSortInput] = useState<'created_at' | 'updated_at'>(sort);
+  const [orderInput, setOrderInput] = useState<'asc' | 'desc'>(order);
 
   useEffect(() => {
     setSearchInput(q);
-  }, [q, strategyId]);
+    setStatusInput(status);
+    setSortInput(sort);
+    setOrderInput(order);
+  }, [q, status, sort, order, strategyId]);
 
   const listApiPath = useMemo(() => {
     const params = new URLSearchParams();
@@ -55,8 +105,13 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (q) {
       params.set('q', q);
     }
+    if (status) {
+      params.set('status', status);
+    }
+    params.set('sort', sort);
+    params.set('order', order);
     return `/api/strategies/${strategyId}/versions?${params.toString()}`;
-  }, [strategyId, page, q]);
+  }, [strategyId, page, q, status, sort, order]);
 
   const { data, error, isLoading } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
 
@@ -92,12 +147,15 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
 
   const onSearch = (event: FormEvent) => {
     event.preventDefault();
-    setLocation(buildStrategyVersionsListUrl(strategyId, 1, searchInput));
+    setLocation(buildStrategyVersionsListUrl(strategyId, 1, searchInput, statusInput, sortInput, orderInput));
   };
 
   const onClear = () => {
     setSearchInput('');
-    setLocation(buildStrategyVersionsListUrl(strategyId, 1, ''));
+    setStatusInput('');
+    setSortInput('created_at');
+    setOrderInput('desc');
+    setLocation(buildStrategyVersionsListUrl(strategyId, 1, '', '', 'created_at', 'desc'));
   };
 
   return (
@@ -153,11 +211,49 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         >
           クリア
         </button>
+        <select
+          value={statusInput}
+          onChange={(event) => setStatusInput(event.target.value)}
+          style={{ padding: '0.5rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+        >
+          <option value=''>状態: すべて</option>
+          <option value='draft'>draft</option>
+          <option value='generated'>generated</option>
+          <option value='failed'>failed</option>
+        </select>
+        <select
+          value={sortInput}
+          onChange={(event) => setSortInput(event.target.value === 'updated_at' ? 'updated_at' : 'created_at')}
+          style={{ padding: '0.5rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+        >
+          <option value='created_at'>並び替え: 作成日時</option>
+          <option value='updated_at'>並び替え: 更新日時</option>
+        </select>
+        <select
+          value={orderInput}
+          onChange={(event) => setOrderInput(event.target.value === 'asc' ? 'asc' : 'desc')}
+          style={{ padding: '0.5rem 0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+        >
+          <option value='desc'>降順</option>
+          <option value='asc'>昇順</option>
+        </select>
       </form>
 
-      {q && (
-        <div style={{ marginTop: '0.45rem', color: '#666', fontSize: '0.9rem' }}>
-          検索中: <code>{q}</code>
+      {(q || status || sort !== 'created_at' || order !== 'desc') && (
+        <div style={{ marginTop: '0.45rem', color: '#666', fontSize: '0.9rem', display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
+          {q && (
+            <span>
+              検索中: <code>{q}</code>
+            </span>
+          )}
+          {status && (
+            <span>
+              状態: <code>{status}</code>
+            </span>
+          )}
+          <span>
+            並び: <code>{sort}</code> / <code>{order}</code>
+          </span>
         </div>
       )}
 
@@ -203,7 +299,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
               </div>
               <div>
                 <Link
-                  href={buildStrategyVersionDetailUrl(strategyId, version.id, normalizedPage, q)}
+                  href={buildStrategyVersionDetailUrl(strategyId, version.id, normalizedPage, q, status, sort, order)}
                   style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
                 >
                   version 詳細を開く
@@ -218,7 +314,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button
             type='button'
-            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1), q))}
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1), q, status, sort, order))}
             disabled={!data.pagination.has_prev}
             style={{
               padding: '0.45rem 0.85rem',
@@ -233,7 +329,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           </button>
           <button
             type='button'
-            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1, q))}
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1, q, status, sort, order))}
             disabled={!data.pagination.has_next}
             style={{
               padding: '0.45rem 0.85rem',
