@@ -37,7 +37,12 @@ export function resolvePriorityVersionIdFromHash(
     return null;
   }
 
-  const decodedId = decodeURIComponent(rawId);
+  let decodedId: string;
+  try {
+    decodedId = decodeURIComponent(rawId);
+  } catch {
+    return null;
+  }
   const match = versions.find(
     (version) =>
       version.id === decodedId &&
@@ -152,6 +157,39 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
 
   const { data, error, isLoading } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const versions = data?.strategy_versions ?? [];
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const applyHashHighlight = () => {
+      const targetId = resolvePriorityVersionIdFromHash(window.location.hash, versions);
+      setHighlightedPriorityVersionId(targetId);
+      setPriorityCursorVersionId((current) => targetId ?? current);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (targetId) {
+        timeoutId = setTimeout(() => {
+          setHighlightedPriorityVersionId(null);
+        }, 2200);
+      }
+    };
+
+    applyHashHighlight();
+    window.addEventListener('hashchange', applyHashHighlight);
+    return () => {
+      window.removeEventListener('hashchange', applyHashHighlight);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [data?.strategy_versions]);
+
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
   if (!data) return null;
@@ -208,38 +246,6 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const needsReviewWithNoteCount = data.strategy_versions.filter(isNeedsReviewWithNote).length;
   const firstNeedsReviewWithNoteVersion = data.strategy_versions.find(isNeedsReviewWithNote);
   const priorityVersionIds = data.strategy_versions.filter(isNeedsReviewWithNote).map((version) => version.id);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const applyHashHighlight = () => {
-      const targetId = resolvePriorityVersionIdFromHash(window.location.hash, data.strategy_versions);
-      setHighlightedPriorityVersionId(targetId);
-      setPriorityCursorVersionId((current) => targetId ?? current);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      if (targetId) {
-        timeoutId = setTimeout(() => {
-          setHighlightedPriorityVersionId(null);
-        }, 2200);
-      }
-    };
-
-    applyHashHighlight();
-    window.addEventListener('hashchange', applyHashHighlight);
-    return () => {
-      window.removeEventListener('hashchange', applyHashHighlight);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-    };
-  }, [data.strategy_versions]);
 
   const moveToNextPriorityVersion = () => {
     if (typeof window === 'undefined' || priorityVersionIds.length === 0) {
