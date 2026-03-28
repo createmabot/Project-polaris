@@ -222,6 +222,7 @@ GitHub Actions で以下のチェックを運用しています。
 確認観点（最新）:
 - 一覧→詳細→一覧の `q/page/status/sort/order` 復帰
 - `要確認差分` を含む一覧状態の保持
+- `検証ノートあり` 行（フォワード検証ノートあり）を含む一覧状態の保持
 - `StrategyVersionDetail` でのフォワード検証ノート編集文脈を含む return-flow の保持
 
 確認ポイント:
