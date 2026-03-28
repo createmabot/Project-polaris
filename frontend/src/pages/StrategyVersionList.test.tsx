@@ -51,6 +51,7 @@ describe('StrategyVersionList', () => {
             strategy_id: 'str-1',
             cloned_from_version_id: 'ver-1',
             is_derived: true,
+            has_forward_validation_note: true,
             has_diff_from_clone: true,
             market: 'JP_STOCK',
             timeframe: 'D',
@@ -67,6 +68,7 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('ver-2');
     expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
     expect(html).toContain('要確認差分');
+    expect(html).toContain('検証ノートあり');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
     expect(html).toContain('value="RSI"');
     expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=2&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
@@ -105,6 +107,7 @@ describe('StrategyVersionList', () => {
             strategy_id: 'str-2',
             cloned_from_version_id: null,
             is_derived: false,
+            has_forward_validation_note: false,
             has_diff_from_clone: null,
             market: 'JP_STOCK',
             timeframe: 'D',
@@ -120,6 +123,7 @@ describe('StrategyVersionList', () => {
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
     expect(html).toContain('ver-10');
     expect(html).toContain('このページの要確認差分: <strong>0</strong> 件');
+    expect(html).not.toContain('検証ノートあり');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
 
