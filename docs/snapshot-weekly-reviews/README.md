@@ -35,8 +35,8 @@ Manual fallback:
 - Threshold tuning is env-only operation (no code change for normal adjustments).
 
 ## Required check failure drill (quarterly)
-- Purpose: verify `snapshot-review-generator-json-check` still blocks PR merge when failing.
+- Purpose: verify required checks (`snapshot-review-generator-json-check`, `backtests-return-flow-e2e-check`, `strategy-versions-return-flow-e2e-check`) still block PR merge when failing.
 - Frequency: run at least once per quarter, or after ruleset/required-check updates.
 - See runbook in root `README.md` section:
-  - `Required-check failure drill (snapshot-review-generator-json-check)`
+  - `Required-check failure drill（運用確認）`
 - Record drill date/result in the weekly review log when executed.
