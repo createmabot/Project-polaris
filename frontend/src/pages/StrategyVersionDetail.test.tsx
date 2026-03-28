@@ -169,11 +169,15 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('比較元との差分（最小）');
     expect(html).toContain('比較サマリ');
     expect(html).toContain('全体: 変更あり');
+    expect(html).toContain('優先確認ポイント');
+    expect(html).toContain('ルール文を確認');
+    expect(html).toContain('Pine 差分抜粋を確認');
     expect(html).toContain('ルール差分: +');
     expect(html).toContain('自然言語ルール差分');
     expect(html).toContain('Pine 差分（最小）');
     expect(html).toContain('変更有無:</strong> 変更あり');
     expect(html).toContain('差分抜粋（先頭');
+    expect(html).toContain('区分: 変更');
     expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
     expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
     expect(html).toContain('href="/strategies/str-1/versions?q=RSI&amp;page=2"');
@@ -192,6 +196,7 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較サマリ');
     expect(html).toContain('全体: 変更あり');
+    expect(html).toContain('優先確認ポイント');
     expect(html).toContain('Pine: 変更なし');
     expect(html).toContain('変更有無:</strong> 変更なし');
     expect(html).not.toContain('差分抜粋（先頭');
