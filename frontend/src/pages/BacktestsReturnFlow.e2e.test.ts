@@ -17,7 +17,7 @@ describe('backtests list -> detail -> list return flow (E2E-like)', () => {
     expect(restored).toEqual({ q: 'ma', page: 2 });
 
     const apiPath = buildBacktestListPath(restored.page, 20, restored.q);
-    expect(apiPath).toBe('/api/backtests?page=999&limit=20&q=ma');
+    expect(apiPath).toBe('/api/backtests?page=2&limit=20&q=ma');
   });
 
   it('falls back to /backtests when return is invalid', () => {
