@@ -21,7 +21,7 @@ describe('StrategyVersionList', () => {
   it('renders version rows with api pagination data', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=1', mockSetLocation]);
+    mockUseLocation.mockReturnValue(['/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2', mockSetLocation]);
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -35,15 +35,15 @@ describe('StrategyVersionList', () => {
         },
         query: { q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' },
         pagination: {
-          page: 1,
+          page: 2,
           limit: 20,
           q: 'RSI',
           status: 'generated',
           sort: 'updated_at',
           order: 'asc',
-          total: 1,
+          total: 21,
           has_next: false,
-          has_prev: false,
+          has_prev: true,
         },
         strategy_versions: [
           {
@@ -67,9 +67,9 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('ver-2');
     expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
     expect(html).toContain('要確認差分');
-    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc');
+    expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
     expect(html).toContain('value="RSI"');
-    expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=1&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
+    expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=2&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
   });
 
   it('renders no-base badge when version has no compare source', () => {
