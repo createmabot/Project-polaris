@@ -169,6 +169,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const needsReviewCount = data.strategy_versions.filter(isNeedsReviewDiff).length;
   const noteCount = data.strategy_versions.filter((version) => version.has_forward_validation_note).length;
   const needsReviewWithNoteCount = data.strategy_versions.filter(isNeedsReviewWithNote).length;
+  const firstNeedsReviewWithNoteVersion = data.strategy_versions.find(isNeedsReviewWithNote);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -285,6 +286,14 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
               要確認差分かつ検証ノートあり: <strong>{needsReviewWithNoteCount}</strong> 件
             </span>
+            {firstNeedsReviewWithNoteVersion && (
+              <a
+                href={`#priority-version-${firstNeedsReviewWithNoteVersion.id}`}
+                style={{ color: '#0a5bb5', fontSize: '0.85rem', textDecoration: 'none', fontWeight: 600 }}
+              >
+                最優先確認の先頭へ移動
+              </a>
+            )}
             {needsReviewWithNoteCount > 0 && (
               <span style={{ color: '#8a1212', fontSize: '0.85rem' }}>
                 `最優先確認` バッジ付き version から確認してください
@@ -299,6 +308,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           {data.strategy_versions.map((version) => (
             <div
               key={version.id}
+              id={isNeedsReviewWithNote(version) ? `priority-version-${version.id}` : undefined}
               style={{
                 border: isNeedsReviewWithNote(version)
                   ? '1px solid #e58080'
