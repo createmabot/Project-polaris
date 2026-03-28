@@ -79,6 +79,8 @@ pnpm run down
   - status フィルタ、sort/order（`created_at|updated_at` × `asc|desc`）に対応
   - version 一覧で `要確認差分`（派生かつ差分あり）を最小強調表示
   - version 一覧で `検証ノートあり`（フォワード検証ノート有無）を最小表示
+  - version 一覧で `要確認差分` かつ `検証ノートあり` を `最優先確認` として最小強調表示
+  - version 一覧ヘッダで `要確認差分` / `検証ノートあり` / `要確認差分かつ検証ノートあり` のページ内件数を表示
   - 一覧URLは `q/page/status/sort/order` をクエリ同期し、詳細から `return` で同じ一覧状態に復帰可能
 
 ### CSV取込（MVPでサポートする形式）

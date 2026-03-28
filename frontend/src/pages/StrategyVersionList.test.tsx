@@ -123,7 +123,8 @@ describe('StrategyVersionList', () => {
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
     expect(html).toContain('ver-10');
     expect(html).toContain('このページの要確認差分: <strong>0</strong> 件');
-    expect(html).not.toContain('検証ノートあり');
+    expect(html).toContain('検証ノートあり: <strong>0</strong> 件');
+    expect(html).not.toContain('検証ノートあり</span>');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
 
@@ -147,5 +148,102 @@ describe('StrategyVersionList', () => {
     expect(buildStrategyVersionsListUrl('str-1', 1, 'RSI')).toBe('/strategies/str-1/versions?q=RSI');
     expect(buildStrategyVersionsListUrl('str-1', 2, 'RSI', 'generated', 'updated_at', 'asc'))
       .toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2');
+  });
+
+  it('shows combined priority signal for versions with both diff and forward note', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategies/str-3/versions', mockSetLocation]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        strategy: {
+          id: 'str-3',
+          title: '検証優先度テスト',
+          status: 'active',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        query: { q: '', status: '', sort: 'created_at', order: 'desc' },
+        pagination: {
+          page: 1,
+          limit: 20,
+          q: '',
+          status: '',
+          sort: 'created_at',
+          order: 'desc',
+          total: 4,
+          has_next: false,
+          has_prev: false,
+        },
+        strategy_versions: [
+          {
+            id: 'ver-priority',
+            strategy_id: 'str-3',
+            cloned_from_version_id: 'ver-base',
+            is_derived: true,
+            has_forward_validation_note: true,
+            has_diff_from_clone: true,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'generated',
+            has_warnings: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'ver-diff-only',
+            strategy_id: 'str-3',
+            cloned_from_version_id: 'ver-base',
+            is_derived: true,
+            has_forward_validation_note: false,
+            has_diff_from_clone: true,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'generated',
+            has_warnings: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'ver-note-only',
+            strategy_id: 'str-3',
+            cloned_from_version_id: null,
+            is_derived: false,
+            has_forward_validation_note: true,
+            has_diff_from_clone: null,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'draft',
+            has_warnings: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'ver-normal',
+            strategy_id: 'str-3',
+            cloned_from_version_id: null,
+            is_derived: false,
+            has_forward_validation_note: false,
+            has_diff_from_clone: null,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'draft',
+            has_warnings: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+
+    const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-3' }} />);
+    expect(html).toContain('このページの要確認差分: <strong>2</strong> 件');
+    expect(html).toContain('検証ノートあり: <strong>2</strong> 件');
+    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
+    expect(html).toContain('`最優先確認` バッジ付き version から確認してください');
+    expect(html).toContain('ver-priority');
+    expect(html).toContain('最優先確認');
   });
 });

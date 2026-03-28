@@ -132,7 +132,10 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const isNeedsReviewDiff = (version: StrategyVersionListData['strategy_versions'][number]) =>
     version.is_derived && version.has_diff_from_clone === true;
 
-  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note') => {
+  const isNeedsReviewWithNote = (version: StrategyVersionListData['strategy_versions'][number]) =>
+    isNeedsReviewDiff(version) && version.has_forward_validation_note;
+
+  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note' | 'priority') => {
     const style = {
       display: 'inline-block',
       padding: '0.2rem 0.5rem',
@@ -146,6 +149,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (kind === 'no-diff') return { ...style, background: '#eef8ee', color: '#1f6a1f' };
     if (kind === 'no-base') return { ...style, background: '#f3f3f3', color: '#666' };
     if (kind === 'note') return { ...style, background: '#fff7dd', color: '#755200' };
+    if (kind === 'priority') return { ...style, background: '#ffdede', color: '#8a1212' };
     return { ...style, background: '#f0f1f5', color: '#333' };
   };
 
@@ -161,6 +165,10 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     setOrderInput('desc');
     setLocation(buildStrategyVersionsListUrl(strategyId, 1, '', '', 'created_at', 'desc'));
   };
+
+  const needsReviewCount = data.strategy_versions.filter(isNeedsReviewDiff).length;
+  const noteCount = data.strategy_versions.filter((version) => version.has_forward_validation_note).length;
+  const needsReviewWithNoteCount = data.strategy_versions.filter(isNeedsReviewWithNote).length;
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -269,9 +277,20 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
           <div style={{ padding: '0.65rem 0.8rem', border: '1px solid #e5e5e5', borderRadius: '6px', background: '#fafafa', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
-              このページの要確認差分: <strong>{data.strategy_versions.filter(isNeedsReviewDiff).length}</strong> 件
+              このページの要確認差分: <strong>{needsReviewCount}</strong> 件
             </span>
-            {data.strategy_versions.filter(isNeedsReviewDiff).length > 0 && (
+            <span style={{ color: '#333', fontSize: '0.9rem' }}>
+              検証ノートあり: <strong>{noteCount}</strong> 件
+            </span>
+            <span style={{ color: '#333', fontSize: '0.9rem' }}>
+              要確認差分かつ検証ノートあり: <strong>{needsReviewWithNoteCount}</strong> 件
+            </span>
+            {needsReviewWithNoteCount > 0 && (
+              <span style={{ color: '#8a1212', fontSize: '0.85rem' }}>
+                `最優先確認` バッジ付き version から確認してください
+              </span>
+            )}
+            {needsReviewCount > 0 && (
               <span style={{ color: '#666', fontSize: '0.85rem' }}>
                 `要確認差分` バッジ付き version を優先確認してください
               </span>
@@ -281,12 +300,20 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
             <div
               key={version.id}
               style={{
-                border: isNeedsReviewDiff(version) ? '1px solid #f0b46d' : '1px solid #ddd',
+                border: isNeedsReviewWithNote(version)
+                  ? '1px solid #e58080'
+                  : isNeedsReviewDiff(version)
+                    ? '1px solid #f0b46d'
+                    : '1px solid #ddd',
                 borderRadius: '8px',
                 padding: '1rem',
                 display: 'grid',
                 gap: '0.45rem',
-                background: isNeedsReviewDiff(version) ? '#fffaf3' : '#fff',
+                background: isNeedsReviewWithNote(version)
+                  ? '#fff5f5'
+                  : isNeedsReviewDiff(version)
+                    ? '#fffaf3'
+                    : '#fff',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap' }}>
@@ -303,6 +330,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 ) : (
                   <span style={badgeStyle('no-base')}>比較元なし</span>
                 )}
+                {isNeedsReviewWithNote(version) && <span style={badgeStyle('priority')}>最優先確認</span>}
                 {isNeedsReviewDiff(version) && <span style={{ ...badgeStyle('diff'), background: '#ffedd4' }}>要確認差分</span>}
                 {version.has_diff_from_clone === true && <span style={badgeStyle('diff')}>差分あり</span>}
                 {version.has_diff_from_clone === false && <span style={badgeStyle('no-diff')}>差分なし</span>}
