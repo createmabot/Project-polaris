@@ -73,6 +73,7 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
     expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
     expect(html).toContain('href="#priority-version-ver-2"');
+    expect(html).not.toContain('次の最優先確認へ');
     expect(html).toContain('要確認差分');
     expect(html).toContain('検証ノートあり');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
@@ -132,6 +133,7 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('検証ノートあり: <strong>0</strong> 件');
     expect(html).toContain('要確認差分かつ検証ノートあり: <strong>0</strong> 件');
     expect(html).not.toContain('最優先確認の先頭へ移動');
+    expect(html).not.toContain('次の最優先確認へ');
     expect(html).not.toContain('検証ノートあり</span>');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
@@ -202,7 +204,7 @@ describe('StrategyVersionList', () => {
           status: '',
           sort: 'created_at',
           order: 'desc',
-          total: 4,
+          total: 5,
           has_next: false,
           has_prev: false,
         },
@@ -227,6 +229,20 @@ describe('StrategyVersionList', () => {
             cloned_from_version_id: 'ver-base',
             is_derived: true,
             has_forward_validation_note: false,
+            has_diff_from_clone: true,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'generated',
+            has_warnings: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'ver-priority-2',
+            strategy_id: 'str-3',
+            cloned_from_version_id: 'ver-base',
+            is_derived: true,
+            has_forward_validation_note: true,
             has_diff_from_clone: true,
             market: 'JP_STOCK',
             timeframe: 'D',
@@ -268,10 +284,11 @@ describe('StrategyVersionList', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-3' }} />);
-    expect(html).toContain('このページの要確認差分: <strong>2</strong> 件');
-    expect(html).toContain('検証ノートあり: <strong>2</strong> 件');
-    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
+    expect(html).toContain('このページの要確認差分: <strong>3</strong> 件');
+    expect(html).toContain('検証ノートあり: <strong>3</strong> 件');
+    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>2</strong> 件');
     expect(html).toContain('最優先確認の先頭へ移動');
+    expect(html).toContain('次の最優先確認へ');
     expect(html).toContain('id="priority-version-ver-priority"');
     expect(html).toContain('href="#priority-version-ver-priority"');
     expect(html).toContain('`最優先確認` バッジ付き version から確認してください');
