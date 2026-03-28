@@ -47,5 +47,21 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
     expect(restored).toEqual({ page: 3, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
   });
+
+  it('keeps list state after forward validation note editing flow on detail page', () => {
+    const listUrl = buildStrategyVersionsListUrl('str-9', 2, 'MA', 'draft', 'updated_at', 'asc');
+    expect(listUrl).toBe('/strategies/str-9/versions?q=MA&status=draft&sort=updated_at&order=asc&page=2');
+
+    const detailUrl = buildStrategyVersionDetailUrl('str-9', 'ver-note-1', 2, 'MA', 'draft', 'updated_at', 'asc');
+    expect(detailUrl).toContain('/strategy-versions/ver-note-1?return=');
+
+    // ノート保存は同一 detail URL 上で完結するため、return の復帰先は変わらない。
+    const detailUrlAfterNoteSave = detailUrl;
+    const resolvedReturn = parseStrategyVersionsReturnPath(detailUrlAfterNoteSave, 'str-9');
+    expect(resolvedReturn).toBe('/strategies/str-9/versions?q=MA&status=draft&page=2&sort=updated_at&order=asc');
+
+    const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-9/versions');
+    expect(restored).toEqual({ page: 2, q: 'MA', status: 'draft', sort: 'updated_at', order: 'asc' });
+  });
 });
 
