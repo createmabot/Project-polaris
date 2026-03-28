@@ -9,6 +9,7 @@ type StrategyVersionListProps = {
 };
 
 const PAGE_SIZE = 20;
+const PRIORITY_VERSION_HASH_PREFIX = '#priority-version-';
 
 export type StrategyVersionsListQueryState = {
   page: number;
@@ -17,6 +18,36 @@ export type StrategyVersionsListQueryState = {
   sort: 'created_at' | 'updated_at';
   order: 'asc' | 'desc';
 };
+
+export function resolvePriorityVersionIdFromHash(
+  hash: string,
+  versions: Array<{
+    id: string;
+    is_derived: boolean;
+    has_diff_from_clone: boolean | null;
+    has_forward_validation_note: boolean;
+  }>,
+): string | null {
+  if (!hash.startsWith(PRIORITY_VERSION_HASH_PREFIX)) {
+    return null;
+  }
+
+  const rawId = hash.slice(PRIORITY_VERSION_HASH_PREFIX.length).trim();
+  if (!rawId) {
+    return null;
+  }
+
+  const decodedId = decodeURIComponent(rawId);
+  const match = versions.find(
+    (version) =>
+      version.id === decodedId &&
+      version.is_derived &&
+      version.has_diff_from_clone === true &&
+      version.has_forward_validation_note,
+  );
+
+  return match ? match.id : null;
+}
 
 function normalizeStrategyVersionsSort(value: string | null | undefined): 'created_at' | 'updated_at' {
   return value === 'updated_at' ? 'updated_at' : 'created_at';
@@ -90,6 +121,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const [statusInput, setStatusInput] = useState(status);
   const [sortInput, setSortInput] = useState<'created_at' | 'updated_at'>(sort);
   const [orderInput, setOrderInput] = useState<'asc' | 'desc'>(order);
+  const [highlightedPriorityVersionId, setHighlightedPriorityVersionId] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchInput(q);
@@ -170,6 +202,37 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const noteCount = data.strategy_versions.filter((version) => version.has_forward_validation_note).length;
   const needsReviewWithNoteCount = data.strategy_versions.filter(isNeedsReviewWithNote).length;
   const firstNeedsReviewWithNoteVersion = data.strategy_versions.find(isNeedsReviewWithNote);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const applyHashHighlight = () => {
+      const targetId = resolvePriorityVersionIdFromHash(window.location.hash, data.strategy_versions);
+      setHighlightedPriorityVersionId(targetId);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (targetId) {
+        timeoutId = setTimeout(() => {
+          setHighlightedPriorityVersionId(null);
+        }, 2200);
+      }
+    };
+
+    applyHashHighlight();
+    window.addEventListener('hashchange', applyHashHighlight);
+    return () => {
+      window.removeEventListener('hashchange', applyHashHighlight);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [data.strategy_versions]);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -310,7 +373,9 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
               key={version.id}
               id={isNeedsReviewWithNote(version) ? `priority-version-${version.id}` : undefined}
               style={{
-                border: isNeedsReviewWithNote(version)
+                border: highlightedPriorityVersionId === version.id
+                  ? '2px solid #d62828'
+                  : isNeedsReviewWithNote(version)
                   ? '1px solid #e58080'
                   : isNeedsReviewDiff(version)
                     ? '1px solid #f0b46d'
@@ -319,11 +384,15 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 padding: '1rem',
                 display: 'grid',
                 gap: '0.45rem',
-                background: isNeedsReviewWithNote(version)
+                background: highlightedPriorityVersionId === version.id
+                  ? '#ffecec'
+                  : isNeedsReviewWithNote(version)
                   ? '#fff5f5'
                   : isNeedsReviewDiff(version)
                     ? '#fffaf3'
                     : '#fff',
+                boxShadow: highlightedPriorityVersionId === version.id ? '0 0 0 3px rgba(214, 40, 40, 0.15)' : 'none',
+                transition: 'background-color 220ms ease, box-shadow 220ms ease, border-color 220ms ease',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap' }}>

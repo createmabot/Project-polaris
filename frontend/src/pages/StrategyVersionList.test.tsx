@@ -15,7 +15,11 @@ vi.mock('wouter', () => ({
   useLocation: () => mockUseLocation(),
 }));
 
-import StrategyVersionList, { buildStrategyVersionsListUrl, parseStrategyVersionsListQuery } from './StrategyVersionList';
+import StrategyVersionList, {
+  buildStrategyVersionsListUrl,
+  parseStrategyVersionsListQuery,
+  resolvePriorityVersionIdFromHash,
+} from './StrategyVersionList';
 
 describe('StrategyVersionList', () => {
   it('renders version rows with api pagination data', () => {
@@ -152,6 +156,27 @@ describe('StrategyVersionList', () => {
     expect(buildStrategyVersionsListUrl('str-1', 1, 'RSI')).toBe('/strategies/str-1/versions?q=RSI');
     expect(buildStrategyVersionsListUrl('str-1', 2, 'RSI', 'generated', 'updated_at', 'asc'))
       .toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2');
+  });
+
+  it('resolves priority target id only for eligible hash + version combination', () => {
+    const versions = [
+      {
+        id: 'ver-priority',
+        is_derived: true,
+        has_diff_from_clone: true,
+        has_forward_validation_note: true,
+      },
+      {
+        id: 'ver-normal',
+        is_derived: false,
+        has_diff_from_clone: null,
+        has_forward_validation_note: false,
+      },
+    ];
+
+    expect(resolvePriorityVersionIdFromHash('#priority-version-ver-priority', versions)).toBe('ver-priority');
+    expect(resolvePriorityVersionIdFromHash('#priority-version-ver-normal', versions)).toBeNull();
+    expect(resolvePriorityVersionIdFromHash('#other-hash', versions)).toBeNull();
   });
 
   it('shows combined priority signal for versions with both diff and forward note', () => {
