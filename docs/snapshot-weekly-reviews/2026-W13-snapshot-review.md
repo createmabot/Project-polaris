@@ -105,6 +105,9 @@ Rules:
   - PR: [#49](https://github.com/createmabot/Project-polaris/pull/49) (merged on 2026-03-29 JST)
   - Update: `最優先確認` 件数サマリからページ内先頭対象へジャンプする最小導線を追加し、`要確認差分` × `検証ノートあり` の優先対象へ到達しやすい return-flow 文脈を固定化
   - Check result: [Actions run 23691713097](https://github.com/createmabot/Project-polaris/actions/runs/23691713097) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
+  - PR: [#51](https://github.com/createmabot/Project-polaris/pull/51) (merged on 2026-03-29 JST)
+  - Update: `最優先確認` 件数サマリからジャンプした直後に対象カードを一時ハイライトする最小視認補助を追加し、ページ内到達後の見失いにくさを return-flow 文脈に含めて固定化
+  - Check result: [Actions run 23692242218](https://github.com/createmabot/Project-polaris/actions/runs/23692242218) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)
