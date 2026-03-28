@@ -111,6 +111,9 @@ Rules:
   - PR: [#53](https://github.com/createmabot/Project-polaris/pull/53) (merged on 2026-03-29 JST)
   - Update: `最優先確認` 対象が複数件ある場合に `次の最優先確認へ` の順送り導線を追加し、`StrategyVersionList -> StrategyVersionDetail -> List` の return-flow 文脈で 2件目以降へ継続到達できることを固定化
   - Check result: [Actions run 23692592489](https://github.com/createmabot/Project-polaris/actions/runs/23692592489) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
+  - PR: [#56](https://github.com/createmabot/Project-polaris/pull/56) (open; checks passed on 2026-03-29 JST)
+  - Update: `StrategyVersionDetail` に `次の最優先確認へ` の最小導線を追加し、`最優先確認` 複数件時に detail 文脈から次対象へ順送りしつつ `StrategyVersionList -> StrategyVersionDetail -> List` の return-flow 文脈を維持する固定化を追加
+  - Check result: [Actions run 23693272766](https://github.com/createmabot/Project-polaris/actions/runs/23693272766) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)
