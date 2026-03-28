@@ -63,5 +63,18 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-9/versions');
     expect(restored).toEqual({ page: 2, q: 'MA', status: 'draft', sort: 'updated_at', order: 'asc' });
   });
+
+  it('keeps list query state for note-flagged target row after explicit return navigation', () => {
+    const listUrl = buildStrategyVersionsListUrl('str-11', 4, 'RSI', 'generated', 'updated_at', 'desc');
+    expect(listUrl).toBe('/strategies/str-11/versions?q=RSI&status=generated&sort=updated_at&page=4');
+
+    // "検証ノートあり" row should use the same return-flow contract as other rows.
+    const detailUrl = buildStrategyVersionDetailUrl('str-11', 'ver-note-flagged', 4, 'RSI', 'generated', 'updated_at', 'desc');
+    const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-11');
+    expect(resolvedReturn).toBe('/strategies/str-11/versions?q=RSI&status=generated&page=4&sort=updated_at');
+
+    const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-11/versions');
+    expect(restored).toEqual({ page: 4, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'desc' });
+  });
 });
 
