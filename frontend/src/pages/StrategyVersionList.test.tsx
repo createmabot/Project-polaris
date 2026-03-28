@@ -65,6 +65,8 @@ describe('StrategyVersionList', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-1' }} />);
     expect(html).toContain('ver-2');
+    expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
+    expect(html).toContain('要確認差分');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc');
     expect(html).toContain('value="RSI"');
     expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=1&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
@@ -117,6 +119,8 @@ describe('StrategyVersionList', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
     expect(html).toContain('ver-10');
+    expect(html).toContain('このページの要確認差分: <strong>0</strong> 件');
+    expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
 
   it('parses q/page from URL query and builds list URL with q', () => {

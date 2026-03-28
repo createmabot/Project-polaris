@@ -129,6 +129,9 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     return status;
   };
 
+  const isNeedsReviewDiff = (version: StrategyVersionListData['strategy_versions'][number]) =>
+    version.is_derived && version.has_diff_from_clone === true;
+
   const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status') => {
     const style = {
       display: 'inline-block',
@@ -263,15 +266,26 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         </div>
       ) : (
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
+          <div style={{ padding: '0.65rem 0.8rem', border: '1px solid #e5e5e5', borderRadius: '6px', background: '#fafafa', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ color: '#333', fontSize: '0.9rem' }}>
+              このページの要確認差分: <strong>{data.strategy_versions.filter(isNeedsReviewDiff).length}</strong> 件
+            </span>
+            {data.strategy_versions.filter(isNeedsReviewDiff).length > 0 && (
+              <span style={{ color: '#666', fontSize: '0.85rem' }}>
+                `要確認差分` バッジ付き version を優先確認してください
+              </span>
+            )}
+          </div>
           {data.strategy_versions.map((version) => (
             <div
               key={version.id}
               style={{
-                border: '1px solid #ddd',
+                border: isNeedsReviewDiff(version) ? '1px solid #f0b46d' : '1px solid #ddd',
                 borderRadius: '8px',
                 padding: '1rem',
                 display: 'grid',
                 gap: '0.45rem',
+                background: isNeedsReviewDiff(version) ? '#fffaf3' : '#fff',
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', flexWrap: 'wrap' }}>
@@ -288,6 +302,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 ) : (
                   <span style={badgeStyle('no-base')}>比較元なし</span>
                 )}
+                {isNeedsReviewDiff(version) && <span style={{ ...badgeStyle('diff'), background: '#ffedd4' }}>要確認差分</span>}
                 {version.has_diff_from_clone === true && <span style={badgeStyle('diff')}>差分あり</span>}
                 {version.has_diff_from_clone === false && <span style={badgeStyle('no-diff')}>差分なし</span>}
                 <span style={badgeStyle('status')}>status: {statusLabel(version.status)}</span>
