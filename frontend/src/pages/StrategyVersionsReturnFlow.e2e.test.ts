@@ -32,5 +32,20 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-1');
     expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc');
   });
+
+  it('keeps review-target list state (q/page/status/sort/order) after explicit return navigation', () => {
+    const listUrl = buildStrategyVersionsListUrl('str-1', 3, 'RSI', 'generated', 'updated_at', 'asc');
+    expect(listUrl).toBe('/strategies/str-1/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=3');
+
+    // A "要確認差分" row uses the same detail link builder and must preserve list state.
+    const detailUrl = buildStrategyVersionDetailUrl('str-1', 'ver-review-target', 3, 'RSI', 'generated', 'updated_at', 'asc');
+    expect(detailUrl).toContain('/strategy-versions/ver-review-target?return=');
+
+    const resolvedReturn = parseStrategyVersionsReturnPath(detailUrl, 'str-1');
+    expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&page=3&sort=updated_at&order=asc');
+
+    const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
+    expect(restored).toEqual({ page: 3, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+  });
 });
 
