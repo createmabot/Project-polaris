@@ -76,6 +76,7 @@ pnpm run down
   - `/strategy-lab` から一覧・詳細へ遷移可能
   - version 一覧は `natural_language_rule` の部分一致検索に対応（`q`）
   - status フィルタ、sort/order（`created_at|updated_at` × `asc|desc`）に対応
+  - version 一覧で `要確認差分`（派生かつ差分あり）を最小強調表示
   - 一覧URLは `q/page/status/sort/order` をクエリ同期し、詳細から `return` で同じ一覧状態に復帰可能
 
 ### CSV取込（MVPでサポートする形式）
