@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -70,8 +70,8 @@ describe('StrategyVersionList', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-1' }} />);
     expect(html).toContain('ver-2');
-    expect(html).toContain('このページの要確認差分: <strong>1</strong> 件');
-    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>1</strong> 件');
+    expect(html).toContain('このページ内の要確認差分: <strong>1</strong> 件');
+    expect(html).toContain('このページ内の要確認差分かつ検証ノートあり: <strong>1</strong> 件');
     expect(html).toContain('href="#priority-version-ver-2"');
     expect(html).not.toContain('次の最優先確認へ');
     expect(html).toContain('要確認差分');
@@ -129,9 +129,9 @@ describe('StrategyVersionList', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-2' }} />);
     expect(html).toContain('ver-10');
-    expect(html).toContain('このページの要確認差分: <strong>0</strong> 件');
-    expect(html).toContain('検証ノートあり: <strong>0</strong> 件');
-    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>0</strong> 件');
+    expect(html).toContain('このページ内の要確認差分: <strong>0</strong> 件');
+    expect(html).toContain('このページ内の検証ノートあり: <strong>0</strong> 件');
+    expect(html).toContain('このページ内の要確認差分かつ検証ノートあり: <strong>0</strong> 件');
     expect(html).not.toContain('最優先確認の先頭へ移動');
     expect(html).not.toContain('次の最優先確認へ');
     expect(html).not.toContain('検証ノートあり</span>');
@@ -285,9 +285,9 @@ describe('StrategyVersionList', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyVersionList params={{ strategyId: 'str-3' }} />);
-    expect(html).toContain('このページの要確認差分: <strong>3</strong> 件');
-    expect(html).toContain('検証ノートあり: <strong>3</strong> 件');
-    expect(html).toContain('要確認差分かつ検証ノートあり: <strong>2</strong> 件');
+    expect(html).toContain('このページ内の要確認差分: <strong>3</strong> 件');
+    expect(html).toContain('このページ内の検証ノートあり: <strong>3</strong> 件');
+    expect(html).toContain('このページ内の要確認差分かつ検証ノートあり: <strong>2</strong> 件');
     expect(html).toContain('最優先確認の先頭へ移動');
     expect(html).toContain('次の最優先確認へ');
     expect(html).toContain('id="priority-version-ver-priority"');

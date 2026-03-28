@@ -25,7 +25,7 @@ vi.mock('../api/client', async () => {
   };
 });
 
-import StrategyVersionDetail from './StrategyVersionDetail';
+import StrategyVersionDetail, { findNextPriorityVersionId } from './StrategyVersionDetail';
 
 function createPayload(params: {
   withCompareBase: boolean;
@@ -65,20 +65,104 @@ function createPayload(params: {
   };
 }
 
+function createListPayload() {
+  return {
+    strategy: {
+      id: 'str-1',
+      title: '検証用ルール',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    query: { q: 'RSI', status: '', sort: 'created_at', order: 'desc' },
+    pagination: {
+      page: 2,
+      limit: 20,
+      q: 'RSI',
+      status: '',
+      sort: 'created_at',
+      order: 'desc',
+      total: 3,
+      has_next: false,
+      has_prev: true,
+    },
+    strategy_versions: [
+      {
+        id: 'ver-1',
+        strategy_id: 'str-1',
+        cloned_from_version_id: 'ver-0',
+        is_derived: true,
+        has_forward_validation_note: true,
+        has_diff_from_clone: true,
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'generated',
+        has_warnings: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: 'ver-next',
+        strategy_id: 'str-1',
+        cloned_from_version_id: 'ver-0',
+        is_derived: true,
+        has_forward_validation_note: true,
+        has_diff_from_clone: true,
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'generated',
+        has_warnings: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ],
+  };
+}
+
+function setupSWR(detailPayload: ReturnType<typeof createPayload>, listPayload = createListPayload()) {
+  mockUseSWR.mockImplementation((key: string) => {
+    if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: detailPayload,
+      };
+    }
+    if (typeof key === 'string' && key.startsWith('/api/strategies/')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: listPayload,
+      };
+    }
+    return { isLoading: false, error: null, mutate: vi.fn(), data: null };
+  });
+}
+
 describe('StrategyVersionDetail', () => {
-  it('shows minimal diff and pine changed marker when compare base exists', () => {
+  it('finds next priority version id with cyclic order', () => {
+    const versions = [
+      { id: 'v1', is_derived: true, has_diff_from_clone: true, has_forward_validation_note: true },
+      { id: 'v2', is_derived: true, has_diff_from_clone: true, has_forward_validation_note: true },
+      { id: 'v3', is_derived: true, has_diff_from_clone: false, has_forward_validation_note: true },
+    ];
+
+    expect(findNextPriorityVersionId('v1', versions)).toBe('v2');
+    expect(findNextPriorityVersionId('v2', versions)).toBe('v1');
+    expect(findNextPriorityVersionId('unknown', versions)).toBe('v1');
+    expect(findNextPriorityVersionId('v1', [versions[0]])).toBeNull();
+  });
+
+  it('shows minimal diff and next priority link when compare base exists', () => {
     mockUseSWR.mockReset();
     mockPostApi.mockReset();
     mockPatchApi.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2', vi.fn()]);
 
-    mockUseSWR.mockReturnValue({
-      isLoading: false,
-      error: null,
-      mutate: vi.fn(),
-      data: createPayload({ withCompareBase: true, samePine: false }),
-    });
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('rule version 詳細');
@@ -93,6 +177,8 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
     expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
     expect(html).toContain('href="/strategies/str-1/versions?q=RSI&amp;page=2"');
+    expect(html).toContain('次の最優先確認へ');
+    expect(html).toContain('/strategy-versions/ver-next?return=');
     expect(html).toContain('次の検証ノート');
     expect(html).toContain('現在のノート: 次回は RSI 55 以上で再検証');
   });
@@ -101,12 +187,7 @@ describe('StrategyVersionDetail', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
-    mockUseSWR.mockReturnValue({
-      isLoading: false,
-      error: null,
-      mutate: vi.fn(),
-      data: createPayload({ withCompareBase: true, samePine: true }),
-    });
+    setupSWR(createPayload({ withCompareBase: true, samePine: true }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較サマリ');
@@ -120,12 +201,7 @@ describe('StrategyVersionDetail', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fexternal', vi.fn()]);
-    mockUseSWR.mockReturnValue({
-      isLoading: false,
-      error: null,
-      mutate: vi.fn(),
-      data: createPayload({ withCompareBase: false }),
-    });
+    setupSWR(createPayload({ withCompareBase: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較元の version はありません。');
@@ -137,12 +213,7 @@ describe('StrategyVersionDetail', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
-    mockUseSWR.mockReturnValue({
-      isLoading: false,
-      error: null,
-      mutate: vi.fn(),
-      data: createPayload({ withCompareBase: true, samePine: false }),
-    });
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('次の検証ノート');

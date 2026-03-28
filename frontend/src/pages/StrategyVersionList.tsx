@@ -373,13 +373,13 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         <div style={{ marginTop: '1rem', display: 'grid', gap: '0.8rem' }}>
           <div style={{ padding: '0.65rem 0.8rem', border: '1px solid #e5e5e5', borderRadius: '6px', background: '#fafafa', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
-              このページの要確認差分: <strong>{needsReviewCount}</strong> 件
+              このページ内の要確認差分: <strong>{needsReviewCount}</strong> 件
             </span>
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
-              検証ノートあり: <strong>{noteCount}</strong> 件
+              このページ内の検証ノートあり: <strong>{noteCount}</strong> 件
             </span>
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
-              要確認差分かつ検証ノートあり: <strong>{needsReviewWithNoteCount}</strong> 件
+              このページ内の要確認差分かつ検証ノートあり: <strong>{needsReviewWithNoteCount}</strong> 件
             </span>
             {firstNeedsReviewWithNoteVersion && (
               <a

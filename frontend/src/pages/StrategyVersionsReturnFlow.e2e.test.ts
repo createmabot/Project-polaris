@@ -88,5 +88,17 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-12/versions');
     expect(restored).toEqual({ page: 5, q: 'MA', status: 'generated', sort: 'updated_at', order: 'asc' });
   });
+
+  it('keeps list query state when moving between priority targets from detail context', () => {
+    const listUrl = buildStrategyVersionsListUrl('str-13', 2, 'RSI', 'generated', 'updated_at', 'asc');
+    expect(listUrl).toBe('/strategies/str-13/versions?q=RSI&status=generated&sort=updated_at&order=asc&page=2');
+
+    const nextPriorityDetailUrl = buildStrategyVersionDetailUrl('str-13', 'ver-priority-2', 2, 'RSI', 'generated', 'updated_at', 'asc');
+    const resolvedReturn = parseStrategyVersionsReturnPath(nextPriorityDetailUrl, 'str-13');
+    expect(resolvedReturn).toBe('/strategies/str-13/versions?q=RSI&status=generated&page=2&sort=updated_at&order=asc');
+
+    const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-13/versions');
+    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+  });
 });
 
