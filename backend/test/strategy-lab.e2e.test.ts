@@ -72,6 +72,9 @@ vi.mock('../src/db', () => {
         if (where?.strategyRuleId) {
           rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
         }
+        if (where?.status) {
+          rows = rows.filter((row) => row.status === where.status);
+        }
         if (where?.naturalLanguageRule?.contains) {
           const keyword = String(where.naturalLanguageRule.contains);
           const insensitive = where.naturalLanguageRule.mode === 'insensitive';
@@ -123,6 +126,9 @@ vi.mock('../src/db', () => {
         if (where?.strategyRuleId) {
           rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
         }
+        if (where?.status) {
+          rows = rows.filter((row) => row.status === where.status);
+        }
         if (where?.naturalLanguageRule?.contains) {
           const keyword = String(where.naturalLanguageRule.contains);
           const insensitive = where.naturalLanguageRule.mode === 'insensitive';
@@ -138,6 +144,12 @@ vi.mock('../src/db', () => {
         }
         if (orderBy?.createdAt === 'asc') {
           rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'desc') {
+          rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'asc') {
+          rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
         }
         const offset = Number.isInteger(skip) && skip > 0 ? skip : 0;
         const limit = Number.isInteger(take) && take >= 0 ? take : rows.length;
@@ -350,6 +362,63 @@ describe('strategy lab vertical slice', () => {
     });
     expect(unfiltered.statusCode).toBe(200);
     expect(unfiltered.json().data.strategy_versions.length).toBe(2);
+
+    await app.close();
+  });
+
+  it('filters and sorts strategy versions with status/sort/order while preserving pagination', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'status-sort-test' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const a = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'A',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const aId = a.json().data.strategy_version.id as string;
+    const b = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'B',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const bId = b.json().data.strategy_version.id as string;
+
+    await app.inject({ method: 'POST', url: `/api/strategy-versions/${aId}/pine/generate`, payload: {} });
+    await app.inject({ method: 'POST', url: `/api/strategy-versions/${bId}/pine/generate`, payload: {} });
+
+    const updateA = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${aId}`,
+      payload: { natural_language_rule: 'A updated' },
+    });
+    expect(updateA.statusCode).toBe(200);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?page=1&limit=20&status=draft&sort=updated_at&order=asc`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.data.query.status).toBe('draft');
+    expect(body.data.query.sort).toBe('updated_at');
+    expect(body.data.query.order).toBe('asc');
+    expect(body.data.pagination.status).toBe('draft');
+    expect(body.data.strategy_versions.length).toBe(1);
+    expect(body.data.strategy_versions[0].id).toBe(aId);
 
     await app.close();
   });

@@ -64,31 +64,50 @@ function normalizeBacktestStrategySnapshot(value: unknown): BacktestStrategySnap
 }
 
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get<{ Querystring: { page?: string; limit?: string; q?: string } }>('/', async (request, reply) => {
+  fastify.get<{
+    Querystring: { page?: string; limit?: string; q?: string; status?: string; sort?: string; order?: string };
+  }>('/', async (request, reply) => {
     const parsedPage = Number(request.query.page ?? 1);
     const parsedLimit = Number(request.query.limit ?? 20);
     const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
     const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50 ? parsedLimit : NaN;
     const q = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+    const status = typeof request.query.status === 'string' ? request.query.status.trim() : '';
+    const sort = typeof request.query.sort === 'string' ? request.query.sort.trim() : 'created_at';
+    const order = typeof request.query.order === 'string' ? request.query.order.trim().toLowerCase() : 'desc';
 
     if (!Number.isFinite(page) || !Number.isFinite(limit)) {
       throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
     }
+    if (sort && sort !== 'created_at' && sort !== 'updated_at') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'sort must be one of: created_at, updated_at.');
+    }
+    if (order !== 'asc' && order !== 'desc') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
+    }
 
-    const where: Prisma.BacktestWhereInput | undefined = q
-      ? {
-          title: {
-            contains: q,
-            mode: 'insensitive',
-          },
-        }
-      : undefined;
+    const where: Prisma.BacktestWhereInput = {
+      ...(q
+        ? {
+            title: {
+              contains: q,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+      ...(status ? { status } : {}),
+    };
+
+    const orderBy =
+      sort === 'updated_at'
+        ? { updatedAt: order as 'asc' | 'desc' }
+        : { createdAt: order as 'asc' | 'desc' };
 
     const skip = (page - 1) * limit;
     const total = await prisma.backtest.count({ where });
     const backtests = await prisma.backtest.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       skip,
       take: limit,
       include: {
@@ -124,6 +143,9 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         page,
         limit,
         q,
+        status,
+        sort,
+        order,
         total,
         has_next: skip + backtests.length < total,
         has_prev: page > 1,

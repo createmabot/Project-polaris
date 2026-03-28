@@ -23,7 +23,10 @@ function normalizeTitle(body: CreateStrategyBody): string {
 }
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get<{ Params: { strategyId: string }; Querystring: { q?: string; page?: string; limit?: string } }>('/:strategyId/versions', async (request, reply) => {
+  fastify.get<{
+    Params: { strategyId: string };
+    Querystring: { q?: string; page?: string; limit?: string; status?: string; sort?: string; order?: string };
+  }>('/:strategyId/versions', async (request, reply) => {
     const { strategyId } = request.params;
     const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
     if (!strategy) {
@@ -31,6 +34,9 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const q = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+    const status = typeof request.query.status === 'string' ? request.query.status.trim() : '';
+    const sort = typeof request.query.sort === 'string' ? request.query.sort.trim() : 'created_at';
+    const order = typeof request.query.order === 'string' ? request.query.order.trim().toLowerCase() : 'desc';
     const parsedPage = Number(request.query.page ?? 1);
     const parsedLimit = Number(request.query.limit ?? 20);
     const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
@@ -38,24 +44,36 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     if (!Number.isFinite(page) || !Number.isFinite(limit)) {
       throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
     }
+    if (sort && sort !== 'created_at' && sort !== 'updated_at') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'sort must be one of: created_at, updated_at.');
+    }
+    if (order !== 'asc' && order !== 'desc') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
+    }
 
-    const where = q
-      ? {
-          strategyRuleId: strategy.id,
-          naturalLanguageRule: {
-            contains: q,
-            mode: 'insensitive' as const,
-          },
-        }
-      : {
-          strategyRuleId: strategy.id,
-        };
+    const where = {
+      strategyRuleId: strategy.id,
+      ...(q
+        ? {
+            naturalLanguageRule: {
+              contains: q,
+              mode: 'insensitive' as const,
+            },
+          }
+        : {}),
+      ...(status ? { status } : {}),
+    };
+
+    const orderBy =
+      sort === 'updated_at'
+        ? { updatedAt: order as 'asc' | 'desc' }
+        : { createdAt: order as 'asc' | 'desc' };
 
     const skip = (page - 1) * limit;
     const total = await prisma.strategyRuleVersion.count({ where });
     const versions = await prisma.strategyRuleVersion.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       skip,
       take: limit,
       include: {
@@ -79,11 +97,17 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       },
       query: {
         q,
+        status,
+        sort,
+        order,
       },
       pagination: {
         page,
         limit,
         q,
+        status,
+        sort,
+        order,
         total,
         has_next: skip + versions.length < total,
         has_prev: page > 1,

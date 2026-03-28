@@ -67,6 +67,8 @@ function normalizeBacktestsReturnPath(decodedPath: string): string | null {
 
   const q = (params.get('q') ?? '').trim();
   if (q) normalized.set('q', q);
+  const status = (params.get('status') ?? '').trim();
+  if (status) normalized.set('status', status);
 
   const rawPage = params.get('page');
   if (rawPage !== null) {
@@ -74,6 +76,14 @@ function normalizeBacktestsReturnPath(decodedPath: string): string | null {
     if (Number.isInteger(page) && page > 0) {
       normalized.set('page', String(page));
     }
+  }
+  const sort = (params.get('sort') ?? '').trim();
+  if (sort === 'updated_at') {
+    normalized.set('sort', sort);
+  }
+  const order = (params.get('order') ?? '').trim().toLowerCase();
+  if (order === 'asc') {
+    normalized.set('order', order);
   }
 
   const query = normalized.toString();
