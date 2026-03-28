@@ -179,6 +179,7 @@ describe('StrategyVersionList', () => {
     expect(resolvePriorityVersionIdFromHash('#priority-version-ver-priority', versions)).toBe('ver-priority');
     expect(resolvePriorityVersionIdFromHash('#priority-version-ver-normal', versions)).toBeNull();
     expect(resolvePriorityVersionIdFromHash('#other-hash', versions)).toBeNull();
+    expect(resolvePriorityVersionIdFromHash('#priority-version-%E0%A4%A', versions)).toBeNull();
   });
 
   it('shows combined priority signal for versions with both diff and forward note', () => {
