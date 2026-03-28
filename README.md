@@ -200,16 +200,29 @@ GitHub Actions で以下のチェックを運用しています。
 - `frontend/src/pages/BacktestsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
 - 例: `page: 2` の期待を `page: 999` に変更して failure を発生させる
 
+ローカル再現コマンド:
+- `npm --prefix frontend run test:e2e:backtests-return-flow`
+- `npm --prefix frontend run test -- src/pages/BacktestList.test.tsx`
+
+確認観点（最新）:
+- 一覧→詳細→一覧の `q/page` 復帰
+- 一覧復帰後の `実行時Strategy` / `実行時Version` 最小表示
+
 ### Drill: `strategy-versions-return-flow-e2e-check`
 一時破壊例:
 - `frontend/src/pages/StrategyVersionsReturnFlow.e2e.test.ts` の期待値を 1 箇所だけ意図的に崩す
 - 例: 一覧復帰 URL の期待を `/strategies/xxx/versions?page=2` から存在しない値に変更して failure を発生させる
 
 確認ポイント:
-1. PR checks で `strategy-versions-return-flow-e2e-check` が `pending` になる
-2. 一時破壊コミット後、同 check が `failure` になる
+1. PR checks で対象 check が `pending` になる
+2. 一時破壊コミット後、対象 check が `failure` になる
 3. PR 画面が `BLOCKED`（required checks 未通過）になる
-4. restore 後、同 check が `success` に戻る
+4. restore 後、対象 check が `success` に戻る
+
+`Expected — Waiting for status to be reported` の場合:
+- ruleset の required check 名と、GitHub Actions の実際の check 名が一致しているか確認する
+- 対象 workflow が PR トリガー（`pull_request`）で起動しているか確認する
+- 必要なら最新コミットを push して checks を再発火し、pending/failure/success の遷移を再確認する
 
 実施記録テンプレート（運用メモへ記録）:
 - 実施日:
