@@ -75,7 +75,8 @@ pnpm run down
   - `/strategy-versions/:versionId` で version 詳細（自然言語原文 / generated pine / warnings / assumptions / status）表示
   - `/strategy-lab` から一覧・詳細へ遷移可能
   - version 一覧は `natural_language_rule` の部分一致検索に対応（`q`）
-  - 一覧URLは `q/page` をクエリ同期し、詳細から `return` で同じ一覧状態に復帰可能
+  - status フィルタ、sort/order（`created_at|updated_at` × `asc|desc`）に対応
+  - 一覧URLは `q/page/status/sort/order` をクエリ同期し、詳細から `return` で同じ一覧状態に復帰可能
 
 ### CSV取込（MVPでサポートする形式）
 - 1行ヘッダ + 1行データの CSV
@@ -104,10 +105,12 @@ pnpm run down
 - URL: `/backtests`
 - createdAt 降順の直近一覧
 - title 部分一致検索（`q`）
+- status フィルタ
+- sort/order（`created_at|updated_at` × `asc|desc`）
 - ページネーション
-- URL クエリ同期（`/backtests?q=...&page=...`）
+- URL クエリ同期（`/backtests?q=...&page=...&status=...&sort=...&order=...`）
 - 一覧→詳細の遷移は `return` クエリで復帰先を保持
-  - 許可する戻り先は `/backtests` の `q/page` のみ
+  - 許可する戻り先は `/backtests` の `q/page/status/sort/order` のみ
 - 表示項目:
   - タイトル / 作成日時
   - market / timeframe / executionSource / backtest status
@@ -205,7 +208,7 @@ GitHub Actions で以下のチェックを運用しています。
 - `npm --prefix frontend run test -- src/pages/BacktestList.test.tsx`
 
 確認観点（最新）:
-- 一覧→詳細→一覧の `q/page` 復帰
+- 一覧→詳細→一覧の `q/page/status/sort/order` 復帰
 - 一覧復帰後の `実行時Strategy` / `実行時Version` 最小表示
 
 ### Drill: `strategy-versions-return-flow-e2e-check`
