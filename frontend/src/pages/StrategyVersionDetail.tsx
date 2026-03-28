@@ -227,8 +227,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
   const [saveRuleMessage, setSaveRuleMessage] = useState<string | null>(null);
+  const [savingForwardNote, setSavingForwardNote] = useState(false);
+  const [saveForwardNoteError, setSaveForwardNoteError] = useState<string | null>(null);
+  const [saveForwardNoteMessage, setSaveForwardNoteMessage] = useState<string | null>(null);
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
+  const [editingForwardValidationNote, setEditingForwardValidationNote] = useState('');
 
   const version = data?.strategy_version ?? null;
   const compareBase = data?.compare_base ?? null;
@@ -238,8 +242,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   useEffect(() => {
     if (version) {
       setEditingNaturalLanguageRule(version.natural_language_rule);
+      setEditingForwardValidationNote(version.forward_validation_note ?? '');
     }
-  }, [version?.id, version?.natural_language_rule]);
+  }, [version?.id, version?.natural_language_rule, version?.forward_validation_note]);
 
   const ruleDiff = useMemo(() => {
     if (!version || !compareBase) {
@@ -312,6 +317,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setSaveRuleError(requestError?.message ?? 'ルール保存に失敗しました。');
     } finally {
       setSavingRule(false);
+    }
+  };
+
+  const onSaveForwardValidationNote = async () => {
+    setSavingForwardNote(true);
+    setSaveForwardNoteError(null);
+    setSaveForwardNoteMessage(null);
+    try {
+      const response = await patchApi<StrategyVersionData>(`/api/strategy-versions/${versionId}`, {
+        forward_validation_note: editingForwardValidationNote,
+      });
+      await mutate(response, false);
+      setSaveForwardNoteMessage('フォワード検証ノートを保存しました。');
+    } catch (requestError: any) {
+      setSaveForwardNoteError(requestError?.message ?? 'フォワード検証ノート保存に失敗しました。');
+    } finally {
+      setSavingForwardNote(false);
     }
   };
 
@@ -435,6 +457,47 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           {cloneError}
         </div>
       )}
+
+      <section style={{ marginTop: '1.2rem' }}>
+        <h2 style={{ marginBottom: '0.5rem' }}>次の検証ノート</h2>
+        <div style={{ marginBottom: '0.6rem', color: '#444', fontSize: '0.92rem' }}>
+          現在のノート: {version.forward_validation_note && version.forward_validation_note.trim() ? version.forward_validation_note : '未設定'}
+        </div>
+        <textarea
+          value={editingForwardValidationNote}
+          onChange={(event) => setEditingForwardValidationNote(event.target.value)}
+          rows={4}
+          placeholder='次に検証したい条件や見直し方針を記録します'
+          style={{ width: '100%', padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+        />
+        <div style={{ marginTop: '0.7rem' }}>
+          <button
+            type='button'
+            onClick={onSaveForwardValidationNote}
+            disabled={savingForwardNote}
+            style={{
+              padding: '0.55rem 0.95rem',
+              border: 'none',
+              borderRadius: '4px',
+              background: savingForwardNote ? '#9cbbe0' : '#0a5bb5',
+              color: '#fff',
+              cursor: savingForwardNote ? 'default' : 'pointer',
+            }}
+          >
+            {savingForwardNote ? '保存中...' : 'ノートを保存'}
+          </button>
+        </div>
+        {saveForwardNoteError && (
+          <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+            {saveForwardNoteError}
+          </div>
+        )}
+        {saveForwardNoteMessage && (
+          <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f', borderRadius: '4px' }}>
+            {saveForwardNoteMessage}
+          </div>
+        )}
+      </section>
 
       <section style={{ marginTop: '1.2rem' }}>
         <h2 style={{ marginBottom: '0.5rem' }}>比較元との差分（最小）</h2>

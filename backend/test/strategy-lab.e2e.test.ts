@@ -17,6 +17,7 @@ type StrategyRuleVersionRow = {
   strategyRuleId: string;
   clonedFromVersionId: string | null;
   naturalLanguageRule: string;
+  forwardValidationNote: string | null;
   normalizedRuleJson: unknown;
   generatedPine: string | null;
   warningsJson: unknown;
@@ -95,6 +96,7 @@ vi.mock('../src/db', () => {
           strategyRuleId: data.strategyRuleId,
           clonedFromVersionId: data.clonedFromVersionId ?? null,
           naturalLanguageRule: data.naturalLanguageRule,
+          forwardValidationNote: data.forwardValidationNote ?? null,
           normalizedRuleJson: data.normalizedRuleJson ?? null,
           generatedPine: data.generatedPine ?? null,
           warningsJson: data.warningsJson ?? null,
@@ -710,6 +712,67 @@ describe('strategy lab vertical slice', () => {
     const editedCloneListItem = listAfterEditBody.data.strategy_versions.find((item: any) => item.id === cloneVersionId);
     expect(editedCloneListItem.is_derived).toBe(true);
     expect(editedCloneListItem.has_diff_from_clone).toBe(true);
+
+    await app.close();
+  });
+
+  it('stores and returns forward validation note for strategy version', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'forward-note-test' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule:
+          '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。買い後5日経過で手仕舞い。',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const versionId = createVersion.json().data.strategy_version.id as string;
+
+    const generate = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${versionId}/pine/generate`,
+      payload: {},
+    });
+    expect(generate.statusCode).toBe(200);
+    const statusBeforeNotePatch = generate.json().data.strategy_version.status as string;
+
+    const patchNote = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${versionId}`,
+      payload: {
+        forward_validation_note: '次回は RSI 条件を 55 以上で再検証する',
+      },
+    });
+    expect(patchNote.statusCode).toBe(200);
+    expect(patchNote.json().data.strategy_version.forward_validation_note).toContain('RSI');
+    expect(patchNote.json().data.strategy_version.status).toBe(statusBeforeNotePatch);
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${versionId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.strategy_version.forward_validation_note).toContain('RSI');
+
+    const clearNote = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${versionId}`,
+      payload: {
+        forward_validation_note: '   ',
+      },
+    });
+    expect(clearNote.statusCode).toBe(200);
+    expect(clearNote.json().data.strategy_version.forward_validation_note).toBeNull();
 
     await app.close();
   });

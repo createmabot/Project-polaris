@@ -10,6 +10,7 @@ function toStrategyVersionResponse(version: {
   clonedFromVersionId: string | null;
   status: string;
   naturalLanguageRule: string;
+  forwardValidationNote: string | null;
   normalizedRuleJson: unknown;
   generatedPine: string | null;
   warningsJson: unknown;
@@ -25,6 +26,7 @@ function toStrategyVersionResponse(version: {
     cloned_from_version_id: version.clonedFromVersionId,
     status: version.status,
     natural_language_rule: version.naturalLanguageRule,
+    forward_validation_note: version.forwardValidationNote,
     normalized_rule_json: version.normalizedRuleJson,
     generated_pine: version.generatedPine,
     warnings: Array.isArray(version.warningsJson) ? version.warningsJson : [],
@@ -53,7 +55,10 @@ function toStrategyVersionCompareBase(version: {
 }
 
 export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.patch<{ Params: { versionId: string }; Body: { natural_language_rule?: string; market?: string; timeframe?: string } }>(
+  fastify.patch<{
+    Params: { versionId: string };
+    Body: { natural_language_rule?: string; market?: string; timeframe?: string; forward_validation_note?: string };
+  }>(
     '/:versionId',
     async (request, reply) => {
       const { versionId } = request.params;
@@ -68,13 +73,21 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       const hasNaturalLanguageRule = typeof request.body.natural_language_rule === 'string';
       const hasMarket = typeof request.body.market === 'string';
       const hasTimeframe = typeof request.body.timeframe === 'string';
-      if (!hasNaturalLanguageRule && !hasMarket && !hasTimeframe) {
-        throw new AppError(400, 'VALIDATION_ERROR', 'at least one of natural_language_rule, market, timeframe is required.');
+      const hasForwardValidationNote = typeof request.body.forward_validation_note === 'string';
+      if (!hasNaturalLanguageRule && !hasMarket && !hasTimeframe && !hasForwardValidationNote) {
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          'at least one of natural_language_rule, market, timeframe, forward_validation_note is required.',
+        );
       }
 
       const nextNaturalLanguageRule = hasNaturalLanguageRule ? request.body.natural_language_rule!.trim() : version.naturalLanguageRule;
       const nextMarket = hasMarket ? request.body.market!.trim() : version.market;
       const nextTimeframe = hasTimeframe ? request.body.timeframe!.trim() : version.timeframe;
+      const nextForwardValidationNote = hasForwardValidationNote
+        ? request.body.forward_validation_note!.trim() || null
+        : version.forwardValidationNote;
 
       if (!nextNaturalLanguageRule) {
         throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule must not be empty.');
@@ -86,18 +99,24 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         throw new AppError(400, 'VALIDATION_ERROR', 'timeframe must not be empty.');
       }
 
+      const updatingRuleFields = hasNaturalLanguageRule || hasMarket || hasTimeframe;
       const updated = await prisma.strategyRuleVersion.update({
         where: { id: version.id },
         data: {
           naturalLanguageRule: nextNaturalLanguageRule,
           market: nextMarket,
           timeframe: nextTimeframe,
-          // Rule text edits invalidate previous generation artifacts.
-          normalizedRuleJson: Prisma.JsonNull,
-          generatedPine: null,
-          warningsJson: Prisma.JsonNull,
-          assumptionsJson: Prisma.JsonNull,
-          status: 'draft',
+          forwardValidationNote: nextForwardValidationNote,
+          ...(updatingRuleFields
+            ? {
+                // Rule edits invalidate previous generation artifacts.
+                normalizedRuleJson: Prisma.JsonNull,
+                generatedPine: null,
+                warningsJson: Prisma.JsonNull,
+                assumptionsJson: Prisma.JsonNull,
+                status: 'draft',
+              }
+            : {}),
         },
       });
 

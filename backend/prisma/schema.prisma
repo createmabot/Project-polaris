@@ -310,6 +310,7 @@ model StrategyRuleVersion {
   clonedFromVersion   StrategyRuleVersion?  @relation("StrategyVersionClones", fields: [clonedFromVersionId], references: [id])
   clonedVersions      StrategyRuleVersion[] @relation("StrategyVersionClones")
   naturalLanguageRule String       @db.Text
+  forwardValidationNote String?    @db.Text
   normalizedRuleJson  Json?
   generatedPine       String?      @db.Text
   warningsJson        Json?
