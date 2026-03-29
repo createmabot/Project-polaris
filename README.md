@@ -73,6 +73,10 @@ pnpm run down
   - execution result summary（主要指標）
   - execution artifact pointer（詳細結果参照）
 - 最小 API は `start / status / result` を基準とし、状態遷移は `queued -> running -> succeeded|failed|canceled` を正とする
+- 実装土台（最小）:
+  - `POST /api/internal-backtests/executions`（`queued` で job 作成）
+  - `GET /api/internal-backtests/executions/:executionId`（status 取得）
+  - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` 時のみ結果取得）
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証
   - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理

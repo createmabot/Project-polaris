@@ -1,0 +1,159 @@
+import { FastifyPluginAsync } from 'fastify';
+import { Prisma } from '@prisma/client';
+import { prisma } from '../db';
+import { AppError, formatSuccess } from '../utils/response';
+
+type CreateInternalBacktestExecutionBody = {
+  strategy_rule_version_id?: string;
+  market?: string;
+  timeframe?: string;
+  data_range?: {
+    from?: string;
+    to?: string;
+  };
+  engine_config?: Record<string, unknown>;
+};
+
+type InputSnapshot = {
+  strategy_rule_version_id: string;
+  market: string;
+  timeframe: string;
+  data_range: { from: string; to: string };
+  engine_config: Record<string, unknown>;
+  strategy_snapshot: {
+    natural_language_rule: string;
+    generated_pine: string | null;
+    market: string;
+    timeframe: string;
+  };
+};
+
+export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.post<{ Body: CreateInternalBacktestExecutionBody }>('/executions', async (request, reply) => {
+    const strategyVersionId = typeof request.body.strategy_rule_version_id === 'string'
+      ? request.body.strategy_rule_version_id.trim()
+      : '';
+    const market = typeof request.body.market === 'string' ? request.body.market.trim() : '';
+    const timeframe = typeof request.body.timeframe === 'string' ? request.body.timeframe.trim() : '';
+    const rangeFrom = typeof request.body.data_range?.from === 'string'
+      ? request.body.data_range.from.trim()
+      : '';
+    const rangeTo = typeof request.body.data_range?.to === 'string'
+      ? request.body.data_range.to.trim()
+      : '';
+    const engineConfig =
+      request.body.engine_config && typeof request.body.engine_config === 'object' && !Array.isArray(request.body.engine_config)
+        ? request.body.engine_config
+        : {};
+
+    if (!strategyVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
+      throw new AppError(
+        400,
+        'VALIDATION_ERROR',
+        'strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required.',
+      );
+    }
+
+    const strategyVersion = await prisma.strategyRuleVersion.findUnique({ where: { id: strategyVersionId } });
+    if (!strategyVersion) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    const inputSnapshot: InputSnapshot = {
+      strategy_rule_version_id: strategyVersion.id,
+      market,
+      timeframe,
+      data_range: {
+        from: rangeFrom,
+        to: rangeTo,
+      },
+      engine_config: engineConfig,
+      strategy_snapshot: {
+        natural_language_rule: strategyVersion.naturalLanguageRule,
+        generated_pine: strategyVersion.generatedPine,
+        market: strategyVersion.market,
+        timeframe: strategyVersion.timeframe,
+      },
+    };
+
+    const execution = await prisma.internalBacktestExecution.create({
+      data: {
+        strategyRuleVersionId: strategyVersion.id,
+        status: 'queued',
+        inputSnapshotJson: inputSnapshot as Prisma.InputJsonValue,
+      },
+    });
+
+    return reply.status(201).send(
+      formatSuccess(request, {
+        execution: {
+          id: execution.id,
+          strategy_rule_version_id: execution.strategyRuleVersionId,
+          status: execution.status,
+          requested_at: execution.requestedAt,
+          engine_version: execution.engineVersion,
+          created_at: execution.createdAt,
+          updated_at: execution.updatedAt,
+        },
+      }),
+    );
+  });
+
+  fastify.get<{ Params: { executionId: string } }>('/executions/:executionId', async (request, reply) => {
+    const execution = await prisma.internalBacktestExecution.findUnique({
+      where: { id: request.params.executionId },
+    });
+    if (!execution) {
+      throw new AppError(404, 'NOT_FOUND', 'internal backtest execution was not found.');
+    }
+
+    return reply.status(200).send(
+      formatSuccess(request, {
+        execution: {
+          id: execution.id,
+          strategy_rule_version_id: execution.strategyRuleVersionId,
+          status: execution.status,
+          requested_at: execution.requestedAt,
+          started_at: execution.startedAt,
+          finished_at: execution.finishedAt,
+          error_code: execution.errorCode,
+          error_message: execution.errorMessage,
+          engine_version: execution.engineVersion,
+          created_at: execution.createdAt,
+          updated_at: execution.updatedAt,
+        },
+      }),
+    );
+  });
+
+  fastify.get<{ Params: { executionId: string } }>('/executions/:executionId/result', async (request, reply) => {
+    const execution = await prisma.internalBacktestExecution.findUnique({
+      where: { id: request.params.executionId },
+    });
+    if (!execution) {
+      throw new AppError(404, 'NOT_FOUND', 'internal backtest execution was not found.');
+    }
+    if (execution.status !== 'succeeded') {
+      throw new AppError(
+        409,
+        'RESULT_NOT_READY',
+        'result is not ready. execution status must be succeeded.',
+        { status: execution.status },
+      );
+    }
+
+    return reply.status(200).send(
+      formatSuccess(request, {
+        execution_id: execution.id,
+        strategy_rule_version_id: execution.strategyRuleVersionId,
+        status: execution.status,
+        result_summary: execution.resultSummaryJson,
+        artifact_pointer: execution.artifactPointerJson,
+        input_snapshot: execution.inputSnapshotJson,
+        engine_version: execution.engineVersion,
+        finished_at: execution.finishedAt,
+      }),
+    );
+  });
+};
+
