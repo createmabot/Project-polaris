@@ -112,6 +112,10 @@ pnpm run down
 - URL: `/backtests/:backtestId`
 - 表示項目:
   - 基本情報（id / strategy_version_id / execution_source / market / timeframe / status）
+  - 使用した Strategy（実行時 snapshot）
+  - 次アクション（Rule Lab）:
+    - この version を Rule Lab で見直す
+    - 同一 Strategy の version 一覧を見る
   - 取込状態（parsed / failed / pending / 未取込）
   - parse failed 時の `parse_error`
   - 主要指標（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
@@ -129,6 +133,8 @@ pnpm run down
 - 表示項目:
   - タイトル / 作成日時
   - market / timeframe / executionSource / backtest status
+  - 実行時 Strategy / Version の最小表示
+  - Rule Lab で見直す導線（version 詳細への最小リンク）
   - 最新 parse 状態（parsed / failed / pending / 未取込）
   - 詳細リンク
 

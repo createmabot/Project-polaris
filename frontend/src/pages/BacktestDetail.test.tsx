@@ -106,8 +106,9 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('使用した Strategy');
-    expect(html).toContain('href="/strategy-versions/ver-1"');
-    expect(html).toContain('href="/strategies/str-1/versions"');
+    expect(html).toContain('href="/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fsort%3Dupdated_at%26order%3Ddesc%26page%3D1"');
+    expect(html).toContain('href="/strategies/str-1/versions?sort=updated_at&amp;order=desc&amp;page=1"');
+    expect(html).toContain('次アクション（Rule Lab）');
   });
 
   it('shows parse error on failed parse', () => {

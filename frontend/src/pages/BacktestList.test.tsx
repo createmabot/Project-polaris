@@ -125,6 +125,8 @@ describe('BacktestList', () => {
     expect(html).toContain('実行時Version');
     expect(html).toContain('ver-1');
     expect(html).toContain(buildBacktestDetailUrl('bt-1', 'トヨタ', 2, 'imported', 'updated_at', 'asc'));
+    expect(html).toContain('/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fsort%3Dupdated_at%26order%3Ddesc%26page%3D1');
+    expect(html).toContain('Rule Lab で見直す');
     expect(html).toContain('前へ');
     expect(html).toContain('2 / 2 ページ');
   });
