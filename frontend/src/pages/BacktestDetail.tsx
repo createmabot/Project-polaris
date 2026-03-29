@@ -106,7 +106,7 @@ export function parseBacktestsReturnPath(locationPath: string): string | null {
   return normalizeBacktestsReturnPath(decodedReturn);
 }
 
-function buildStrategyVersionsPath(strategyId: string): string {
+export function buildBacktestRuleLabVersionsPath(strategyId: string): string {
   const params = new URLSearchParams();
   params.set('sort', 'updated_at');
   params.set('order', 'desc');
@@ -114,8 +114,8 @@ function buildStrategyVersionsPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions?${params.toString()}`;
 }
 
-function buildStrategyVersionDetailPath(strategyId: string, strategyVersionId: string): string {
-  const returnPath = buildStrategyVersionsPath(strategyId);
+export function buildBacktestRuleLabVersionDetailPath(strategyId: string, strategyVersionId: string): string {
+  const returnPath = buildBacktestRuleLabVersionsPath(strategyId);
   return `/strategy-versions/${strategyVersionId}?return=${encodeURIComponent(returnPath)}`;
 }
 
@@ -135,10 +135,10 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const summary = latestImport?.parsed_summary;
   const usedStrategy = data.used_strategy;
   const snapshot = usedStrategy.snapshot;
-  const strategyVersionsPath = usedStrategy.strategy_id ? buildStrategyVersionsPath(usedStrategy.strategy_id) : null;
+  const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
   const strategyVersionDetailPath =
     usedStrategy.strategy_id && usedStrategy.strategy_version_id
-      ? buildStrategyVersionDetailPath(usedStrategy.strategy_id, usedStrategy.strategy_version_id)
+      ? buildBacktestRuleLabVersionDetailPath(usedStrategy.strategy_id, usedStrategy.strategy_version_id)
       : null;
 
   return (

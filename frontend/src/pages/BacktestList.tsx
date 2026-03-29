@@ -25,7 +25,7 @@ function shortId(value: string | null | undefined): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
-function buildStrategyVersionsPath(strategyId: string): string {
+export function buildBacktestRuleLabVersionsPath(strategyId: string): string {
   const params = new URLSearchParams();
   params.set('sort', 'updated_at');
   params.set('order', 'desc');
@@ -33,8 +33,8 @@ function buildStrategyVersionsPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions?${params.toString()}`;
 }
 
-function buildStrategyVersionDetailPath(strategyId: string, strategyVersionId: string): string {
-  const returnPath = buildStrategyVersionsPath(strategyId);
+export function buildBacktestRuleLabVersionDetailPath(strategyId: string, strategyVersionId: string): string {
+  const returnPath = buildBacktestRuleLabVersionsPath(strategyId);
   return `/strategy-versions/${strategyVersionId}?return=${encodeURIComponent(returnPath)}`;
 }
 
@@ -307,7 +307,7 @@ export default function BacktestList() {
                   {item.strategy_id && item.strategy_version_id && (
                     <span style={{ marginLeft: '0.8rem' }}>
                       <Link
-                        href={buildStrategyVersionDetailPath(item.strategy_id, item.strategy_version_id)}
+                        href={buildBacktestRuleLabVersionDetailPath(item.strategy_id, item.strategy_version_id)}
                         style={{ color: '#0a5bb5', textDecoration: 'none' }}
                       >
                         Rule Lab で見直す

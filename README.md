@@ -231,6 +231,7 @@ GitHub Actions で以下のチェックを運用しています。
 確認観点（最新）:
 - 一覧→詳細→一覧の `q/page/status/sort/order` 復帰
 - 一覧復帰後の `実行時Strategy` / `実行時Version` 最小表示
+- Backtest List / Detail から Rule Lab（version 詳細）へ戻る導線URLが維持されること
 
 ### Drill: `strategy-versions-return-flow-e2e-check`
 一時破壊例:
