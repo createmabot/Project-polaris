@@ -64,6 +64,18 @@ pnpm run down
 - まだ未対応:
   - 本格レポート分析（グラフ等）
   - 高度な比較機能
+  - 北極星内バックテストエンジン本体（未実装）
+
+### 北極星内バックテストエンジン（着手前固定・未実装）
+- 次フェーズ着手前の最小責務のみ固定済み:
+  - execution job（状態遷移の正本）
+  - execution input snapshot（実行条件固定）
+  - execution result summary（主要指標）
+  - execution artifact pointer（詳細結果参照）
+- 最小 API は `start / status / result` を基準とし、状態遷移は `queued -> running -> succeeded|failed|canceled` を正とする
+- 役割分担は維持:
+  - TradingView: 表示 / 監視 / 一次検証
+  - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理
 
 ### ルール version 再閲覧（MVP最小）
 - API:
