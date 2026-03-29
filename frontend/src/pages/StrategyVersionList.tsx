@@ -11,6 +11,14 @@ type StrategyVersionListProps = {
 const PAGE_SIZE = 20;
 const PRIORITY_VERSION_HASH_PREFIX = '#priority-version-';
 
+function formatNoteFreshness(updatedAt: string): string {
+  const updated = new Date(updatedAt);
+  if (Number.isNaN(updated.getTime())) {
+    return '更新時刻不明';
+  }
+  return `${updated.toLocaleDateString('ja-JP')} 更新`;
+}
+
 export type StrategyVersionsListQueryState = {
   page: number;
   q: string;
@@ -470,6 +478,9 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 <span><strong>市場:</strong> {version.market}</span>
                 <span><strong>時間足:</strong> {version.timeframe}</span>
                 <span><strong>warnings:</strong> {version.has_warnings ? 'あり' : 'なし'}</span>
+                {version.has_forward_validation_note && (
+                  <span><strong>ノート更新目安:</strong> {formatNoteFreshness(version.updated_at)}</span>
+                )}
               </div>
               <div>
                 <Link

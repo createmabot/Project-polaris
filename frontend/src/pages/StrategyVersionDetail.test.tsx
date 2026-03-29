@@ -190,6 +190,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('/strategy-versions/ver-next?return=');
     expect(html).toContain('次の検証ノート');
     expect(html).toContain('現在のノート: 次回は RSI 55 以上で再検証');
+    expect(html).toContain('ノート更新目安:');
   });
 
   it('shows pine unchanged when generated pine is identical', () => {
@@ -218,6 +219,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('比較元の version はありません。');
     expect(html).toContain('href="/strategies/str-1/versions"');
     expect(html).toContain('現在のノート: 未設定');
+    expect(html).toContain('ノート更新目安: -');
   });
 
   it('renders forward validation note editor controls', () => {
