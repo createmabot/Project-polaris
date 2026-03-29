@@ -596,6 +596,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div style={{ marginBottom: '0.6rem', color: '#444', fontSize: '0.92rem' }}>
           現在のノート: {version.forward_validation_note && version.forward_validation_note.trim() ? version.forward_validation_note : '未設定'}
         </div>
+        <div style={{ marginBottom: '0.6rem', color: '#444', fontSize: '0.88rem' }}>
+          ノート更新目安: {version.forward_validation_note && version.forward_validation_note.trim()
+            ? new Date(version.updated_at).toLocaleString('ja-JP')
+            : '-'}
+        </div>
         <textarea
           value={editingForwardValidationNote}
           onChange={(event) => setEditingForwardValidationNote(event.target.value)}

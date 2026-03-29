@@ -76,6 +76,7 @@ describe('StrategyVersionList', () => {
     expect(html).not.toContain('次の最優先確認へ');
     expect(html).toContain('要確認差分');
     expect(html).toContain('検証ノートあり');
+    expect(html).toContain('ノート更新目安:');
     expect(html).toContain('/strategy-versions/ver-2?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26status%3Dgenerated%26sort%3Dupdated_at%26order%3Dasc%26page%3D2');
     expect(html).toContain('value="RSI"');
     expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-1/versions?page=2&limit=20&q=RSI&status=generated&sort=updated_at&order=asc', expect.any(Function));
@@ -135,6 +136,7 @@ describe('StrategyVersionList', () => {
     expect(html).not.toContain('最優先確認の先頭へ移動');
     expect(html).not.toContain('次の最優先確認へ');
     expect(html).not.toContain('検証ノートあり</span>');
+    expect(html).not.toContain('ノート更新目安:');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
   });
 
