@@ -170,8 +170,11 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('比較サマリ');
     expect(html).toContain('全体: 変更あり');
     expect(html).toContain('優先確認ポイント');
-    expect(html).toContain('ルール文を確認');
-    expect(html).toContain('Pine 差分抜粋を確認');
+    expect(html).toContain('最初に確認: naturalLanguageRule');
+    expect(html).toContain('naturalLanguageRule');
+    expect(html).toContain('Pine');
+    expect(html).toContain('status');
+    expect(html).toContain('updatedAt');
     expect(html).toContain('ルール差分: +');
     expect(html).toContain('自然言語ルール差分');
     expect(html).toContain('Pine 差分（最小）');
@@ -199,6 +202,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('比較サマリ');
     expect(html).toContain('全体: 変更あり');
     expect(html).toContain('優先確認ポイント');
+    expect(html).toContain('最初に確認: naturalLanguageRule');
     expect(html).toContain('Pine: 変更なし');
     expect(html).toContain('変更有無:</strong> 変更なし');
     expect(html).not.toContain('差分抜粋（先頭');
