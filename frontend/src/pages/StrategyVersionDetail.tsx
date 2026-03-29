@@ -44,6 +44,13 @@ type RuleDiffSummary = {
   removedLines: number;
 };
 
+type CompareSummaryItem = {
+  key: 'rule' | 'pine' | 'status' | 'updated_at';
+  label: string;
+  changed: boolean;
+  detail: string;
+};
+
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
 }
@@ -358,25 +365,45 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const pineDiffSections = useMemo(() => groupPineDiffExcerpt(pineDiffExcerpt), [pineDiffExcerpt]);
 
-  const comparisonFocusItems = useMemo(() => {
+  const compareSummaryItems = useMemo(() => {
     if (!version || !compareBase) {
-      return [] as string[];
+      return [] as CompareSummaryItem[];
     }
-    const items: string[] = [];
-    if (ruleDiffSummary.hasChanges) {
-      items.push(`ルール文を確認（+${ruleDiffSummary.addedLines} / -${ruleDiffSummary.removedLines}）`);
-    }
-    if (pineDiff.changed) {
-      items.push('Pine 差分抜粋を確認（実装条件のズレ有無）');
-    }
-    if (compareBase.status !== version.status) {
-      items.push(`status 変化を確認（${compareBase.status} -> ${version.status}）`);
-    }
-    if (items.length === 0) {
-      items.push('差分は検出されていません');
-    }
+    const updatedAtChanged = compareBase.updated_at !== version.updated_at;
+    const items: CompareSummaryItem[] = [
+      {
+        key: 'rule',
+        label: 'naturalLanguageRule',
+        changed: ruleDiffSummary.hasChanges,
+        detail: ruleDiffSummary.hasChanges ? `+${ruleDiffSummary.addedLines} / -${ruleDiffSummary.removedLines}` : '差分なし',
+      },
+      {
+        key: 'pine',
+        label: 'Pine',
+        changed: pineDiff.changed,
+        detail: pineDiff.changed
+          ? `行差分 ${pineDiff.lineDelta > 0 ? `+${pineDiff.lineDelta}` : pineDiff.lineDelta}, 文字差分 ${
+              pineDiff.charDelta > 0 ? `+${pineDiff.charDelta}` : pineDiff.charDelta
+            }`
+          : '変更なし',
+      },
+      {
+        key: 'status',
+        label: 'status',
+        changed: compareBase.status !== version.status,
+        detail: `${compareBase.status} -> ${version.status}`,
+      },
+      {
+        key: 'updated_at',
+        label: 'updatedAt',
+        changed: updatedAtChanged,
+        detail: `${new Date(compareBase.updated_at).toLocaleString('ja-JP')} -> ${new Date(version.updated_at).toLocaleString('ja-JP')}`,
+      },
+    ];
     return items;
-  }, [compareBase, pineDiff.changed, ruleDiffSummary, version]);
+  }, [compareBase, pineDiff, ruleDiffSummary, version]);
+
+  const firstChangedSummaryItem = compareSummaryItems.find((item) => item.changed) ?? null;
 
   const onRegenerate = async () => {
     setRegenerating(true);
@@ -632,9 +659,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               </div>
               <div style={{ marginTop: '0.5rem', padding: '0.6rem', borderRadius: '4px', background: '#fff' }}>
                 <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>優先確認ポイント</div>
+                <div style={{ marginBottom: '0.45rem', color: '#444', fontSize: '0.9rem' }}>
+                  最初に確認: {firstChangedSummaryItem ? firstChangedSummaryItem.label : '差分は検出されていません'}
+                </div>
                 <ol style={{ margin: 0, paddingLeft: '1.2rem', color: '#333', fontSize: '0.9rem' }}>
-                  {comparisonFocusItems.map((item, index) => (
-                    <li key={`${item}-${index}`} style={{ marginBottom: '0.2rem' }}>{item}</li>
+                  {compareSummaryItems.map((item) => (
+                    <li key={item.key} style={{ marginBottom: '0.35rem' }}>
+                      <span style={{ fontWeight: 600 }}>{item.label}</span>
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          marginLeft: '0.45rem',
+                          padding: '0.05rem 0.4rem',
+                          borderRadius: '999px',
+                          background: item.changed ? '#fff3e6' : '#eef8ee',
+                          color: item.changed ? '#9a4d00' : '#1f6a1f',
+                          fontSize: '0.78rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {item.changed ? '変更あり' : '変更なし'}
+                      </span>
+                      <div style={{ marginTop: '0.12rem', color: '#555' }}>{item.detail}</div>
+                    </li>
                   ))}
                 </ol>
               </div>
