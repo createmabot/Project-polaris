@@ -57,6 +57,18 @@ function toStrategyVersionCompareBase(version: {
 }
 
 export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
+  const rethrowKnownSchemaMismatch = (error: unknown): never => {
+    const code = (error as { code?: unknown })?.code;
+    if (code === 'P2021' || code === 'P2022') {
+      throw new AppError(
+        500,
+        'DATABASE_SCHEMA_MISMATCH',
+        'Database schema is outdated. Run `npx prisma migrate deploy` in backend and restart the API.',
+      );
+    }
+    throw error;
+  };
+
   fastify.patch<{
     Params: { versionId: string };
     Body: { natural_language_rule?: string; market?: string; timeframe?: string; forward_validation_note?: string };
@@ -157,35 +169,39 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post<{ Params: { versionId: string } }>('/:versionId/pine/generate', async (request, reply) => {
-    const { versionId } = request.params;
-    const version = await prisma.strategyRuleVersion.findUnique({
-      where: { id: versionId },
-    });
+    try {
+      const { versionId } = request.params;
+      const version = await prisma.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
 
-    if (!version) {
-      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      if (!version) {
+        throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      }
+
+      const generation = generatePineFromNaturalLanguage({
+        naturalLanguageRule: version.naturalLanguageRule,
+        market: version.market,
+        timeframe: version.timeframe,
+      });
+
+      const updated = await prisma.strategyRuleVersion.update({
+        where: { id: version.id },
+        data: {
+          normalizedRuleJson: generation.normalizedRuleJson as Prisma.InputJsonValue,
+          generatedPine: generation.generatedPine,
+          warningsJson: generation.warnings as Prisma.InputJsonValue,
+          assumptionsJson: generation.assumptions as Prisma.InputJsonValue,
+          status: generation.status,
+        },
+      });
+
+      return reply.status(200).send(formatSuccess(request, {
+        strategy_version: toStrategyVersionResponse(updated),
+      }));
+    } catch (error) {
+      rethrowKnownSchemaMismatch(error);
     }
-
-    const generation = generatePineFromNaturalLanguage({
-      naturalLanguageRule: version.naturalLanguageRule,
-      market: version.market,
-      timeframe: version.timeframe,
-    });
-
-    const updated = await prisma.strategyRuleVersion.update({
-      where: { id: version.id },
-      data: {
-        normalizedRuleJson: generation.normalizedRuleJson as Prisma.InputJsonValue,
-        generatedPine: generation.generatedPine,
-        warningsJson: generation.warnings as Prisma.InputJsonValue,
-        assumptionsJson: generation.assumptions as Prisma.InputJsonValue,
-        status: generation.status,
-      },
-    });
-
-    return reply.status(200).send(formatSuccess(request, {
-      strategy_version: toStrategyVersionResponse(updated),
-    }));
   });
 
   fastify.post<{ Params: { versionId: string } }>('/:versionId/clone', async (request, reply) => {
