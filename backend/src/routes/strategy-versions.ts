@@ -11,6 +11,7 @@ function toStrategyVersionResponse(version: {
   status: string;
   naturalLanguageRule: string;
   forwardValidationNote: string | null;
+  forwardValidationNoteUpdatedAt: Date | null;
   normalizedRuleJson: unknown;
   generatedPine: string | null;
   warningsJson: unknown;
@@ -27,6 +28,7 @@ function toStrategyVersionResponse(version: {
     status: version.status,
     natural_language_rule: version.naturalLanguageRule,
     forward_validation_note: version.forwardValidationNote,
+    forward_validation_note_updated_at: version.forwardValidationNoteUpdatedAt,
     normalized_rule_json: version.normalizedRuleJson,
     generated_pine: version.generatedPine,
     warnings: Array.isArray(version.warningsJson) ? version.warningsJson : [],
@@ -88,6 +90,8 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       const nextForwardValidationNote = hasForwardValidationNote
         ? request.body.forward_validation_note!.trim() || null
         : version.forwardValidationNote;
+      const shouldUpdateForwardValidationNoteTimestamp =
+        hasForwardValidationNote && nextForwardValidationNote !== version.forwardValidationNote;
 
       if (!nextNaturalLanguageRule) {
         throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule must not be empty.');
@@ -107,6 +111,11 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           market: nextMarket,
           timeframe: nextTimeframe,
           forwardValidationNote: nextForwardValidationNote,
+          ...(shouldUpdateForwardValidationNoteTimestamp
+            ? {
+                forwardValidationNoteUpdatedAt: nextForwardValidationNote ? new Date() : null,
+              }
+            : {}),
           ...(updatingRuleFields
             ? {
                 // Rule edits invalidate previous generation artifacts.

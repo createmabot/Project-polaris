@@ -18,6 +18,7 @@ type StrategyRuleVersionRow = {
   clonedFromVersionId: string | null;
   naturalLanguageRule: string;
   forwardValidationNote: string | null;
+  forwardValidationNoteUpdatedAt: Date | null;
   normalizedRuleJson: unknown;
   generatedPine: string | null;
   warningsJson: unknown;
@@ -97,6 +98,7 @@ vi.mock('../src/db', () => {
           clonedFromVersionId: data.clonedFromVersionId ?? null,
           naturalLanguageRule: data.naturalLanguageRule,
           forwardValidationNote: data.forwardValidationNote ?? null,
+          forwardValidationNoteUpdatedAt: data.forwardValidationNoteUpdatedAt ?? null,
           normalizedRuleJson: data.normalizedRuleJson ?? null,
           generatedPine: data.generatedPine ?? null,
           warningsJson: data.warningsJson ?? null,
@@ -747,16 +749,29 @@ describe('strategy lab vertical slice', () => {
     expect(generate.statusCode).toBe(200);
     const statusBeforeNotePatch = generate.json().data.strategy_version.status as string;
 
-    const patchNote = await app.inject({
-      method: 'PATCH',
-      url: `/api/strategy-versions/${versionId}`,
-      payload: {
-        forward_validation_note: '次回は RSI 条件を 55 以上で再検証する',
-      },
-    });
-    expect(patchNote.statusCode).toBe(200);
-    expect(patchNote.json().data.strategy_version.forward_validation_note).toContain('RSI');
-    expect(patchNote.json().data.strategy_version.status).toBe(statusBeforeNotePatch);
+      const patchNote = await app.inject({
+        method: 'PATCH',
+        url: `/api/strategy-versions/${versionId}`,
+        payload: {
+          forward_validation_note: '次回は RSI 条件を 55 以上で再検証する',
+        },
+      });
+      expect(patchNote.statusCode).toBe(200);
+      expect(patchNote.json().data.strategy_version.forward_validation_note).toContain('RSI');
+      const noteUpdatedAtAfterNotePatch = patchNote.json().data.strategy_version.forward_validation_note_updated_at as string;
+      expect(typeof noteUpdatedAtAfterNotePatch).toBe('string');
+      expect(patchNote.json().data.strategy_version.status).toBe(statusBeforeNotePatch);
+
+      const patchRuleOnly = await app.inject({
+        method: 'PATCH',
+        url: `/api/strategy-versions/${versionId}`,
+        payload: {
+          natural_language_rule:
+            '25日移動平均線の上で、RSIが55以上、出来高が20日平均の1.8倍以上で買い。買い後5日経過で手仕舞い。',
+        },
+      });
+      expect(patchRuleOnly.statusCode).toBe(200);
+      expect(patchRuleOnly.json().data.strategy_version.forward_validation_note_updated_at).toBe(noteUpdatedAtAfterNotePatch);
 
     const detail = await app.inject({
       method: 'GET',
@@ -764,6 +779,7 @@ describe('strategy lab vertical slice', () => {
     });
     expect(detail.statusCode).toBe(200);
     expect(detail.json().data.strategy_version.forward_validation_note).toContain('RSI');
+    expect(detail.json().data.strategy_version.forward_validation_note_updated_at).toBe(noteUpdatedAtAfterNotePatch);
 
     const listedWithNote = await app.inject({
       method: 'GET',
@@ -772,6 +788,7 @@ describe('strategy lab vertical slice', () => {
     expect(listedWithNote.statusCode).toBe(200);
     const listedWithNoteRow = listedWithNote.json().data.strategy_versions.find((item: any) => item.id === versionId);
     expect(listedWithNoteRow.has_forward_validation_note).toBe(true);
+    expect(listedWithNoteRow.forward_validation_note_updated_at).toBe(noteUpdatedAtAfterNotePatch);
 
     const clearNote = await app.inject({
       method: 'PATCH',
@@ -782,6 +799,7 @@ describe('strategy lab vertical slice', () => {
     });
     expect(clearNote.statusCode).toBe(200);
     expect(clearNote.json().data.strategy_version.forward_validation_note).toBeNull();
+    expect(clearNote.json().data.strategy_version.forward_validation_note_updated_at).toBeNull();
 
     const listedWithoutNote = await app.inject({
       method: 'GET',
@@ -790,6 +808,7 @@ describe('strategy lab vertical slice', () => {
     expect(listedWithoutNote.statusCode).toBe(200);
     const listedWithoutNoteRow = listedWithoutNote.json().data.strategy_versions.find((item: any) => item.id === versionId);
     expect(listedWithoutNoteRow.has_forward_validation_note).toBe(false);
+    expect(listedWithoutNoteRow.forward_validation_note_updated_at).toBeNull();
 
     await app.close();
   });

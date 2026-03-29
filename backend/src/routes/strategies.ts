@@ -120,6 +120,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         has_forward_validation_note:
           typeof version.forwardValidationNote === 'string' &&
           version.forwardValidationNote.trim().length > 0,
+        forward_validation_note_updated_at: version.forwardValidationNoteUpdatedAt,
         has_diff_from_clone: version.clonedFromVersion
           ? version.naturalLanguageRule !== version.clonedFromVersion.naturalLanguageRule ||
             (version.generatedPine ?? '') !== (version.clonedFromVersion.generatedPine ?? '')

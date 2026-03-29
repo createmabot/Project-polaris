@@ -11,8 +11,11 @@ type StrategyVersionListProps = {
 const PAGE_SIZE = 20;
 const PRIORITY_VERSION_HASH_PREFIX = '#priority-version-';
 
-function formatNoteFreshness(updatedAt: string): string {
-  const updated = new Date(updatedAt);
+function formatNoteFreshness(noteUpdatedAt: string | null): string {
+  if (!noteUpdatedAt) {
+    return '-';
+  }
+  const updated = new Date(noteUpdatedAt);
   if (Number.isNaN(updated.getTime())) {
     return '更新時刻不明';
   }
@@ -479,7 +482,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 <span><strong>時間足:</strong> {version.timeframe}</span>
                 <span><strong>warnings:</strong> {version.has_warnings ? 'あり' : 'なし'}</span>
                 {version.has_forward_validation_note && (
-                  <span><strong>ノート更新目安:</strong> {formatNoteFreshness(version.updated_at)}</span>
+                  <span><strong>ノート更新目安:</strong> {formatNoteFreshness(version.forward_validation_note_updated_at)}</span>
                 )}
               </div>
               <div>
