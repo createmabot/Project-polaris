@@ -311,6 +311,7 @@ model StrategyRuleVersion {
   clonedVersions      StrategyRuleVersion[] @relation("StrategyVersionClones")
   naturalLanguageRule String       @db.Text
   forwardValidationNote String?    @map("forward_validation_note") @db.Text
+  forwardValidationNoteUpdatedAt DateTime? @map("forward_validation_note_updated_at")
   normalizedRuleJson  Json?
   generatedPine       String?      @db.Text
   warningsJson        Json?

@@ -293,6 +293,7 @@ export type StrategyVersionData = {
     normalized_rule_json: any;
     generated_pine: string | null;
     forward_validation_note: string | null;
+    forward_validation_note_updated_at: string | null;
     warnings: string[];
     assumptions: string[];
     created_at: string;
@@ -338,6 +339,7 @@ export type StrategyVersionListData = {
     cloned_from_version_id: string | null;
     is_derived: boolean;
     has_forward_validation_note: boolean;
+    forward_validation_note_updated_at: string | null;
     has_diff_from_clone: boolean | null;
     market: string;
     timeframe: string;

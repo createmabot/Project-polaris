@@ -74,13 +74,13 @@ pnpm run down
   - `/strategies/:strategyId/versions` で version 一覧表示
   - `/strategy-versions/:versionId` で version 詳細（自然言語原文 / generated pine / warnings / assumptions / status）表示
   - `/strategy-versions/:versionId` で「次の検証ノート（フォワード検証ノート）」を保存・更新可能（Strategy Version 単位）
-  - `/strategy-versions/:versionId` のノートセクションで「ノート更新目安」を表示し、最終更新時点を確認可能
+  - `/strategy-versions/:versionId` のノートセクションで「ノート更新目安」を表示し、`forward_validation_note_updated_at` に基づく最終更新時点を確認可能
   - `/strategy-lab` から一覧・詳細へ遷移可能
   - version 一覧は `natural_language_rule` の部分一致検索に対応（`q`）
   - status フィルタ、sort/order（`created_at|updated_at` × `asc|desc`）に対応
   - version 一覧で `要確認差分`（派生かつ差分あり）を最小強調表示
   - version 一覧で `検証ノートあり`（フォワード検証ノート有無）を最小表示
-  - version 一覧で `検証ノートあり` 行に「ノート更新目安」を最小表示し、鮮度判断を補助
+  - version 一覧で `検証ノートあり` 行に「ノート更新目安」を最小表示し、`forward_validation_note_updated_at` ベースで鮮度判断を補助
   - version 一覧で `要確認差分` かつ `検証ノートあり` を `最優先確認` として最小強調表示
   - version 一覧ヘッダで `要確認差分` / `検証ノートあり` / `要確認差分かつ検証ノートあり` のページ内件数を表示
   - `要確認差分かつ検証ノートあり` がある場合、件数サマリからページ内の最初の対象へジャンプ可能
