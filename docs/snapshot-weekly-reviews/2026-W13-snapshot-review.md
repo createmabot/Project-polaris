@@ -123,6 +123,9 @@ Rules:
   - PR: [#62](https://github.com/createmabot/Project-polaris/pull/62) (merged on 2026-03-29 JST)
   - Update: `StrategyVersionList` / `StrategyVersionDetail` に `ノート更新目安` の最小表示を追加し、`検証ノートあり` 行を起点とした return-flow 文脈でノート鮮度（一覧/詳細）の確認対象を固定化
   - Check result: [Actions run 23702576897](https://github.com/createmabot/Project-polaris/actions/runs/23702576897) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
+  - PR: [#67](https://github.com/createmabot/Project-polaris/pull/67) (merged on 2026-03-29 JST)
+  - Update: `今読む候補` の先頭移動 / 順送り導線を `StrategyVersionList` に追加し、`StrategyVersionList -> StrategyVersionDetail -> List` の return-flow 文脈で優先候補を連続確認できることを固定化
+  - Check result: [Actions run 23706383795](https://github.com/createmabot/Project-polaris/actions/runs/23706383795) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)
