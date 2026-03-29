@@ -328,6 +328,7 @@ model StrategyRuleVersion {
   @@map("strategy_rule_versions")
 
   backtests Backtest[]
+  internalBacktestExecutions InternalBacktestExecution[]
 }
 
 model Backtest {
@@ -367,4 +368,34 @@ model BacktestImport {
   @@index([backtestId, createdAt])
   @@index([parseStatus])
   @@map("backtest_imports")
+}
+
+enum InternalBacktestExecutionStatus {
+  queued
+  running
+  succeeded
+  failed
+  canceled
+}
+
+model InternalBacktestExecution {
+  id                    String                          @id @default(uuid())
+  strategyRuleVersionId String
+  strategyRuleVersion   StrategyRuleVersion             @relation(fields: [strategyRuleVersionId], references: [id])
+  status                InternalBacktestExecutionStatus @default(queued)
+  requestedAt           DateTime                        @default(now())
+  startedAt             DateTime?
+  finishedAt            DateTime?
+  inputSnapshotJson     Json
+  resultSummaryJson     Json?
+  artifactPointerJson   Json?
+  errorCode             String?
+  errorMessage          String?
+  engineVersion         String                          @default("ibtx-v0")
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+
+  @@index([strategyRuleVersionId, requestedAt])
+  @@index([status, requestedAt])
+  @@map("internal_backtest_executions")
 }

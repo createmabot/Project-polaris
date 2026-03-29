@@ -11,6 +11,7 @@ import { comparisonRoutes } from './routes/comparisons';
 import { strategyRoutes } from './routes/strategies';
 import { strategyVersionRoutes } from './routes/strategy-versions';
 import { backtestRoutes } from './routes/backtests';
+import { internalBacktestRoutes } from './routes/internal-backtests';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import crypto from 'crypto';
@@ -42,6 +43,7 @@ fastify.register(comparisonRoutes, { prefix: '/api/comparisons' });
 fastify.register(strategyRoutes, { prefix: '/api/strategies' });
 fastify.register(strategyVersionRoutes, { prefix: '/api/strategy-versions' });
 fastify.register(backtestRoutes, { prefix: '/api/backtests' });
+fastify.register(internalBacktestRoutes, { prefix: '/api/internal-backtests' });
 
 const start = async () => {
   try {
