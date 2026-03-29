@@ -230,7 +230,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const isNeedsReviewWithNote = (version: StrategyVersionListData['strategy_versions'][number]) =>
     isNeedsReviewDiff(version) && version.has_forward_validation_note;
 
-  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note' | 'priority' | 'note-fresh') => {
+  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note' | 'priority' | 'note-fresh' | 'read-now') => {
     const style = {
       display: 'inline-block',
       padding: '0.2rem 0.5rem',
@@ -245,6 +245,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (kind === 'no-base') return { ...style, background: '#f3f3f3', color: '#666' };
     if (kind === 'note') return { ...style, background: '#fff7dd', color: '#755200' };
     if (kind === 'note-fresh') return { ...style, background: '#e8f6ff', color: '#0e577c' };
+    if (kind === 'read-now') return { ...style, background: '#ffe9fb', color: '#7b1e68' };
     if (kind === 'priority') return { ...style, background: '#ffdede', color: '#8a1212' };
     return { ...style, background: '#f0f1f5', color: '#333' };
   };
@@ -288,6 +289,9 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
       .map((version) => version.id),
   );
   const latestForwardNoteCount = latestForwardNoteVersionIds.size;
+  const readNowCandidateCount = data.strategy_versions.filter(
+    (version) => isNeedsReviewWithNote(version) && latestForwardNoteVersionIds.has(version.id),
+  ).length;
   const latestForwardNoteLabel =
     latestForwardNoteTimestamp === null
       ? '-'
@@ -432,6 +436,9 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
             <span style={{ color: '#333', fontSize: '0.9rem' }}>
               このページ内の{NOTE_FRESHNESS_BADGE_LABEL}: <strong>{latestForwardNoteCount}</strong> 件
             </span>
+            <span style={{ color: '#333', fontSize: '0.9rem' }}>
+              このページ内の今読む候補: <strong>{readNowCandidateCount}</strong> 件
+            </span>
             {latestForwardNoteCount > 0 && (
               <span style={{ color: '#666', fontSize: '0.85rem' }}>
                 最新ノート更新: {latestForwardNoteLabel}
@@ -476,6 +483,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           </div>
           {data.strategy_versions.map((version) => {
             const isLatestForwardNote = latestForwardNoteVersionIds.has(version.id);
+            const isReadNowCandidate = isNeedsReviewWithNote(version) && isLatestForwardNote;
             return (
             <div
               key={version.id}
@@ -518,6 +526,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                   <span style={badgeStyle('no-base')}>比較元なし</span>
                 )}
                 {isNeedsReviewWithNote(version) && <span style={badgeStyle('priority')}>最優先確認</span>}
+                {isReadNowCandidate && <span style={badgeStyle('read-now')}>今読む候補</span>}
                 {isNeedsReviewDiff(version) && <span style={{ ...badgeStyle('diff'), background: '#ffedd4' }}>要確認差分</span>}
                 {version.has_diff_from_clone === true && <span style={badgeStyle('diff')}>差分あり</span>}
                 {version.has_diff_from_clone === false && <span style={badgeStyle('no-diff')}>差分なし</span>}
