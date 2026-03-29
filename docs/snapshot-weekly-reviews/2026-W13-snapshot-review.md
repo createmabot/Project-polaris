@@ -117,6 +117,9 @@ Rules:
   - PR: [#58](https://github.com/createmabot/Project-polaris/pull/58) (merged on 2026-03-29 JST)
   - Update: `StrategyVersionDetail` の Pine 差分抜粋に「確認順（変更 → 追加 → 削除）」と区分ごとの件数表示を追加し、clone 元との差分を読む順序を return-flow 文脈の確認対象として固定化
   - Check result: [Actions run 23701551085](https://github.com/createmabot/Project-polaris/actions/runs/23701551085) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
+  - PR: [#60](https://github.com/createmabot/Project-polaris/pull/60) (merged on 2026-03-29 JST)
+  - Update: `StrategyVersionDetail` の比較サマリ本体に「最初に確認」導線と `naturalLanguageRule / Pine / status / updatedAt` の変更有無表示を追加し、clone 元との差分をどの順で確認するかを return-flow 文脈の確認対象として固定化
+  - Check result: [Actions run 23702172323](https://github.com/createmabot/Project-polaris/actions/runs/23702172323) で `strategy-versions-return-flow-e2e-check` PASS（required checks 全体 PASS）
 
 ## 8) Required-check Failure Drill Evidence (`backtests-return-flow-e2e-check`)
 - Target PR: [#30 drill: backtests-return-flow-e2e-check pending/failure/restore/success](https://github.com/createmabot/Project-polaris/pull/30)
