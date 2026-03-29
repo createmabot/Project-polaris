@@ -32,6 +32,12 @@ type PineDiffExcerpt = {
   currentLine: string;
 };
 
+type PineDiffSection = {
+  kind: PineDiffExcerpt['kind'];
+  label: string;
+  items: PineDiffExcerpt[];
+};
+
 type RuleDiffSummary = {
   hasChanges: boolean;
   addedLines: number;
@@ -248,6 +254,21 @@ function buildPineDiffExcerpt(
   return excerpts;
 }
 
+function groupPineDiffExcerpt(excerpts: PineDiffExcerpt[]): PineDiffSection[] {
+  const order: Array<{ kind: PineDiffExcerpt['kind']; label: string }> = [
+    { kind: 'modified', label: '変更' },
+    { kind: 'added', label: '追加' },
+    { kind: 'removed', label: '削除' },
+  ];
+  return order
+    .map(({ kind, label }) => ({
+      kind,
+      label,
+      items: excerpts.filter((excerpt) => excerpt.kind === kind),
+    }))
+    .filter((section) => section.items.length > 0);
+}
+
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
   const [location, setLocation] = useLocation();
@@ -334,6 +355,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
     return buildPineDiffExcerpt(compareBase.generated_pine, version?.generated_pine);
   }, [compareBase, pineDiff.changed, version?.generated_pine]);
+
+  const pineDiffSections = useMemo(() => groupPineDiffExcerpt(pineDiffExcerpt), [pineDiffExcerpt]);
 
   const comparisonFocusItems = useMemo(() => {
     if (!version || !compareBase) {
@@ -659,17 +682,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               {pineDiff.changed && pineDiffExcerpt.length > 0 && (
                 <div style={{ marginTop: '0.7rem' }}>
                   <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>差分抜粋（先頭{pineDiffExcerpt.length}件）</div>
+                  <div style={{ marginBottom: '0.4rem', color: '#444', fontSize: '0.9rem' }}>
+                    確認順: 変更 → 追加 → 削除（存在する区分のみ表示）
+                  </div>
                   <div style={{ display: 'grid', gap: '0.35rem' }}>
-                    {pineDiffExcerpt.map((excerpt, index) => (
-                      <div key={`${excerpt.baseLine}-${excerpt.currentLine}-${index}`} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: '4px', padding: '0.5rem' }}>
-                        <div style={{ marginBottom: '0.25rem', fontSize: '0.82rem', color: '#555' }}>
-                          区分: {excerpt.kind === 'modified' ? '変更' : excerpt.kind === 'added' ? '追加' : '削除'}
+                    {pineDiffSections.map((section) => (
+                      <div key={section.kind} style={{ border: '1px solid #e5e5e5', borderRadius: '4px', padding: '0.5rem', background: '#fff' }}>
+                        <div style={{ marginBottom: '0.35rem', fontSize: '0.9rem', color: '#333', fontWeight: 600 }}>
+                          {section.label} ({section.items.length})
                         </div>
-                        <div style={{ color: '#a10000', whiteSpace: 'pre-wrap' }}>
-                          <strong>- base:</strong> {excerpt.baseLine || '(なし)'}
-                        </div>
-                        <div style={{ color: '#1f6a1f', whiteSpace: 'pre-wrap', marginTop: '0.2rem' }}>
-                          <strong>+ current:</strong> {excerpt.currentLine || '(なし)'}
+                        <div style={{ display: 'grid', gap: '0.35rem' }}>
+                          {section.items.map((excerpt, index) => (
+                            <div key={`${section.kind}-${excerpt.baseLine}-${excerpt.currentLine}-${index}`} style={{ borderTop: index > 0 ? '1px dashed #ececec' : 'none', paddingTop: index > 0 ? '0.35rem' : 0 }}>
+                              <div style={{ marginBottom: '0.25rem', fontSize: '0.82rem', color: '#555' }}>
+                                区分: {excerpt.kind === 'modified' ? '変更' : excerpt.kind === 'added' ? '追加' : '削除'}
+                              </div>
+                              <div style={{ color: '#a10000', whiteSpace: 'pre-wrap' }}>
+                                <strong>- base:</strong> {excerpt.baseLine || '(なし)'}
+                              </div>
+                              <div style={{ color: '#1f6a1f', whiteSpace: 'pre-wrap', marginTop: '0.2rem' }}>
+                                <strong>+ current:</strong> {excerpt.currentLine || '(なし)'}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))}

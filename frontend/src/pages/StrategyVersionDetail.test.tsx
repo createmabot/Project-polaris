@@ -177,6 +177,8 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Pine 差分（最小）');
     expect(html).toContain('変更有無:</strong> 変更あり');
     expect(html).toContain('差分抜粋（先頭');
+    expect(html).toContain('確認順: 変更 → 追加 → 削除');
+    expect(html).toContain('変更 (1)');
     expect(html).toContain('区分: 変更');
     expect(html).toContain('- base:</strong> strategy(&quot;A&quot;)');
     expect(html).toContain('+ current:</strong> strategy(&quot;B&quot;)');
