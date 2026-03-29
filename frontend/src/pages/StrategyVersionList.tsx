@@ -297,7 +297,13 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
       ? '-'
       : new Date(latestForwardNoteTimestamp).toLocaleString('ja-JP');
   const firstNeedsReviewWithNoteVersion = data.strategy_versions.find(isNeedsReviewWithNote);
+  const firstReadNowCandidateVersion = data.strategy_versions.find(
+    (version) => isNeedsReviewWithNote(version) && latestForwardNoteVersionIds.has(version.id),
+  );
   const priorityVersionIds = data.strategy_versions.filter(isNeedsReviewWithNote).map((version) => version.id);
+  const readNowVersionIds = data.strategy_versions
+    .filter((version) => isNeedsReviewWithNote(version) && latestForwardNoteVersionIds.has(version.id))
+    .map((version) => version.id);
 
   const moveToNextPriorityVersion = () => {
     if (typeof window === 'undefined' || priorityVersionIds.length === 0) {
@@ -312,6 +318,25 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (window.location.hash === nextHash) {
       setHighlightedPriorityVersionId(nextVersionId);
       setPriorityCursorVersionId(nextVersionId);
+      return;
+    }
+
+    window.location.hash = nextHash;
+  };
+
+  const moveToNextReadNowCandidate = () => {
+    if (typeof window === 'undefined' || readNowVersionIds.length === 0) {
+      return;
+    }
+
+    const currentHashId = resolvePriorityVersionIdFromHash(window.location.hash, data.strategy_versions);
+    const currentIndex = currentHashId ? readNowVersionIds.indexOf(currentHashId) : -1;
+    const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % readNowVersionIds.length : 0;
+    const nextVersionId = readNowVersionIds[nextIndex];
+    const nextHash = buildPriorityVersionHash(nextVersionId);
+
+    if (window.location.hash === nextHash) {
+      setHighlightedPriorityVersionId(nextVersionId);
       return;
     }
 
@@ -443,6 +468,32 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
               <span style={{ color: '#666', fontSize: '0.85rem' }}>
                 最新ノート更新: {latestForwardNoteLabel}
               </span>
+            )}
+            {firstReadNowCandidateVersion && (
+              <a
+                href={buildPriorityVersionHash(firstReadNowCandidateVersion.id)}
+                style={{ color: '#8a1212', fontSize: '0.85rem', textDecoration: 'none', fontWeight: 600 }}
+              >
+                今読む候補の先頭へ移動
+              </a>
+            )}
+            {readNowCandidateCount > 1 && (
+              <button
+                type='button'
+                onClick={moveToNextReadNowCandidate}
+                style={{
+                  padding: '0.2rem 0.55rem',
+                  border: '1px solid #e5bad9',
+                  borderRadius: '999px',
+                  background: '#fff',
+                  color: '#7b1e68',
+                  cursor: 'pointer',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                }}
+              >
+                次の今読む候補へ
+              </button>
             )}
             {firstNeedsReviewWithNoteVersion && (
               <a

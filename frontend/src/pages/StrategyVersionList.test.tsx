@@ -75,6 +75,8 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('このページ内の要確認差分かつ検証ノートあり: <strong>1</strong> 件');
     expect(html).toContain('このページ内の最新ノート: <strong>1</strong> 件');
     expect(html).toContain('このページ内の今読む候補: <strong>1</strong> 件');
+    expect(html).toContain('今読む候補の先頭へ移動');
+    expect(html).not.toContain('次の今読む候補へ');
     expect(html).toContain('最新ノート更新:');
     expect(html).toContain('href="#priority-version-ver-2"');
     expect(html).not.toContain('次の最優先確認へ');
@@ -143,6 +145,8 @@ describe('StrategyVersionList', () => {
     expect(html).not.toContain('最新ノート更新:');
     expect(html).not.toContain('最優先確認の先頭へ移動');
     expect(html).not.toContain('次の最優先確認へ');
+    expect(html).not.toContain('今読む候補の先頭へ移動');
+    expect(html).not.toContain('次の今読む候補へ');
     expect(html).not.toContain('検証ノートあり</span>');
     expect(html).not.toContain('ノート更新目安:');
     expect(html).not.toContain('`要確認差分` バッジ付き version を優先確認してください');
@@ -256,7 +260,7 @@ describe('StrategyVersionList', () => {
             cloned_from_version_id: 'ver-base',
             is_derived: true,
             has_forward_validation_note: true,
-            forward_validation_note_updated_at: '2026-03-29T08:00:00.000Z',
+            forward_validation_note_updated_at: '2026-03-29T09:00:00.000Z',
             has_diff_from_clone: true,
             market: 'JP_STOCK',
             timeframe: 'D',
@@ -303,8 +307,10 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('このページ内の要確認差分: <strong>3</strong> 件');
     expect(html).toContain('このページ内の検証ノートあり: <strong>3</strong> 件');
     expect(html).toContain('このページ内の要確認差分かつ検証ノートあり: <strong>2</strong> 件');
-    expect(html).toContain('このページ内の最新ノート: <strong>1</strong> 件');
-    expect(html).toContain('このページ内の今読む候補: <strong>1</strong> 件');
+    expect(html).toContain('このページ内の最新ノート: <strong>2</strong> 件');
+    expect(html).toContain('このページ内の今読む候補: <strong>2</strong> 件');
+    expect(html).toContain('今読む候補の先頭へ移動');
+    expect(html).toContain('次の今読む候補へ');
     expect(html).toContain('最優先確認の先頭へ移動');
     expect(html).toContain('次の最優先確認へ');
     expect(html).toContain('id="priority-version-ver-priority"');
