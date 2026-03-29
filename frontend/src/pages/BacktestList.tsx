@@ -25,6 +25,19 @@ function shortId(value: string | null | undefined): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
+function buildStrategyVersionsPath(strategyId: string): string {
+  const params = new URLSearchParams();
+  params.set('sort', 'updated_at');
+  params.set('order', 'desc');
+  params.set('page', '1');
+  return `/strategies/${strategyId}/versions?${params.toString()}`;
+}
+
+function buildStrategyVersionDetailPath(strategyId: string, strategyVersionId: string): string {
+  const returnPath = buildStrategyVersionsPath(strategyId);
+  return `/strategy-versions/${strategyVersionId}?return=${encodeURIComponent(returnPath)}`;
+}
+
 export type BacktestListQueryState = {
   q: string;
   page: number;
@@ -291,6 +304,16 @@ export default function BacktestList() {
                   >
                     詳細を開く
                   </Link>
+                  {item.strategy_id && item.strategy_version_id && (
+                    <span style={{ marginLeft: '0.8rem' }}>
+                      <Link
+                        href={buildStrategyVersionDetailPath(item.strategy_id, item.strategy_version_id)}
+                        style={{ color: '#0a5bb5', textDecoration: 'none' }}
+                      >
+                        Rule Lab で見直す
+                      </Link>
+                    </span>
+                  )}
                 </div>
               </div>
             );

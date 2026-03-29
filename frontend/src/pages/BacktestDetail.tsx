@@ -106,6 +106,19 @@ export function parseBacktestsReturnPath(locationPath: string): string | null {
   return normalizeBacktestsReturnPath(decodedReturn);
 }
 
+function buildStrategyVersionsPath(strategyId: string): string {
+  const params = new URLSearchParams();
+  params.set('sort', 'updated_at');
+  params.set('order', 'desc');
+  params.set('page', '1');
+  return `/strategies/${strategyId}/versions?${params.toString()}`;
+}
+
+function buildStrategyVersionDetailPath(strategyId: string, strategyVersionId: string): string {
+  const returnPath = buildStrategyVersionsPath(strategyId);
+  return `/strategy-versions/${strategyVersionId}?return=${encodeURIComponent(returnPath)}`;
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location] = useLocation();
@@ -122,6 +135,11 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const summary = latestImport?.parsed_summary;
   const usedStrategy = data.used_strategy;
   const snapshot = usedStrategy.snapshot;
+  const strategyVersionsPath = usedStrategy.strategy_id ? buildStrategyVersionsPath(usedStrategy.strategy_id) : null;
+  const strategyVersionDetailPath =
+    usedStrategy.strategy_id && usedStrategy.strategy_version_id
+      ? buildStrategyVersionDetailPath(usedStrategy.strategy_id, usedStrategy.strategy_version_id)
+      : null;
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -174,17 +192,23 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           <p style={{ marginBottom: 0, color: '#666' }}>実行時 strategy snapshot はありません。</p>
         )}
 
-        <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '0.8rem' }}>
-          {usedStrategy.strategy_version_id && (
-            <Link href={`/strategy-versions/${usedStrategy.strategy_version_id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-              現在の version 詳細を見る
-            </Link>
-          )}
-          {usedStrategy.strategy_id && (
-            <Link href={`/strategies/${usedStrategy.strategy_id}/versions`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-              同一 Strategy の version 一覧を見る
-            </Link>
-          )}
+        <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
+          <div style={{ fontWeight: 600 }}>次アクション（Rule Lab）</div>
+          <div style={{ marginTop: '0.35rem', color: '#555', fontSize: '0.92rem' }}>
+            この backtest の結果をもとに、version の見直し・再生成へ戻れます。
+          </div>
+          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
+            {strategyVersionDetailPath && (
+              <Link href={strategyVersionDetailPath} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+                この version を Rule Lab で見直す
+              </Link>
+            )}
+            {strategyVersionsPath && (
+              <Link href={strategyVersionsPath} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+                同一 Strategy の version 一覧を見る
+              </Link>
+            )}
+          </div>
         </div>
       </section>
 
