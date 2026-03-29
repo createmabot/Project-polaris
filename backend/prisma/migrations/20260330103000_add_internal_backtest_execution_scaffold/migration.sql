@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "InternalBacktestExecutionStatus" AS ENUM ('queued', 'running', 'succeeded', 'failed', 'canceled');
 
 -- CreateTable
