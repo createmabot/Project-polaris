@@ -149,6 +149,50 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('returns validation error when data_range uses invalid date format', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        data_range: { from: '2024/01/01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('ISO date format');
+
+    await app.close();
+  });
+
+  it('returns validation error when data_range.from is after data_range.to', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        data_range: { from: '2026-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('less than or equal');
+
+    await app.close();
+  });
+
   it('marks execution as failed when enqueue fails', async () => {
     const app = await createApp();
     enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));
@@ -244,8 +288,19 @@ describe('internal backtests scaffold routes', () => {
         timeframe: 'D',
       },
       resultSummaryJson: {
-        net_profit: 120000,
-        profit_factor: 1.42,
+        schema_version: '1.0',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        period: { from: '2024-01-01', to: '2025-12-31' },
+        metrics: {
+          total_trades: 36,
+          win_rate: 0.44,
+          net_profit: 120000,
+          profit_factor: 1.42,
+          max_drawdown_percent: -8.2,
+        },
+        engine: { version: 'ibtx-v0' },
+        notes: 'sample summary',
       },
       artifactPointerJson: {
         type: 'internal_report_snapshot',
@@ -265,7 +320,7 @@ describe('internal backtests scaffold routes', () => {
     expect(resultRes.statusCode).toBe(200);
     const body = resultRes.json();
     expect(body.data.execution_id).toBe('ibtx-succeeded');
-    expect(body.data.result_summary.net_profit).toBe(120000);
+    expect(body.data.result_summary.metrics.net_profit).toBe(120000);
     expect(body.data.artifact_pointer.id).toBe('ibtx-report-1');
 
     await app.close();
