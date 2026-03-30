@@ -149,6 +149,50 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('falls back to strategy version market/timeframe when request omits them', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const executionId = res.json().data.execution.id as string;
+    const saved = runtime.executions.get(executionId);
+    expect(saved?.inputSnapshotJson.market).toBe('JP_STOCK');
+    expect(saved?.inputSnapshotJson.timeframe).toBe('D');
+
+    await app.close();
+  });
+
+  it('uses request market/timeframe over strategy version defaults', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'US_STOCK',
+        timeframe: '4H',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const executionId = res.json().data.execution.id as string;
+    const saved = runtime.executions.get(executionId);
+    expect(saved?.inputSnapshotJson.market).toBe('US_STOCK');
+    expect(saved?.inputSnapshotJson.timeframe).toBe('4H');
+
+    await app.close();
+  });
+
   it('returns validation error when data_range uses invalid date format', async () => {
     const app = await createApp();
 
@@ -189,6 +233,48 @@ describe('internal backtests scaffold routes', () => {
     const body = res.json();
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.message).toContain('less than or equal');
+
+    await app.close();
+  });
+
+  it('returns validation error when optional market is present but invalid', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 123,
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('market must be a non-empty string when provided');
+
+    await app.close();
+  });
+
+  it('returns validation error when optional timeframe is present but blank', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        timeframe: '   ',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('timeframe must be a non-empty string when provided');
 
     await app.close();
   });

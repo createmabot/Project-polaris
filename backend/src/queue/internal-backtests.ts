@@ -3,10 +3,10 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { redis } from '../redis';
 import {
-  createDefaultResultSummary,
-  validateResultSummarySchema,
-  type InternalBacktestInputSnapshot,
-} from '../internal-backtests/contracts';
+  runInternalBacktestExecutionService,
+  type RunExecutionServiceInput,
+} from '../internal-backtests/run-execution-service';
+import { validateResultSummarySchema } from '../internal-backtests/contracts';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
@@ -18,15 +18,11 @@ export type InternalBacktestExecutionJobData = {
 };
 
 type ExecutionOutput = {
-  resultSummary: Prisma.InputJsonValue;
+  resultSummary: unknown;
   artifactPointer?: Prisma.InputJsonValue | null;
 };
 
-type RunExecutionFn = (execution: {
-  id: string;
-  strategyRuleVersionId: string;
-  inputSnapshotJson: unknown;
-}) => Promise<ExecutionOutput>;
+type RunExecutionFn = (execution: RunExecutionServiceInput) => Promise<ExecutionOutput>;
 
 type WorkerLogger = {
   info: (payload: Record<string, unknown>) => void;
@@ -60,32 +56,15 @@ export function getInternalBacktestExecutionQueue() {
 }
 
 const defaultRunExecution: RunExecutionFn = async (execution) => {
-  const inputSnapshot =
-    execution.inputSnapshotJson && typeof execution.inputSnapshotJson === 'object' && !Array.isArray(execution.inputSnapshotJson)
-      ? (execution.inputSnapshotJson as InternalBacktestInputSnapshot)
-      : null;
-  if (!inputSnapshot) {
-    throw new Error('input_snapshot_invalid');
-  }
-  const engineConfig =
-    inputSnapshot.engine_config && typeof inputSnapshot.engine_config === 'object' && !Array.isArray(inputSnapshot.engine_config)
-      ? (inputSnapshot.engine_config as Record<string, unknown>)
-      : {};
-
-  if (engineConfig.simulate_failure === true) {
-    throw new Error('simulated_internal_backtest_failure');
-  }
-
+  const output = await runInternalBacktestExecutionService({
+    executionId: execution.executionId,
+    strategyRuleVersionId: execution.strategyRuleVersionId,
+    inputSnapshotJson: execution.inputSnapshotJson,
+    engineVersion: execution.engineVersion,
+  });
   return {
-    resultSummary: createDefaultResultSummary({
-      inputSnapshot,
-      engineVersion: 'ibtx-v0',
-    }),
-    artifactPointer: {
-      type: 'internal_backtest_execution',
-      execution_id: execution.id,
-      path: `/internal-backtests/executions/${execution.id}`,
-    },
+    resultSummary: output.resultSummary as unknown as Prisma.InputJsonValue,
+    artifactPointer: output.artifactPointer as unknown as Prisma.InputJsonValue,
   };
 };
 
@@ -135,19 +114,21 @@ export async function processInternalBacktestExecution(
   });
 
   try {
-    const output = await runExecution({
-      id: execution.id,
+    const runInput: RunExecutionServiceInput = {
+      executionId: execution.id,
       strategyRuleVersionId: execution.strategyRuleVersionId,
       inputSnapshotJson: execution.inputSnapshotJson,
-    });
-    const validatedResultSummary = validateResultSummarySchema(output.resultSummary);
+      engineVersion: execution.engineVersion,
+    };
+    const output = await runExecution(runInput);
+    const validatedSummary = validateResultSummarySchema(output.resultSummary as unknown);
 
     const succeeded = await db.internalBacktestExecution.update({
       where: { id: execution.id },
       data: {
         status: 'succeeded',
         finishedAt: now(),
-        resultSummaryJson: validatedResultSummary,
+        resultSummaryJson: validatedSummary as unknown as Prisma.InputJsonValue,
         artifactPointerJson: output.artifactPointer ?? Prisma.DbNull,
         errorCode: null,
         errorMessage: null,
@@ -161,7 +142,9 @@ export async function processInternalBacktestExecution(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'internal_backtest_execution_failed';
     const errorCode =
-      errorMessage.includes('result_summary') || errorMessage.includes('schema_version')
+      errorMessage.includes('result_summary') ||
+      errorMessage.includes('schema_version') ||
+      errorMessage.includes('input_snapshot')
         ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
         : INTERNAL_BACKTEST_EXECUTION_FAILED_CODE;
 
