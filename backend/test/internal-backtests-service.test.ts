@@ -45,10 +45,59 @@ describe('internal backtest execution service contracts', () => {
     expect(output.resultSummary.schema_version).toBe('1.0');
     expect(output.resultSummary.market).toBe('JP_STOCK');
     expect(output.resultSummary.period.to).toBe('2025-12-31');
+    expect(output.resultSummary.metrics.total_trades).toBeGreaterThan(0);
     expect(output.artifactPointer).toMatchObject({
       type: 'internal_backtest_execution',
       execution_id: 'ibtx-1',
+      path: '/internal-backtests/executions/ibtx-1',
     });
+  });
+
+  it('calculates deterministic metrics from execution input', async () => {
+    const snapshotBase = {
+      strategy_rule_version_id: 'ver-1',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {},
+      strategy_snapshot: {
+        natural_language_rule: 'rule',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    };
+
+    const first = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-a',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: snapshotBase,
+    });
+
+    const second = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-b',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: snapshotBase,
+    });
+
+    const differentInput = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-c',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: {
+        ...snapshotBase,
+        timeframe: '4H',
+        strategy_snapshot: {
+          ...snapshotBase.strategy_snapshot,
+          timeframe: '4H',
+        },
+      },
+    });
+
+    expect(first.resultSummary.metrics).toEqual(second.resultSummary.metrics);
+    expect(differentInput.resultSummary.metrics).not.toEqual(first.resultSummary.metrics);
   });
 
   it('fails when input snapshot is invalid', async () => {
@@ -73,4 +122,3 @@ describe('internal backtest execution service contracts', () => {
     ).rejects.toThrow('from<=to');
   });
 });
-
