@@ -237,6 +237,48 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('returns validation error when optional market is present but invalid', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 123,
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('market must be a non-empty string when provided');
+
+    await app.close();
+  });
+
+  it('returns validation error when optional timeframe is present but blank', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        timeframe: '   ',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('timeframe must be a non-empty string when provided');
+
+    await app.close();
+  });
+
   it('marks execution as failed when enqueue fails', async () => {
     const app = await createApp();
     enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));

@@ -88,6 +88,23 @@ function requireTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function getOptionalStringIfPresent(
+  input: Record<string, unknown>,
+  key: string,
+  label: string,
+): string | null {
+  if (!Object.prototype.hasOwnProperty.call(input, key)) {
+    return null;
+  }
+
+  const value = requireTrimmedString(input[key]);
+  if (!value) {
+    throw new Error(`${label} must be a non-empty string when provided.`);
+  }
+
+  return value;
+}
+
 function asPlainObject(value: unknown): PlainObject | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as PlainObject;
@@ -113,8 +130,9 @@ function assertOptionalFiniteNumber(value: unknown, field: string): number | nul
 
 export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInput): NormalizedCreateExecutionRequest {
   const strategyRuleVersionId = requireTrimmedString(input.strategy_rule_version_id);
-  const market = requireTrimmedString(input.market);
-  const timeframe = requireTrimmedString(input.timeframe);
+  const inputObject = input as Record<string, unknown>;
+  const market = getOptionalStringIfPresent(inputObject, 'market', 'market');
+  const timeframe = getOptionalStringIfPresent(inputObject, 'timeframe', 'timeframe');
   const dataRangeRaw = asPlainObject(input.data_range);
   const rangeFrom = requireTrimmedString(dataRangeRaw?.from);
   const rangeTo = requireTrimmedString(dataRangeRaw?.to);
