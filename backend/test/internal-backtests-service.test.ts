@@ -149,6 +149,44 @@ describe('internal backtest execution service contracts', () => {
     expect(daily.resultSummary.metrics).toEqual(lowercase.resultSummary.metrics);
   });
 
+  it('returns engine_estimated summary when summary_mode is requested', async () => {
+    const baseInputSnapshot = {
+      strategy_rule_version_id: 'ver-1',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      data_range: { from: '2024-01-01', to: '2025-12-31' },
+      strategy_snapshot: {
+        natural_language_rule: 'rule',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    };
+
+    const scaffoldOutput = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-11',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: {
+        ...baseInputSnapshot,
+        engine_config: {},
+      },
+    });
+    const estimatedOutput = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-22',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: {
+        ...baseInputSnapshot,
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(estimatedOutput.resultSummary.summary_kind).toBe('engine_estimated');
+    expect(scaffoldOutput.resultSummary.summary_kind).toBe('scaffold_deterministic');
+    expect(estimatedOutput.resultSummary.metrics).not.toEqual(scaffoldOutput.resultSummary.metrics);
+  });
+
   it('fails when input snapshot is invalid', async () => {
     await expect(
       runInternalBacktestExecutionService({
@@ -186,7 +224,7 @@ describe('internal backtest execution service contracts', () => {
             engine_config: {},
             strategy_snapshot: {
               natural_language_rule: 'rule',
-              generated_pine: 'strategy(\"x\")',
+              generated_pine: 'strategy("x")',
               market: 'JP_STOCK',
               timeframe: 'D',
             },

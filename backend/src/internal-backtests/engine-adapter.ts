@@ -84,17 +84,44 @@ function calculateDeterministicMetrics(input: InternalBacktestExecutionInput) {
   };
 }
 
+function calculateEstimatedMetrics(input: InternalBacktestExecutionInput) {
+  const scaffold = calculateDeterministicMetrics(input);
+  const periodDays = daysBetweenInclusive(input.dataRange.from, input.dataRange.to);
+  const rangeFactor = Math.max(1, Math.floor(periodDays / 45));
+
+  return {
+    total_trades: scaffold.total_trades + rangeFactor,
+    win_rate: roundTo(Math.min(0.95, scaffold.win_rate + 0.02), 2),
+    net_profit: scaffold.net_profit + rangeFactor * 650,
+    profit_factor: scaffold.profit_factor === null ? null : roundTo(scaffold.profit_factor + 0.12, 2),
+    max_drawdown_percent:
+      scaffold.max_drawdown_percent === null ? null : roundTo(scaffold.max_drawdown_percent - 0.6, 2),
+  };
+}
+
 export const runDummyInternalBacktestEngine: InternalBacktestEngineAdapter = async ({ input }) => {
   const simulateFailure = input.engineConfig.simulate_failure === true;
   if (simulateFailure) {
     throw new Error('simulated_internal_backtest_failure');
   }
 
-  const metrics = calculateDeterministicMetrics(input);
+  const requestedSummaryMode =
+    typeof input.engineConfig.summary_mode === 'string'
+      ? input.engineConfig.summary_mode.trim().toLowerCase()
+      : null;
+
+  const useEstimated = requestedSummaryMode === 'engine_estimated';
+  const summaryKind: InternalBacktestEngineRunResult['summary_kind'] = useEstimated
+    ? 'engine_estimated'
+    : 'scaffold_deterministic';
+  const metrics = useEstimated ? calculateEstimatedMetrics(input) : calculateDeterministicMetrics(input);
+  const notes = useEstimated
+    ? 'internal backtest worker estimated-stage result'
+    : 'deterministic scaffold metrics derived from execution input';
 
   return {
-    summary_kind: 'scaffold_deterministic',
+    summary_kind: summaryKind,
     metrics,
-    notes: 'deterministic scaffold metrics derived from execution input',
+    notes,
   };
 };

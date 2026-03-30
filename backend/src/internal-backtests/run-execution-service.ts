@@ -29,11 +29,12 @@ function mergeEngineResult(args: {
   engine: Awaited<ReturnType<InternalBacktestEngineAdapter>>;
 }): InternalBacktestResultSummary {
   const metrics = args.engine.metrics ?? {};
+  const summaryKind = args.engine.summary_kind ?? args.base.summary_kind;
   const notes = args.engine.notes?.trim() ?? args.base.notes;
 
   return {
     ...args.base,
-    summary_kind: args.engine.summary_kind ?? args.base.summary_kind,
+    summary_kind: summaryKind,
     metrics: {
       total_trades: metrics.total_trades ?? args.base.metrics.total_trades,
       win_rate: metrics.win_rate ?? args.base.metrics.win_rate,
