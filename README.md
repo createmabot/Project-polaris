@@ -77,8 +77,9 @@ pnpm run down
   - `POST /api/internal-backtests/executions`（`queued` で job 作成 + queue enqueue）
   - `GET /api/internal-backtests/executions/:executionId`（status 取得）
   - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` 時のみ結果取得）
+  - `POST` では execution input snapshot の最小検証を実施（必須項目 / `YYYY-MM-DD` / `from<=to`）
   - worker 骨組みで `queued -> running -> succeeded|failed` を最小遷移
-  - 成功時に `resultSummaryJson` / `artifactPointerJson` を最小保存（ダミー結果）
+  - 成功時に `resultSummaryJson` / `artifactPointerJson` を最小保存（`schema_version: \"1.0\"` の summary）
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証
   - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理

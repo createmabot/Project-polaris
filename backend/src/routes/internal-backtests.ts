@@ -3,79 +3,43 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { enqueueInternalBacktestExecution } from '../queue/internal-backtests';
-
-type CreateInternalBacktestExecutionBody = {
-  strategy_rule_version_id?: string;
-  market?: string;
-  timeframe?: string;
-  data_range?: {
-    from?: string;
-    to?: string;
-  };
-  engine_config?: Record<string, unknown>;
-};
-
-type InputSnapshot = {
-  strategy_rule_version_id: string;
-  market: string;
-  timeframe: string;
-  data_range: { from: string; to: string };
-  engine_config: Record<string, unknown>;
-  strategy_snapshot: {
-    natural_language_rule: string;
-    generated_pine: string | null;
-    market: string;
-    timeframe: string;
-  };
-};
+import {
+  buildExecutionInputSnapshot,
+  normalizeCreateExecutionRequest,
+  type CreateExecutionRequestInput,
+  type NormalizedCreateExecutionRequest,
+} from '../internal-backtests/contracts';
 
 export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post<{ Body: CreateInternalBacktestExecutionBody }>('/executions', async (request, reply) => {
-    const strategyVersionId = typeof request.body.strategy_rule_version_id === 'string'
-      ? request.body.strategy_rule_version_id.trim()
-      : '';
-    const market = typeof request.body.market === 'string' ? request.body.market.trim() : '';
-    const timeframe = typeof request.body.timeframe === 'string' ? request.body.timeframe.trim() : '';
-    const rangeFrom = typeof request.body.data_range?.from === 'string'
-      ? request.body.data_range.from.trim()
-      : '';
-    const rangeTo = typeof request.body.data_range?.to === 'string'
-      ? request.body.data_range.to.trim()
-      : '';
-    const engineConfig =
-      request.body.engine_config && typeof request.body.engine_config === 'object' && !Array.isArray(request.body.engine_config)
-        ? request.body.engine_config
-        : {};
-
-    if (!strategyVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
-      throw new AppError(
-        400,
-        'VALIDATION_ERROR',
-        'strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required.',
-      );
+  fastify.post<{ Body: CreateExecutionRequestInput }>('/executions', async (request, reply) => {
+    let normalizedRequest: NormalizedCreateExecutionRequest;
+    try {
+      normalizedRequest = normalizeCreateExecutionRequest(request.body ?? {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'invalid request body';
+      throw new AppError(400, 'VALIDATION_ERROR', message);
     }
 
-    const strategyVersion = await prisma.strategyRuleVersion.findUnique({ where: { id: strategyVersionId } });
+    const strategyVersion = await prisma.strategyRuleVersion.findUnique({
+      where: { id: normalizedRequest.strategyRuleVersionId },
+    });
     if (!strategyVersion) {
       throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
     }
 
-    const inputSnapshot: InputSnapshot = {
-      strategy_rule_version_id: strategyVersion.id,
-      market,
-      timeframe,
-      data_range: {
-        from: rangeFrom,
-        to: rangeTo,
-      },
-      engine_config: engineConfig,
-      strategy_snapshot: {
-        natural_language_rule: strategyVersion.naturalLanguageRule,
-        generated_pine: strategyVersion.generatedPine,
+    const inputSnapshot = buildExecutionInputSnapshot({
+      strategyRuleVersionId: strategyVersion.id,
+      market: normalizedRequest.market,
+      timeframe: normalizedRequest.timeframe,
+      dataRange: normalizedRequest.dataRange,
+      engineConfig: normalizedRequest.engineConfig,
+      strategySnapshot: {
+        naturalLanguageRule: strategyVersion.naturalLanguageRule,
+        generatedPine: strategyVersion.generatedPine,
         market: strategyVersion.market,
         timeframe: strategyVersion.timeframe,
       },
-    };
+    });
 
     const execution = await prisma.internalBacktestExecution.create({
       data: {

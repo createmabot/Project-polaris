@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { processInternalBacktestExecution, INTERNAL_BACKTEST_EXECUTION_FAILED_CODE } from '../src/queue/internal-backtests';
+import {
+  processInternalBacktestExecution,
+  INTERNAL_BACKTEST_EXECUTION_FAILED_CODE,
+  INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE,
+} from '../src/queue/internal-backtests';
 
 type ExecutionRow = {
   id: string;
@@ -80,7 +84,21 @@ describe('internal backtest worker scaffold', () => {
       {
         db: prismaMock,
         runExecution: async () => ({
-          resultSummary: { net_profit: 1234, trade_count: 10 },
+          resultSummary: {
+            schema_version: '1.0',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2025-12-31' },
+            metrics: {
+              total_trades: 10,
+              win_rate: 0.5,
+              net_profit: 1234,
+              profit_factor: 1.2,
+              max_drawdown_percent: -5.1,
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'ok',
+          },
           artifactPointer: { type: 'internal_report_snapshot', id: 'rep-1' },
         }),
       },
@@ -91,7 +109,10 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.status).toBe('succeeded');
     expect(saved?.startedAt).not.toBeNull();
     expect(saved?.finishedAt).not.toBeNull();
-    expect(saved?.resultSummaryJson).toMatchObject({ net_profit: 1234, trade_count: 10 });
+    expect(saved?.resultSummaryJson).toMatchObject({
+      schema_version: '1.0',
+      metrics: { net_profit: 1234, total_trades: 10 },
+    });
     expect(saved?.artifactPointerJson).toMatchObject({ id: 'rep-1' });
     expect(saved?.errorCode).toBeNull();
     expect(saved?.errorMessage).toBeNull();
@@ -116,6 +137,28 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_EXECUTION_FAILED_CODE);
     expect(saved?.errorMessage).toContain('simulated_failure');
     expect(saved?.finishedAt).not.toBeNull();
+  });
+
+  it('fails execution when result summary schema is invalid', async () => {
+    executionStore.set('ibtx-invalid-summary', createExecutionRow({ id: 'ibtx-invalid-summary', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-invalid-summary' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          // schema_version missing intentionally
+          resultSummary: { net_profit: 1 },
+          artifactPointer: { type: 'internal_report_snapshot', id: 'rep-invalid' },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    const saved = executionStore.get('ibtx-invalid-summary');
+    expect(saved?.status).toBe('failed');
+    expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE);
+    expect(saved?.errorMessage).toContain('schema_version');
   });
 
   it('skips execution that is already running', async () => {

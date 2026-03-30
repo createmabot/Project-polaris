@@ -2,10 +2,16 @@ import { Job, Queue, Worker } from 'bullmq';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { redis } from '../redis';
+import {
+  createDefaultResultSummary,
+  validateResultSummarySchema,
+  type InternalBacktestInputSnapshot,
+} from '../internal-backtests/contracts';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
 export const INTERNAL_BACKTEST_EXECUTION_FAILED_CODE = 'INTERNAL_BACKTEST_EXECUTION_FAILED';
+export const INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE = 'INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID';
 
 export type InternalBacktestExecutionJobData = {
   executionId: string;
@@ -56,8 +62,11 @@ export function getInternalBacktestExecutionQueue() {
 const defaultRunExecution: RunExecutionFn = async (execution) => {
   const inputSnapshot =
     execution.inputSnapshotJson && typeof execution.inputSnapshotJson === 'object' && !Array.isArray(execution.inputSnapshotJson)
-      ? (execution.inputSnapshotJson as Record<string, unknown>)
-      : {};
+      ? (execution.inputSnapshotJson as InternalBacktestInputSnapshot)
+      : null;
+  if (!inputSnapshot) {
+    throw new Error('input_snapshot_invalid');
+  }
   const engineConfig =
     inputSnapshot.engine_config && typeof inputSnapshot.engine_config === 'object' && !Array.isArray(inputSnapshot.engine_config)
       ? (inputSnapshot.engine_config as Record<string, unknown>)
@@ -68,12 +77,10 @@ const defaultRunExecution: RunExecutionFn = async (execution) => {
   }
 
   return {
-    resultSummary: {
-      trade_count: 0,
-      win_rate: 0,
-      net_profit: 0,
-      notes: 'internal backtest worker scaffold result',
-    },
+    resultSummary: createDefaultResultSummary({
+      inputSnapshot,
+      engineVersion: 'ibtx-v0',
+    }),
     artifactPointer: {
       type: 'internal_backtest_execution',
       execution_id: execution.id,
@@ -133,13 +140,14 @@ export async function processInternalBacktestExecution(
       strategyRuleVersionId: execution.strategyRuleVersionId,
       inputSnapshotJson: execution.inputSnapshotJson,
     });
+    const validatedResultSummary = validateResultSummarySchema(output.resultSummary);
 
     const succeeded = await db.internalBacktestExecution.update({
       where: { id: execution.id },
       data: {
         status: 'succeeded',
         finishedAt: now(),
-        resultSummaryJson: output.resultSummary,
+        resultSummaryJson: validatedResultSummary,
         artifactPointerJson: output.artifactPointer ?? Prisma.DbNull,
         errorCode: null,
         errorMessage: null,
@@ -152,13 +160,17 @@ export async function processInternalBacktestExecution(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'internal_backtest_execution_failed';
+    const errorCode =
+      errorMessage.includes('result_summary') || errorMessage.includes('schema_version')
+        ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
+        : INTERNAL_BACKTEST_EXECUTION_FAILED_CODE;
 
     const failed = await db.internalBacktestExecution.update({
       where: { id: execution.id },
       data: {
         status: 'failed',
         finishedAt: now(),
-        errorCode: INTERNAL_BACKTEST_EXECUTION_FAILED_CODE,
+        errorCode,
         errorMessage,
       },
     });
