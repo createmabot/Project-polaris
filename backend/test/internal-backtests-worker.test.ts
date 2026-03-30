@@ -99,7 +99,11 @@ describe('internal backtest worker scaffold', () => {
             engine: { version: 'ibtx-v0' },
             notes: 'ok',
           },
-          artifactPointer: { type: 'internal_report_snapshot', id: 'rep-1' },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-success',
+            path: '/internal-backtests/executions/ibtx-success',
+          },
         }),
       },
     );
@@ -113,7 +117,11 @@ describe('internal backtest worker scaffold', () => {
       schema_version: '1.0',
       metrics: { net_profit: 1234, total_trades: 10 },
     });
-    expect(saved?.artifactPointerJson).toMatchObject({ id: 'rep-1' });
+    expect(saved?.artifactPointerJson).toMatchObject({
+      type: 'internal_backtest_execution',
+      execution_id: 'ibtx-success',
+      path: '/internal-backtests/executions/ibtx-success',
+    });
     expect(saved?.errorCode).toBeNull();
     expect(saved?.errorMessage).toBeNull();
   });
@@ -149,7 +157,11 @@ describe('internal backtest worker scaffold', () => {
         runExecution: async () => ({
           // schema_version missing intentionally
           resultSummary: { net_profit: 1 },
-          artifactPointer: { type: 'internal_report_snapshot', id: 'rep-invalid' },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-invalid-summary',
+            path: '/internal-backtests/executions/ibtx-invalid-summary',
+          },
         }),
       },
     );
@@ -159,6 +171,42 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.status).toBe('failed');
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE);
     expect(saved?.errorMessage).toContain('schema_version');
+  });
+
+  it('fails execution when artifact pointer schema is invalid', async () => {
+    executionStore.set('ibtx-invalid-artifact', createExecutionRow({ id: 'ibtx-invalid-artifact', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-invalid-artifact' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2025-12-31' },
+            metrics: {
+              total_trades: 10,
+              win_rate: 0.5,
+              net_profit: 1234,
+              profit_factor: 1.2,
+              max_drawdown_percent: -5.1,
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'ok',
+          },
+          // missing `path`
+          artifactPointer: { type: 'internal_backtest_execution', execution_id: 'ibtx-invalid-artifact' },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    const saved = executionStore.get('ibtx-invalid-artifact');
+    expect(saved?.status).toBe('failed');
+    expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE);
+    expect(saved?.errorMessage).toContain('artifact_pointer');
   });
 
   it('skips execution that is already running', async () => {
