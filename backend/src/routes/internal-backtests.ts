@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
+import { enqueueInternalBacktestExecution } from '../queue/internal-backtests';
 
 type CreateInternalBacktestExecutionBody = {
   strategy_rule_version_id?: string;
@@ -84,6 +85,31 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
       },
     });
 
+    try {
+      await enqueueInternalBacktestExecution(execution.id);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'failed_to_enqueue_internal_backtest_execution';
+      await prisma.internalBacktestExecution.update({
+        where: { id: execution.id },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          errorCode: 'QUEUE_ENQUEUE_FAILED',
+          errorMessage,
+        },
+      });
+
+      request.log.error({
+        event: 'internal_backtest_execution_enqueue_failed',
+        execution_id: execution.id,
+        error: errorMessage,
+      });
+
+      throw new AppError(503, 'QUEUE_ENQUEUE_FAILED', 'internal backtest execution enqueue failed.', {
+        execution_id: execution.id,
+      });
+    }
+
     return reply.status(201).send(
       formatSuccess(request, {
         execution: {
@@ -156,4 +182,3 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
     );
   });
 };
-

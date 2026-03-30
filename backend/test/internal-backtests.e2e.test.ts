@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../src/utils/response';
 import { internalBacktestRoutes } from '../src/routes/internal-backtests';
 
+const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
+  enqueueInternalBacktestExecutionMock: vi.fn(async () => ({ id: 'ibtx-job-1' })),
+}));
+
 type StrategyRuleVersionRow = {
   id: string;
   strategyRuleId: string;
@@ -76,11 +80,26 @@ vi.mock('../src/db', () => {
         return row;
       },
       findUnique: async ({ where }: any) => runtime.executions.get(where.id) ?? null,
+      update: async ({ where, data }: any) => {
+        const existing = runtime.executions.get(where.id);
+        if (!existing) throw new Error(`internal_execution_not_found:${where.id}`);
+        const next: InternalExecutionRow = {
+          ...existing,
+          ...data,
+          updatedAt: new Date(Date.now() + runtime.nowSeq++),
+        };
+        runtime.executions.set(where.id, next);
+        return next;
+      },
     },
   };
 
   return { prisma };
 });
+
+vi.mock('../src/queue/internal-backtests', () => ({
+  enqueueInternalBacktestExecution: enqueueInternalBacktestExecutionMock,
+}));
 
 async function createApp() {
   const app = Fastify({ logger: false });
@@ -93,6 +112,8 @@ async function createApp() {
 describe('internal backtests scaffold routes', () => {
   beforeEach(() => {
     runtime = createRuntime();
+    enqueueInternalBacktestExecutionMock.mockReset();
+    enqueueInternalBacktestExecutionMock.mockResolvedValue({ id: 'ibtx-job-1' });
     runtime.versions.set('ver-1', {
       id: 'ver-1',
       strategyRuleId: 'str-1',
@@ -122,6 +143,34 @@ describe('internal backtests scaffold routes', () => {
     const body = res.json();
     expect(body.data.execution.status).toBe('queued');
     expect(body.data.execution.strategy_rule_version_id).toBe('ver-1');
+    expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledTimes(1);
+    expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledWith(body.data.execution.id);
+
+    await app.close();
+  });
+
+  it('marks execution as failed when enqueue fails', async () => {
+    const app = await createApp();
+    enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+      },
+    });
+
+    expect(res.statusCode).toBe(503);
+    const body = res.json();
+    expect(body.error.code).toBe('QUEUE_ENQUEUE_FAILED');
+    expect(runtime.executions.size).toBe(1);
+    const failedExecution = [...runtime.executions.values()][0];
+    expect(failedExecution.status).toBe('failed');
+    expect(failedExecution.errorCode).toBe('QUEUE_ENQUEUE_FAILED');
 
     await app.close();
   });
