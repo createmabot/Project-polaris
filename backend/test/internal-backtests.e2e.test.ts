@@ -375,6 +375,7 @@ describe('internal backtests scaffold routes', () => {
       },
       resultSummaryJson: {
         schema_version: '1.0',
+        summary_kind: 'scaffold_deterministic',
         market: 'JP_STOCK',
         timeframe: 'D',
         period: { from: '2024-01-01', to: '2025-12-31' },
@@ -407,6 +408,7 @@ describe('internal backtests scaffold routes', () => {
     expect(resultRes.statusCode).toBe(200);
     const body = resultRes.json();
     expect(body.data.execution_id).toBe('ibtx-succeeded');
+    expect(body.data.result_summary.summary_kind).toBe('scaffold_deterministic');
     expect(body.data.result_summary.metrics.net_profit).toBe(120000);
     expect(body.data.artifact_pointer.execution_id).toBe('ibtx-succeeded');
     expect(body.data.artifact_pointer.path).toBe('/internal-backtests/executions/ibtx-succeeded');

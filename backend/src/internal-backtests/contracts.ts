@@ -38,6 +38,7 @@ export type InternalBacktestInputSnapshot = {
 
 export type InternalBacktestResultSummary = {
   schema_version: '1.0';
+  summary_kind: 'scaffold_deterministic' | 'engine_estimated' | 'engine_actual';
   market: string;
   timeframe: string;
   period: {
@@ -266,6 +267,7 @@ export function createDefaultResultSummary(args: {
 }): InternalBacktestResultSummary {
   return {
     schema_version: '1.0',
+    summary_kind: 'scaffold_deterministic',
     market: args.inputSnapshot.market,
     timeframe: args.inputSnapshot.timeframe,
     period: {
@@ -305,6 +307,13 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
   if (root.schema_version !== '1.0') {
     throw new Error('result_summary.schema_version must be "1.0"');
   }
+  const summaryKind = requireTrimmedString(root.summary_kind);
+  const allowedSummaryKinds = new Set(['scaffold_deterministic', 'engine_estimated', 'engine_actual']);
+  if (!summaryKind || !allowedSummaryKinds.has(summaryKind)) {
+    throw new Error(
+      'result_summary.summary_kind must be one of scaffold_deterministic, engine_estimated, engine_actual.',
+    );
+  }
 
   const market = requireTrimmedString(root.market);
   const timeframe = requireTrimmedString(root.timeframe);
@@ -342,6 +351,7 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
 
   return {
     schema_version: '1.0',
+    summary_kind: summaryKind as InternalBacktestResultSummary['summary_kind'],
     market,
     timeframe,
     period: { from, to },
