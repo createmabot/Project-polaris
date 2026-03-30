@@ -26,6 +26,15 @@ const TIMEFRAME_BARS_PER_DAY: Record<string, number> = {
   '15M': 96,
 };
 
+const TIMEFRAME_CANONICAL: Record<string, string> = {
+  '1D': '1D',
+  D: '1D',
+  '4H': '4H',
+  '1H': '1H',
+  '30M': '30M',
+  '15M': '15M',
+};
+
 function stableHash(text: string): number {
   let hash = 0;
   for (let i = 0; i < text.length; i += 1) {
@@ -47,11 +56,13 @@ function roundTo(value: number, digits: number): number {
 }
 
 function calculateDeterministicMetrics(input: InternalBacktestExecutionInput) {
-  const barsPerDay = TIMEFRAME_BARS_PER_DAY[input.timeframe.toUpperCase()] ?? 1;
+  const timeframeKey = input.timeframe.toUpperCase();
+  const canonicalTimeframe = TIMEFRAME_CANONICAL[timeframeKey] ?? timeframeKey;
+  const barsPerDay = TIMEFRAME_BARS_PER_DAY[timeframeKey] ?? 1;
   const periodDays = daysBetweenInclusive(input.dataRange.from, input.dataRange.to);
   const estimatedBars = periodDays * barsPerDay;
 
-  const seedText = `${input.strategyRuleVersionId}|${input.market}|${input.timeframe}|${input.dataRange.from}|${input.dataRange.to}`;
+  const seedText = `${input.strategyRuleVersionId}|${input.market}|${canonicalTimeframe}|${input.dataRange.from}|${input.dataRange.to}`;
   const seed = stableHash(seedText);
 
   const totalTrades = Math.max(1, Math.floor(estimatedBars / 40) + (seed % 5));
