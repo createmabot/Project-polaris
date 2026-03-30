@@ -1,6 +1,7 @@
 import type { InternalBacktestExecutionInput } from './contracts';
 
 export type InternalBacktestEngineRunResult = {
+  summary_kind?: 'scaffold_deterministic' | 'engine_estimated' | 'engine_actual';
   metrics?: Partial<{
     total_trades: number;
     win_rate: number;
@@ -92,6 +93,7 @@ export const runDummyInternalBacktestEngine: InternalBacktestEngineAdapter = asy
   const metrics = calculateDeterministicMetrics(input);
 
   return {
+    summary_kind: 'scaffold_deterministic',
     metrics,
     notes: 'deterministic scaffold metrics derived from execution input',
   };

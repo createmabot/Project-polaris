@@ -43,6 +43,7 @@ describe('internal backtest execution service contracts', () => {
     });
 
     expect(output.resultSummary.schema_version).toBe('1.0');
+    expect(output.resultSummary.summary_kind).toBe('scaffold_deterministic');
     expect(output.resultSummary.market).toBe('JP_STOCK');
     expect(output.resultSummary.period.to).toBe('2025-12-31');
     expect(output.resultSummary.metrics.total_trades).toBeGreaterThan(0);
@@ -168,5 +169,43 @@ describe('internal backtest execution service contracts', () => {
         },
       }),
     ).rejects.toThrow('from<=to');
+  });
+
+  it('fails when summary_kind is invalid in adapter output', async () => {
+    await expect(
+      runInternalBacktestExecutionService(
+        {
+          executionId: 'ibtx-invalid-kind',
+          strategyRuleVersionId: 'ver-1',
+          engineVersion: 'ibtx-v0',
+          inputSnapshotJson: {
+            strategy_rule_version_id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            data_range: { from: '2024-01-01', to: '2025-12-31' },
+            engine_config: {},
+            strategy_snapshot: {
+              natural_language_rule: 'rule',
+              generated_pine: 'strategy(\"x\")',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+            },
+          },
+        },
+        {
+          engineAdapter: async () => ({
+            // intentionally invalid
+            summary_kind: 'invalid_kind' as any,
+            metrics: {
+              total_trades: 10,
+              win_rate: 0.5,
+              net_profit: 1234,
+              profit_factor: 1.2,
+              max_drawdown_percent: -5.1,
+            },
+          }),
+        },
+      ),
+    ).rejects.toThrow('result_summary.summary_kind');
   });
 });

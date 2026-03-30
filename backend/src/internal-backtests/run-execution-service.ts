@@ -33,6 +33,7 @@ function mergeEngineResult(args: {
 
   return {
     ...args.base,
+    summary_kind: args.engine.summary_kind ?? args.base.summary_kind,
     metrics: {
       total_trades: metrics.total_trades ?? args.base.metrics.total_trades,
       win_rate: metrics.win_rate ?? args.base.metrics.win_rate,
@@ -78,4 +79,3 @@ export async function runInternalBacktestExecutionService(
     artifactPointer: createExecutionArtifactPointer({ executionId: input.executionId }),
   };
 }
-

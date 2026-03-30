@@ -86,6 +86,7 @@ describe('internal backtest worker scaffold', () => {
         runExecution: async () => ({
           resultSummary: {
             schema_version: '1.0',
+            summary_kind: 'scaffold_deterministic',
             market: 'JP_STOCK',
             timeframe: 'D',
             period: { from: '2024-01-01', to: '2025-12-31' },
@@ -115,6 +116,7 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.finishedAt).not.toBeNull();
     expect(saved?.resultSummaryJson).toMatchObject({
       schema_version: '1.0',
+      summary_kind: 'scaffold_deterministic',
       metrics: { net_profit: 1234, total_trades: 10 },
     });
     expect(saved?.artifactPointerJson).toMatchObject({
@@ -183,6 +185,7 @@ describe('internal backtest worker scaffold', () => {
         runExecution: async () => ({
           resultSummary: {
             schema_version: '1.0',
+            summary_kind: 'scaffold_deterministic',
             market: 'JP_STOCK',
             timeframe: 'D',
             period: { from: '2024-01-01', to: '2025-12-31' },
@@ -207,6 +210,46 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.status).toBe('failed');
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE);
     expect(saved?.errorMessage).toContain('artifact_pointer');
+  });
+
+  it('fails execution when summary_kind is invalid', async () => {
+    executionStore.set('ibtx-invalid-kind', createExecutionRow({ id: 'ibtx-invalid-kind', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-invalid-kind' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            summary_kind: 'invalid_kind',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2025-12-31' },
+            metrics: {
+              total_trades: 10,
+              win_rate: 0.5,
+              net_profit: 1234,
+              profit_factor: 1.2,
+              max_drawdown_percent: -5.1,
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'ok',
+          },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-invalid-kind',
+            path: '/internal-backtests/executions/ibtx-invalid-kind',
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    const saved = executionStore.get('ibtx-invalid-kind');
+    expect(saved?.status).toBe('failed');
+    expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE);
+    expect(saved?.errorMessage).toContain('result_summary.summary_kind');
   });
 
   it('skips execution that is already running', async () => {
