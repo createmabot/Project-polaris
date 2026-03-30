@@ -358,3 +358,24 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
     notes,
   };
 }
+
+export function validateArtifactPointerSchema(input: unknown): InternalBacktestArtifactPointer {
+  const root = asPlainObject(input);
+  if (!root) {
+    throw new Error('artifact_pointer must be an object');
+  }
+
+  const type = requireTrimmedString(root.type);
+  const executionId = requireTrimmedString(root.execution_id);
+  const path = requireTrimmedString(root.path);
+
+  if (!type || !executionId || !path) {
+    throw new Error('artifact_pointer.type, artifact_pointer.execution_id, artifact_pointer.path are required.');
+  }
+
+  return {
+    type,
+    execution_id: executionId,
+    path,
+  };
+}

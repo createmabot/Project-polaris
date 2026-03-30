@@ -6,7 +6,7 @@ import {
   runInternalBacktestExecutionService,
   type RunExecutionServiceInput,
 } from '../internal-backtests/run-execution-service';
-import { validateResultSummarySchema } from '../internal-backtests/contracts';
+import { validateArtifactPointerSchema, validateResultSummarySchema } from '../internal-backtests/contracts';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
@@ -122,6 +122,7 @@ export async function processInternalBacktestExecution(
     };
     const output = await runExecution(runInput);
     const validatedSummary = validateResultSummarySchema(output.resultSummary as unknown);
+    const validatedArtifactPointer = validateArtifactPointerSchema(output.artifactPointer as unknown);
 
     const succeeded = await db.internalBacktestExecution.update({
       where: { id: execution.id },
@@ -129,7 +130,7 @@ export async function processInternalBacktestExecution(
         status: 'succeeded',
         finishedAt: now(),
         resultSummaryJson: validatedSummary as unknown as Prisma.InputJsonValue,
-        artifactPointerJson: output.artifactPointer ?? Prisma.DbNull,
+        artifactPointerJson: validatedArtifactPointer as unknown as Prisma.InputJsonValue,
         errorCode: null,
         errorMessage: null,
       },
@@ -143,6 +144,7 @@ export async function processInternalBacktestExecution(
     const errorMessage = error instanceof Error ? error.message : 'internal_backtest_execution_failed';
     const errorCode =
       errorMessage.includes('result_summary') ||
+      errorMessage.includes('artifact_pointer') ||
       errorMessage.includes('schema_version') ||
       errorMessage.includes('input_snapshot')
         ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE

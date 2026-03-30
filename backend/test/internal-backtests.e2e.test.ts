@@ -389,8 +389,9 @@ describe('internal backtests scaffold routes', () => {
         notes: 'sample summary',
       },
       artifactPointerJson: {
-        type: 'internal_report_snapshot',
-        id: 'ibtx-report-1',
+        type: 'internal_backtest_execution',
+        execution_id: 'ibtx-succeeded',
+        path: '/internal-backtests/executions/ibtx-succeeded',
       },
       errorCode: null,
       errorMessage: null,
@@ -407,7 +408,8 @@ describe('internal backtests scaffold routes', () => {
     const body = resultRes.json();
     expect(body.data.execution_id).toBe('ibtx-succeeded');
     expect(body.data.result_summary.metrics.net_profit).toBe(120000);
-    expect(body.data.artifact_pointer.id).toBe('ibtx-report-1');
+    expect(body.data.artifact_pointer.execution_id).toBe('ibtx-succeeded');
+    expect(body.data.artifact_pointer.path).toBe('/internal-backtests/executions/ibtx-succeeded');
 
     await app.close();
   });
