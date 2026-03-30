@@ -6,6 +6,7 @@ import { enqueueInternalBacktestExecution } from '../queue/internal-backtests';
 import {
   buildExecutionInputSnapshot,
   normalizeCreateExecutionRequest,
+  resolveExecutionInput,
   type CreateExecutionRequestInput,
   type NormalizedCreateExecutionRequest,
 } from '../internal-backtests/contracts';
@@ -27,12 +28,20 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
     }
 
+    const resolvedInput = resolveExecutionInput({
+      request: normalizedRequest,
+      strategyVersion: {
+        market: strategyVersion.market,
+        timeframe: strategyVersion.timeframe,
+      },
+    });
+
     const inputSnapshot = buildExecutionInputSnapshot({
       strategyRuleVersionId: strategyVersion.id,
-      market: normalizedRequest.market,
-      timeframe: normalizedRequest.timeframe,
-      dataRange: normalizedRequest.dataRange,
-      engineConfig: normalizedRequest.engineConfig,
+      market: resolvedInput.market,
+      timeframe: resolvedInput.timeframe,
+      dataRange: resolvedInput.dataRange,
+      engineConfig: resolvedInput.engineConfig,
       strategySnapshot: {
         naturalLanguageRule: strategyVersion.naturalLanguageRule,
         generatedPine: strategyVersion.generatedPine,

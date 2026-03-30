@@ -10,8 +10,8 @@ export type CreateExecutionRequestInput = {
 
 export type NormalizedCreateExecutionRequest = {
   strategyRuleVersionId: string;
-  market: string;
-  timeframe: string;
+  market: string | null;
+  timeframe: string | null;
   dataRange: {
     from: string;
     to: string;
@@ -57,6 +57,29 @@ export type InternalBacktestResultSummary = {
   notes: string;
 };
 
+export type InternalBacktestExecutionInput = {
+  strategyRuleVersionId: string;
+  market: string;
+  timeframe: string;
+  dataRange: {
+    from: string;
+    to: string;
+  };
+  engineConfig: PlainObject;
+  strategySnapshot: {
+    naturalLanguageRule: string;
+    generatedPine: string | null;
+    market: string;
+    timeframe: string;
+  };
+};
+
+export type InternalBacktestArtifactPointer = {
+  type: string;
+  execution_id: string;
+  path: string;
+};
+
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireTrimmedString(value: unknown): string | null {
@@ -97,8 +120,8 @@ export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInp
   const rangeTo = requireTrimmedString(dataRangeRaw?.to);
   const engineConfig = asPlainObject(input.engine_config) ?? {};
 
-  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
-    throw new Error('strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required.');
+  if (!strategyRuleVersionId || !rangeFrom || !rangeTo) {
+    throw new Error('strategy_rule_version_id, data_range.from, data_range.to are required.');
   }
 
   if (!isValidIsoDate(rangeFrom) || !isValidIsoDate(rangeTo)) {
@@ -111,13 +134,25 @@ export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInp
 
   return {
     strategyRuleVersionId,
-    market,
-    timeframe,
+    market: market ?? null,
+    timeframe: timeframe ?? null,
     dataRange: {
       from: rangeFrom,
       to: rangeTo,
     },
     engineConfig,
+  };
+}
+
+export function resolveExecutionInput(args: {
+  request: NormalizedCreateExecutionRequest;
+  strategyVersion: { market: string; timeframe: string };
+}): Pick<InternalBacktestExecutionInput, 'market' | 'timeframe' | 'dataRange' | 'engineConfig'> {
+  return {
+    market: args.request.market ?? args.strategyVersion.market,
+    timeframe: args.request.timeframe ?? args.strategyVersion.timeframe,
+    dataRange: args.request.dataRange,
+    engineConfig: args.request.engineConfig,
   };
 }
 
@@ -152,8 +187,63 @@ export function buildExecutionInputSnapshot(args: {
   };
 }
 
+export function normalizeExecutionInputSnapshot(
+  input: unknown,
+): InternalBacktestExecutionInput {
+  const snapshot = asPlainObject(input);
+  if (!snapshot) {
+    throw new Error('input_snapshot must be an object');
+  }
+
+  const strategyRuleVersionId = requireTrimmedString(snapshot.strategy_rule_version_id);
+  const dataRange = asPlainObject(snapshot.data_range);
+  const strategySnapshot = asPlainObject(snapshot.strategy_snapshot);
+
+  const strategySnapshotMarket = requireTrimmedString(strategySnapshot?.market);
+  const strategySnapshotTimeframe = requireTrimmedString(strategySnapshot?.timeframe);
+
+  const market = requireTrimmedString(snapshot.market) ?? strategySnapshotMarket;
+  const timeframe = requireTrimmedString(snapshot.timeframe) ?? strategySnapshotTimeframe;
+  const rangeFrom = requireTrimmedString(dataRange?.from);
+  const rangeTo = requireTrimmedString(dataRange?.to);
+  const engineConfig = asPlainObject(snapshot.engine_config) ?? {};
+
+  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
+    throw new Error('input_snapshot.strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required');
+  }
+  if (!isValidIsoDate(rangeFrom) || !isValidIsoDate(rangeTo) || rangeFrom > rangeTo) {
+    throw new Error('input_snapshot.data_range.from/to must be valid ISO dates and from<=to');
+  }
+
+  const naturalLanguageRule = requireTrimmedString(strategySnapshot?.natural_language_rule) ?? '';
+  const generatedPineRaw = strategySnapshot?.generated_pine;
+  const generatedPine =
+    typeof generatedPineRaw === 'string'
+      ? generatedPineRaw
+      : generatedPineRaw === null
+        ? null
+        : null;
+
+  return {
+    strategyRuleVersionId,
+    market,
+    timeframe,
+    dataRange: {
+      from: rangeFrom,
+      to: rangeTo,
+    },
+    engineConfig,
+    strategySnapshot: {
+      naturalLanguageRule,
+      generatedPine,
+      market: strategySnapshotMarket ?? market,
+      timeframe: strategySnapshotTimeframe ?? timeframe,
+    },
+  };
+}
+
 export function createDefaultResultSummary(args: {
-  inputSnapshot: InternalBacktestInputSnapshot;
+  inputSnapshot: Pick<InternalBacktestExecutionInput, 'market' | 'timeframe' | 'dataRange'>;
   engineVersion: string;
 }): InternalBacktestResultSummary {
   return {
@@ -161,8 +251,8 @@ export function createDefaultResultSummary(args: {
     market: args.inputSnapshot.market,
     timeframe: args.inputSnapshot.timeframe,
     period: {
-      from: args.inputSnapshot.data_range.from,
-      to: args.inputSnapshot.data_range.to,
+      from: args.inputSnapshot.dataRange.from,
+      to: args.inputSnapshot.dataRange.to,
     },
     metrics: {
       total_trades: 0,
@@ -175,6 +265,16 @@ export function createDefaultResultSummary(args: {
       version: args.engineVersion,
     },
     notes: 'internal backtest worker scaffold result',
+  };
+}
+
+export function createExecutionArtifactPointer(args: {
+  executionId: string;
+}): InternalBacktestArtifactPointer {
+  return {
+    type: 'internal_backtest_execution',
+    execution_id: args.executionId,
+    path: `/internal-backtests/executions/${args.executionId}`,
   };
 }
 
