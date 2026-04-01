@@ -136,6 +136,11 @@ function assertFiniteNumber(value: unknown, field: string) {
 }
 
 function isValidIsoDateTime(value: string): boolean {
+  const ISO_DATETIME_PATTERN =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+\-]\d{2}:\d{2})$/;
+  if (!ISO_DATETIME_PATTERN.test(value)) {
+    return false;
+  }
   const parsed = Date.parse(value);
   return !Number.isNaN(parsed);
 }

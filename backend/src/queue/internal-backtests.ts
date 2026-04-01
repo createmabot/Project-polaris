@@ -155,6 +155,7 @@ export async function processInternalBacktestExecution(
         ? INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE
         : errorMessage.includes('result_summary') ||
             errorMessage.includes('artifact_pointer') ||
+            errorMessage.includes('data_source_snapshot') ||
             errorMessage.includes('schema_version') ||
             errorMessage.includes('input_snapshot')
           ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
