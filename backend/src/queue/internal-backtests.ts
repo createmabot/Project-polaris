@@ -4,6 +4,7 @@ import { prisma } from '../db';
 import { redis } from '../redis';
 import {
   runInternalBacktestExecutionService,
+  INVALID_EXECUTION_TARGET_CODE,
   type RunExecutionServiceInput,
 } from '../internal-backtests/run-execution-service';
 import { validateArtifactPointerSchema, validateResultSummarySchema } from '../internal-backtests/contracts';
@@ -153,6 +154,11 @@ export async function processInternalBacktestExecution(
     const errorCode =
       isDataSourceUnavailableError(error)
         ? INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE
+        : !!error &&
+            typeof error === 'object' &&
+            'code' in error &&
+            (error as { code?: string }).code === INVALID_EXECUTION_TARGET_CODE
+          ? INVALID_EXECUTION_TARGET_CODE
         : errorMessage.includes('result_summary') ||
             errorMessage.includes('artifact_pointer') ||
             errorMessage.includes('data_source_snapshot') ||

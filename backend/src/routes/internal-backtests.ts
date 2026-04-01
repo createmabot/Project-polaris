@@ -35,11 +35,23 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
         timeframe: strategyVersion.timeframe,
       },
     });
+    const requestedSummaryMode =
+      typeof resolvedInput.engineConfig.summary_mode === 'string'
+        ? resolvedInput.engineConfig.summary_mode.trim().toLowerCase()
+        : null;
+    if (requestedSummaryMode === 'engine_estimated' && normalizedRequest.executionTarget.symbol === null) {
+      throw new AppError(
+        400,
+        'INVALID_EXECUTION_TARGET',
+        'execution_target.symbol is required when engine_config.summary_mode is engine_estimated.',
+      );
+    }
 
     const inputSnapshot = buildExecutionInputSnapshot({
       strategyRuleVersionId: strategyVersion.id,
       market: resolvedInput.market,
       timeframe: resolvedInput.timeframe,
+      executionTarget: resolvedInput.executionTarget,
       dataRange: resolvedInput.dataRange,
       engineConfig: resolvedInput.engineConfig,
       strategySnapshot: {

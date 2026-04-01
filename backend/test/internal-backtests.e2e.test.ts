@@ -134,6 +134,10 @@ describe('internal backtests scaffold routes', () => {
         strategy_rule_version_id: 'ver-1',
         market: 'JP_STOCK',
         timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
         data_range: { from: '2024-01-01', to: '2025-12-31' },
         engine_config: { commission_percent: 0.1, slippage: 0.05 },
       },
@@ -145,6 +149,11 @@ describe('internal backtests scaffold routes', () => {
     expect(body.data.execution.strategy_rule_version_id).toBe('ver-1');
     expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledTimes(1);
     expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledWith(body.data.execution.id);
+    const saved = runtime.executions.get(body.data.execution.id);
+    expect(saved?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: '7203',
+      source_kind: 'daily_ohlcv',
+    });
 
     await app.close();
   });
@@ -166,6 +175,10 @@ describe('internal backtests scaffold routes', () => {
     const saved = runtime.executions.get(executionId);
     expect(saved?.inputSnapshotJson.market).toBe('JP_STOCK');
     expect(saved?.inputSnapshotJson.timeframe).toBe('D');
+    expect(saved?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: 'legacy:ver-1',
+      source_kind: 'daily_ohlcv',
+    });
 
     await app.close();
   });
@@ -189,6 +202,10 @@ describe('internal backtests scaffold routes', () => {
     const saved = runtime.executions.get(executionId);
     expect(saved?.inputSnapshotJson.market).toBe('US_STOCK');
     expect(saved?.inputSnapshotJson.timeframe).toBe('4H');
+    expect(saved?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: 'legacy:ver-1',
+      source_kind: 'daily_ohlcv',
+    });
 
     await app.close();
   });
@@ -275,6 +292,28 @@ describe('internal backtests scaffold routes', () => {
     const body = res.json();
     expect(body.error.code).toBe('VALIDATION_ERROR');
     expect(body.error.message).toContain('timeframe must be a non-empty string when provided');
+
+    await app.close();
+  });
+
+  it('returns INVALID_EXECUTION_TARGET for engine_estimated without execution_target.symbol', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('INVALID_EXECUTION_TARGET');
 
     await app.close();
   });
@@ -372,6 +411,10 @@ describe('internal backtests scaffold routes', () => {
         strategy_rule_version_id: 'ver-1',
         market: 'JP_STOCK',
         timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
         data_source_snapshot: {
           source_kind: 'daily_ohlcv',
           market: 'JP_STOCK',
@@ -422,6 +465,7 @@ describe('internal backtests scaffold routes', () => {
     expect(body.data.result_summary.metrics.net_profit).toBe(120000);
     expect(body.data.artifact_pointer.execution_id).toBe('ibtx-succeeded');
     expect(body.data.artifact_pointer.path).toBe('/internal-backtests/executions/ibtx-succeeded');
+    expect(body.data.input_snapshot.execution_target.symbol).toBe('7203');
     expect(body.data.input_snapshot.data_source_snapshot.source_kind).toBe('daily_ohlcv');
     expect(body.data.input_snapshot.data_source_snapshot.bar_count).toBe(731);
 

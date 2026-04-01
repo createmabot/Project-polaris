@@ -22,7 +22,7 @@ export type InternalBacktestOhlcvBar = {
 };
 
 export type InternalBacktestDataSourceFetchInput = {
-  instrument_id: string;
+  symbol: string;
   market: string;
   timeframe: string;
   from: string;
@@ -60,7 +60,7 @@ function stableHash(text: string): number {
 }
 
 function buildDeterministicBars(args: {
-  instrumentId: string;
+  symbol: string;
   market: string;
   timeframe: string;
   from: string;
@@ -71,7 +71,7 @@ function buildDeterministicBars(args: {
   const bars: InternalBacktestOhlcvBar[] = [];
   let cursor = start;
   let index = 0;
-  const seedBase = `${args.instrumentId}|${args.market}|${args.timeframe}|${args.from}|${args.to}`;
+  const seedBase = `${args.symbol}|${args.market}|${args.timeframe}|${args.from}|${args.to}`;
 
   while (cursor.getTime() <= end.getTime()) {
     const dateText = formatDate(cursor);
@@ -112,7 +112,7 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
     }
 
     const bars = buildDeterministicBars({
-      instrumentId: input.instrument_id,
+      symbol: input.symbol,
       market: input.market,
       timeframe: input.timeframe,
       from: input.from,

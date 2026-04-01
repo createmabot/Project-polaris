@@ -110,6 +110,10 @@ describe('internal backtest worker scaffold', () => {
             strategy_rule_version_id: 'ver-1',
             market: 'JP_STOCK',
             timeframe: 'D',
+            execution_target: {
+              symbol: '7203',
+              source_kind: 'daily_ohlcv',
+            },
             data_range: { from: '2024-01-01', to: '2025-12-31' },
             engine_config: { summary_mode: 'engine_estimated' },
             strategy_snapshot: {
@@ -202,6 +206,28 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.status).toBe('failed');
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE);
     expect(saved?.errorMessage).toContain('unsupported market/timeframe');
+  });
+
+  it('maps INVALID_EXECUTION_TARGET when estimated execution target is missing', async () => {
+    executionStore.set('ibtx-invalid-target', createExecutionRow({ id: 'ibtx-invalid-target', status: 'queued' }));
+
+    const error = new Error('engine_estimated requires execution_target.symbol') as Error & { code?: string };
+    error.code = 'INVALID_EXECUTION_TARGET';
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-invalid-target' },
+      {
+        db: prismaMock,
+        runExecution: async () => {
+          throw error;
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    const saved = executionStore.get('ibtx-invalid-target');
+    expect(saved?.status).toBe('failed');
+    expect(saved?.errorCode).toBe('INVALID_EXECUTION_TARGET');
   });
 
   it('fails execution when result summary schema is invalid', async () => {
