@@ -7,11 +7,16 @@ import {
   type RunExecutionServiceInput,
 } from '../internal-backtests/run-execution-service';
 import { validateArtifactPointerSchema, validateResultSummarySchema } from '../internal-backtests/contracts';
+import {
+  INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
+  isDataSourceUnavailableError,
+} from '../internal-backtests/data-source-adapter';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
 export const INTERNAL_BACKTEST_EXECUTION_FAILED_CODE = 'INTERNAL_BACKTEST_EXECUTION_FAILED';
 export const INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE = 'INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID';
+export { INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE };
 
 export type InternalBacktestExecutionJobData = {
   executionId: string;
@@ -20,6 +25,7 @@ export type InternalBacktestExecutionJobData = {
 type ExecutionOutput = {
   resultSummary: unknown;
   artifactPointer?: Prisma.InputJsonValue | null;
+  inputSnapshot?: Prisma.InputJsonValue | null;
 };
 
 type RunExecutionFn = (execution: RunExecutionServiceInput) => Promise<ExecutionOutput>;
@@ -65,6 +71,7 @@ const defaultRunExecution: RunExecutionFn = async (execution) => {
   return {
     resultSummary: output.resultSummary as unknown as Prisma.InputJsonValue,
     artifactPointer: output.artifactPointer as unknown as Prisma.InputJsonValue,
+    inputSnapshot: output.inputSnapshot as unknown as Prisma.InputJsonValue,
   };
 };
 
@@ -129,6 +136,7 @@ export async function processInternalBacktestExecution(
       data: {
         status: 'succeeded',
         finishedAt: now(),
+        inputSnapshotJson: (output.inputSnapshot ?? execution.inputSnapshotJson) as Prisma.InputJsonValue,
         resultSummaryJson: validatedSummary as unknown as Prisma.InputJsonValue,
         artifactPointerJson: validatedArtifactPointer as unknown as Prisma.InputJsonValue,
         errorCode: null,
@@ -143,12 +151,15 @@ export async function processInternalBacktestExecution(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'internal_backtest_execution_failed';
     const errorCode =
-      errorMessage.includes('result_summary') ||
-      errorMessage.includes('artifact_pointer') ||
-      errorMessage.includes('schema_version') ||
-      errorMessage.includes('input_snapshot')
-        ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
-        : INTERNAL_BACKTEST_EXECUTION_FAILED_CODE;
+      isDataSourceUnavailableError(error)
+        ? INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE
+        : errorMessage.includes('result_summary') ||
+            errorMessage.includes('artifact_pointer') ||
+            errorMessage.includes('data_source_snapshot') ||
+            errorMessage.includes('schema_version') ||
+            errorMessage.includes('input_snapshot')
+          ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
+          : INTERNAL_BACKTEST_EXECUTION_FAILED_CODE;
 
     const failed = await db.internalBacktestExecution.update({
       where: { id: execution.id },

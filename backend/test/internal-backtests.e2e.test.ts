@@ -372,6 +372,16 @@ describe('internal backtests scaffold routes', () => {
         strategy_rule_version_id: 'ver-1',
         market: 'JP_STOCK',
         timeframe: 'D',
+        data_source_snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2025-12-31',
+          fetched_at: '2025-12-31T00:00:00.000Z',
+          data_revision: 'stub-daily-ohlcv-v1:JP_STOCK:D:2024-01-01:2025-12-31',
+          bar_count: 731,
+        },
       },
       resultSummaryJson: {
         schema_version: '1.0',
@@ -412,6 +422,8 @@ describe('internal backtests scaffold routes', () => {
     expect(body.data.result_summary.metrics.net_profit).toBe(120000);
     expect(body.data.artifact_pointer.execution_id).toBe('ibtx-succeeded');
     expect(body.data.artifact_pointer.path).toBe('/internal-backtests/executions/ibtx-succeeded');
+    expect(body.data.input_snapshot.data_source_snapshot.source_kind).toBe('daily_ohlcv');
+    expect(body.data.input_snapshot.data_source_snapshot.bar_count).toBe(731);
 
     await app.close();
   });

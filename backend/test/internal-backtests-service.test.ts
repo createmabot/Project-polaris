@@ -52,6 +52,8 @@ describe('internal backtest execution service contracts', () => {
       execution_id: 'ibtx-1',
       path: '/internal-backtests/executions/ibtx-1',
     });
+    expect(output.inputSnapshot.strategy_rule_version_id).toBe('ver-1');
+    expect(output.inputSnapshot.data_source_snapshot).toBeUndefined();
   });
 
   it('calculates deterministic metrics from execution input', async () => {
@@ -185,6 +187,37 @@ describe('internal backtest execution service contracts', () => {
     expect(estimatedOutput.resultSummary.summary_kind).toBe('engine_estimated');
     expect(scaffoldOutput.resultSummary.summary_kind).toBe('scaffold_deterministic');
     expect(estimatedOutput.resultSummary.metrics).not.toEqual(scaffoldOutput.resultSummary.metrics);
+    expect(estimatedOutput.inputSnapshot.data_source_snapshot).toMatchObject({
+      source_kind: 'daily_ohlcv',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      from: '2024-01-01',
+      to: '2025-12-31',
+    });
+    expect(estimatedOutput.inputSnapshot.data_source_snapshot?.bar_count).toBeGreaterThan(0);
+  });
+
+  it('fails with DATA_SOURCE_UNAVAILABLE on unsupported estimated market/timeframe', async () => {
+    await expect(
+      runInternalBacktestExecutionService({
+        executionId: 'ibtx-estimated-unsupported',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'US_STOCK',
+          timeframe: 'D',
+          data_range: { from: '2024-01-01', to: '2025-12-31' },
+          engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'US_STOCK',
+            timeframe: 'D',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'DATA_SOURCE_UNAVAILABLE' });
   });
 
   it('fails when input snapshot is invalid', async () => {
