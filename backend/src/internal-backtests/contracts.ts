@@ -116,6 +116,83 @@ function requireTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+const JP_STOCK_CANONICAL_SYMBOL_PATTERN = /^\d{4}$/;
+
+function normalizeMarketForValidation(market: string): string {
+  return market.trim().toUpperCase();
+}
+
+function normalizeExecutionTargetSymbolByMarket(args: {
+  symbol: string;
+  market: string;
+}): string {
+  const market = normalizeMarketForValidation(args.market);
+  let symbol = args.symbol.trim();
+  if (!symbol) {
+    throw new Error('execution_target.symbol must be a non-empty string.');
+  }
+
+  if (market === 'JP_STOCK') {
+    const prefixedMatch = symbol.match(/^([A-Za-z]+):(.*)$/);
+    if (prefixedMatch) {
+      const prefix = prefixedMatch[1]?.toUpperCase();
+      const body = prefixedMatch[2]?.trim() ?? '';
+      if (prefix !== 'TYO') {
+        throw new Error(
+          'execution_target.symbol for JP_STOCK supports optional TYO: prefix only (e.g. TYO:7203).',
+        );
+      }
+      symbol = body;
+    }
+
+    if (!JP_STOCK_CANONICAL_SYMBOL_PATTERN.test(symbol)) {
+      throw new Error('execution_target.symbol for JP_STOCK must be 4 digits (e.g. 7203 or TYO:7203).');
+    }
+    return symbol;
+  }
+
+  return symbol;
+}
+
+export function normalizeExecutionTarget(args: {
+  strategyRuleVersionId: string;
+  market: string;
+  executionTarget: {
+    symbol: string | null;
+    sourceKind: 'daily_ohlcv';
+  };
+  allowLegacyFallback?: boolean;
+}): {
+  symbol: string;
+  sourceKind: 'daily_ohlcv';
+} {
+  const symbolRaw = args.executionTarget.symbol;
+  if (symbolRaw === null) {
+    if (args.allowLegacyFallback === true) {
+      return {
+        symbol: `legacy:${args.strategyRuleVersionId}`,
+        sourceKind: 'daily_ohlcv',
+      };
+    }
+    throw new Error('execution_target.symbol is required.');
+  }
+
+  if (symbolRaw.startsWith('legacy:')) {
+    return {
+      symbol: symbolRaw,
+      sourceKind: 'daily_ohlcv',
+    };
+  }
+
+  return {
+    symbol: normalizeExecutionTargetSymbolByMarket({
+      symbol: symbolRaw,
+      market: args.market,
+    }),
+    sourceKind: 'daily_ohlcv',
+  };
+}
+
 function getOptionalStringIfPresent(
   input: Record<string, unknown>,
   key: string,
@@ -215,13 +292,18 @@ export function resolveExecutionInput(args: {
   request: NormalizedCreateExecutionRequest;
   strategyVersion: { market: string; timeframe: string };
 }): Pick<InternalBacktestExecutionInput, 'market' | 'timeframe' | 'executionTarget' | 'dataRange' | 'engineConfig'> {
+  const resolvedMarket = args.request.market ?? args.strategyVersion.market;
+  const resolvedExecutionTarget = normalizeExecutionTarget({
+    strategyRuleVersionId: args.request.strategyRuleVersionId,
+    market: resolvedMarket,
+    executionTarget: args.request.executionTarget,
+    allowLegacyFallback: true,
+  });
+
   return {
-    market: args.request.market ?? args.strategyVersion.market,
+    market: resolvedMarket,
     timeframe: args.request.timeframe ?? args.strategyVersion.timeframe,
-    executionTarget: {
-      symbol: args.request.executionTarget.symbol ?? `legacy:${args.request.strategyRuleVersionId}`,
-      sourceKind: 'daily_ohlcv',
-    },
+    executionTarget: resolvedExecutionTarget,
     dataRange: args.request.dataRange,
     engineConfig: args.request.engineConfig,
   };
@@ -289,14 +371,14 @@ export function normalizeExecutionInputSnapshot(
 
   const market = requireTrimmedString(snapshot.market) ?? strategySnapshotMarket;
   const timeframe = requireTrimmedString(snapshot.timeframe) ?? strategySnapshotTimeframe;
-  const targetSymbol = requireTrimmedString(executionTarget?.symbol) ?? `legacy:${strategyRuleVersionId ?? ''}`;
+  const targetSymbol = requireTrimmedString(executionTarget?.symbol) ?? null;
   const targetSourceKindRaw = requireTrimmedString(executionTarget?.source_kind);
   const targetSourceKind = targetSourceKindRaw ?? 'daily_ohlcv';
   const rangeFrom = requireTrimmedString(dataRange?.from);
   const rangeTo = requireTrimmedString(dataRange?.to);
   const engineConfig = asPlainObject(snapshot.engine_config) ?? {};
 
-  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo || !targetSymbol) {
+  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
     throw new Error('input_snapshot.strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required');
   }
   if (targetSourceKind !== 'daily_ohlcv') {
@@ -305,6 +387,16 @@ export function normalizeExecutionInputSnapshot(
   if (!isValidIsoDate(rangeFrom) || !isValidIsoDate(rangeTo) || rangeFrom > rangeTo) {
     throw new Error('input_snapshot.data_range.from/to must be valid ISO dates and from<=to');
   }
+
+  const normalizedExecutionTarget = normalizeExecutionTarget({
+    strategyRuleVersionId,
+    market,
+    executionTarget: {
+      symbol: targetSymbol,
+      sourceKind: 'daily_ohlcv',
+    },
+    allowLegacyFallback: true,
+  });
 
   const naturalLanguageRule = requireTrimmedString(strategySnapshot?.natural_language_rule) ?? '';
   const generatedPineRaw = strategySnapshot?.generated_pine;
@@ -319,10 +411,7 @@ export function normalizeExecutionInputSnapshot(
     strategyRuleVersionId,
     market,
     timeframe,
-    executionTarget: {
-      symbol: targetSymbol,
-      sourceKind: 'daily_ohlcv',
-    },
+    executionTarget: normalizedExecutionTarget,
     dataRange: {
       from: rangeFrom,
       to: rangeTo,

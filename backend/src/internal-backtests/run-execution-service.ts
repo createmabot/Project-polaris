@@ -71,7 +71,16 @@ export async function runInternalBacktestExecutionService(
   deps: { engineAdapter?: InternalBacktestEngineAdapter } = {},
 ): Promise<RunExecutionServiceOutput> {
   const engineAdapter = deps.engineAdapter ?? runDummyInternalBacktestEngine;
-  const normalizedInput = normalizeExecutionInputSnapshot(input.inputSnapshotJson);
+  let normalizedInput: ReturnType<typeof normalizeExecutionInputSnapshot>;
+  try {
+    normalizedInput = normalizeExecutionInputSnapshot(input.inputSnapshotJson);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'invalid execution target.';
+    if (message.includes('execution_target')) {
+      throw new InvalidExecutionTargetError(message);
+    }
+    throw error;
+  }
   const requestedSummaryMode =
     typeof normalizedInput.engineConfig.summary_mode === 'string'
       ? normalizedInput.engineConfig.summary_mode.trim().toLowerCase()
