@@ -9,7 +9,7 @@ describe('internal backtest data source adapter (minimal stub)', () => {
 
   it('returns deterministic bars and snapshot for JP_STOCK/D daily_ohlcv', async () => {
     const first = await adapter.fetchDailyOhlcv({
-      instrument_id: 'ver-1',
+      symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
       from: '2024-01-01',
@@ -17,7 +17,7 @@ describe('internal backtest data source adapter (minimal stub)', () => {
       source_kind: 'daily_ohlcv',
     });
     const second = await adapter.fetchDailyOhlcv({
-      instrument_id: 'ver-1',
+      symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
       from: '2024-01-01',
@@ -32,7 +32,7 @@ describe('internal backtest data source adapter (minimal stub)', () => {
 
   it('changes bar_count deterministically by from/to range', async () => {
     const shortRange = await adapter.fetchDailyOhlcv({
-      instrument_id: 'ver-1',
+      symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
       from: '2024-01-01',
@@ -40,7 +40,7 @@ describe('internal backtest data source adapter (minimal stub)', () => {
       source_kind: 'daily_ohlcv',
     });
     const longRange = await adapter.fetchDailyOhlcv({
-      instrument_id: 'ver-1',
+      symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
       from: '2024-01-01',
@@ -56,7 +56,7 @@ describe('internal backtest data source adapter (minimal stub)', () => {
   it('throws DATA_SOURCE_UNAVAILABLE for unsupported market/timeframe', async () => {
     await expect(
       adapter.fetchDailyOhlcv({
-        instrument_id: 'ver-1',
+        symbol: 'AAPL',
         market: 'US_STOCK',
         timeframe: 'D',
         from: '2024-01-01',

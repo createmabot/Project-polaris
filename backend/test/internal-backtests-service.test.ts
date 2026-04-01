@@ -53,6 +53,10 @@ describe('internal backtest execution service contracts', () => {
       path: '/internal-backtests/executions/ibtx-1',
     });
     expect(output.inputSnapshot.strategy_rule_version_id).toBe('ver-1');
+    expect(output.inputSnapshot.execution_target).toMatchObject({
+      symbol: 'legacy:ver-1',
+      source_kind: 'daily_ohlcv',
+    });
     expect(output.inputSnapshot.data_source_snapshot).toBeUndefined();
   });
 
@@ -156,6 +160,10 @@ describe('internal backtest execution service contracts', () => {
       strategy_rule_version_id: 'ver-1',
       market: 'JP_STOCK',
       timeframe: 'D',
+      execution_target: {
+        symbol: '7203',
+        source_kind: 'daily_ohlcv',
+      },
       data_range: { from: '2024-01-01', to: '2025-12-31' },
       strategy_snapshot: {
         natural_language_rule: 'rule',
@@ -207,6 +215,10 @@ describe('internal backtest execution service contracts', () => {
           strategy_rule_version_id: 'ver-1',
           market: 'US_STOCK',
           timeframe: 'D',
+          execution_target: {
+            symbol: 'AAPL',
+            source_kind: 'daily_ohlcv',
+          },
           data_range: { from: '2024-01-01', to: '2025-12-31' },
           engine_config: { summary_mode: 'engine_estimated' },
           strategy_snapshot: {
@@ -218,6 +230,29 @@ describe('internal backtest execution service contracts', () => {
         },
       }),
     ).rejects.toMatchObject({ code: 'DATA_SOURCE_UNAVAILABLE' });
+  });
+
+  it('fails with INVALID_EXECUTION_TARGET when estimated mode has no execution_target.symbol', async () => {
+    await expect(
+      runInternalBacktestExecutionService({
+        executionId: 'ibtx-estimated-no-target',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          data_range: { from: '2024-01-01', to: '2025-12-31' },
+          engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy(\"x\")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_EXECUTION_TARGET' });
   });
 
   it('fails when input snapshot is invalid', async () => {

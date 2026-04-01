@@ -4,6 +4,7 @@ export type CreateExecutionRequestInput = {
   strategy_rule_version_id?: unknown;
   market?: unknown;
   timeframe?: unknown;
+  execution_target?: unknown;
   data_range?: unknown;
   engine_config?: unknown;
 };
@@ -16,13 +17,23 @@ export type NormalizedCreateExecutionRequest = {
     from: string;
     to: string;
   };
+  executionTarget: {
+    symbol: string | null;
+    sourceKind: 'daily_ohlcv';
+  };
   engineConfig: PlainObject;
+};
+
+export type InternalBacktestExecutionTarget = {
+  symbol: string;
+  source_kind: 'daily_ohlcv';
 };
 
 export type InternalBacktestInputSnapshot = {
   strategy_rule_version_id: string;
   market: string;
   timeframe: string;
+  execution_target: InternalBacktestExecutionTarget;
   data_range: {
     from: string;
     to: string;
@@ -74,6 +85,10 @@ export type InternalBacktestExecutionInput = {
   strategyRuleVersionId: string;
   market: string;
   timeframe: string;
+  executionTarget: {
+    symbol: string;
+    sourceKind: 'daily_ohlcv';
+  };
   dataRange: {
     from: string;
     to: string;
@@ -156,6 +171,10 @@ export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInp
   const inputObject = input as Record<string, unknown>;
   const market = getOptionalStringIfPresent(inputObject, 'market', 'market');
   const timeframe = getOptionalStringIfPresent(inputObject, 'timeframe', 'timeframe');
+  const executionTargetRaw = asPlainObject(input.execution_target);
+  const targetSymbol = requireTrimmedString(executionTargetRaw?.symbol);
+  const targetSourceKindRaw = requireTrimmedString(executionTargetRaw?.source_kind);
+  const sourceKind = targetSourceKindRaw ?? 'daily_ohlcv';
   const dataRangeRaw = asPlainObject(input.data_range);
   const rangeFrom = requireTrimmedString(dataRangeRaw?.from);
   const rangeTo = requireTrimmedString(dataRangeRaw?.to);
@@ -172,11 +191,18 @@ export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInp
   if (rangeFrom > rangeTo) {
     throw new Error('data_range.from must be less than or equal to data_range.to.');
   }
+  if (targetSourceKindRaw !== null && sourceKind !== 'daily_ohlcv') {
+    throw new Error('execution_target.source_kind must be "daily_ohlcv" when provided.');
+  }
 
   return {
     strategyRuleVersionId,
     market: market ?? null,
     timeframe: timeframe ?? null,
+    executionTarget: {
+      symbol: targetSymbol ?? null,
+      sourceKind: 'daily_ohlcv',
+    },
     dataRange: {
       from: rangeFrom,
       to: rangeTo,
@@ -188,10 +214,14 @@ export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInp
 export function resolveExecutionInput(args: {
   request: NormalizedCreateExecutionRequest;
   strategyVersion: { market: string; timeframe: string };
-}): Pick<InternalBacktestExecutionInput, 'market' | 'timeframe' | 'dataRange' | 'engineConfig'> {
+}): Pick<InternalBacktestExecutionInput, 'market' | 'timeframe' | 'executionTarget' | 'dataRange' | 'engineConfig'> {
   return {
     market: args.request.market ?? args.strategyVersion.market,
     timeframe: args.request.timeframe ?? args.strategyVersion.timeframe,
+    executionTarget: {
+      symbol: args.request.executionTarget.symbol ?? `legacy:${args.request.strategyRuleVersionId}`,
+      sourceKind: 'daily_ohlcv',
+    },
     dataRange: args.request.dataRange,
     engineConfig: args.request.engineConfig,
   };
@@ -201,6 +231,10 @@ export function buildExecutionInputSnapshot(args: {
   strategyRuleVersionId: string;
   market: string;
   timeframe: string;
+  executionTarget: {
+    symbol: string;
+    sourceKind: 'daily_ohlcv';
+  };
   dataRange: { from: string; to: string };
   engineConfig: PlainObject;
   strategySnapshot: {
@@ -215,6 +249,10 @@ export function buildExecutionInputSnapshot(args: {
     strategy_rule_version_id: args.strategyRuleVersionId,
     market: args.market,
     timeframe: args.timeframe,
+    execution_target: {
+      symbol: args.executionTarget.symbol,
+      source_kind: args.executionTarget.sourceKind,
+    },
     data_range: {
       from: args.dataRange.from,
       to: args.dataRange.to,
@@ -242,6 +280,7 @@ export function normalizeExecutionInputSnapshot(
   }
 
   const strategyRuleVersionId = requireTrimmedString(snapshot.strategy_rule_version_id);
+  const executionTarget = asPlainObject(snapshot.execution_target);
   const dataRange = asPlainObject(snapshot.data_range);
   const strategySnapshot = asPlainObject(snapshot.strategy_snapshot);
 
@@ -250,12 +289,18 @@ export function normalizeExecutionInputSnapshot(
 
   const market = requireTrimmedString(snapshot.market) ?? strategySnapshotMarket;
   const timeframe = requireTrimmedString(snapshot.timeframe) ?? strategySnapshotTimeframe;
+  const targetSymbol = requireTrimmedString(executionTarget?.symbol) ?? `legacy:${strategyRuleVersionId ?? ''}`;
+  const targetSourceKindRaw = requireTrimmedString(executionTarget?.source_kind);
+  const targetSourceKind = targetSourceKindRaw ?? 'daily_ohlcv';
   const rangeFrom = requireTrimmedString(dataRange?.from);
   const rangeTo = requireTrimmedString(dataRange?.to);
   const engineConfig = asPlainObject(snapshot.engine_config) ?? {};
 
-  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo) {
+  if (!strategyRuleVersionId || !market || !timeframe || !rangeFrom || !rangeTo || !targetSymbol) {
     throw new Error('input_snapshot.strategy_rule_version_id, market, timeframe, data_range.from, data_range.to are required');
+  }
+  if (targetSourceKind !== 'daily_ohlcv') {
+    throw new Error('input_snapshot.execution_target.source_kind must be daily_ohlcv');
   }
   if (!isValidIsoDate(rangeFrom) || !isValidIsoDate(rangeTo) || rangeFrom > rangeTo) {
     throw new Error('input_snapshot.data_range.from/to must be valid ISO dates and from<=to');
@@ -274,6 +319,10 @@ export function normalizeExecutionInputSnapshot(
     strategyRuleVersionId,
     market,
     timeframe,
+    executionTarget: {
+      symbol: targetSymbol,
+      sourceKind: 'daily_ohlcv',
+    },
     dataRange: {
       from: rangeFrom,
       to: rangeTo,

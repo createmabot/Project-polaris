@@ -68,7 +68,7 @@ function calculateDeterministicMetrics(input: InternalBacktestExecutionInput) {
   const periodDays = daysBetweenInclusive(input.dataRange.from, input.dataRange.to);
   const estimatedBars = periodDays * barsPerDay;
 
-  const seedText = `${input.strategyRuleVersionId}|${input.market}|${canonicalTimeframe}|${input.dataRange.from}|${input.dataRange.to}`;
+  const seedText = `${input.executionTarget.symbol}|${input.market}|${canonicalTimeframe}|${input.dataRange.from}|${input.dataRange.to}|${input.strategyRuleVersionId}`;
   const seed = stableHash(seedText);
 
   const totalTrades = Math.max(1, Math.floor(estimatedBars / 40) + (seed % 5));
@@ -126,7 +126,7 @@ export function createDummyInternalBacktestEngineAdapter(
   let metrics = useEstimated ? calculateEstimatedMetrics(input) : calculateDeterministicMetrics(input);
   if (useEstimated) {
     const dataSourceResult = await dataSourceAdapter.fetchDailyOhlcv({
-      instrument_id: input.strategyRuleVersionId,
+      symbol: input.executionTarget.symbol,
       market: input.market,
       timeframe: input.timeframe,
       from: input.dataRange.from,

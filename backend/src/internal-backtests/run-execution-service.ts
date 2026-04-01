@@ -28,6 +28,18 @@ export type RunExecutionServiceOutput = {
   inputSnapshot: InternalBacktestInputSnapshot;
 };
 
+export const INVALID_EXECUTION_TARGET_CODE = 'INVALID_EXECUTION_TARGET';
+
+export class InvalidExecutionTargetError extends Error {
+  code: string;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidExecutionTargetError';
+    this.code = INVALID_EXECUTION_TARGET_CODE;
+  }
+}
+
 function mergeEngineResult(args: {
   base: InternalBacktestResultSummary;
   engine: Awaited<ReturnType<InternalBacktestEngineAdapter>>;
@@ -60,6 +72,15 @@ export async function runInternalBacktestExecutionService(
 ): Promise<RunExecutionServiceOutput> {
   const engineAdapter = deps.engineAdapter ?? runDummyInternalBacktestEngine;
   const normalizedInput = normalizeExecutionInputSnapshot(input.inputSnapshotJson);
+  const requestedSummaryMode =
+    typeof normalizedInput.engineConfig.summary_mode === 'string'
+      ? normalizedInput.engineConfig.summary_mode.trim().toLowerCase()
+      : null;
+  if (requestedSummaryMode === 'engine_estimated' && normalizedInput.executionTarget.symbol.startsWith('legacy:')) {
+    throw new InvalidExecutionTargetError(
+      'engine_estimated requires execution_target.symbol for data source resolution.',
+    );
+  }
 
   const engineResult = await engineAdapter({
     executionId: input.executionId,
@@ -85,6 +106,7 @@ export async function runInternalBacktestExecutionService(
     strategyRuleVersionId: normalizedInput.strategyRuleVersionId,
     market: normalizedInput.market,
     timeframe: normalizedInput.timeframe,
+    executionTarget: normalizedInput.executionTarget,
     dataRange: normalizedInput.dataRange,
     engineConfig: normalizedInput.engineConfig,
     strategySnapshot: normalizedInput.strategySnapshot,
