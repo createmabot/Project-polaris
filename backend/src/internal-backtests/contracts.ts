@@ -34,6 +34,18 @@ export type InternalBacktestInputSnapshot = {
     market: string;
     timeframe: string;
   };
+  data_source_snapshot?: InternalBacktestDataSourceSnapshot;
+};
+
+export type InternalBacktestDataSourceSnapshot = {
+  source_kind: string;
+  market: string;
+  timeframe: string;
+  from: string;
+  to: string;
+  fetched_at: string;
+  data_revision: string;
+  bar_count: number;
 };
 
 export type InternalBacktestResultSummary = {
@@ -123,6 +135,11 @@ function assertFiniteNumber(value: unknown, field: string) {
   }
 }
 
+function isValidIsoDateTime(value: string): boolean {
+  const parsed = Date.parse(value);
+  return !Number.isNaN(parsed);
+}
+
 function assertOptionalFiniteNumber(value: unknown, field: string): number | null {
   if (value === null) return null;
   assertFiniteNumber(value, field);
@@ -187,8 +204,9 @@ export function buildExecutionInputSnapshot(args: {
     market: string;
     timeframe: string;
   };
+  dataSourceSnapshot?: InternalBacktestDataSourceSnapshot;
 }): InternalBacktestInputSnapshot {
-  return {
+  const snapshot: InternalBacktestInputSnapshot = {
     strategy_rule_version_id: args.strategyRuleVersionId,
     market: args.market,
     timeframe: args.timeframe,
@@ -204,6 +222,10 @@ export function buildExecutionInputSnapshot(args: {
       timeframe: args.strategySnapshot.timeframe,
     },
   };
+  if (args.dataSourceSnapshot) {
+    snapshot.data_source_snapshot = args.dataSourceSnapshot;
+  }
+  return snapshot;
 }
 
 export function normalizeExecutionInputSnapshot(
@@ -387,5 +409,47 @@ export function validateArtifactPointerSchema(input: unknown): InternalBacktestA
     type,
     execution_id: executionId,
     path,
+  };
+}
+
+export function validateDataSourceSnapshotSchema(input: unknown): InternalBacktestDataSourceSnapshot {
+  const root = asPlainObject(input);
+  if (!root) {
+    throw new Error('data_source_snapshot must be an object');
+  }
+
+  const sourceKind = requireTrimmedString(root.source_kind);
+  const market = requireTrimmedString(root.market);
+  const timeframe = requireTrimmedString(root.timeframe);
+  const from = requireTrimmedString(root.from);
+  const to = requireTrimmedString(root.to);
+  const fetchedAt = requireTrimmedString(root.fetched_at);
+  const dataRevision = requireTrimmedString(root.data_revision);
+  const barCount = root.bar_count;
+
+  if (!sourceKind || !market || !timeframe || !from || !to || !fetchedAt || !dataRevision) {
+    throw new Error(
+      'data_source_snapshot.source_kind/market/timeframe/from/to/fetched_at/data_revision are required.',
+    );
+  }
+  if (!isValidIsoDate(from) || !isValidIsoDate(to) || from > to) {
+    throw new Error('data_source_snapshot.from/to must be valid ISO dates and from<=to.');
+  }
+  if (!isValidIsoDateTime(fetchedAt)) {
+    throw new Error('data_source_snapshot.fetched_at must be valid ISO datetime.');
+  }
+  if (typeof barCount !== 'number' || !Number.isInteger(barCount) || barCount < 0) {
+    throw new Error('data_source_snapshot.bar_count must be a non-negative integer.');
+  }
+
+  return {
+    source_kind: sourceKind,
+    market,
+    timeframe,
+    from,
+    to,
+    fetched_at: fetchedAt,
+    data_revision: dataRevision,
+    bar_count: barCount,
   };
 }

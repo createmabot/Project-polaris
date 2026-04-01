@@ -1,4 +1,8 @@
-import type { InternalBacktestExecutionInput } from './contracts';
+import type { InternalBacktestDataSourceSnapshot, InternalBacktestExecutionInput } from './contracts';
+import {
+  defaultInternalBacktestDataSourceAdapter,
+  type InternalBacktestDataSourceAdapter,
+} from './data-source-adapter';
 
 export type InternalBacktestEngineRunResult = {
   summary_kind?: 'scaffold_deterministic' | 'engine_estimated' | 'engine_actual';
@@ -10,6 +14,7 @@ export type InternalBacktestEngineRunResult = {
     max_drawdown_percent: number | null;
   }>;
   notes?: string;
+  data_source_snapshot?: InternalBacktestDataSourceSnapshot;
 };
 
 export type InternalBacktestEngineAdapter = (args: {
@@ -99,7 +104,10 @@ function calculateEstimatedMetrics(input: InternalBacktestExecutionInput) {
   };
 }
 
-export const runDummyInternalBacktestEngine: InternalBacktestEngineAdapter = async ({ input }) => {
+export function createDummyInternalBacktestEngineAdapter(
+  dataSourceAdapter: InternalBacktestDataSourceAdapter = defaultInternalBacktestDataSourceAdapter,
+): InternalBacktestEngineAdapter {
+  return async ({ input }) => {
   const simulateFailure = input.engineConfig.simulate_failure === true;
   if (simulateFailure) {
     throw new Error('simulated_internal_backtest_failure');
@@ -114,14 +122,38 @@ export const runDummyInternalBacktestEngine: InternalBacktestEngineAdapter = asy
   const summaryKind: InternalBacktestEngineRunResult['summary_kind'] = useEstimated
     ? 'engine_estimated'
     : 'scaffold_deterministic';
-  const metrics = useEstimated ? calculateEstimatedMetrics(input) : calculateDeterministicMetrics(input);
+  let dataSourceSnapshot: InternalBacktestDataSourceSnapshot | undefined;
+  let metrics = useEstimated ? calculateEstimatedMetrics(input) : calculateDeterministicMetrics(input);
+  if (useEstimated) {
+    const dataSourceResult = await dataSourceAdapter.fetchDailyOhlcv({
+      instrument_id: input.strategyRuleVersionId,
+      market: input.market,
+      timeframe: input.timeframe,
+      from: input.dataRange.from,
+      to: input.dataRange.to,
+      source_kind: 'daily_ohlcv',
+    });
+    const barsFactor = Math.max(1, Math.floor(dataSourceResult.bars.length / 30));
+    metrics = {
+      ...metrics,
+      total_trades: metrics.total_trades + barsFactor,
+      net_profit: metrics.net_profit + barsFactor * 120,
+      profit_factor:
+        metrics.profit_factor === null ? null : roundTo((metrics.profit_factor ?? 1) + 0.03, 2),
+    };
+    dataSourceSnapshot = dataSourceResult.snapshot;
+  }
   const notes = useEstimated
-    ? 'internal backtest worker estimated-stage result'
+    ? 'internal backtest worker estimated-stage result with daily_ohlcv JP_STOCK/D adapter'
     : 'deterministic scaffold metrics derived from execution input';
 
   return {
     summary_kind: summaryKind,
     metrics,
     notes,
+    data_source_snapshot: dataSourceSnapshot,
   };
-};
+  };
+}
+
+export const runDummyInternalBacktestEngine = createDummyInternalBacktestEngineAdapter();

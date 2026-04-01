@@ -3,6 +3,7 @@ import {
   processInternalBacktestExecution,
   INTERNAL_BACKTEST_EXECUTION_FAILED_CODE,
   INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE,
+  INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
 } from '../src/queue/internal-backtests';
 
 type ExecutionRow = {
@@ -105,6 +106,29 @@ describe('internal backtest worker scaffold', () => {
             execution_id: 'ibtx-success',
             path: '/internal-backtests/executions/ibtx-success',
           },
+          inputSnapshot: {
+            strategy_rule_version_id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            data_range: { from: '2024-01-01', to: '2025-12-31' },
+            engine_config: { summary_mode: 'engine_estimated' },
+            strategy_snapshot: {
+              natural_language_rule: 'rule',
+              generated_pine: 'strategy("base")',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+            },
+            data_source_snapshot: {
+              source_kind: 'daily_ohlcv',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+              from: '2024-01-01',
+              to: '2025-12-31',
+              fetched_at: '2025-12-31T00:00:00.000Z',
+              data_revision: 'stub-daily-ohlcv-v1:JP_STOCK:D:2024-01-01:2025-12-31',
+              bar_count: 731,
+            },
+          },
         }),
       },
     );
@@ -123,6 +147,14 @@ describe('internal backtest worker scaffold', () => {
       type: 'internal_backtest_execution',
       execution_id: 'ibtx-success',
       path: '/internal-backtests/executions/ibtx-success',
+    });
+    expect(saved?.inputSnapshotJson).toMatchObject({
+      strategy_rule_version_id: 'ver-1',
+      data_source_snapshot: {
+        source_kind: 'daily_ohlcv',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
     });
     expect(saved?.errorCode).toBeNull();
     expect(saved?.errorMessage).toBeNull();
@@ -147,6 +179,29 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_EXECUTION_FAILED_CODE);
     expect(saved?.errorMessage).toContain('simulated_failure');
     expect(saved?.finishedAt).not.toBeNull();
+  });
+
+  it('maps DATA_SOURCE_UNAVAILABLE error code when adapter path fails', async () => {
+    executionStore.set('ibtx-ds-fail', createExecutionRow({ id: 'ibtx-ds-fail', status: 'queued' }));
+
+    const error = new Error('unsupported market/timeframe: US_STOCK/D') as Error & { code?: string };
+    error.code = 'DATA_SOURCE_UNAVAILABLE';
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-ds-fail' },
+      {
+        db: prismaMock,
+        runExecution: async () => {
+          throw error;
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    const saved = executionStore.get('ibtx-ds-fail');
+    expect(saved?.status).toBe('failed');
+    expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE);
+    expect(saved?.errorMessage).toContain('unsupported market/timeframe');
   });
 
   it('fails execution when result summary schema is invalid', async () => {

@@ -1,9 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import {
+  buildExecutionInputSnapshot,
   createDefaultResultSummary,
   createExecutionArtifactPointer,
   normalizeExecutionInputSnapshot,
+  validateDataSourceSnapshotSchema,
   validateResultSummarySchema,
+  type InternalBacktestInputSnapshot,
   type InternalBacktestArtifactPointer,
   type InternalBacktestResultSummary,
 } from './contracts';
@@ -22,6 +25,7 @@ export type RunExecutionServiceInput = {
 export type RunExecutionServiceOutput = {
   resultSummary: InternalBacktestResultSummary;
   artifactPointer: InternalBacktestArtifactPointer;
+  inputSnapshot: InternalBacktestInputSnapshot;
 };
 
 function mergeEngineResult(args: {
@@ -74,9 +78,22 @@ export async function runInternalBacktestExecutionService(
   const validatedSummary = validateResultSummarySchema(
     summaryCandidate as unknown as Prisma.InputJsonValue,
   );
+  const dataSourceSnapshot = engineResult.data_source_snapshot
+    ? validateDataSourceSnapshotSchema(engineResult.data_source_snapshot as unknown as Prisma.InputJsonValue)
+    : undefined;
+  const nextInputSnapshot = buildExecutionInputSnapshot({
+    strategyRuleVersionId: normalizedInput.strategyRuleVersionId,
+    market: normalizedInput.market,
+    timeframe: normalizedInput.timeframe,
+    dataRange: normalizedInput.dataRange,
+    engineConfig: normalizedInput.engineConfig,
+    strategySnapshot: normalizedInput.strategySnapshot,
+    dataSourceSnapshot,
+  });
 
   return {
     resultSummary: validatedSummary,
     artifactPointer: createExecutionArtifactPointer({ executionId: input.executionId }),
+    inputSnapshot: nextInputSnapshot,
   };
 }
