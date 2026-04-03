@@ -234,6 +234,13 @@ function assertFiniteNumber(value: unknown, field: string) {
   }
 }
 
+function assertNonNegativeInteger(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error(`${field} must be a non-negative integer`);
+  }
+  return value;
+}
+
 function isValidIsoDateTime(value: string): boolean {
   const ISO_DATETIME_PATTERN =
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?(?:Z|[+\-]\d{2}:\d{2})$/;
@@ -503,7 +510,7 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
   if (!metrics) {
     throw new Error('result_summary.metrics must be an object');
   }
-  assertFiniteNumber(metrics.bar_count, 'result_summary.metrics.bar_count');
+  const barCount = assertNonNegativeInteger(metrics.bar_count, 'result_summary.metrics.bar_count');
   assertFiniteNumber(metrics.first_close, 'result_summary.metrics.first_close');
   assertFiniteNumber(metrics.last_close, 'result_summary.metrics.last_close');
   assertFiniteNumber(metrics.price_change, 'result_summary.metrics.price_change');
@@ -527,7 +534,7 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
     timeframe,
     period: { from, to },
     metrics: {
-      bar_count: metrics.bar_count as number,
+      bar_count: barCount,
       first_close: metrics.first_close as number,
       last_close: metrics.last_close as number,
       price_change: metrics.price_change as number,

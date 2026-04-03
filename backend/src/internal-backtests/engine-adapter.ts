@@ -103,7 +103,16 @@ function buildEstimatedMetricsFromBars(
   }>,
 ) {
   if (bars.length === 0) {
-    throw new Error('estimated metrics require at least one normalized bar');
+    return {
+      bar_count: 0,
+      first_close: 0,
+      last_close: 0,
+      price_change: 0,
+      price_change_percent: 0,
+      period_high: 0,
+      period_low: 0,
+      range_percent: 0,
+    };
   }
   const firstClose = roundTo(bars[0]!.close, 2);
   const lastClose = roundTo(bars[bars.length - 1]!.close, 2);
