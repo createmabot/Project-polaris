@@ -103,6 +103,7 @@ function buildEstimatedMetricsFromBars(
   }>,
 ) {
   if (bars.length === 0) {
+    // Contract: empty bars are treated as succeeded engine_estimated with zero-valued summary metrics.
     return {
       bar_count: 0,
       first_close: 0,
