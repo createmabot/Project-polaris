@@ -2,7 +2,17 @@
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
-import { StrategyVersionData, StrategyVersionListData } from '../api/types';
+import {
+  InternalBacktestExecutionCreateData,
+  InternalBacktestExecutionResultData,
+  InternalBacktestExecutionStatusData,
+  StrategyVersionData,
+  StrategyVersionListData,
+} from '../api/types';
+import {
+  getInternalBacktestMessageText,
+  getInternalBacktestResultViewModel,
+} from './internalBacktestResultViewModel';
 import {
   buildStrategyVersionDetailUrl,
   parseStrategyVersionsListQuery,
@@ -137,6 +147,23 @@ export function parseStrategyVersionsReturnPath(locationPath: string, strategyId
   }
 
   return normalizeStrategyVersionsReturnPath(decoded, strategyId);
+}
+
+function parseInternalExecutionId(locationPath: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const rawExecutionId = (params.get('internalExecutionId') ?? '').trim();
+  return rawExecutionId.length > 0 ? rawExecutionId : null;
+}
+
+function getDefaultDateRangeForInternalBacktest() {
+  const to = new Date();
+  const from = new Date(to.getTime());
+  from.setDate(from.getDate() - 365);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
 }
 
 function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
@@ -296,6 +323,10 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
   const [editingForwardValidationNote, setEditingForwardValidationNote] = useState('');
+  const [startingInternalBacktest, setStartingInternalBacktest] = useState(false);
+  const [startInternalBacktestError, setStartInternalBacktestError] = useState<string | null>(null);
+  const [internalBacktestSymbol, setInternalBacktestSymbol] = useState('7203');
+  const [internalExecutionId, setInternalExecutionId] = useState<string | null>(() => parseInternalExecutionId(location));
 
   const version = data?.strategy_version ?? null;
   const compareBase = data?.compare_base ?? null;
@@ -325,6 +356,45 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         returnQuery.order,
       )
     : null;
+  const { from: defaultRangeFrom, to: defaultRangeTo } = useMemo(
+    () => getDefaultDateRangeForInternalBacktest(),
+    [],
+  );
+  const internalExecutionStatusApiPath = internalExecutionId
+    ? `/api/internal-backtests/executions/${internalExecutionId}`
+    : null;
+  const { data: internalExecutionStatusData, error: internalExecutionStatusError } = useSWR<InternalBacktestExecutionStatusData>(
+    internalExecutionStatusApiPath,
+    swrFetcher,
+    {
+      refreshInterval: (currentData) => {
+        const currentStatus = currentData?.execution?.status;
+        return currentStatus === 'queued' || currentStatus === 'running' ? 1500 : 0;
+      },
+    },
+  );
+  const internalExecutionStatus = internalExecutionStatusData?.execution?.status ?? null;
+  const internalExecutionResultApiPath = internalExecutionId && internalExecutionStatus === 'succeeded'
+    ? `/api/internal-backtests/executions/${internalExecutionId}/result`
+    : null;
+  const { data: internalExecutionResultData, error: internalExecutionResultError } = useSWR<InternalBacktestExecutionResultData>(
+    internalExecutionResultApiPath,
+    swrFetcher,
+  );
+  const internalExecutionViewModel = useMemo(
+    () =>
+      getInternalBacktestResultViewModel({
+        status: internalExecutionStatus ?? 'not_ready',
+        errorCode: internalExecutionStatusData?.execution?.error_code ?? null,
+        summaryKind: internalExecutionResultData?.result_summary?.summary_kind ?? null,
+        metricsBarCount: internalExecutionResultData?.result_summary?.metrics?.bar_count ?? null,
+        snapshotBarCount: internalExecutionResultData?.input_snapshot?.data_source_snapshot?.bar_count ?? null,
+      }),
+    [internalExecutionResultData, internalExecutionStatus, internalExecutionStatusData?.execution?.error_code],
+  );
+  const internalExecutionMessageText = getInternalBacktestMessageText(
+    internalExecutionViewModel.recommendedMessageKey,
+  );
 
   useEffect(() => {
     if (version) {
@@ -463,6 +533,35 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setSaveForwardNoteError(requestError?.message ?? 'フォワード検証ノート保存に失敗しました。');
     } finally {
       setSavingForwardNote(false);
+    }
+  };
+
+  const onStartInternalBacktest = async () => {
+    if (!version) return;
+    setStartingInternalBacktest(true);
+    setStartInternalBacktestError(null);
+    try {
+      const response = await postApi<InternalBacktestExecutionCreateData>('/api/internal-backtests/executions', {
+        strategy_rule_version_id: version.id,
+        market: version.market,
+        timeframe: version.timeframe,
+        data_range: {
+          from: defaultRangeFrom,
+          to: defaultRangeTo,
+        },
+        execution_target: {
+          symbol: internalBacktestSymbol.trim(),
+          source_kind: 'daily_ohlcv',
+        },
+        engine_config: {
+          summary_mode: 'engine_estimated',
+        },
+      });
+      setInternalExecutionId(response.execution.id);
+    } catch (requestError: any) {
+      setStartInternalBacktestError(requestError?.message ?? '内製バックテストの開始に失敗しました。');
+    } finally {
+      setStartingInternalBacktest(false);
     }
   };
 
@@ -635,6 +734,97 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         {saveForwardNoteMessage && (
           <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f', borderRadius: '4px' }}>
             {saveForwardNoteMessage}
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: '1.2rem', border: '1px solid #ddd', borderRadius: '6px', padding: '0.85rem', background: '#fafafa' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.6rem' }}>内製バックテスト（最小）</h2>
+        <div style={{ display: 'grid', gap: '0.35rem', marginBottom: '0.7rem', fontSize: '0.9rem' }}>
+          <div><strong>execution_id:</strong> <code>{internalExecutionId ?? '-'}</code></div>
+          <div><strong>status:</strong> <code>{internalExecutionStatus ?? '-'}</code></div>
+          <div><strong>state_label:</strong> <code>{internalExecutionViewModel.stateLabel}</code></div>
+          <div><strong>判定カテゴリ:</strong> <code>{internalExecutionViewModel.interpretation}</code></div>
+          <div><strong>ガイド:</strong> {internalExecutionMessageText}</div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.55rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span>symbol</span>
+            <input
+              value={internalBacktestSymbol}
+              onChange={(event) => setInternalBacktestSymbol(event.target.value)}
+              placeholder='例: 7203'
+              style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.35rem 0.45rem', minWidth: '9rem' }}
+            />
+          </label>
+          <button
+            type='button'
+            onClick={onStartInternalBacktest}
+            disabled={startingInternalBacktest}
+            style={{
+              padding: '0.45rem 0.75rem',
+              border: 'none',
+              borderRadius: '4px',
+              background: startingInternalBacktest ? '#9cbbe0' : '#0a5bb5',
+              color: '#fff',
+              cursor: startingInternalBacktest ? 'default' : 'pointer',
+            }}
+          >
+            {startingInternalBacktest ? '開始中...' : '内製バックテストを開始'}
+          </button>
+        </div>
+        <div style={{ marginTop: '0.45rem', color: '#666', fontSize: '0.85rem' }}>
+          期間: {defaultRangeFrom} 〜 {defaultRangeTo} / summary_mode: engine_estimated
+        </div>
+
+        {internalExecutionViewModel.canShowMetrics && internalExecutionResultData?.result_summary?.metrics && (
+          <div style={{ marginTop: '0.75rem', padding: '0.65rem', borderRadius: '4px', background: '#fff', border: '1px solid #ececec' }}>
+            <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>metrics</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(180px, 1fr))', gap: '0.25rem 0.8rem', fontSize: '0.9rem' }}>
+              <div>bar_count: {internalExecutionResultData.result_summary.metrics.bar_count}</div>
+              <div>first_close: {internalExecutionResultData.result_summary.metrics.first_close}</div>
+              <div>last_close: {internalExecutionResultData.result_summary.metrics.last_close}</div>
+              <div>price_change: {internalExecutionResultData.result_summary.metrics.price_change}</div>
+              <div>price_change_percent: {internalExecutionResultData.result_summary.metrics.price_change_percent}</div>
+              <div>range_percent: {internalExecutionResultData.result_summary.metrics.range_percent}</div>
+            </div>
+          </div>
+        )}
+
+        {internalExecutionViewModel.interpretation === 'success_no_data' && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f' }}>
+            対象期間のデータがありません（empty bars success）。
+          </div>
+        )}
+        {internalExecutionViewModel.interpretation === 'data_source_unavailable' && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            データ取得に失敗しました。symbol / market / timeframe を確認して再試行してください。
+          </div>
+        )}
+        {internalExecutionViewModel.interpretation === 'not_ready' && internalExecutionId && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#f0f6ff', border: '1px solid #bed6f8', color: '#0a4a99' }}>
+            実行中です。完了までお待ちください。
+          </div>
+        )}
+        {internalExecutionViewModel.interpretation === 'internal_failure' && internalExecutionId && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            内部エラーが発生しました。時間をおいて再試行してください。
+          </div>
+        )}
+        {startInternalBacktestError && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            {startInternalBacktestError}
+          </div>
+        )}
+        {internalExecutionStatusError && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            status 取得に失敗しました: {internalExecutionStatusError.message}
+          </div>
+        )}
+        {internalExecutionResultError && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            result 取得に失敗しました: {internalExecutionResultError.message}
           </div>
         )}
       </section>
