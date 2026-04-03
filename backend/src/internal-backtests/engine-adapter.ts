@@ -7,11 +7,14 @@ import {
 export type InternalBacktestEngineRunResult = {
   summary_kind?: 'scaffold_deterministic' | 'engine_estimated' | 'engine_actual';
   metrics?: Partial<{
-    total_trades: number;
-    win_rate: number;
-    net_profit: number;
-    profit_factor: number | null;
-    max_drawdown_percent: number | null;
+    bar_count: number;
+    first_close: number;
+    last_close: number;
+    price_change: number;
+    price_change_percent: number;
+    period_high: number;
+    period_low: number;
+    range_percent: number;
   }>;
   notes?: string;
   data_source_snapshot?: InternalBacktestDataSourceSnapshot;
@@ -62,45 +65,62 @@ function roundTo(value: number, digits: number): number {
 }
 
 function calculateDeterministicMetrics(input: InternalBacktestExecutionInput) {
-  const timeframeKey = input.timeframe.toUpperCase();
+  const timeframeKey = input.timeframe.trim().toUpperCase();
   const canonicalTimeframe = TIMEFRAME_CANONICAL[timeframeKey] ?? timeframeKey;
-  const barsPerDay = TIMEFRAME_BARS_PER_DAY[timeframeKey] ?? 1;
+  const barsPerDay = TIMEFRAME_BARS_PER_DAY[canonicalTimeframe] ?? 1;
   const periodDays = daysBetweenInclusive(input.dataRange.from, input.dataRange.to);
-  const estimatedBars = periodDays * barsPerDay;
+  const barCount = Math.max(1, periodDays * barsPerDay);
 
   const seedText = `${input.executionTarget.symbol}|${input.market}|${canonicalTimeframe}|${input.dataRange.from}|${input.dataRange.to}|${input.strategyRuleVersionId}`;
   const seed = stableHash(seedText);
-
-  const totalTrades = Math.max(1, Math.floor(estimatedBars / 40) + (seed % 5));
-  const winRate = roundTo(0.35 + (seed % 31) / 100, 2); // 0.35 - 0.65
-  const avgTradePnl = 150 + (seed % 900); // 150 - 1049
-  const direction = seed % 2 === 0 ? 1 : -1;
-  const netProfit = direction * totalTrades * avgTradePnl;
-
-  const profitFactor = roundTo(0.8 + winRate * 1.2, 2);
-  const maxDrawdownPercent = -roundTo(3 + (seed % 18) + periodDays / 365, 2);
+  const firstClose = roundTo(900 + (seed % 700) / 10, 2);
+  const trendPercent = ((seed % 900) - 450) / 1000; // -45% to +44.9%
+  const lastClose = roundTo(Math.max(1, firstClose * (1 + trendPercent)), 2);
+  const periodLow = roundTo(Math.min(firstClose, lastClose) * (1 - ((seed % 120) / 1000)), 2);
+  const periodHigh = roundTo(Math.max(firstClose, lastClose) * (1 + ((seed % 140) / 1000)), 2);
+  const priceChange = roundTo(lastClose - firstClose, 2);
+  const priceChangePercent = firstClose === 0 ? 0 : roundTo((priceChange / firstClose) * 100, 4);
+  const rangePercent = periodLow <= 0 ? 0 : roundTo(((periodHigh - periodLow) / periodLow) * 100, 4);
 
   return {
-    total_trades: totalTrades,
-    win_rate: winRate,
-    net_profit: netProfit,
-    profit_factor: profitFactor,
-    max_drawdown_percent: maxDrawdownPercent,
+    bar_count: barCount,
+    first_close: firstClose,
+    last_close: lastClose,
+    price_change: priceChange,
+    price_change_percent: priceChangePercent,
+    period_high: periodHigh,
+    period_low: periodLow,
+    range_percent: rangePercent,
   };
 }
 
-function calculateEstimatedMetrics(input: InternalBacktestExecutionInput) {
-  const scaffold = calculateDeterministicMetrics(input);
-  const periodDays = daysBetweenInclusive(input.dataRange.from, input.dataRange.to);
-  const rangeFactor = Math.max(1, Math.floor(periodDays / 45));
-
+function buildEstimatedMetricsFromBars(
+  bars: Array<{
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+  }>,
+) {
+  if (bars.length === 0) {
+    throw new Error('estimated metrics require at least one normalized bar');
+  }
+  const firstClose = roundTo(bars[0]!.close, 2);
+  const lastClose = roundTo(bars[bars.length - 1]!.close, 2);
+  const periodHigh = roundTo(Math.max(...bars.map((bar) => bar.high)), 2);
+  const periodLow = roundTo(Math.min(...bars.map((bar) => bar.low)), 2);
+  const priceChange = roundTo(lastClose - firstClose, 2);
+  const priceChangePercent = firstClose === 0 ? 0 : roundTo((priceChange / firstClose) * 100, 4);
+  const rangePercent = periodLow <= 0 ? 0 : roundTo(((periodHigh - periodLow) / periodLow) * 100, 4);
   return {
-    total_trades: scaffold.total_trades + rangeFactor,
-    win_rate: roundTo(Math.min(0.95, scaffold.win_rate + 0.02), 2),
-    net_profit: scaffold.net_profit + rangeFactor * 650,
-    profit_factor: scaffold.profit_factor === null ? null : roundTo(scaffold.profit_factor + 0.12, 2),
-    max_drawdown_percent:
-      scaffold.max_drawdown_percent === null ? null : roundTo(scaffold.max_drawdown_percent - 0.6, 2),
+    bar_count: bars.length,
+    first_close: firstClose,
+    last_close: lastClose,
+    price_change: priceChange,
+    price_change_percent: priceChangePercent,
+    period_high: periodHigh,
+    period_low: periodLow,
+    range_percent: rangePercent,
   };
 }
 
@@ -123,7 +143,7 @@ export function createDummyInternalBacktestEngineAdapter(
     ? 'engine_estimated'
     : 'scaffold_deterministic';
   let dataSourceSnapshot: InternalBacktestDataSourceSnapshot | undefined;
-  let metrics = useEstimated ? calculateEstimatedMetrics(input) : calculateDeterministicMetrics(input);
+  let metrics = calculateDeterministicMetrics(input);
   if (useEstimated) {
     const dataSourceResult = await dataSourceAdapter.fetchDailyOhlcv({
       symbol: input.executionTarget.symbol,
@@ -133,14 +153,7 @@ export function createDummyInternalBacktestEngineAdapter(
       to: input.dataRange.to,
       source_kind: 'daily_ohlcv',
     });
-    const barsFactor = Math.max(1, Math.floor(dataSourceResult.bars.length / 30));
-    metrics = {
-      ...metrics,
-      total_trades: metrics.total_trades + barsFactor,
-      net_profit: metrics.net_profit + barsFactor * 120,
-      profit_factor:
-        metrics.profit_factor === null ? null : roundTo((metrics.profit_factor ?? 1) + 0.03, 2),
-    };
+    metrics = buildEstimatedMetricsFromBars(dataSourceResult.bars);
     dataSourceSnapshot = dataSourceResult.snapshot;
   }
   const notes = useEstimated

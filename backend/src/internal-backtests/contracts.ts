@@ -69,11 +69,14 @@ export type InternalBacktestResultSummary = {
     to: string;
   };
   metrics: {
-    total_trades: number;
-    win_rate: number;
-    net_profit: number;
-    profit_factor: number | null;
-    max_drawdown_percent: number | null;
+    bar_count: number;
+    first_close: number;
+    last_close: number;
+    price_change: number;
+    price_change_percent: number;
+    period_high: number;
+    period_low: number;
+    range_percent: number;
   };
   engine: {
     version: string;
@@ -239,12 +242,6 @@ function isValidIsoDateTime(value: string): boolean {
   }
   const parsed = Date.parse(value);
   return !Number.isNaN(parsed);
-}
-
-function assertOptionalFiniteNumber(value: unknown, field: string): number | null {
-  if (value === null) return null;
-  assertFiniteNumber(value, field);
-  return value as number;
 }
 
 export function normalizeCreateExecutionRequest(input: CreateExecutionRequestInput): NormalizedCreateExecutionRequest {
@@ -446,11 +443,14 @@ export function createDefaultResultSummary(args: {
       to: args.inputSnapshot.dataRange.to,
     },
     metrics: {
-      total_trades: 0,
-      win_rate: 0,
-      net_profit: 0,
-      profit_factor: null,
-      max_drawdown_percent: null,
+      bar_count: 0,
+      first_close: 0,
+      last_close: 0,
+      price_change: 0,
+      price_change_percent: 0,
+      period_high: 0,
+      period_low: 0,
+      range_percent: 0,
     },
     engine: {
       version: args.engineVersion,
@@ -503,14 +503,14 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
   if (!metrics) {
     throw new Error('result_summary.metrics must be an object');
   }
-  assertFiniteNumber(metrics.total_trades, 'result_summary.metrics.total_trades');
-  assertFiniteNumber(metrics.win_rate, 'result_summary.metrics.win_rate');
-  assertFiniteNumber(metrics.net_profit, 'result_summary.metrics.net_profit');
-  const profitFactor = assertOptionalFiniteNumber(metrics.profit_factor, 'result_summary.metrics.profit_factor');
-  const maxDrawdown = assertOptionalFiniteNumber(
-    metrics.max_drawdown_percent,
-    'result_summary.metrics.max_drawdown_percent',
-  );
+  assertFiniteNumber(metrics.bar_count, 'result_summary.metrics.bar_count');
+  assertFiniteNumber(metrics.first_close, 'result_summary.metrics.first_close');
+  assertFiniteNumber(metrics.last_close, 'result_summary.metrics.last_close');
+  assertFiniteNumber(metrics.price_change, 'result_summary.metrics.price_change');
+  assertFiniteNumber(metrics.price_change_percent, 'result_summary.metrics.price_change_percent');
+  assertFiniteNumber(metrics.period_high, 'result_summary.metrics.period_high');
+  assertFiniteNumber(metrics.period_low, 'result_summary.metrics.period_low');
+  assertFiniteNumber(metrics.range_percent, 'result_summary.metrics.range_percent');
 
   const engine = asPlainObject(root.engine);
   const engineVersion = requireTrimmedString(engine?.version);
@@ -527,11 +527,14 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
     timeframe,
     period: { from, to },
     metrics: {
-      total_trades: metrics.total_trades as number,
-      win_rate: metrics.win_rate as number,
-      net_profit: metrics.net_profit as number,
-      profit_factor: profitFactor,
-      max_drawdown_percent: maxDrawdown,
+      bar_count: metrics.bar_count as number,
+      first_close: metrics.first_close as number,
+      last_close: metrics.last_close as number,
+      price_change: metrics.price_change as number,
+      price_change_percent: metrics.price_change_percent as number,
+      period_high: metrics.period_high as number,
+      period_low: metrics.period_low as number,
+      range_percent: metrics.range_percent as number,
     },
     engine: {
       version: engineVersion,

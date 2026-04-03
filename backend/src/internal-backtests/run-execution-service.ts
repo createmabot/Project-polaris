@@ -52,15 +52,14 @@ function mergeEngineResult(args: {
     ...args.base,
     summary_kind: summaryKind,
     metrics: {
-      total_trades: metrics.total_trades ?? args.base.metrics.total_trades,
-      win_rate: metrics.win_rate ?? args.base.metrics.win_rate,
-      net_profit: metrics.net_profit ?? args.base.metrics.net_profit,
-      profit_factor:
-        metrics.profit_factor === undefined ? args.base.metrics.profit_factor : metrics.profit_factor,
-      max_drawdown_percent:
-        metrics.max_drawdown_percent === undefined
-          ? args.base.metrics.max_drawdown_percent
-          : metrics.max_drawdown_percent,
+      bar_count: metrics.bar_count ?? args.base.metrics.bar_count,
+      first_close: metrics.first_close ?? args.base.metrics.first_close,
+      last_close: metrics.last_close ?? args.base.metrics.last_close,
+      price_change: metrics.price_change ?? args.base.metrics.price_change,
+      price_change_percent: metrics.price_change_percent ?? args.base.metrics.price_change_percent,
+      period_high: metrics.period_high ?? args.base.metrics.period_high,
+      period_low: metrics.period_low ?? args.base.metrics.period_low,
+      range_percent: metrics.range_percent ?? args.base.metrics.range_percent,
     },
     notes,
   };
