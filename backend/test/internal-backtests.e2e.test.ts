@@ -374,6 +374,32 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('returns INVALID_EXECUTION_TARGET when request symbol uses forbidden legacy prefix', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: 'legacy:ver-1',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('INVALID_EXECUTION_TARGET');
+
+    await app.close();
+  });
+
   it('marks execution as failed when enqueue fails', async () => {
     const app = await createApp();
     enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));

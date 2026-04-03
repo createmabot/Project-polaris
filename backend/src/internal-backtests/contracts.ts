@@ -162,6 +162,7 @@ export function normalizeExecutionTarget(args: {
     sourceKind: 'daily_ohlcv';
   };
   allowLegacyFallback?: boolean;
+  allowUserProvidedLegacySymbol?: boolean;
 }): {
   symbol: string;
   sourceKind: 'daily_ohlcv';
@@ -178,6 +179,9 @@ export function normalizeExecutionTarget(args: {
   }
 
   if (symbolRaw.startsWith('legacy:')) {
+    if (args.allowUserProvidedLegacySymbol !== true) {
+      throw new Error('execution_target.symbol cannot start with legacy: for request input.');
+    }
     return {
       symbol: symbolRaw,
       sourceKind: 'daily_ohlcv',
@@ -298,6 +302,7 @@ export function resolveExecutionInput(args: {
     market: resolvedMarket,
     executionTarget: args.request.executionTarget,
     allowLegacyFallback: true,
+    allowUserProvidedLegacySymbol: false,
   });
 
   return {
@@ -396,6 +401,7 @@ export function normalizeExecutionInputSnapshot(
       sourceKind: 'daily_ohlcv',
     },
     allowLegacyFallback: true,
+    allowUserProvidedLegacySymbol: true,
   });
 
   const naturalLanguageRule = requireTrimmedString(strategySnapshot?.natural_language_rule) ?? '';
