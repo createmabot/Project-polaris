@@ -515,11 +515,14 @@ describe('internal backtests scaffold routes', () => {
         timeframe: 'D',
         period: { from: '2024-01-01', to: '2025-12-31' },
         metrics: {
-          total_trades: 36,
-          win_rate: 0.44,
-          net_profit: 120000,
-          profit_factor: 1.42,
-          max_drawdown_percent: -8.2,
+          bar_count: 731,
+          first_close: 1234.56,
+          last_close: 1330.12,
+          price_change: 95.56,
+          price_change_percent: 7.7398,
+          period_high: 1410.2,
+          period_low: 1188.4,
+          range_percent: 18.6654,
         },
         engine: { version: 'ibtx-v0' },
         notes: 'sample summary',
@@ -544,7 +547,7 @@ describe('internal backtests scaffold routes', () => {
     const body = resultRes.json();
     expect(body.data.execution_id).toBe('ibtx-succeeded');
     expect(body.data.result_summary.summary_kind).toBe('scaffold_deterministic');
-    expect(body.data.result_summary.metrics.net_profit).toBe(120000);
+    expect(body.data.result_summary.metrics.bar_count).toBe(731);
     expect(body.data.artifact_pointer.execution_id).toBe('ibtx-succeeded');
     expect(body.data.artifact_pointer.path).toBe('/internal-backtests/executions/ibtx-succeeded');
     expect(body.data.input_snapshot.execution_target.symbol).toBe('7203');

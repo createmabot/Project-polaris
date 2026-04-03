@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runInternalBacktestExecutionService } from '../src/internal-backtests/run-execution-service';
 import { normalizeExecutionInputSnapshot } from '../src/internal-backtests/contracts';
+import { createDummyInternalBacktestEngineAdapter } from '../src/internal-backtests/engine-adapter';
 
 describe('internal backtest execution service contracts', () => {
   it('normalizes input snapshot with fallback from strategy_snapshot market/timeframe', () => {
@@ -68,7 +69,7 @@ describe('internal backtest execution service contracts', () => {
     expect(output.resultSummary.summary_kind).toBe('scaffold_deterministic');
     expect(output.resultSummary.market).toBe('JP_STOCK');
     expect(output.resultSummary.period.to).toBe('2025-12-31');
-    expect(output.resultSummary.metrics.total_trades).toBeGreaterThan(0);
+    expect(output.resultSummary.metrics.bar_count).toBeGreaterThan(0);
     expect(output.artifactPointer).toMatchObject({
       type: 'internal_backtest_execution',
       execution_id: 'ibtx-1',
@@ -227,6 +228,56 @@ describe('internal backtest execution service contracts', () => {
     expect(estimatedOutput.inputSnapshot.data_source_snapshot?.bar_count).toBeGreaterThan(0);
   });
 
+  it('builds engine_estimated metrics from normalized bars deterministically', async () => {
+    const inputSnapshot = {
+      strategy_rule_version_id: 'ver-1',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      execution_target: {
+        symbol: '7203',
+        source_kind: 'daily_ohlcv',
+      },
+      data_range: { from: '2024-01-01', to: '2024-01-10' },
+      engine_config: { summary_mode: 'engine_estimated' },
+      strategy_snapshot: {
+        natural_language_rule: 'rule',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    };
+
+    const first = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-est-bars-1',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: inputSnapshot,
+    });
+
+    const second = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-est-bars-2',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: inputSnapshot,
+    });
+
+    const changedRange = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-est-bars-3',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: {
+        ...inputSnapshot,
+        data_range: { from: '2024-01-01', to: '2024-01-20' },
+      },
+    });
+
+    expect(first.resultSummary.summary_kind).toBe('engine_estimated');
+    expect(first.resultSummary.metrics).toEqual(second.resultSummary.metrics);
+    expect(first.resultSummary.metrics).not.toEqual(changedRange.resultSummary.metrics);
+    expect(first.resultSummary.metrics.bar_count).toBe(10);
+    expect(changedRange.resultSummary.metrics.bar_count).toBe(20);
+  });
+
   it('fails with DATA_SOURCE_UNAVAILABLE on unsupported estimated market/timeframe', async () => {
     await expect(
       runInternalBacktestExecutionService({
@@ -352,15 +403,110 @@ describe('internal backtest execution service contracts', () => {
             // intentionally invalid
             summary_kind: 'invalid_kind' as any,
             metrics: {
-              total_trades: 10,
-              win_rate: 0.5,
-              net_profit: 1234,
-              profit_factor: 1.2,
-              max_drawdown_percent: -5.1,
+              bar_count: 10,
+              first_close: 100,
+              last_close: 110,
+              price_change: 10,
+              price_change_percent: 10,
+              period_high: 112,
+              period_low: 95,
+              range_percent: 17.8947,
             },
           }),
         },
       ),
     ).rejects.toThrow('result_summary.summary_kind');
+  });
+
+  it('keeps engine_estimated succeeded with zero-bar data source results', async () => {
+    const engineAdapter = createDummyInternalBacktestEngineAdapter({
+      fetchDailyOhlcv: async () => ({
+        bars: [],
+        snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-10',
+          fetched_at: '2024-01-10T00:00:00.000Z',
+          data_revision: 'stub-zero-bars',
+          bar_count: 0,
+        },
+      }),
+    });
+
+    const output = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-estimated-zero-bars',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-10' },
+          engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy(\"x\")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(output.resultSummary.summary_kind).toBe('engine_estimated');
+    expect(output.resultSummary.metrics).toMatchObject({
+      bar_count: 0,
+      first_close: 0,
+      last_close: 0,
+    });
+    expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(0);
+  });
+
+  it('fails when metrics.bar_count is fractional', async () => {
+    await expect(
+      runInternalBacktestExecutionService(
+        {
+          executionId: 'ibtx-invalid-bar-count',
+          strategyRuleVersionId: 'ver-1',
+          engineVersion: 'ibtx-v0',
+          inputSnapshotJson: {
+            strategy_rule_version_id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            data_range: { from: '2024-01-01', to: '2025-12-31' },
+            engine_config: {},
+            strategy_snapshot: {
+              natural_language_rule: 'rule',
+              generated_pine: 'strategy(\"x\")',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+            },
+          },
+        },
+        {
+          engineAdapter: async () => ({
+            summary_kind: 'engine_estimated',
+            metrics: {
+              bar_count: 1.5,
+              first_close: 100,
+              last_close: 110,
+              price_change: 10,
+              price_change_percent: 10,
+              period_high: 112,
+              period_low: 95,
+              range_percent: 17.89,
+            },
+          }),
+        },
+      ),
+    ).rejects.toThrow('result_summary.metrics.bar_count');
   });
 });
