@@ -167,6 +167,88 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.errorMessage).toBeNull();
   });
 
+  it('keeps execution succeeded when engine_estimated returns empty-bars summary', async () => {
+    executionStore.set('ibtx-empty-bars', createExecutionRow({ id: 'ibtx-empty-bars', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-empty-bars' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            summary_kind: 'engine_estimated',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2024-01-10' },
+            metrics: {
+              bar_count: 0,
+              first_close: 0,
+              last_close: 0,
+              price_change: 0,
+              price_change_percent: 0,
+              period_high: 0,
+              period_low: 0,
+              range_percent: 0,
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'engine_estimated empty bars summary',
+          },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-empty-bars',
+            path: '/internal-backtests/executions/ibtx-empty-bars',
+          },
+          inputSnapshot: {
+            strategy_rule_version_id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            execution_target: {
+              symbol: '7203',
+              source_kind: 'daily_ohlcv',
+            },
+            data_range: { from: '2024-01-01', to: '2024-01-10' },
+            engine_config: { summary_mode: 'engine_estimated' },
+            strategy_snapshot: {
+              natural_language_rule: 'rule',
+              generated_pine: 'strategy("base")',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+            },
+            data_source_snapshot: {
+              source_kind: 'daily_ohlcv',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+              from: '2024-01-01',
+              to: '2024-01-10',
+              fetched_at: '2024-01-10T00:00:00.000Z',
+              data_revision: 'stub-empty-bars',
+              bar_count: 0,
+            },
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('succeeded');
+    const saved = executionStore.get('ibtx-empty-bars');
+    expect(saved?.status).toBe('succeeded');
+    expect(saved?.errorCode).toBeNull();
+    expect(saved?.resultSummaryJson).toMatchObject({
+      summary_kind: 'engine_estimated',
+      metrics: {
+        bar_count: 0,
+        first_close: 0,
+        last_close: 0,
+      },
+    });
+    expect(saved?.inputSnapshotJson).toMatchObject({
+      data_source_snapshot: {
+        bar_count: 0,
+      },
+    });
+  });
+
   it('moves queued execution to failed and stores error on runExecution failure', async () => {
     executionStore.set('ibtx-fail', createExecutionRow({ id: 'ibtx-fail', status: 'queued' }));
 

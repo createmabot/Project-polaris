@@ -556,4 +556,81 @@ describe('internal backtests scaffold routes', () => {
 
     await app.close();
   });
+
+  it('returns succeeded result with zero metrics when engine_estimated has empty bars', async () => {
+    const app = await createApp();
+
+    const now = new Date();
+    runtime.executions.set('ibtx-empty-bars', {
+      id: 'ibtx-empty-bars',
+      strategyRuleVersionId: 'ver-1',
+      status: 'succeeded',
+      requestedAt: now,
+      startedAt: now,
+      finishedAt: now,
+      inputSnapshotJson: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_source_snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-10',
+          fetched_at: '2024-01-10T00:00:00.000Z',
+          data_revision: 'stub-empty-bars',
+          bar_count: 0,
+        },
+      },
+      resultSummaryJson: {
+        schema_version: '1.0',
+        summary_kind: 'engine_estimated',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        period: { from: '2024-01-01', to: '2024-01-10' },
+        metrics: {
+          bar_count: 0,
+          first_close: 0,
+          last_close: 0,
+          price_change: 0,
+          price_change_percent: 0,
+          period_high: 0,
+          period_low: 0,
+          range_percent: 0,
+        },
+        engine: { version: 'ibtx-v0' },
+        notes: 'engine_estimated empty bars summary',
+      },
+      artifactPointerJson: {
+        type: 'internal_backtest_execution',
+        execution_id: 'ibtx-empty-bars',
+        path: '/internal-backtests/executions/ibtx-empty-bars',
+      },
+      errorCode: null,
+      errorMessage: null,
+      engineVersion: 'ibtx-v0',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const resultRes = await app.inject({
+      method: 'GET',
+      url: '/api/internal-backtests/executions/ibtx-empty-bars/result',
+    });
+
+    expect(resultRes.statusCode).toBe(200);
+    const body = resultRes.json();
+    expect(body.data.status).toBe('succeeded');
+    expect(body.data.result_summary.summary_kind).toBe('engine_estimated');
+    expect(body.data.result_summary.metrics.bar_count).toBe(0);
+    expect(body.data.input_snapshot.data_source_snapshot.bar_count).toBe(0);
+    expect(body.error).toBeNull();
+
+    await app.close();
+  });
 });
