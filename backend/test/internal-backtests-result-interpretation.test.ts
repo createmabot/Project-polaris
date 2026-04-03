@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildInternalBacktestResultViewModel,
+  getInternalBacktestResultViewModel,
   interpretInternalBacktestResult,
   resolveInternalBacktestBarCountForInterpretation,
 } from '../src/internal-backtests/result-interpretation';
@@ -84,5 +86,72 @@ describe('internal backtest result interpretation helper', () => {
       }),
     ).toBe(7);
   });
-});
 
+  it('maps success_with_data to metrics-visible non-error view model', () => {
+    const vm = buildInternalBacktestResultViewModel('success_with_data');
+    expect(vm).toMatchObject({
+      state_label: 'success',
+      is_error: false,
+      is_empty: false,
+      can_show_metrics: true,
+      recommended_message_key: 'internal_backtest.result.success',
+    });
+  });
+
+  it('maps success_no_data to empty-state view model', () => {
+    const vm = buildInternalBacktestResultViewModel('success_no_data');
+    expect(vm).toMatchObject({
+      state_label: 'success_no_data',
+      is_error: false,
+      is_empty: true,
+      can_show_metrics: false,
+      recommended_message_key: 'internal_backtest.result.success_no_data',
+      show_zero_data_note: true,
+    });
+  });
+
+  it('maps data_source_unavailable to retryable data-source error view model', () => {
+    const vm = buildInternalBacktestResultViewModel('data_source_unavailable');
+    expect(vm).toMatchObject({
+      state_label: 'error_data_source_unavailable',
+      is_error: true,
+      can_show_metrics: false,
+      recommended_message_key: 'internal_backtest.result.data_source_unavailable',
+      should_prompt_retry: true,
+      show_data_source_hint: true,
+    });
+  });
+
+  it('maps internal_failure to retryable generic error view model', () => {
+    const vm = buildInternalBacktestResultViewModel('internal_failure');
+    expect(vm).toMatchObject({
+      state_label: 'error_internal',
+      is_error: true,
+      can_show_metrics: false,
+      recommended_message_key: 'internal_backtest.result.internal_failure',
+      should_prompt_retry: true,
+    });
+  });
+
+  it('maps not_ready to waiting view model', () => {
+    const vm = buildInternalBacktestResultViewModel('not_ready');
+    expect(vm).toMatchObject({
+      state_label: 'not_ready',
+      is_error: false,
+      can_show_metrics: false,
+      recommended_message_key: 'internal_backtest.result.not_ready',
+      should_prompt_retry: false,
+    });
+  });
+
+  it('builds view model directly from raw interpretation input', () => {
+    const vm = getInternalBacktestResultViewModel({
+      status: 'succeeded',
+      summaryKind: 'engine_estimated',
+      metricsBarCount: 0,
+      snapshotBarCount: 0,
+    });
+    expect(vm.interpretation).toBe('success_no_data');
+    expect(vm.state_label).toBe('success_no_data');
+  });
+});
