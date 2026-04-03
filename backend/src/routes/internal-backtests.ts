@@ -28,13 +28,19 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
     }
 
-    const resolvedInput = resolveExecutionInput({
-      request: normalizedRequest,
-      strategyVersion: {
-        market: strategyVersion.market,
-        timeframe: strategyVersion.timeframe,
-      },
-    });
+    let resolvedInput: ReturnType<typeof resolveExecutionInput>;
+    try {
+      resolvedInput = resolveExecutionInput({
+        request: normalizedRequest,
+        strategyVersion: {
+          market: strategyVersion.market,
+          timeframe: strategyVersion.timeframe,
+        },
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'invalid execution target.';
+      throw new AppError(400, 'INVALID_EXECUTION_TARGET', message);
+    }
     const requestedSummaryMode =
       typeof resolvedInput.engineConfig.summary_mode === 'string'
         ? resolvedInput.engineConfig.summary_mode.trim().toLowerCase()

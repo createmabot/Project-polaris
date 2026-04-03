@@ -22,6 +22,28 @@ describe('internal backtest execution service contracts', () => {
     expect(normalized.dataRange.to).toBe('2025-12-31');
   });
 
+  it('canonicalizes JP_STOCK execution_target symbol in input snapshot', () => {
+    const normalized = normalizeExecutionInputSnapshot({
+      strategy_rule_version_id: 'ver-1',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      execution_target: {
+        symbol: '  tyo:7203 ',
+        source_kind: 'daily_ohlcv',
+      },
+      data_range: { from: '2024-01-01', to: '2024-01-31' },
+      engine_config: {},
+      strategy_snapshot: {
+        natural_language_rule: 'rule',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+
+    expect(normalized.executionTarget.symbol).toBe('7203');
+  });
+
   it('returns validated summary and artifact pointer from service', async () => {
     const output = await runInternalBacktestExecutionService({
       executionId: 'ibtx-1',
@@ -242,6 +264,33 @@ describe('internal backtest execution service contracts', () => {
           strategy_rule_version_id: 'ver-1',
           market: 'JP_STOCK',
           timeframe: 'D',
+          data_range: { from: '2024-01-01', to: '2025-12-31' },
+          engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy(\"x\")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_EXECUTION_TARGET' });
+  });
+
+  it('fails with INVALID_EXECUTION_TARGET when JP_STOCK symbol is not canonicalizable', async () => {
+    await expect(
+      runInternalBacktestExecutionService({
+        executionId: 'ibtx-estimated-invalid-symbol',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: 'AAPL',
+            source_kind: 'daily_ohlcv',
+          },
           data_range: { from: '2024-01-01', to: '2025-12-31' },
           engine_config: { summary_mode: 'engine_estimated' },
           strategy_snapshot: {

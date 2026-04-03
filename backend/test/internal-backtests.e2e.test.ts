@@ -296,6 +296,36 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('canonicalizes execution_target.symbol for JP_STOCK and stores canonical snapshot value', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '  tyo:7203  ',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const executionId = res.json().data.execution.id as string;
+    const saved = runtime.executions.get(executionId);
+    expect(saved?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: '7203',
+      source_kind: 'daily_ohlcv',
+    });
+
+    await app.close();
+  });
+
   it('returns INVALID_EXECUTION_TARGET for engine_estimated without execution_target.symbol', async () => {
     const app = await createApp();
 
@@ -306,6 +336,58 @@ describe('internal backtests scaffold routes', () => {
         strategy_rule_version_id: 'ver-1',
         market: 'JP_STOCK',
         timeframe: 'D',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('INVALID_EXECUTION_TARGET');
+
+    await app.close();
+  });
+
+  it('returns INVALID_EXECUTION_TARGET when JP_STOCK symbol is invalid', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: 'AAPL',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('INVALID_EXECUTION_TARGET');
+
+    await app.close();
+  });
+
+  it('returns INVALID_EXECUTION_TARGET when request symbol uses forbidden legacy prefix', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: 'legacy:ver-1',
+          source_kind: 'daily_ohlcv',
+        },
         data_range: { from: '2024-01-01', to: '2025-12-31' },
         engine_config: { summary_mode: 'engine_estimated' },
       },
