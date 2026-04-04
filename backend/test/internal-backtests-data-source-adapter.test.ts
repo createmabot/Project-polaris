@@ -298,6 +298,46 @@ describe('internal backtest data source adapter (minimal stub)', () => {
     expect(callCount).toBe(1);
   });
 
+  it('does not retry for provider_http_error with 429', async () => {
+    let callCount = 0;
+    const provider: InternalBacktestMarketDataProvider = {
+      fetchDailyOhlcv: async () => {
+        callCount += 1;
+        throw new InternalBacktestProviderUnavailableError('stooq_http_429', {
+          reasonCode: 'provider_http_error',
+          providerName: 'stooq',
+          details: { http_status: 429, endpoint_kind: 'stooq_daily_csv' },
+        });
+      },
+    };
+    const adapterWithRetry = new StubInternalBacktestDataSourceAdapter(
+      provider,
+      { maxRetries: 1, baseDelayMs: 0 },
+      async () => {},
+    );
+
+    await expect(
+      adapterWithRetry.fetchDailyOhlcv({
+        symbol: '7203',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        from: '2024-01-01',
+        to: '2024-01-03',
+        source_kind: 'daily_ohlcv',
+      }),
+    ).rejects.toMatchObject({
+      code: 'DATA_SOURCE_UNAVAILABLE',
+      reasonCode: 'provider_http_error',
+      details: {
+        retry_attempted: false,
+        retry_attempts: 1,
+        retry_target: false,
+        http_status: 429,
+      },
+    });
+    expect(callCount).toBe(1);
+  });
+
   it('does not retry for provider_parse_error', async () => {
     let callCount = 0;
     const provider: InternalBacktestMarketDataProvider = {
