@@ -12,6 +12,7 @@ import {
   INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
   isDataSourceUnavailableError,
 } from '../internal-backtests/data-source-adapter';
+import { recordInternalBacktestDataSourceUnavailableEvent } from '../internal-backtests/observability';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
@@ -242,6 +243,24 @@ export async function processInternalBacktestExecution(
           endpointKind: null,
         };
 
+    const elapsedMs = Date.now() - startedMs;
+    if (isDataSourceUnavailableError(error)) {
+      recordInternalBacktestDataSourceUnavailableEvent({
+        at: now().toISOString(),
+        executionId: execution.id,
+        providerName: dataSourceMeta.providerName,
+        internalReasonCode: dataSourceMeta.internalReasonCode,
+        symbol: executionContext.symbol,
+        market: executionContext.market,
+        timeframe: executionContext.timeframe,
+        from: executionContext.from,
+        to: executionContext.to,
+        elapsedMs,
+        httpStatus: dataSourceMeta.httpStatus,
+        endpointKind: dataSourceMeta.endpointKind,
+      });
+    }
+
     const failed = await db.internalBacktestExecution.update({
       where: { id: execution.id },
       data: {
@@ -264,7 +283,7 @@ export async function processInternalBacktestExecution(
       timeframe: executionContext.timeframe,
       from: executionContext.from,
       to: executionContext.to,
-      elapsed_ms: Date.now() - startedMs,
+      elapsed_ms: elapsedMs,
       http_status: dataSourceMeta.httpStatus,
       endpoint_kind: dataSourceMeta.endpointKind,
     };

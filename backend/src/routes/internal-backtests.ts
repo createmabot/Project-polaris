@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { enqueueInternalBacktestExecution } from '../queue/internal-backtests';
+import { getInternalBacktestDataSourceUnavailableSummary } from '../internal-backtests/observability';
 import {
   buildExecutionInputSnapshot,
   normalizeCreateExecutionRequest,
@@ -12,6 +13,20 @@ import {
 } from '../internal-backtests/contracts';
 
 export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.get<{ Querystring: { window?: string } }>(
+    '/observability/data-source-unavailable-summary',
+    async (request, reply) => {
+      const rawWindow = request.query?.window;
+      const window: '24h' | '7d' = rawWindow === '7d' ? '7d' : '24h';
+      if (rawWindow !== undefined && rawWindow !== '24h' && rawWindow !== '7d') {
+        throw new AppError(400, 'VALIDATION_ERROR', 'window must be one of 24h or 7d');
+      }
+
+      const summary = getInternalBacktestDataSourceUnavailableSummary({ window });
+      return reply.status(200).send(formatSuccess(request, { summary }));
+    },
+  );
+
   fastify.post<{ Body: CreateExecutionRequestInput }>('/executions', async (request, reply) => {
     let normalizedRequest: NormalizedCreateExecutionRequest;
     try {
