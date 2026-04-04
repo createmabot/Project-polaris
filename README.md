@@ -268,6 +268,7 @@ GitHub Actions で以下のチェックを運用しています。
 - `要確認差分` を含む一覧状態の保持
 - `検証ノートあり` 行（フォワード検証ノートあり）を含む一覧状態の保持
 - `StrategyVersionDetail` でのフォワード検証ノート編集文脈を含む return-flow の保持
+- `StrategyVersionDetail` の internal-backtests 最小表示分岐（`not_ready` / `success_no_data` / `data_source_unavailable` / `success_with_data`）の回帰固定
 
 確認ポイント:
 1. PR checks で対象 check が `pending` になる

@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e:backtests-return-flow": "vitest run src/pages/BacktestsReturnFlow.e2e.test.ts",
-    "test:e2e:strategy-versions-return-flow": "vitest run src/pages/StrategyVersionsReturnFlow.e2e.test.ts"
+    "test:e2e:strategy-versions-return-flow": "vitest run src/pages/StrategyVersionsReturnFlow.e2e.test.ts src/pages/StrategyVersionDetail.test.tsx"
   },
   "dependencies": {
     "react": "^18.2.0",

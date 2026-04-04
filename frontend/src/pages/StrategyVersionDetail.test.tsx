@@ -122,7 +122,68 @@ function createListPayload() {
   };
 }
 
-function setupSWR(detailPayload: ReturnType<typeof createPayload>, listPayload = createListPayload()) {
+function createInternalExecutionStatusData(params: {
+  executionId?: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | string;
+  errorCode?: string | null;
+}) {
+  return {
+    execution: {
+      id: params.executionId ?? 'exec-1',
+      strategy_rule_version_id: 'ver-1',
+      status: params.status,
+      requested_at: new Date().toISOString(),
+      started_at: null,
+      finished_at: null,
+      error_code: params.errorCode ?? null,
+      error_message: params.errorCode ? 'simulated error' : null,
+      engine_version: 'estimated-v1',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+  };
+}
+
+function createInternalExecutionResultData(params?: {
+  executionId?: string;
+  summaryKind?: string;
+  metricsBarCount?: number;
+  snapshotBarCount?: number;
+}) {
+  const metricsBarCount = params?.metricsBarCount ?? 12;
+  const firstClose = metricsBarCount > 0 ? 100 : 0;
+  const lastClose = metricsBarCount > 0 ? 108 : 0;
+  return {
+    execution_id: params?.executionId ?? 'exec-1',
+    strategy_rule_version_id: 'ver-1',
+    status: 'succeeded',
+    result_summary: {
+      summary_kind: params?.summaryKind ?? 'engine_estimated',
+      metrics: {
+        bar_count: metricsBarCount,
+        first_close: firstClose,
+        last_close: lastClose,
+        price_change: lastClose - firstClose,
+        price_change_percent: firstClose === 0 ? 0 : ((lastClose - firstClose) / firstClose) * 100,
+        period_high: metricsBarCount > 0 ? 110 : 0,
+        period_low: metricsBarCount > 0 ? 98 : 0,
+        range_percent: metricsBarCount > 0 ? 12 : 0,
+      },
+    },
+    input_snapshot: {
+      data_source_snapshot: {
+        bar_count: params?.snapshotBarCount ?? metricsBarCount,
+      },
+    },
+  };
+}
+
+function setupSWR(
+  detailPayload: ReturnType<typeof createPayload>,
+  listPayload = createListPayload(),
+  internalStatusData: ReturnType<typeof createInternalExecutionStatusData> | null = null,
+  internalResultData: ReturnType<typeof createInternalExecutionResultData> | null = null,
+) {
   mockUseSWR.mockImplementation((key: string) => {
     if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
       return {
@@ -138,6 +199,22 @@ function setupSWR(detailPayload: ReturnType<typeof createPayload>, listPayload =
         error: null,
         mutate: vi.fn(),
         data: listPayload,
+      };
+    }
+    if (typeof key === 'string' && key.startsWith('/api/internal-backtests/executions/') && key.endsWith('/result')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: internalResultData,
+      };
+    }
+    if (typeof key === 'string' && key.startsWith('/api/internal-backtests/executions/')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: internalStatusData,
       };
     }
     return { isLoading: false, error: null, mutate: vi.fn(), data: null };
@@ -238,5 +315,85 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('次の検証ノート');
     expect(html).toContain('placeholder="次に検証したい条件や見直し方針を記録します"');
     expect(html).toContain('ノートを保存');
+  });
+
+  it('shows not_ready guidance while internal execution is queued', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-queued', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-queued', status: 'queued' }),
+      null,
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('判定カテゴリ:</strong> <code>not_ready</code>');
+    expect(html).toContain('実行中です。完了までお待ちください。');
+  });
+
+  it('shows success_no_data branch without rendering metrics table', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-empty', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-empty', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-empty',
+        summaryKind: 'engine_estimated',
+        metricsBarCount: 0,
+        snapshotBarCount: 0,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('判定カテゴリ:</strong> <code>success_no_data</code>');
+    expect(html).toContain('対象期間のデータがありません（empty bars success）。');
+    expect(html).not.toContain('<div style="font-weight:600;margin-bottom:0.35rem">metrics</div>');
+  });
+
+  it('shows data_source_unavailable branch as fetch-failure guidance', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-failed', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({
+        executionId: 'exec-failed',
+        status: 'failed',
+        errorCode: 'DATA_SOURCE_UNAVAILABLE',
+      }),
+      null,
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('判定カテゴリ:</strong> <code>data_source_unavailable</code>');
+    expect(html).toContain('データ取得に失敗しました。symbol / market / timeframe を確認して再試行してください。');
+  });
+
+  it('shows success_with_data branch with metrics table', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-success', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-success', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-success',
+        summaryKind: 'engine_estimated',
+        metricsBarCount: 12,
+        snapshotBarCount: 12,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('判定カテゴリ:</strong> <code>success_with_data</code>');
+    expect(html).toContain('<div style="font-weight:600;margin-bottom:0.35rem">metrics</div>');
+    expect(html).toContain('bar_count: 12');
   });
 });
