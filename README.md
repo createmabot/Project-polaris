@@ -88,7 +88,7 @@ pnpm run down
   - `engine_estimated` は日足 OHLCV（`JP_STOCK` / `D`）の最小 provider 経路を利用
   - provider 応答は adapter 層で normalize し、再現性情報として `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を保存
   - provider failure / unsupported は `DATA_SOURCE_UNAVAILABLE` に統一
-  - 内部観測性として provider failure reason を構造化ログ + 内部集計で保持（consumer 向け契約は変更しない）
+  - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
   - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証

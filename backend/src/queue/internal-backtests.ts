@@ -245,8 +245,8 @@ export async function processInternalBacktestExecution(
 
     const elapsedMs = Date.now() - startedMs;
     if (isDataSourceUnavailableError(error)) {
-      recordInternalBacktestDataSourceUnavailableEvent({
-        at: now().toISOString(),
+      await recordInternalBacktestDataSourceUnavailableEvent({
+        occurredAt: now(),
         executionId: execution.id,
         providerName: dataSourceMeta.providerName,
         internalReasonCode: dataSourceMeta.internalReasonCode,
@@ -258,7 +258,7 @@ export async function processInternalBacktestExecution(
         elapsedMs,
         httpStatus: dataSourceMeta.httpStatus,
         endpointKind: dataSourceMeta.endpointKind,
-      });
+      }, { db: db as never });
     }
 
     const failed = await db.internalBacktestExecution.update({

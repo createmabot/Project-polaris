@@ -399,3 +399,25 @@ model InternalBacktestExecution {
   @@index([status, requestedAt])
   @@map("internal_backtest_executions")
 }
+
+model InternalBacktestDataSourceFailureEvent {
+  id                 String   @id @default(uuid())
+  executionId        String?  @map("execution_id")
+  providerName       String?  @map("provider_name")
+  internalReasonCode String?  @map("internal_reason_code")
+  symbol             String?
+  market             String?
+  timeframe          String?
+  rangeFrom          String?  @map("range_from")
+  rangeTo            String?  @map("range_to")
+  elapsedMs          Int?     @map("elapsed_ms")
+  httpStatus         Int?     @map("http_status")
+  endpointKind       String?  @map("endpoint_kind")
+  occurredAt         DateTime @default(now()) @map("occurred_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([occurredAt])
+  @@index([internalReasonCode])
+  @@index([providerName])
+  @@map("internal_backtest_data_source_failure_events")
+}

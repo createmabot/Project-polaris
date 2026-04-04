@@ -2,10 +2,6 @@ import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../src/utils/response';
 import { internalBacktestRoutes } from '../src/routes/internal-backtests';
-import {
-  __resetInternalBacktestObservabilityForTest,
-  recordInternalBacktestDataSourceUnavailableEvent,
-} from '../src/internal-backtests/observability';
 
 const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
   enqueueInternalBacktestExecutionMock: vi.fn(async () => ({ id: 'ibtx-job-1' })),
@@ -42,6 +38,22 @@ type Runtime = {
   nowSeq: number;
   versions: Map<string, StrategyRuleVersionRow>;
   executions: Map<string, InternalExecutionRow>;
+  failureEventSeq: number;
+  failureEvents: Array<{
+    id: string;
+    executionId: string | null;
+    providerName: string | null;
+    internalReasonCode: string | null;
+    symbol: string | null;
+    market: string | null;
+    timeframe: string | null;
+    rangeFrom: string | null;
+    rangeTo: string | null;
+    elapsedMs: number | null;
+    httpStatus: number | null;
+    endpointKind: string | null;
+    occurredAt: Date;
+  }>;
 };
 
 let runtime: Runtime;
@@ -52,6 +64,8 @@ function createRuntime(): Runtime {
     nowSeq: 1,
     versions: new Map(),
     executions: new Map(),
+    failureEventSeq: 1,
+    failureEvents: [],
   };
 }
 
@@ -96,6 +110,31 @@ vi.mock('../src/db', () => {
         return next;
       },
     },
+    internalBacktestDataSourceFailureEvent: {
+      create: async ({ data }: any) => {
+        const row = {
+          id: `ibtx-ds-fail-${runtime.failureEventSeq++}`,
+          executionId: data.executionId ?? null,
+          providerName: data.providerName ?? null,
+          internalReasonCode: data.internalReasonCode ?? null,
+          symbol: data.symbol ?? null,
+          market: data.market ?? null,
+          timeframe: data.timeframe ?? null,
+          rangeFrom: data.rangeFrom ?? null,
+          rangeTo: data.rangeTo ?? null,
+          elapsedMs: data.elapsedMs ?? null,
+          httpStatus: data.httpStatus ?? null,
+          endpointKind: data.endpointKind ?? null,
+          occurredAt: data.occurredAt ?? new Date(),
+        };
+        runtime.failureEvents.push(row);
+        return row;
+      },
+      findMany: async ({ where }: any) =>
+        runtime.failureEvents
+          .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
+          .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+    },
   };
 
   return { prisma };
@@ -116,13 +155,12 @@ async function createApp() {
 describe('internal backtests scaffold routes', () => {
   beforeEach(() => {
     runtime = createRuntime();
-    __resetInternalBacktestObservabilityForTest();
     enqueueInternalBacktestExecutionMock.mockReset();
     enqueueInternalBacktestExecutionMock.mockResolvedValue({ id: 'ibtx-job-1' });
     runtime.versions.set('ver-1', {
       id: 'ver-1',
       strategyRuleId: 'str-1',
-      naturalLanguageRule: '25日線を上回ったら買い',
+      naturalLanguageRule: 'buy when close breaks above 25d high',
       generatedPine: 'strategy("base")',
       market: 'JP_STOCK',
       timeframe: 'D',
@@ -131,33 +169,35 @@ describe('internal backtests scaffold routes', () => {
 
   it('returns internal observability summary grouped by reason', async () => {
     const app = await createApp();
-    recordInternalBacktestDataSourceUnavailableEvent({
-      at: new Date().toISOString(),
+    runtime.failureEvents.push({
+      id: `ibtx-ds-fail-${runtime.failureEventSeq++}`,
       executionId: 'ibtx-a',
       providerName: 'stooq',
       internalReasonCode: 'provider_http_error',
       symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
-      from: '2024-01-01',
-      to: '2024-01-10',
+      rangeFrom: '2024-01-01',
+      rangeTo: '2024-01-10',
       elapsedMs: 120,
       httpStatus: 503,
       endpointKind: 'stooq_daily_csv',
+      occurredAt: new Date(),
     });
-    recordInternalBacktestDataSourceUnavailableEvent({
-      at: new Date().toISOString(),
+    runtime.failureEvents.push({
+      id: `ibtx-ds-fail-${runtime.failureEventSeq++}`,
       executionId: 'ibtx-b',
       providerName: 'stooq',
       internalReasonCode: 'provider_parse_error',
       symbol: '6758',
       market: 'JP_STOCK',
       timeframe: 'D',
-      from: '2024-01-01',
-      to: '2024-01-10',
+      rangeFrom: '2024-01-01',
+      rangeTo: '2024-01-10',
       elapsedMs: 100,
       httpStatus: null,
       endpointKind: 'stooq_daily_csv',
+      occurredAt: new Date(),
     });
 
     const res = await app.inject({
