@@ -5,10 +5,7 @@ import {
   INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE,
   INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
 } from '../src/queue/internal-backtests';
-import {
-  __resetInternalBacktestObservabilityForTest,
-  getInternalBacktestDataSourceUnavailableSummary,
-} from '../src/internal-backtests/observability';
+import { getInternalBacktestDataSourceUnavailableSummary } from '../src/internal-backtests/observability';
 
 type ExecutionRow = {
   id: string;
@@ -54,13 +51,30 @@ function createExecutionRow(partial: Partial<ExecutionRow>): ExecutionRow {
 
 describe('internal backtest worker scaffold', () => {
   let executionStore: Map<string, ExecutionRow>;
+  let failureEvents: Array<{
+    id: string;
+    executionId: string | null;
+    providerName: string | null;
+    internalReasonCode: string | null;
+    symbol: string | null;
+    market: string | null;
+    timeframe: string | null;
+    rangeFrom: string | null;
+    rangeTo: string | null;
+    elapsedMs: number | null;
+    httpStatus: number | null;
+    endpointKind: string | null;
+    occurredAt: Date;
+  }>;
   let seq: number;
+  let eventSeq: number;
   let prismaMock: any;
 
   beforeEach(() => {
-    __resetInternalBacktestObservabilityForTest();
     executionStore = new Map();
+    failureEvents = [];
     seq = 0;
+    eventSeq = 0;
     prismaMock = {
       internalBacktestExecution: {
         findUnique: async ({ where }: any) => executionStore.get(where.id) ?? null,
@@ -78,6 +92,31 @@ describe('internal backtest worker scaffold', () => {
           executionStore.set(where.id, next);
           return next;
         },
+      },
+      internalBacktestDataSourceFailureEvent: {
+        create: async ({ data }: any) => {
+          const row = {
+            id: `evt-${++eventSeq}`,
+            executionId: data.executionId ?? null,
+            providerName: data.providerName ?? null,
+            internalReasonCode: data.internalReasonCode ?? null,
+            symbol: data.symbol ?? null,
+            market: data.market ?? null,
+            timeframe: data.timeframe ?? null,
+            rangeFrom: data.rangeFrom ?? null,
+            rangeTo: data.rangeTo ?? null,
+            elapsedMs: data.elapsedMs ?? null,
+            httpStatus: data.httpStatus ?? null,
+            endpointKind: data.endpointKind ?? null,
+            occurredAt: data.occurredAt ?? new Date(),
+          };
+          failureEvents.push(row);
+          return row;
+        },
+        findMany: async ({ where }: any) =>
+          failureEvents
+            .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
+            .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
       },
     };
   });
@@ -371,10 +410,13 @@ describe('internal backtest worker scaffold', () => {
       },
     );
 
-    const summary = getInternalBacktestDataSourceUnavailableSummary({
-      window: '24h',
-      now: new Date(Date.now() + 1000),
-    });
+    const summary = await getInternalBacktestDataSourceUnavailableSummary(
+      {
+        window: '24h',
+        now: new Date(Date.now() + 1000),
+      },
+      { db: prismaMock },
+    );
     expect(summary.total_failures).toBe(1);
     expect(summary.by_reason).toEqual(
       expect.arrayContaining([

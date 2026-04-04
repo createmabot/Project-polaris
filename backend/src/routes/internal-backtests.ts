@@ -22,7 +22,7 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
         throw new AppError(400, 'VALIDATION_ERROR', 'window must be one of 24h or 7d');
       }
 
-      const summary = getInternalBacktestDataSourceUnavailableSummary({ window });
+      const summary = await getInternalBacktestDataSourceUnavailableSummary({ window });
       return reply.status(200).send(formatSuccess(request, { summary }));
     },
   );
