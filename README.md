@@ -94,9 +94,36 @@ pnpm run down
     - 追加試行は 1 回のみ（最大 2 試行）、最終失敗時の outward 契約は従来どおり `DATA_SOURCE_UNAVAILABLE`
   - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
   - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
+  - `DATA_SOURCE_UNAVAILABLE` 運用確認は summary API（DB集計）を正本として扱う
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証
   - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理
+
+#### internal-backtests provider failure 最小 runbook
+- 参照 endpoint:
+  - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`
+  - `GET /api/internal-backtests/executions/:executionId`
+  - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` のみ）
+- `window` 使い分け:
+  - `24h`: 当日障害の一次切り分け
+  - `7d`: 傾向確認（特定 reason の反復有無）
+- 読み順:
+  1. `total_failures` で発生規模を確認
+  2. `by_reason[]` で主要 reason（件数上位）を確認
+  3. `recent_failures[]` で直近 `execution_id` を取得
+  4. `GET /executions/:executionId` で `status/error_code` を確認
+  5. `status=failed` かつ `error_code=DATA_SOURCE_UNAVAILABLE` を確認後、`symbol/market/timeframe/from/to/http_status/endpoint_kind` で原因切り分け
+- reason code 別の最小確認観点:
+  - `provider_http_error`: `http_status` と `endpoint_kind` を先に確認
+  - `provider_timeout`: 同時間帯で連続発生しているか確認
+  - `provider_network_error`: 一時的通信障害かを `recent_failures` で時系列確認
+  - `provider_invalid_response`: provider 応答 shape 崩れの可能性を確認
+  - `provider_parse_error`: parser 前提と応答フォーマット差分を確認
+  - `provider_not_configured`: 環境変数/起動設定を確認
+  - `provider_unsupported_target`: `execution_target` と `market/timeframe` の組み合わせを確認
+- 契約上の注意:
+  - consumer 向け outward error code は常に `DATA_SOURCE_UNAVAILABLE` のまま
+  - internal reason code は運用切り分け専用（UI/public API 契約は変更しない）
 
 ### ルール version 再閲覧（MVP最小）
 - API:
