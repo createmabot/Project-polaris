@@ -4,23 +4,50 @@ export const INTERNAL_BACKTEST_PROVIDER_UNAVAILABLE_CODE = 'INTERNAL_BACKTEST_PR
 export const INTERNAL_BACKTEST_PROVIDER_INVALID_RESPONSE_CODE =
   'INTERNAL_BACKTEST_PROVIDER_INVALID_RESPONSE';
 
+export type InternalBacktestProviderFailureReasonCode =
+  | 'provider_http_error'
+  | 'provider_timeout'
+  | 'provider_network_error'
+  | 'provider_invalid_response'
+  | 'provider_parse_error'
+  | 'provider_not_configured'
+  | 'provider_unsupported_target';
+
+type InternalBacktestProviderErrorOptions = {
+  reasonCode: InternalBacktestProviderFailureReasonCode;
+  providerName: string;
+  details?: Record<string, unknown>;
+};
+
 export class InternalBacktestProviderUnavailableError extends Error {
   code: string;
+  reasonCode: InternalBacktestProviderFailureReasonCode;
+  providerName: string;
+  details?: Record<string, unknown>;
 
-  constructor(message: string) {
+  constructor(message: string, options?: InternalBacktestProviderErrorOptions) {
     super(message);
     this.name = 'InternalBacktestProviderUnavailableError';
     this.code = INTERNAL_BACKTEST_PROVIDER_UNAVAILABLE_CODE;
+    this.reasonCode = options?.reasonCode ?? 'provider_network_error';
+    this.providerName = options?.providerName ?? 'unknown';
+    this.details = options?.details;
   }
 }
 
 export class InternalBacktestProviderInvalidResponseError extends Error {
   code: string;
+  reasonCode: InternalBacktestProviderFailureReasonCode;
+  providerName: string;
+  details?: Record<string, unknown>;
 
-  constructor(message: string) {
+  constructor(message: string, options?: InternalBacktestProviderErrorOptions) {
     super(message);
     this.name = 'InternalBacktestProviderInvalidResponseError';
     this.code = INTERNAL_BACKTEST_PROVIDER_INVALID_RESPONSE_CODE;
+    this.reasonCode = options?.reasonCode ?? 'provider_invalid_response';
+    this.providerName = options?.providerName ?? 'unknown';
+    this.details = options?.details;
   }
 }
 
@@ -125,12 +152,26 @@ type CsvRow = {
 };
 
 function parseStooqDailyCsv(content: string): CsvRow[] {
+  const endpointKind = 'stooq_daily_csv';
   const lines = content
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
 
-  if (lines.length < 2) {
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const header = lines[0] ?? '';
+  if (!/^date,open,high,low,close,volume$/i.test(header)) {
+    throw new InternalBacktestProviderInvalidResponseError('stooq csv header is invalid', {
+      reasonCode: 'provider_parse_error',
+      providerName: 'stooq',
+      details: { endpoint_kind: endpointKind },
+    });
+  }
+
+  if (lines.length === 1) {
     return [];
   }
 
@@ -156,6 +197,15 @@ function parseStooqDailyCsv(content: string): CsvRow[] {
       volume: Number.isFinite(volume) ? volume : 0,
     });
   }
+
+  if (lines.length > 1 && rows.length === 0) {
+    throw new InternalBacktestProviderInvalidResponseError('stooq csv rows are not parseable', {
+      reasonCode: 'provider_parse_error',
+      providerName: 'stooq',
+      details: { endpoint_kind: endpointKind },
+    });
+  }
+
   return rows;
 }
 
@@ -169,15 +219,35 @@ function isDateInRange(date: string, from: string, to: string): boolean {
 
 export class StooqDailyInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
   async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
+    const providerName = 'stooq';
+    const endpointKind = 'stooq_daily_csv';
     if (input.source_kind !== 'daily_ohlcv') {
       throw new InternalBacktestProviderUnavailableError(
         `unsupported source_kind: ${input.source_kind}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
       );
     }
     if (input.market !== 'JP_STOCK' || input.timeframe !== 'D') {
       throw new InternalBacktestProviderUnavailableError(
         `unsupported market/timeframe: ${input.market}/${input.timeframe}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
       );
+    }
+
+    if (!env.SNAPSHOT_STOOQ_DAILY_URL_TEMPLATE.includes('{symbol}')) {
+      throw new InternalBacktestProviderUnavailableError('stooq url template is not configured', {
+        reasonCode: 'provider_not_configured',
+        providerName,
+        details: { endpoint_kind: endpointKind },
+      });
     }
 
     const stooqCode = toStooqCodeForJpStock(input.symbol);
@@ -190,13 +260,26 @@ export class StooqDailyInternalBacktestMarketDataProvider implements InternalBac
     try {
       response = await fetch(url, { signal: AbortSignal.timeout(env.SNAPSHOT_FETCH_TIMEOUT_MS) });
     } catch (error) {
+      const reasonCode: InternalBacktestProviderFailureReasonCode =
+        error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+          ? 'provider_timeout'
+          : 'provider_network_error';
       throw new InternalBacktestProviderUnavailableError(
         error instanceof Error ? error.message : 'stooq fetch failed',
+        {
+          reasonCode,
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
       );
     }
 
     if (!response.ok) {
-      throw new InternalBacktestProviderUnavailableError(`stooq_http_${response.status}`);
+      throw new InternalBacktestProviderUnavailableError(`stooq_http_${response.status}`, {
+        reasonCode: 'provider_http_error',
+        providerName,
+        details: { http_status: response.status, endpoint_kind: endpointKind },
+      });
     }
 
     const text = await response.text();
@@ -223,14 +306,23 @@ export class StooqDailyInternalBacktestMarketDataProvider implements InternalBac
 
 export class StubInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
   async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
+    const providerName = 'stub';
     if (input.source_kind !== 'daily_ohlcv') {
       throw new InternalBacktestProviderUnavailableError(
         `unsupported source_kind: ${input.source_kind}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+        },
       );
     }
     if (input.market !== 'JP_STOCK' || input.timeframe !== 'D') {
       throw new InternalBacktestProviderUnavailableError(
         `unsupported market/timeframe: ${input.market}/${input.timeframe}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+        },
       );
     }
 

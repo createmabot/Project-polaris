@@ -1,6 +1,7 @@
 import type { InternalBacktestDataSourceSnapshot } from './contracts';
 import {
   defaultInternalBacktestMarketDataProvider,
+  type InternalBacktestProviderFailureReasonCode,
   InternalBacktestProviderInvalidResponseError,
   isProviderInvalidResponseError,
   isProviderUnavailableError,
@@ -8,14 +9,30 @@ import {
 } from './market-data-provider';
 
 export const INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE = 'DATA_SOURCE_UNAVAILABLE';
+export type InternalBacktestDataSourceUnavailableReasonCode =
+  | InternalBacktestProviderFailureReasonCode
+  | 'provider_unknown_error';
 
 export class InternalBacktestDataSourceUnavailableError extends Error {
   code: string;
+  reasonCode: InternalBacktestDataSourceUnavailableReasonCode;
+  providerName: string;
+  details?: Record<string, unknown>;
 
-  constructor(message: string) {
+  constructor(
+    message: string,
+    options?: {
+      reasonCode?: InternalBacktestDataSourceUnavailableReasonCode;
+      providerName?: string;
+      details?: Record<string, unknown>;
+    },
+  ) {
     super(message);
     this.name = 'InternalBacktestDataSourceUnavailableError';
     this.code = INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE;
+    this.reasonCode = options?.reasonCode ?? 'provider_unknown_error';
+    this.providerName = options?.providerName ?? 'unknown';
+    this.details = options?.details;
   }
 }
 
@@ -45,6 +62,12 @@ export type InternalBacktestDataSourceFetchResult = {
 export interface InternalBacktestDataSourceAdapter {
   fetchDailyOhlcv(input: InternalBacktestDataSourceFetchInput): Promise<InternalBacktestDataSourceFetchResult>;
 }
+
+type ProviderUnavailableErrorLike = {
+  reasonCode?: InternalBacktestProviderFailureReasonCode;
+  providerName?: string;
+  details?: Record<string, unknown>;
+};
 
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const ISO_DATE_TIME_PATTERN =
@@ -140,8 +163,14 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
       };
     } catch (error) {
       if (isProviderUnavailableError(error) || isProviderInvalidResponseError(error)) {
+        const providerError = error as ProviderUnavailableErrorLike;
         throw new InternalBacktestDataSourceUnavailableError(
           error instanceof Error ? error.message : 'data source provider unavailable',
+          {
+            reasonCode: providerError.reasonCode ?? 'provider_unknown_error',
+            providerName: providerError.providerName ?? 'unknown',
+            details: providerError.details,
+          },
         );
       }
       if (error instanceof InternalBacktestDataSourceUnavailableError) {
@@ -149,6 +178,7 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
       }
       throw new InternalBacktestDataSourceUnavailableError(
         error instanceof Error ? error.message : 'data source provider unavailable',
+        { reasonCode: 'provider_unknown_error', providerName: 'unknown' },
       );
     }
   }

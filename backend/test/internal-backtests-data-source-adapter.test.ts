@@ -116,27 +116,43 @@ describe('internal backtest data source adapter (minimal stub)', () => {
   it('maps provider unavailable error to DATA_SOURCE_UNAVAILABLE', async () => {
     const mockProvider: InternalBacktestMarketDataProvider = {
       fetchDailyOhlcv: async () => {
-        throw new InternalBacktestProviderUnavailableError('provider temporarily unavailable');
+        throw new InternalBacktestProviderUnavailableError('provider temporarily unavailable', {
+          reasonCode: 'provider_http_error',
+          providerName: 'stooq',
+          details: { http_status: 503, endpoint_kind: 'stooq_daily_csv' },
+        });
       },
     };
     const providerBackedAdapter = new StubInternalBacktestDataSourceAdapter(mockProvider);
 
-    await expect(
-      providerBackedAdapter.fetchDailyOhlcv({
+    try {
+      await providerBackedAdapter.fetchDailyOhlcv({
         symbol: '7203',
         market: 'JP_STOCK',
         timeframe: 'D',
         from: '2024-01-01',
         to: '2024-01-03',
         source_kind: 'daily_ohlcv',
-      }),
-    ).rejects.toBeInstanceOf(InternalBacktestDataSourceUnavailableError);
+      });
+      throw new Error('expected DATA_SOURCE_UNAVAILABLE');
+    } catch (error) {
+      expect(error).toBeInstanceOf(InternalBacktestDataSourceUnavailableError);
+      const e = error as InternalBacktestDataSourceUnavailableError;
+      expect(e.reasonCode).toBe('provider_http_error');
+      expect(e.providerName).toBe('stooq');
+      expect(e.details?.http_status).toBe(503);
+      expect(e.details?.endpoint_kind).toBe('stooq_daily_csv');
+    }
   });
 
   it('maps provider invalid response error to DATA_SOURCE_UNAVAILABLE', async () => {
     const mockProvider: InternalBacktestMarketDataProvider = {
       fetchDailyOhlcv: async () => {
-        throw new InternalBacktestProviderInvalidResponseError('invalid provider payload');
+        throw new InternalBacktestProviderInvalidResponseError('invalid provider payload', {
+          reasonCode: 'provider_parse_error',
+          providerName: 'stooq',
+          details: { endpoint_kind: 'stooq_daily_csv' },
+        });
       },
     };
     const providerBackedAdapter = new StubInternalBacktestDataSourceAdapter(mockProvider);
@@ -150,6 +166,10 @@ describe('internal backtest data source adapter (minimal stub)', () => {
         to: '2024-01-03',
         source_kind: 'daily_ohlcv',
       }),
-    ).rejects.toBeInstanceOf(InternalBacktestDataSourceUnavailableError);
+    ).rejects.toMatchObject({
+      code: 'DATA_SOURCE_UNAVAILABLE',
+      reasonCode: 'provider_parse_error',
+      providerName: 'stooq',
+    });
   });
 });
