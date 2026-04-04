@@ -271,10 +271,32 @@ describe('internal backtest worker scaffold', () => {
   });
 
   it('maps DATA_SOURCE_UNAVAILABLE error code when adapter path fails', async () => {
-    executionStore.set('ibtx-ds-fail', createExecutionRow({ id: 'ibtx-ds-fail', status: 'queued' }));
+    executionStore.set(
+      'ibtx-ds-fail',
+      createExecutionRow({
+        id: 'ibtx-ds-fail',
+        status: 'queued',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-10' },
+          engine_config: { summary_mode: 'engine_estimated' },
+        },
+      }),
+    );
 
     const error = new Error('unsupported market/timeframe: US_STOCK/D') as Error & { code?: string };
     error.code = 'DATA_SOURCE_UNAVAILABLE';
+    (error as Error & { reasonCode?: string }).reasonCode = 'provider_unsupported_target';
+    (error as Error & { providerName?: string }).providerName = 'stooq';
+    (error as Error & { details?: Record<string, unknown> }).details = {
+      endpoint_kind: 'stooq_daily_csv',
+    };
 
     const result = await processInternalBacktestExecution(
       { executionId: 'ibtx-ds-fail' },
@@ -291,6 +313,16 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.status).toBe('failed');
     expect(saved?.errorCode).toBe(INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE);
     expect(saved?.errorMessage).toContain('unsupported market/timeframe');
+    expect(result).toMatchObject({
+      internal_reason_code: 'provider_unsupported_target',
+      provider_name: 'stooq',
+      symbol: '7203',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      from: '2024-01-01',
+      to: '2024-01-10',
+      endpoint_kind: 'stooq_daily_csv',
+    });
   });
 
   it('maps INVALID_EXECUTION_TARGET when estimated execution target is missing', async () => {

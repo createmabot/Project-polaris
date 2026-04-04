@@ -52,6 +52,70 @@ type SetupWorkerDeps = {
 
 let internalBacktestExecutionQueue: Queue | null = null;
 
+type DataSourceUnavailableMeta = {
+  internalReasonCode: string | null;
+  providerName: string | null;
+  httpStatus: number | null;
+  endpointKind: string | null;
+};
+
+function extractExecutionTargetContext(
+  inputSnapshot: unknown,
+): {
+  symbol: string | null;
+  market: string | null;
+  timeframe: string | null;
+  from: string | null;
+  to: string | null;
+} {
+  if (!inputSnapshot || typeof inputSnapshot !== 'object') {
+    return { symbol: null, market: null, timeframe: null, from: null, to: null };
+  }
+  const snapshot = inputSnapshot as Record<string, unknown>;
+  const executionTarget =
+    snapshot.execution_target && typeof snapshot.execution_target === 'object'
+      ? (snapshot.execution_target as Record<string, unknown>)
+      : null;
+  const dataRange =
+    snapshot.data_range && typeof snapshot.data_range === 'object'
+      ? (snapshot.data_range as Record<string, unknown>)
+      : null;
+  return {
+    symbol: typeof executionTarget?.symbol === 'string' ? executionTarget.symbol : null,
+    market: typeof snapshot.market === 'string' ? snapshot.market : null,
+    timeframe: typeof snapshot.timeframe === 'string' ? snapshot.timeframe : null,
+    from: typeof dataRange?.from === 'string' ? dataRange.from : null,
+    to: typeof dataRange?.to === 'string' ? dataRange.to : null,
+  };
+}
+
+function extractDataSourceUnavailableMeta(error: unknown): DataSourceUnavailableMeta {
+  const reasonCandidate =
+    !!error && typeof error === 'object' && 'reasonCode' in error
+      ? (error as { reasonCode?: unknown }).reasonCode
+      : null;
+  const providerCandidate =
+    !!error && typeof error === 'object' && 'providerName' in error
+      ? (error as { providerName?: unknown }).providerName
+      : null;
+  const detailsCandidate =
+    !!error && typeof error === 'object' && 'details' in error
+      ? (error as { details?: unknown }).details
+      : null;
+  const details =
+    detailsCandidate && typeof detailsCandidate === 'object'
+      ? (detailsCandidate as Record<string, unknown>)
+      : {};
+  const httpStatusCandidate = details.http_status;
+  const endpointKindCandidate = details.endpoint_kind;
+  return {
+    internalReasonCode: typeof reasonCandidate === 'string' ? reasonCandidate : null,
+    providerName: typeof providerCandidate === 'string' ? providerCandidate : null,
+    httpStatus: typeof httpStatusCandidate === 'number' ? httpStatusCandidate : null,
+    endpointKind: typeof endpointKindCandidate === 'string' ? endpointKindCandidate : null,
+  };
+}
+
 export function getInternalBacktestExecutionQueue() {
   if (!internalBacktestExecutionQueue) {
     internalBacktestExecutionQueue = new Queue(INTERNAL_BACKTEST_EXECUTION_QUEUE, {
@@ -121,6 +185,8 @@ export async function processInternalBacktestExecution(
     },
   });
 
+  const executionContext = extractExecutionTargetContext(execution.inputSnapshotJson);
+  const startedMs = Date.now();
   try {
     const runInput: RunExecutionServiceInput = {
       executionId: execution.id,
@@ -167,6 +233,15 @@ export async function processInternalBacktestExecution(
           ? INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE
           : INTERNAL_BACKTEST_EXECUTION_FAILED_CODE;
 
+    const dataSourceMeta = isDataSourceUnavailableError(error)
+      ? extractDataSourceUnavailableMeta(error)
+      : {
+          internalReasonCode: null,
+          providerName: null,
+          httpStatus: null,
+          endpointKind: null,
+        };
+
     const failed = await db.internalBacktestExecution.update({
       where: { id: execution.id },
       data: {
@@ -182,6 +257,16 @@ export async function processInternalBacktestExecution(
       status: failed.status,
       error_code: failed.errorCode,
       error_message: failed.errorMessage,
+      internal_reason_code: dataSourceMeta.internalReasonCode,
+      provider_name: dataSourceMeta.providerName,
+      symbol: executionContext.symbol,
+      market: executionContext.market,
+      timeframe: executionContext.timeframe,
+      from: executionContext.from,
+      to: executionContext.to,
+      elapsed_ms: Date.now() - startedMs,
+      http_status: dataSourceMeta.httpStatus,
+      endpoint_kind: dataSourceMeta.endpointKind,
     };
   }
 }
@@ -208,11 +293,36 @@ export function setupInternalBacktestWorker(logger: WorkerLogger, deps: SetupWor
         return { status: 'skipped_unknown' };
       }
 
-      return processInternalBacktestExecution(job.data, {
+      const result = await processInternalBacktestExecution(job.data, {
         db: deps.db,
         now: deps.now,
         runExecution: deps.runExecution,
       });
+      if (
+        result &&
+        typeof result === 'object' &&
+        'status' in result &&
+        (result as { status?: string }).status === 'failed' &&
+        'error_code' in result &&
+        (result as { error_code?: string }).error_code === INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE
+      ) {
+        logger.error({
+          event: 'internal_backtest_data_source_unavailable',
+          execution_id: (result as { execution_id?: string }).execution_id,
+          error_code: (result as { error_code?: string }).error_code,
+          provider_name: (result as { provider_name?: string | null }).provider_name,
+          internal_reason_code: (result as { internal_reason_code?: string | null }).internal_reason_code,
+          symbol: (result as { symbol?: string | null }).symbol,
+          market: (result as { market?: string | null }).market,
+          timeframe: (result as { timeframe?: string | null }).timeframe,
+          from: (result as { from?: string | null }).from,
+          to: (result as { to?: string | null }).to,
+          elapsed_ms: (result as { elapsed_ms?: number | null }).elapsed_ms,
+          http_status: (result as { http_status?: number | null }).http_status,
+          endpoint_kind: (result as { endpoint_kind?: string | null }).endpoint_kind,
+        });
+      }
+      return result;
     },
     {
       // @ts-ignore ioredis type mismatch with BullMQ expected connection type

@@ -77,6 +77,31 @@ describe('internal backtest market data provider', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream error', { status: 503 })));
     const provider = new StooqDailyInternalBacktestMarketDataProvider();
 
+    try {
+      await provider.fetchDailyOhlcv({
+        symbol: '7203',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        from: '2024-01-01',
+        to: '2024-01-02',
+        source_kind: 'daily_ohlcv',
+      });
+      throw new Error('expected provider to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(InternalBacktestProviderUnavailableError);
+      const e = error as InternalBacktestProviderUnavailableError;
+      expect(e.reasonCode).toBe('provider_http_error');
+      expect(e.providerName).toBe('stooq');
+      expect(e.details?.http_status).toBe(503);
+    }
+  });
+
+  it('classifies network exception as provider_network_error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      throw new TypeError('fetch failed');
+    }));
+    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+
     await expect(
       provider.fetchDailyOhlcv({
         symbol: '7203',
@@ -86,6 +111,28 @@ describe('internal backtest market data provider', () => {
         to: '2024-01-02',
         source_kind: 'daily_ohlcv',
       }),
-    ).rejects.toBeInstanceOf(InternalBacktestProviderUnavailableError);
+    ).rejects.toMatchObject({
+      reasonCode: 'provider_network_error',
+      providerName: 'stooq',
+    });
+  });
+
+  it('classifies invalid csv response as provider_parse_error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('invalid_csv_payload', { status: 200 })));
+    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+
+    await expect(
+      provider.fetchDailyOhlcv({
+        symbol: '7203',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        from: '2024-01-01',
+        to: '2024-01-02',
+        source_kind: 'daily_ohlcv',
+      }),
+    ).rejects.toMatchObject({
+      reasonCode: 'provider_parse_error',
+      providerName: 'stooq',
+    });
   });
 });
