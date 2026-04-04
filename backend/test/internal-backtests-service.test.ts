@@ -437,6 +437,15 @@ describe('internal backtest execution service contracts', () => {
           data_revision: 'stub-zero-bars',
           bar_count: 0,
         },
+        fetchObservation: {
+          providerName: 'stub',
+          internalReasonCode: null,
+          retryTarget: false,
+          retryAttempted: false,
+          retryAttempts: 1,
+          httpStatus: null,
+          endpointKind: 'stub_daily_ohlcv',
+        },
       }),
     });
 

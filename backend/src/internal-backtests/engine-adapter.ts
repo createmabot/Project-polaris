@@ -1,6 +1,7 @@
 import type { InternalBacktestDataSourceSnapshot, InternalBacktestExecutionInput } from './contracts';
 import {
   StubInternalBacktestDataSourceAdapter,
+  type InternalBacktestDataSourceFetchObservation,
   type InternalBacktestDataSourceAdapter,
 } from './data-source-adapter';
 import { createInternalBacktestMarketDataProvider } from './market-data-provider';
@@ -19,6 +20,7 @@ export type InternalBacktestEngineRunResult = {
   }>;
   notes?: string;
   data_source_snapshot?: InternalBacktestDataSourceSnapshot;
+  data_source_fetch_observation?: InternalBacktestDataSourceFetchObservation;
 };
 
 export type InternalBacktestEngineAdapter = (args: {
@@ -156,6 +158,7 @@ export function createDummyInternalBacktestEngineAdapter(
     ? 'engine_estimated'
     : 'scaffold_deterministic';
   let dataSourceSnapshot: InternalBacktestDataSourceSnapshot | undefined;
+  let dataSourceFetchObservation: InternalBacktestDataSourceFetchObservation | undefined;
   let metrics = calculateDeterministicMetrics(input);
   if (useEstimated) {
     const dataSourceResult = await dataSourceAdapter.fetchDailyOhlcv({
@@ -168,6 +171,7 @@ export function createDummyInternalBacktestEngineAdapter(
     });
     metrics = buildEstimatedMetricsFromBars(dataSourceResult.bars);
     dataSourceSnapshot = dataSourceResult.snapshot;
+    dataSourceFetchObservation = dataSourceResult.fetchObservation;
   }
   const notes = useEstimated
     ? 'internal backtest worker estimated-stage result with daily_ohlcv JP_STOCK/D adapter'
@@ -178,6 +182,7 @@ export function createDummyInternalBacktestEngineAdapter(
     metrics,
     notes,
     data_source_snapshot: dataSourceSnapshot,
+    data_source_fetch_observation: dataSourceFetchObservation,
   };
   };
 }

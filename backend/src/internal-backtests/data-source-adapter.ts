@@ -57,11 +57,22 @@ export type InternalBacktestDataSourceFetchInput = {
 export type InternalBacktestDataSourceFetchResult = {
   bars: InternalBacktestOhlcvBar[];
   snapshot: InternalBacktestDataSourceSnapshot;
+  fetchObservation: InternalBacktestDataSourceFetchObservation;
 };
 
 export type InternalBacktestDataSourceRetryConfig = {
   maxRetries: number;
   baseDelayMs: number;
+};
+
+export type InternalBacktestDataSourceFetchObservation = {
+  providerName: string;
+  internalReasonCode: InternalBacktestDataSourceUnavailableReasonCode | null;
+  retryTarget: boolean;
+  retryAttempted: boolean;
+  retryAttempts: number;
+  httpStatus: number | null;
+  endpointKind: string | null;
 };
 
 export interface InternalBacktestDataSourceAdapter {
@@ -185,6 +196,10 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
   ): Promise<InternalBacktestDataSourceFetchResult> {
     let attempts = 0;
     let lastRetryable = false;
+    let lastReasonCode: InternalBacktestDataSourceUnavailableReasonCode | null = null;
+    let lastProviderName: string | null = null;
+    let lastHttpStatus: number | null = null;
+    let lastEndpointKind: string | null = null;
     try {
       let providerResult: Awaited<ReturnType<InternalBacktestMarketDataProvider['fetchDailyOhlcv']>>;
       // attempt #1 + selective retry (at most maxRetries)
@@ -202,6 +217,15 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
           break;
         } catch (error) {
           lastRetryable = shouldRetryProviderError(error);
+          if (isProviderUnavailableError(error) || isProviderInvalidResponseError(error)) {
+            const providerError = error as ProviderUnavailableErrorLike;
+            lastReasonCode = providerError.reasonCode ?? 'provider_unknown_error';
+            lastProviderName = providerError.providerName ?? null;
+            const httpStatus = providerError.details?.http_status;
+            const endpointKind = providerError.details?.endpoint_kind;
+            lastHttpStatus = typeof httpStatus === 'number' ? httpStatus : null;
+            lastEndpointKind = typeof endpointKind === 'string' ? endpointKind : null;
+          }
           if (lastRetryable && attempts <= this.retryConfig.maxRetries) {
             await this.sleepFn(this.retryConfig.baseDelayMs * attempts);
             continue;
@@ -223,6 +247,15 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
           fetched_at: providerResult.fetched_at,
           data_revision: providerResult.data_revision,
           bar_count: bars.length,
+        },
+        fetchObservation: {
+          providerName: lastProviderName ?? this.provider.constructor.name ?? 'unknown',
+          internalReasonCode: lastReasonCode,
+          retryTarget: lastRetryable,
+          retryAttempted: attempts > 1,
+          retryAttempts: attempts,
+          httpStatus: lastHttpStatus,
+          endpointKind: lastEndpointKind,
         },
       };
     } catch (error) {

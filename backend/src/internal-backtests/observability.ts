@@ -15,6 +15,25 @@ export type InternalBacktestDataSourceUnavailableEvent = {
   occurredAt?: Date;
 };
 
+export type InternalBacktestDataSourceRetryOutcomeEvent = {
+  executionId: string | null;
+  providerName: string | null;
+  internalReasonCode: string | null;
+  symbol: string | null;
+  market: string | null;
+  timeframe: string | null;
+  from: string | null;
+  to: string | null;
+  elapsedMs: number | null;
+  httpStatus: number | null;
+  endpointKind: string | null;
+  retryTarget: boolean;
+  retryAttempted: boolean;
+  retryAttempts: number;
+  outcome: 'retried_and_succeeded' | 'retried_and_failed' | 'not_retried_failed';
+  occurredAt?: Date;
+};
+
 type RecentFailure = {
   at: string;
   execution_id: string | null;
@@ -77,6 +96,52 @@ type ObservabilityDb = {
         elapsedMs: number | null;
         httpStatus: number | null;
         endpointKind: string | null;
+        occurredAt: Date;
+      }>
+    >;
+  };
+  internalBacktestDataSourceRetryOutcomeEvent: {
+    create: (args: {
+      data: {
+        executionId: string | null;
+        providerName: string | null;
+        internalReasonCode: string | null;
+        symbol: string | null;
+        market: string | null;
+        timeframe: string | null;
+        rangeFrom: string | null;
+        rangeTo: string | null;
+        elapsedMs: number | null;
+        httpStatus: number | null;
+        endpointKind: string | null;
+        retryTarget: boolean;
+        retryAttempted: boolean;
+        retryAttempts: number;
+        outcome: string;
+        occurredAt?: Date;
+      };
+    }) => Promise<unknown>;
+    findMany: (args: {
+      where: { occurredAt: { gte: Date; lte: Date } };
+      orderBy: Array<{ occurredAt: 'desc' } | { id: 'desc' }>;
+    }) => Promise<
+      Array<{
+        id: string;
+        executionId: string | null;
+        providerName: string | null;
+        internalReasonCode: string | null;
+        symbol: string | null;
+        market: string | null;
+        timeframe: string | null;
+        rangeFrom: string | null;
+        rangeTo: string | null;
+        elapsedMs: number | null;
+        httpStatus: number | null;
+        endpointKind: string | null;
+        retryTarget: boolean;
+        retryAttempted: boolean;
+        retryAttempts: number;
+        outcome: string;
         occurredAt: Date;
       }>
     >;
@@ -190,6 +255,33 @@ export async function recordInternalBacktestDataSourceUnavailableEvent(
   });
 }
 
+export async function recordInternalBacktestDataSourceRetryOutcomeEvent(
+  event: InternalBacktestDataSourceRetryOutcomeEvent,
+  deps: { db?: ObservabilityDb } = {},
+) {
+  const db = deps.db ?? (prisma as unknown as ObservabilityDb);
+  await db.internalBacktestDataSourceRetryOutcomeEvent.create({
+    data: {
+      executionId: event.executionId,
+      providerName: event.providerName,
+      internalReasonCode: event.internalReasonCode,
+      symbol: event.symbol,
+      market: event.market,
+      timeframe: event.timeframe,
+      rangeFrom: event.from,
+      rangeTo: event.to,
+      elapsedMs: event.elapsedMs,
+      httpStatus: event.httpStatus,
+      endpointKind: event.endpointKind,
+      retryTarget: event.retryTarget,
+      retryAttempted: event.retryAttempted,
+      retryAttempts: event.retryAttempts,
+      outcome: event.outcome,
+      occurredAt: event.occurredAt,
+    },
+  });
+}
+
 export async function getInternalBacktestDataSourceUnavailableSummary(
   args: { window: '24h' | '7d'; now?: Date; recentLimit?: number },
   deps: { db?: ObservabilityDb } = {},
@@ -209,6 +301,52 @@ export async function getInternalBacktestDataSourceUnavailableSummary(
     orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
   });
 
+  const retryScoped = await db.internalBacktestDataSourceRetryOutcomeEvent.findMany({
+    where: {
+      occurredAt: {
+        gte: fromTime,
+        lte: now,
+      },
+    },
+    orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
+  });
+
+  const retryByReasonMap = new Map<string, {
+    internal_reason_code: string;
+    total: number;
+    retried_and_succeeded: number;
+    retried_and_failed: number;
+    not_retried_failed: number;
+  }>();
+  let retryTargeted = 0;
+  let retryAttempted = 0;
+  let retriedAndSucceeded = 0;
+  let retriedAndFailed = 0;
+  let notRetriedFailed = 0;
+  for (const event of retryScoped) {
+    if (event.retryTarget) retryTargeted += 1;
+    if (event.retryAttempted) retryAttempted += 1;
+    if (event.outcome === 'retried_and_succeeded') retriedAndSucceeded += 1;
+    if (event.outcome === 'retried_and_failed') retriedAndFailed += 1;
+    if (event.outcome === 'not_retried_failed') notRetriedFailed += 1;
+    const reason = event.internalReasonCode ?? 'unknown';
+    const current = retryByReasonMap.get(reason) ?? {
+      internal_reason_code: reason,
+      total: 0,
+      retried_and_succeeded: 0,
+      retried_and_failed: 0,
+      not_retried_failed: 0,
+    };
+    current.total += 1;
+    if (event.outcome === 'retried_and_succeeded') current.retried_and_succeeded += 1;
+    if (event.outcome === 'retried_and_failed') current.retried_and_failed += 1;
+    if (event.outcome === 'not_retried_failed') current.not_retried_failed += 1;
+    retryByReasonMap.set(reason, current);
+  }
+  const retryByReason = [...retryByReasonMap.values()].sort(
+    (a, b) => b.total - a.total || a.internal_reason_code.localeCompare(b.internal_reason_code),
+  );
+
   return {
     window: args.window,
     from: fromTime.toISOString(),
@@ -216,5 +354,14 @@ export async function getInternalBacktestDataSourceUnavailableSummary(
     total_failures: scoped.length,
     by_reason: aggregateReasons(scoped),
     recent_failures: listRecentFailures(scoped, args.recentLimit ?? 10),
+    retry_effect: {
+      total_observed: retryScoped.length,
+      retry_targeted_count: retryTargeted,
+      retry_attempted_count: retryAttempted,
+      retried_and_succeeded_count: retriedAndSucceeded,
+      retried_and_failed_count: retriedAndFailed,
+      not_retried_failed_count: notRetriedFailed,
+      by_reason: retryByReason,
+    },
   };
 }

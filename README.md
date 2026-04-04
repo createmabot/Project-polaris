@@ -78,6 +78,7 @@ pnpm run down
   - `GET /api/internal-backtests/executions/:executionId`（status 取得）
   - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` 時のみ結果取得）
   - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`（内部運用向け: reason code 別件数と直近失敗 execution を確認）
+    - `retry_effect` で selective retry 効果（retry 対象件数 / retry 実施件数 / retry 後成功件数 / retry 後失敗件数）も確認可能
   - `POST` では execution input snapshot の最小検証を実施（`strategy_rule_version_id` と `data_range` は必須、`market/timeframe` は optional）
   - `market/timeframe` は request 値を優先し、未指定時は strategy version 側の値で補完
   - worker 骨組みで `queued -> running -> succeeded|failed` を最小遷移
@@ -111,8 +112,9 @@ pnpm run down
   1. `total_failures` で発生規模を確認
   2. `by_reason[]` で主要 reason（件数上位）を確認
   3. `recent_failures[]` で直近 `execution_id` を取得
-  4. `GET /executions/:executionId` で `status/error_code` を確認
-  5. `status=failed` かつ `error_code=DATA_SOURCE_UNAVAILABLE` を確認後、`symbol/market/timeframe/from/to/http_status/endpoint_kind` で原因切り分け
+  4. `retry_effect` で selective retry 効果を確認（`retried_and_succeeded_count` と `retried_and_failed_count` の差分を最小判断）
+  5. `GET /executions/:executionId` で `status/error_code` を確認
+  6. `status=failed` かつ `error_code=DATA_SOURCE_UNAVAILABLE` を確認後、`symbol/market/timeframe/from/to/http_status/endpoint_kind` で原因切り分け
 - reason code 別の最小確認観点:
   - `provider_http_error`: `http_status` と `endpoint_kind` を先に確認
   - `provider_timeout`: 同時間帯で連続発生しているか確認
