@@ -397,6 +397,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   );
 
   useEffect(() => {
+    setInternalExecutionId(parseInternalExecutionId(location));
+    setStartInternalBacktestError(null);
+  }, [location, versionId]);
+
+  useEffect(() => {
     if (version) {
       setEditingNaturalLanguageRule(version.natural_language_rule);
       setEditingForwardValidationNote(version.forward_validation_note ?? '');

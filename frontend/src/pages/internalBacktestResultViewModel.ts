@@ -54,13 +54,11 @@ export function resolveInternalBacktestBarCountForInterpretation(args: {
 export function interpretInternalBacktestResult(
   input: InternalBacktestResultInterpretationInput,
 ): InternalBacktestResultInterpretation {
-  if (
-    input.status === 'not_ready' ||
-    input.status === 'queued' ||
-    input.status === 'running' ||
-    input.status === 'canceled'
-  ) {
+  if (input.status === 'not_ready' || input.status === 'queued' || input.status === 'running') {
     return 'not_ready';
+  }
+  if (input.status === 'canceled') {
+    return 'internal_failure';
   }
   if (input.status === 'failed') {
     if (input.errorCode === 'DATA_SOURCE_UNAVAILABLE') {

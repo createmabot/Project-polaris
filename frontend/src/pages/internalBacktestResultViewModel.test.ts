@@ -46,5 +46,10 @@ describe('internalBacktestResultViewModel', () => {
     expect(getInternalBacktestResultViewModel({ status: 'queued' }).interpretation).toBe('not_ready');
     expect(getInternalBacktestResultViewModel({ status: 'running' }).interpretation).toBe('not_ready');
   });
-});
 
+  it('internal_failure for canceled', () => {
+    const vm = getInternalBacktestResultViewModel({ status: 'canceled' });
+    expect(vm.interpretation).toBe('internal_failure');
+    expect(vm.isError).toBe(true);
+  });
+});
