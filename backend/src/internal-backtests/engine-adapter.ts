@@ -1,8 +1,9 @@
 import type { InternalBacktestDataSourceSnapshot, InternalBacktestExecutionInput } from './contracts';
 import {
-  defaultInternalBacktestDataSourceAdapter,
+  StubInternalBacktestDataSourceAdapter,
   type InternalBacktestDataSourceAdapter,
 } from './data-source-adapter';
+import { createInternalBacktestMarketDataProvider } from './market-data-provider';
 
 export type InternalBacktestEngineRunResult = {
   summary_kind?: 'scaffold_deterministic' | 'engine_estimated' | 'engine_actual';
@@ -135,7 +136,9 @@ function buildEstimatedMetricsFromBars(
 }
 
 export function createDummyInternalBacktestEngineAdapter(
-  dataSourceAdapter: InternalBacktestDataSourceAdapter = defaultInternalBacktestDataSourceAdapter,
+  dataSourceAdapter: InternalBacktestDataSourceAdapter = new StubInternalBacktestDataSourceAdapter(
+    createInternalBacktestMarketDataProvider(),
+  ),
 ): InternalBacktestEngineAdapter {
   return async ({ input }) => {
   const simulateFailure = input.engineConfig.simulate_failure === true;
