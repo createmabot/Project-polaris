@@ -10,6 +10,7 @@ import {
   type InternalBacktestArtifactPointer,
   type InternalBacktestResultSummary,
 } from './contracts';
+import type { InternalBacktestDataSourceFetchObservation } from './data-source-adapter';
 import {
   runDummyInternalBacktestEngine,
   type InternalBacktestEngineAdapter,
@@ -26,6 +27,7 @@ export type RunExecutionServiceOutput = {
   resultSummary: InternalBacktestResultSummary;
   artifactPointer: InternalBacktestArtifactPointer;
   inputSnapshot: InternalBacktestInputSnapshot;
+  dataSourceFetchObservation?: InternalBacktestDataSourceFetchObservation;
 };
 
 export const INVALID_EXECUTION_TARGET_CODE = 'INVALID_EXECUTION_TARGET';
@@ -125,5 +127,6 @@ export async function runInternalBacktestExecutionService(
     resultSummary: validatedSummary,
     artifactPointer: createExecutionArtifactPointer({ executionId: input.executionId }),
     inputSnapshot: nextInputSnapshot,
+    dataSourceFetchObservation: engineResult.data_source_fetch_observation,
   };
 }

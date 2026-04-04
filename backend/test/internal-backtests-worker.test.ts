@@ -66,15 +66,37 @@ describe('internal backtest worker scaffold', () => {
     endpointKind: string | null;
     occurredAt: Date;
   }>;
+  let retryOutcomeEvents: Array<{
+    id: string;
+    executionId: string | null;
+    providerName: string | null;
+    internalReasonCode: string | null;
+    symbol: string | null;
+    market: string | null;
+    timeframe: string | null;
+    rangeFrom: string | null;
+    rangeTo: string | null;
+    elapsedMs: number | null;
+    httpStatus: number | null;
+    endpointKind: string | null;
+    retryTarget: boolean;
+    retryAttempted: boolean;
+    retryAttempts: number;
+    outcome: string;
+    occurredAt: Date;
+  }>;
   let seq: number;
   let eventSeq: number;
+  let retryEventSeq: number;
   let prismaMock: any;
 
   beforeEach(() => {
     executionStore = new Map();
     failureEvents = [];
+    retryOutcomeEvents = [];
     seq = 0;
     eventSeq = 0;
+    retryEventSeq = 0;
     prismaMock = {
       internalBacktestExecution: {
         findUnique: async ({ where }: any) => executionStore.get(where.id) ?? null,
@@ -115,6 +137,35 @@ describe('internal backtest worker scaffold', () => {
         },
         findMany: async ({ where }: any) =>
           failureEvents
+            .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
+            .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+      },
+      internalBacktestDataSourceRetryOutcomeEvent: {
+        create: async ({ data }: any) => {
+          const row = {
+            id: `retry-evt-${++retryEventSeq}`,
+            executionId: data.executionId ?? null,
+            providerName: data.providerName ?? null,
+            internalReasonCode: data.internalReasonCode ?? null,
+            symbol: data.symbol ?? null,
+            market: data.market ?? null,
+            timeframe: data.timeframe ?? null,
+            rangeFrom: data.rangeFrom ?? null,
+            rangeTo: data.rangeTo ?? null,
+            elapsedMs: data.elapsedMs ?? null,
+            httpStatus: data.httpStatus ?? null,
+            endpointKind: data.endpointKind ?? null,
+            retryTarget: data.retryTarget ?? false,
+            retryAttempted: data.retryAttempted ?? false,
+            retryAttempts: data.retryAttempts ?? 1,
+            outcome: data.outcome ?? 'not_retried_failed',
+            occurredAt: data.occurredAt ?? new Date(),
+          };
+          retryOutcomeEvents.push(row);
+          return row;
+        },
+        findMany: async ({ where }: any) =>
+          retryOutcomeEvents
             .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
             .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
       },
@@ -424,6 +475,114 @@ describe('internal backtest worker scaffold', () => {
           internal_reason_code: 'provider_parse_error',
           provider_name: 'stooq',
           last_execution_id: 'ibtx-log-fail',
+        }),
+      ]),
+    );
+    expect(summary.retry_effect).toEqual(
+      expect.objectContaining({
+        total_observed: 1,
+        not_retried_failed_count: 1,
+      }),
+    );
+  });
+
+  it('records retried_and_succeeded when provider retry recovers', async () => {
+    executionStore.set('ibtx-retry-success', createExecutionRow({ id: 'ibtx-retry-success', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-retry-success' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            summary_kind: 'engine_estimated',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2024-01-10' },
+            metrics: {
+              bar_count: 1,
+              first_close: 100,
+              last_close: 101,
+              price_change: 1,
+              price_change_percent: 1,
+              period_high: 102,
+              period_low: 99,
+              range_percent: 3.03,
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'retry recovered',
+          },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-retry-success',
+            path: '/internal-backtests/executions/ibtx-retry-success',
+          },
+          dataSourceFetchObservation: {
+            providerName: 'stooq',
+            internalReasonCode: 'provider_timeout',
+            retryTarget: true,
+            retryAttempted: true,
+            retryAttempts: 2,
+            httpStatus: null,
+            endpointKind: 'stooq_daily_csv',
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('succeeded');
+    expect(retryOutcomeEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          executionId: 'ibtx-retry-success',
+          outcome: 'retried_and_succeeded',
+          retryAttempted: true,
+          retryAttempts: 2,
+          internalReasonCode: 'provider_timeout',
+        }),
+      ]),
+    );
+  });
+
+  it('records retried_and_failed when retry target still fails', async () => {
+    executionStore.set('ibtx-retry-failed', createExecutionRow({ id: 'ibtx-retry-failed', status: 'queued' }));
+
+    const error = new Error('temporary timeout') as Error & {
+      code?: string;
+      reasonCode?: string;
+      providerName?: string;
+      details?: Record<string, unknown>;
+    };
+    error.code = 'DATA_SOURCE_UNAVAILABLE';
+    error.reasonCode = 'provider_timeout';
+    error.providerName = 'stooq';
+    error.details = {
+      endpoint_kind: 'stooq_daily_csv',
+      retry_attempted: true,
+      retry_attempts: 2,
+      retry_target: true,
+    };
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-retry-failed' },
+      {
+        db: prismaMock,
+        runExecution: async () => {
+          throw error;
+        },
+      },
+    );
+
+    expect(result.status).toBe('failed');
+    expect(retryOutcomeEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          executionId: 'ibtx-retry-failed',
+          outcome: 'retried_and_failed',
+          retryAttempted: true,
+          retryAttempts: 2,
+          internalReasonCode: 'provider_timeout',
         }),
       ]),
     );

@@ -10,9 +10,13 @@ import {
 import { validateArtifactPointerSchema, validateResultSummarySchema } from '../internal-backtests/contracts';
 import {
   INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
+  type InternalBacktestDataSourceFetchObservation,
   isDataSourceUnavailableError,
 } from '../internal-backtests/data-source-adapter';
-import { recordInternalBacktestDataSourceUnavailableEvent } from '../internal-backtests/observability';
+import {
+  recordInternalBacktestDataSourceRetryOutcomeEvent,
+  recordInternalBacktestDataSourceUnavailableEvent,
+} from '../internal-backtests/observability';
 
 export const INTERNAL_BACKTEST_EXECUTION_QUEUE = 'internal_backtest_execution_queue';
 export const RUN_INTERNAL_BACKTEST_EXECUTION_JOB = 'run_internal_backtest_execution';
@@ -28,6 +32,7 @@ type ExecutionOutput = {
   resultSummary: unknown;
   artifactPointer?: Prisma.InputJsonValue | null;
   inputSnapshot?: Prisma.InputJsonValue | null;
+  dataSourceFetchObservation?: InternalBacktestDataSourceFetchObservation;
 };
 
 type RunExecutionFn = (execution: RunExecutionServiceInput) => Promise<ExecutionOutput>;
@@ -147,6 +152,7 @@ const defaultRunExecution: RunExecutionFn = async (execution) => {
     resultSummary: output.resultSummary as unknown as Prisma.InputJsonValue,
     artifactPointer: output.artifactPointer as unknown as Prisma.InputJsonValue,
     inputSnapshot: output.inputSnapshot as unknown as Prisma.InputJsonValue,
+    dataSourceFetchObservation: output.dataSourceFetchObservation,
   };
 };
 
@@ -221,6 +227,30 @@ export async function processInternalBacktestExecution(
       },
     });
 
+    if (output.dataSourceFetchObservation?.retryAttempted) {
+      await recordInternalBacktestDataSourceRetryOutcomeEvent(
+        {
+          occurredAt: now(),
+          executionId: execution.id,
+          providerName: output.dataSourceFetchObservation.providerName,
+          internalReasonCode: output.dataSourceFetchObservation.internalReasonCode,
+          symbol: executionContext.symbol,
+          market: executionContext.market,
+          timeframe: executionContext.timeframe,
+          from: executionContext.from,
+          to: executionContext.to,
+          elapsedMs: Date.now() - startedMs,
+          httpStatus: output.dataSourceFetchObservation.httpStatus,
+          endpointKind: output.dataSourceFetchObservation.endpointKind,
+          retryTarget: output.dataSourceFetchObservation.retryTarget,
+          retryAttempted: output.dataSourceFetchObservation.retryAttempted,
+          retryAttempts: output.dataSourceFetchObservation.retryAttempts,
+          outcome: 'retried_and_succeeded',
+        },
+        { db: db as never },
+      );
+    }
+
     return {
       execution_id: succeeded.id,
       status: succeeded.status,
@@ -271,6 +301,30 @@ export async function processInternalBacktestExecution(
         httpStatus: dataSourceMeta.httpStatus,
         endpointKind: dataSourceMeta.endpointKind,
       }, { db: db as never });
+      await recordInternalBacktestDataSourceRetryOutcomeEvent(
+        {
+          occurredAt: now(),
+          executionId: execution.id,
+          providerName: dataSourceMeta.providerName,
+          internalReasonCode: dataSourceMeta.internalReasonCode,
+          symbol: executionContext.symbol,
+          market: executionContext.market,
+          timeframe: executionContext.timeframe,
+          from: executionContext.from,
+          to: executionContext.to,
+          elapsedMs,
+          httpStatus: dataSourceMeta.httpStatus,
+          endpointKind: dataSourceMeta.endpointKind,
+          retryTarget: dataSourceMeta.retryTarget ?? false,
+          retryAttempted: dataSourceMeta.retryAttempted ?? false,
+          retryAttempts: dataSourceMeta.retryAttempts ?? 1,
+          outcome:
+            dataSourceMeta.retryAttempted === true
+              ? 'retried_and_failed'
+              : 'not_retried_failed',
+        },
+        { db: db as never },
+      );
     }
 
     const failed = await db.internalBacktestExecution.update({

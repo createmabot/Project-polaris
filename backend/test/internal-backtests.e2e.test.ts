@@ -54,6 +54,26 @@ type Runtime = {
     endpointKind: string | null;
     occurredAt: Date;
   }>;
+  retryOutcomeEventSeq: number;
+  retryOutcomeEvents: Array<{
+    id: string;
+    executionId: string | null;
+    providerName: string | null;
+    internalReasonCode: string | null;
+    symbol: string | null;
+    market: string | null;
+    timeframe: string | null;
+    rangeFrom: string | null;
+    rangeTo: string | null;
+    elapsedMs: number | null;
+    httpStatus: number | null;
+    endpointKind: string | null;
+    retryTarget: boolean;
+    retryAttempted: boolean;
+    retryAttempts: number;
+    outcome: string;
+    occurredAt: Date;
+  }>;
 };
 
 let runtime: Runtime;
@@ -66,6 +86,8 @@ function createRuntime(): Runtime {
     executions: new Map(),
     failureEventSeq: 1,
     failureEvents: [],
+    retryOutcomeEventSeq: 1,
+    retryOutcomeEvents: [],
   };
 }
 
@@ -132,6 +154,35 @@ vi.mock('../src/db', () => {
       },
       findMany: async ({ where }: any) =>
         runtime.failureEvents
+          .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
+          .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+    },
+    internalBacktestDataSourceRetryOutcomeEvent: {
+      create: async ({ data }: any) => {
+        const row = {
+          id: `ibtx-ds-retry-${runtime.retryOutcomeEventSeq++}`,
+          executionId: data.executionId ?? null,
+          providerName: data.providerName ?? null,
+          internalReasonCode: data.internalReasonCode ?? null,
+          symbol: data.symbol ?? null,
+          market: data.market ?? null,
+          timeframe: data.timeframe ?? null,
+          rangeFrom: data.rangeFrom ?? null,
+          rangeTo: data.rangeTo ?? null,
+          elapsedMs: data.elapsedMs ?? null,
+          httpStatus: data.httpStatus ?? null,
+          endpointKind: data.endpointKind ?? null,
+          retryTarget: data.retryTarget ?? false,
+          retryAttempted: data.retryAttempted ?? false,
+          retryAttempts: data.retryAttempts ?? 1,
+          outcome: data.outcome ?? 'not_retried_failed',
+          occurredAt: data.occurredAt ?? new Date(),
+        };
+        runtime.retryOutcomeEvents.push(row);
+        return row;
+      },
+      findMany: async ({ where }: any) =>
+        runtime.retryOutcomeEvents
           .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
           .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
     },
