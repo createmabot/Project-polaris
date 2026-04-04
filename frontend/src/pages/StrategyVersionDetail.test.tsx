@@ -194,6 +194,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('次の検証ノート');
     expect(html).toContain('現在のノート: 次回は RSI 55 以上で再検証');
     expect(html).toContain('ノート更新目安:');
+    expect(html).toContain('内製バックテスト（最小）');
+    expect(html).toContain('内製バックテストを開始');
+    expect(html).toContain('判定カテゴリ:</strong> <code>not_ready</code>');
   });
 
   it('shows pine unchanged when generated pine is identical', () => {

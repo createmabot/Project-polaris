@@ -440,3 +440,60 @@ export type BacktestListData = {
   };
 };
 
+export type InternalBacktestExecutionCreateData = {
+  execution: {
+    id: string;
+    strategy_rule_version_id: string;
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | string;
+    requested_at: string;
+    engine_version: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type InternalBacktestExecutionStatusData = {
+  execution: {
+    id: string;
+    strategy_rule_version_id: string;
+    status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | string;
+    requested_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+    error_code: string | null;
+    error_message: string | null;
+    engine_version: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
+export type InternalBacktestExecutionResultData = {
+  execution_id: string;
+  strategy_rule_version_id: string;
+  status: 'succeeded' | string;
+  result_summary: {
+    summary_kind: string;
+    metrics: {
+      bar_count: number;
+      first_close: number;
+      last_close: number;
+      price_change: number;
+      price_change_percent: number;
+      period_high: number;
+      period_low: number;
+      range_percent: number;
+    };
+  };
+  input_snapshot?: {
+    data_source_snapshot?: {
+      bar_count?: number;
+      [key: string]: unknown;
+    };
+    [key: string]: unknown;
+  } | null;
+  artifact_pointer?: Record<string, unknown> | null;
+  engine_version?: string | null;
+  finished_at?: string | null;
+};
+
