@@ -5,6 +5,10 @@ import {
   INTERNAL_BACKTEST_RESULT_SCHEMA_INVALID_CODE,
   INTERNAL_BACKTEST_DATA_SOURCE_UNAVAILABLE_CODE,
 } from '../src/queue/internal-backtests';
+import {
+  __resetInternalBacktestObservabilityForTest,
+  getInternalBacktestDataSourceUnavailableSummary,
+} from '../src/internal-backtests/observability';
 
 type ExecutionRow = {
   id: string;
@@ -54,6 +58,7 @@ describe('internal backtest worker scaffold', () => {
   let prismaMock: any;
 
   beforeEach(() => {
+    __resetInternalBacktestObservabilityForTest();
     executionStore = new Map();
     seq = 0;
     prismaMock = {
@@ -323,6 +328,63 @@ describe('internal backtest worker scaffold', () => {
       to: '2024-01-10',
       endpoint_kind: 'stooq_daily_csv',
     });
+  });
+
+  it('records DATA_SOURCE_UNAVAILABLE into observability summary store', async () => {
+    executionStore.set(
+      'ibtx-log-fail',
+      createExecutionRow({
+        id: 'ibtx-log-fail',
+        status: 'queued',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-10' },
+          engine_config: { summary_mode: 'engine_estimated' },
+        },
+      }),
+    );
+
+    const error = new Error('provider parse error') as Error & {
+      code?: string;
+      reasonCode?: string;
+      providerName?: string;
+      details?: Record<string, unknown>;
+    };
+    error.code = 'DATA_SOURCE_UNAVAILABLE';
+    error.reasonCode = 'provider_parse_error';
+    error.providerName = 'stooq';
+    error.details = { endpoint_kind: 'stooq_daily_csv' };
+
+    await processInternalBacktestExecution(
+      { executionId: 'ibtx-log-fail' },
+      {
+        db: prismaMock,
+        runExecution: async () => {
+          throw error;
+        },
+      },
+    );
+
+    const summary = getInternalBacktestDataSourceUnavailableSummary({
+      window: '24h',
+      now: new Date(Date.now() + 1000),
+    });
+    expect(summary.total_failures).toBe(1);
+    expect(summary.by_reason).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          internal_reason_code: 'provider_parse_error',
+          provider_name: 'stooq',
+          last_execution_id: 'ibtx-log-fail',
+        }),
+      ]),
+    );
   });
 
   it('maps INVALID_EXECUTION_TARGET when estimated execution target is missing', async () => {

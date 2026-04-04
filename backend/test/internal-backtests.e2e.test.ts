@@ -2,6 +2,10 @@ import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../src/utils/response';
 import { internalBacktestRoutes } from '../src/routes/internal-backtests';
+import {
+  __resetInternalBacktestObservabilityForTest,
+  recordInternalBacktestDataSourceUnavailableEvent,
+} from '../src/internal-backtests/observability';
 
 const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
   enqueueInternalBacktestExecutionMock: vi.fn(async () => ({ id: 'ibtx-job-1' })),
@@ -112,6 +116,7 @@ async function createApp() {
 describe('internal backtests scaffold routes', () => {
   beforeEach(() => {
     runtime = createRuntime();
+    __resetInternalBacktestObservabilityForTest();
     enqueueInternalBacktestExecutionMock.mockReset();
     enqueueInternalBacktestExecutionMock.mockResolvedValue({ id: 'ibtx-job-1' });
     runtime.versions.set('ver-1', {
@@ -122,6 +127,79 @@ describe('internal backtests scaffold routes', () => {
       market: 'JP_STOCK',
       timeframe: 'D',
     });
+  });
+
+  it('returns internal observability summary grouped by reason', async () => {
+    const app = await createApp();
+    recordInternalBacktestDataSourceUnavailableEvent({
+      at: new Date().toISOString(),
+      executionId: 'ibtx-a',
+      providerName: 'stooq',
+      internalReasonCode: 'provider_http_error',
+      symbol: '7203',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      from: '2024-01-01',
+      to: '2024-01-10',
+      elapsedMs: 120,
+      httpStatus: 503,
+      endpointKind: 'stooq_daily_csv',
+    });
+    recordInternalBacktestDataSourceUnavailableEvent({
+      at: new Date().toISOString(),
+      executionId: 'ibtx-b',
+      providerName: 'stooq',
+      internalReasonCode: 'provider_parse_error',
+      symbol: '6758',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      from: '2024-01-01',
+      to: '2024-01-10',
+      elapsedMs: 100,
+      httpStatus: null,
+      endpointKind: 'stooq_daily_csv',
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/internal-backtests/observability/data-source-unavailable-summary?window=24h',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.data.summary.total_failures).toBe(2);
+    expect(body.data.summary.by_reason).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          internal_reason_code: 'provider_http_error',
+          count: 1,
+          provider_name: 'stooq',
+        }),
+        expect.objectContaining({
+          internal_reason_code: 'provider_parse_error',
+          count: 1,
+          provider_name: 'stooq',
+        }),
+      ]),
+    );
+    expect(body.error).toBeNull();
+
+    await app.close();
+  });
+
+  it('returns validation error for unsupported observability window', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/internal-backtests/observability/data-source-unavailable-summary?window=30d',
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
   });
 
   it('creates execution in queued status', async () => {

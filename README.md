@@ -77,6 +77,7 @@ pnpm run down
   - `POST /api/internal-backtests/executions`（`queued` で job 作成 + queue enqueue）
   - `GET /api/internal-backtests/executions/:executionId`（status 取得）
   - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` 時のみ結果取得）
+  - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`（内部運用向け: reason code 別件数と直近失敗 execution を確認）
   - `POST` では execution input snapshot の最小検証を実施（`strategy_rule_version_id` と `data_range` は必須、`market/timeframe` は optional）
   - `market/timeframe` は request 値を優先し、未指定時は strategy version 側の値で補完
   - worker 骨組みで `queued -> running -> succeeded|failed` を最小遷移
@@ -87,6 +88,7 @@ pnpm run down
   - `engine_estimated` は日足 OHLCV（`JP_STOCK` / `D`）の最小 provider 経路を利用
   - provider 応答は adapter 層で normalize し、再現性情報として `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を保存
   - provider failure / unsupported は `DATA_SOURCE_UNAVAILABLE` に統一
+  - 内部観測性として provider failure reason を構造化ログ + 内部集計で保持（consumer 向け契約は変更しない）
   - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証
