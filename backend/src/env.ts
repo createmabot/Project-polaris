@@ -59,6 +59,9 @@ const envSchema = z.object({
   SNAPSHOT_THRESHOLD_FRESHNESS_INVALID_DAILY: z.coerce.number().int().nonnegative().default(5),
   SNAPSHOT_THRESHOLD_FRESHNESS_EXPIRED_DAILY: z.coerce.number().int().nonnegative().default(10),
   SNAPSHOT_THRESHOLD_CANDIDATE_UNKNOWN_DAILY: z.coerce.number().int().nonnegative().default(30),
+
+  // Internal backtests market-data provider (stub|stooq)
+  INTERNAL_BACKTEST_MARKET_DATA_PROVIDER: z.enum(['stub', 'stooq']).optional(),
 });
 
 const _env = envSchema.safeParse(process.env);

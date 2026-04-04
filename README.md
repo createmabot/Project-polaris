@@ -66,7 +66,7 @@ pnpm run down
   - 高度な比較機能
   - 北極星内バックテストエンジン本体（未実装）
 
-### 北極星内バックテストエンジン（着手前固定・未実装）
+### 北極星内バックテストエンジン（最小実装 + 段階固定）
 - 次フェーズ着手前の最小責務のみ固定済み:
   - execution job（状態遷移の正本）
   - execution input snapshot（実行条件固定）
@@ -83,9 +83,11 @@ pnpm run down
   - 成功時に `resultSummaryJson` / `artifactPointerJson` を最小保存（`schema_version: \"1.0\"` の summary）
   - `artifactPointerJson` は `type` / `execution_id` / `path` の最小 shape を採用
   - worker は status 遷移と永続化に責務を限定し、実行処理本体は service/adapter 境界へ分離
-- 次段設計固定（未実装）:
-  - `engine_estimated` の実データ接続は日足 OHLCV（`JP_STOCK` / `D`）を最小入口とする
-  - 再現性のため `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を固定契約として扱う
+- 実データ接続（最小）:
+  - `engine_estimated` は日足 OHLCV（`JP_STOCK` / `D`）の最小 provider 経路を利用
+  - provider 応答は adapter 層で normalize し、再現性情報として `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を保存
+  - provider failure / unsupported は `DATA_SOURCE_UNAVAILABLE` に統一
+  - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証
   - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理

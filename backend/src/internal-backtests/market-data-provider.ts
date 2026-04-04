@@ -1,3 +1,5 @@
+import { env } from '../env';
+
 export const INTERNAL_BACKTEST_PROVIDER_UNAVAILABLE_CODE = 'INTERNAL_BACKTEST_PROVIDER_UNAVAILABLE';
 export const INTERNAL_BACKTEST_PROVIDER_INVALID_RESPONSE_CODE =
   'INTERNAL_BACKTEST_PROVIDER_INVALID_RESPONSE';
@@ -49,6 +51,8 @@ export type InternalBacktestProviderFetchResult = {
 export interface InternalBacktestMarketDataProvider {
   fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult>;
 }
+
+export type InternalBacktestMarketDataProviderMode = 'stub' | 'stooq';
 
 function toDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -107,6 +111,116 @@ function buildDeterministicBars(args: {
   return bars;
 }
 
+function toStooqCodeForJpStock(symbol: string): string {
+  return `${symbol.toLowerCase()}.jp`;
+}
+
+type CsvRow = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+function parseStooqDailyCsv(content: string): CsvRow[] {
+  const lines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length < 2) {
+    return [];
+  }
+
+  const rows: CsvRow[] = [];
+  for (const line of lines.slice(1)) {
+    const cols = line.split(',');
+    if (cols.length < 6) continue;
+    const date = cols[0]?.trim() ?? '';
+    const open = Number(cols[1]);
+    const high = Number(cols[2]);
+    const low = Number(cols[3]);
+    const close = Number(cols[4]);
+    const volume = Number(cols[5]);
+    if (!date || !Number.isFinite(open) || !Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(close)) {
+      continue;
+    }
+    rows.push({
+      date,
+      open,
+      high,
+      low,
+      close,
+      volume: Number.isFinite(volume) ? volume : 0,
+    });
+  }
+  return rows;
+}
+
+function toIsoDateTimeFromDate(date: string): string {
+  return `${date}T00:00:00.000Z`;
+}
+
+function isDateInRange(date: string, from: string, to: string): boolean {
+  return date >= from && date <= to;
+}
+
+export class StooqDailyInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
+  async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
+    if (input.source_kind !== 'daily_ohlcv') {
+      throw new InternalBacktestProviderUnavailableError(
+        `unsupported source_kind: ${input.source_kind}`,
+      );
+    }
+    if (input.market !== 'JP_STOCK' || input.timeframe !== 'D') {
+      throw new InternalBacktestProviderUnavailableError(
+        `unsupported market/timeframe: ${input.market}/${input.timeframe}`,
+      );
+    }
+
+    const stooqCode = toStooqCodeForJpStock(input.symbol);
+    const url = env.SNAPSHOT_STOOQ_DAILY_URL_TEMPLATE.replace(
+      '{symbol}',
+      encodeURIComponent(stooqCode),
+    );
+
+    let response: Response;
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(env.SNAPSHOT_FETCH_TIMEOUT_MS) });
+    } catch (error) {
+      throw new InternalBacktestProviderUnavailableError(
+        error instanceof Error ? error.message : 'stooq fetch failed',
+      );
+    }
+
+    if (!response.ok) {
+      throw new InternalBacktestProviderUnavailableError(`stooq_http_${response.status}`);
+    }
+
+    const text = await response.text();
+    const csvRows = parseStooqDailyCsv(text);
+    const filtered = csvRows.filter((row) => isDateInRange(row.date, input.from, input.to));
+
+    const bars: InternalBacktestProviderBar[] = filtered.map((row) => ({
+      timestamp: toIsoDateTimeFromDate(row.date),
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+    }));
+
+    const latestDate = filtered.length > 0 ? filtered[filtered.length - 1]!.date : input.to;
+    return {
+      bars,
+      fetched_at: new Date().toISOString(),
+      data_revision: `stooq-daily-v1:${stooqCode}:${latestDate}`,
+    };
+  }
+}
+
 export class StubInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
   async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
     if (input.source_kind !== 'daily_ohlcv') {
@@ -137,6 +251,20 @@ export class StubInternalBacktestMarketDataProvider implements InternalBacktestM
 }
 
 export const defaultInternalBacktestMarketDataProvider = new StubInternalBacktestMarketDataProvider();
+
+export function createInternalBacktestMarketDataProvider(mode?: InternalBacktestMarketDataProviderMode): InternalBacktestMarketDataProvider {
+  const isTestRuntime =
+    env.APP_ENV === 'test' || process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
+  const selectedMode =
+    mode ??
+    env.INTERNAL_BACKTEST_MARKET_DATA_PROVIDER ??
+    (isTestRuntime ? 'stub' : 'stooq');
+
+  if (selectedMode === 'stooq') {
+    return new StooqDailyInternalBacktestMarketDataProvider();
+  }
+  return new StubInternalBacktestMarketDataProvider();
+}
 
 export function isProviderUnavailableError(error: unknown): error is { code: string } {
   return (
