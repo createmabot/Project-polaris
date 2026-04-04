@@ -59,6 +59,11 @@ export type InternalBacktestDataSourceFetchResult = {
   snapshot: InternalBacktestDataSourceSnapshot;
 };
 
+export type InternalBacktestDataSourceRetryConfig = {
+  maxRetries: number;
+  baseDelayMs: number;
+};
+
 export interface InternalBacktestDataSourceAdapter {
   fetchDailyOhlcv(input: InternalBacktestDataSourceFetchInput): Promise<InternalBacktestDataSourceFetchResult>;
 }
@@ -128,23 +133,82 @@ function normalizeProviderBars(
   return normalized;
 }
 
+function delay(ms: number): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function shouldRetryProviderError(error: unknown): boolean {
+  if (!isProviderUnavailableError(error)) {
+    return false;
+  }
+
+  const providerError = error as ProviderUnavailableErrorLike;
+  const reasonCode = providerError.reasonCode;
+  if (reasonCode === 'provider_timeout' || reasonCode === 'provider_network_error') {
+    return true;
+  }
+  if (reasonCode === 'provider_http_error') {
+    const httpStatus = providerError.details?.http_status;
+    return typeof httpStatus === 'number' && httpStatus >= 500 && httpStatus < 600;
+  }
+  return false;
+}
+
+function getRetryMetadata(args: {
+  attempts: number;
+  retryable: boolean;
+}): Record<string, unknown> {
+  return {
+    retry_attempted: args.attempts > 1,
+    retry_attempts: args.attempts,
+    retry_target: args.retryable,
+  };
+}
+
 export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDataSourceAdapter {
+  private readonly retryConfig: InternalBacktestDataSourceRetryConfig;
+
   constructor(
     private readonly provider: InternalBacktestMarketDataProvider = defaultInternalBacktestMarketDataProvider,
-  ) {}
+    retryConfig: Partial<InternalBacktestDataSourceRetryConfig> = {},
+    private readonly sleepFn: (ms: number) => Promise<void> = delay,
+  ) {
+    this.retryConfig = {
+      maxRetries: retryConfig.maxRetries ?? 1,
+      baseDelayMs: retryConfig.baseDelayMs ?? 120,
+    };
+  }
 
   async fetchDailyOhlcv(
     input: InternalBacktestDataSourceFetchInput,
   ): Promise<InternalBacktestDataSourceFetchResult> {
+    let attempts = 0;
+    let lastRetryable = false;
     try {
-      const providerResult = await this.provider.fetchDailyOhlcv({
-        symbol: input.symbol,
-        market: input.market,
-        timeframe: input.timeframe,
-        from: input.from,
-        to: input.to,
-        source_kind: input.source_kind,
-      });
+      let providerResult: Awaited<ReturnType<InternalBacktestMarketDataProvider['fetchDailyOhlcv']>>;
+      // attempt #1 + selective retry (at most maxRetries)
+      for (;;) {
+        attempts += 1;
+        try {
+          providerResult = await this.provider.fetchDailyOhlcv({
+            symbol: input.symbol,
+            market: input.market,
+            timeframe: input.timeframe,
+            from: input.from,
+            to: input.to,
+            source_kind: input.source_kind,
+          });
+          break;
+        } catch (error) {
+          lastRetryable = shouldRetryProviderError(error);
+          if (lastRetryable && attempts <= this.retryConfig.maxRetries) {
+            await this.sleepFn(this.retryConfig.baseDelayMs * attempts);
+            continue;
+          }
+          throw error;
+        }
+      }
 
       const bars = normalizeProviderBars(providerResult.bars);
 
@@ -164,21 +228,36 @@ export class StubInternalBacktestDataSourceAdapter implements InternalBacktestDa
     } catch (error) {
       if (isProviderUnavailableError(error) || isProviderInvalidResponseError(error)) {
         const providerError = error as ProviderUnavailableErrorLike;
+        const retryMeta = getRetryMetadata({
+          attempts: Math.max(1, attempts),
+          retryable: lastRetryable,
+        });
         throw new InternalBacktestDataSourceUnavailableError(
           error instanceof Error ? error.message : 'data source provider unavailable',
           {
             reasonCode: providerError.reasonCode ?? 'provider_unknown_error',
             providerName: providerError.providerName ?? 'unknown',
-            details: providerError.details,
+            details: {
+              ...(providerError.details ?? {}),
+              ...retryMeta,
+            },
           },
         );
       }
       if (error instanceof InternalBacktestDataSourceUnavailableError) {
         throw error;
       }
+      const retryMeta = getRetryMetadata({
+        attempts: Math.max(1, attempts),
+        retryable: lastRetryable,
+      });
       throw new InternalBacktestDataSourceUnavailableError(
         error instanceof Error ? error.message : 'data source provider unavailable',
-        { reasonCode: 'provider_unknown_error', providerName: 'unknown' },
+        {
+          reasonCode: 'provider_unknown_error',
+          providerName: 'unknown',
+          details: retryMeta,
+        },
       );
     }
   }

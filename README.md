@@ -88,6 +88,10 @@ pnpm run down
   - `engine_estimated` は日足 OHLCV（`JP_STOCK` / `D`）の最小 provider 経路を利用
   - provider 応答は adapter 層で normalize し、再現性情報として `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を保存
   - provider failure / unsupported は `DATA_SOURCE_UNAVAILABLE` に統一
+  - provider fetch には selective retry（最小）を導入:
+    - retry対象: `provider_timeout` / `provider_network_error` / `provider_http_error(5xx)`
+    - retry非対象: `provider_parse_error` / `provider_invalid_response` / `provider_not_configured` / `provider_unsupported_target` / `provider_http_error(4xx)`
+    - 追加試行は 1 回のみ（最大 2 試行）、最終失敗時の outward 契約は従来どおり `DATA_SOURCE_UNAVAILABLE`
   - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
   - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
 - 役割分担は維持:

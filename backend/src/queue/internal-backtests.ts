@@ -58,6 +58,9 @@ type DataSourceUnavailableMeta = {
   providerName: string | null;
   httpStatus: number | null;
   endpointKind: string | null;
+  retryAttempted: boolean | null;
+  retryAttempts: number | null;
+  retryTarget: boolean | null;
 };
 
 function extractExecutionTargetContext(
@@ -109,11 +112,17 @@ function extractDataSourceUnavailableMeta(error: unknown): DataSourceUnavailable
       : {};
   const httpStatusCandidate = details.http_status;
   const endpointKindCandidate = details.endpoint_kind;
+  const retryAttemptedCandidate = details.retry_attempted;
+  const retryAttemptsCandidate = details.retry_attempts;
+  const retryTargetCandidate = details.retry_target;
   return {
     internalReasonCode: typeof reasonCandidate === 'string' ? reasonCandidate : null,
     providerName: typeof providerCandidate === 'string' ? providerCandidate : null,
     httpStatus: typeof httpStatusCandidate === 'number' ? httpStatusCandidate : null,
     endpointKind: typeof endpointKindCandidate === 'string' ? endpointKindCandidate : null,
+    retryAttempted: typeof retryAttemptedCandidate === 'boolean' ? retryAttemptedCandidate : null,
+    retryAttempts: typeof retryAttemptsCandidate === 'number' ? retryAttemptsCandidate : null,
+    retryTarget: typeof retryTargetCandidate === 'boolean' ? retryTargetCandidate : null,
   };
 }
 
@@ -241,6 +250,9 @@ export async function processInternalBacktestExecution(
           providerName: null,
           httpStatus: null,
           endpointKind: null,
+          retryAttempted: null,
+          retryAttempts: null,
+          retryTarget: null,
         };
 
     const elapsedMs = Date.now() - startedMs;
@@ -286,6 +298,9 @@ export async function processInternalBacktestExecution(
       elapsed_ms: elapsedMs,
       http_status: dataSourceMeta.httpStatus,
       endpoint_kind: dataSourceMeta.endpointKind,
+      retry_attempted: dataSourceMeta.retryAttempted,
+      retry_attempts: dataSourceMeta.retryAttempts,
+      retry_target: dataSourceMeta.retryTarget,
     };
   }
 }
@@ -339,6 +354,9 @@ export function setupInternalBacktestWorker(logger: WorkerLogger, deps: SetupWor
           elapsed_ms: (result as { elapsed_ms?: number | null }).elapsed_ms,
           http_status: (result as { http_status?: number | null }).http_status,
           endpoint_kind: (result as { endpoint_kind?: string | null }).endpoint_kind,
+          retry_attempted: (result as { retry_attempted?: boolean | null }).retry_attempted,
+          retry_attempts: (result as { retry_attempts?: number | null }).retry_attempts,
+          retry_target: (result as { retry_target?: boolean | null }).retry_target,
         });
       }
       return result;
