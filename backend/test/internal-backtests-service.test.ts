@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { runInternalBacktestExecutionService } from '../src/internal-backtests/run-execution-service';
 import { normalizeExecutionInputSnapshot } from '../src/internal-backtests/contracts';
 import { createDummyInternalBacktestEngineAdapter } from '../src/internal-backtests/engine-adapter';
+import { StubInternalBacktestDataSourceAdapter } from '../src/internal-backtests/data-source-adapter';
+import {
+  InternalBacktestProviderUnavailableError,
+  type InternalBacktestMarketDataProvider,
+} from '../src/internal-backtests/market-data-provider';
 
 describe('internal backtest execution service contracts', () => {
   it('normalizes input snapshot with fallback from strategy_snapshot market/timeframe', () => {
@@ -468,6 +473,74 @@ describe('internal backtest execution service contracts', () => {
       last_close: 0,
     });
     expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(0);
+  });
+
+  it('succeeds in engine_estimated when retry-target provider error recovers on retry', async () => {
+    let callCount = 0;
+    const flakyProvider: InternalBacktestMarketDataProvider = {
+      fetchDailyOhlcv: async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          throw new InternalBacktestProviderUnavailableError('temporary timeout', {
+            reasonCode: 'provider_timeout',
+            providerName: 'stooq',
+            details: { endpoint_kind: 'stooq_daily_csv' },
+          });
+        }
+        return {
+          fetched_at: '2024-01-10T00:00:00.000Z',
+          data_revision: 'retry-recovered',
+          bars: [
+            {
+              timestamp: '2024-01-10',
+              open: 100,
+              high: 110,
+              low: 90,
+              close: 105,
+              volume: 1000,
+            },
+          ],
+        };
+      },
+    };
+    const engineAdapter = createDummyInternalBacktestEngineAdapter(
+      new StubInternalBacktestDataSourceAdapter(
+        flakyProvider,
+        { maxRetries: 1, baseDelayMs: 0 },
+        async () => {},
+      ),
+    );
+
+    const output = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-estimated-retry-recovered',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-10' },
+          engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(callCount).toBe(2);
+    expect(output.resultSummary.summary_kind).toBe('engine_estimated');
+    expect(output.resultSummary.metrics.bar_count).toBe(1);
+    expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(1);
   });
 
   it('fails when metrics.bar_count is fractional', async () => {
