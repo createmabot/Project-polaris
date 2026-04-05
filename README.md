@@ -40,6 +40,29 @@ pnpm exec prisma migrate dev
 pnpm exec prisma db seed
 ```
 
+### Prisma migration drift 対応手順（ローカル開発）
+`prisma migrate dev` で drift が出た場合は、以下の順で切り分ける。
+
+1. `cd backend && npx prisma validate`
+2. `cd backend && npx prisma migrate status`
+3. `cd backend && npx prisma migrate dev`
+4. `cd backend && npx prisma migrate deploy`
+
+`The migration ... was modified after it was applied` のような checksum 不一致が出た場合は、  
+**repo の `schema.prisma` と `prisma/migrations/*` を正本**として、ローカル開発DBを reset して再適用する。
+
+```bash
+cd backend
+npx prisma migrate reset --force --skip-seed
+npx prisma migrate status
+npx prisma migrate dev --name verify_noop
+npx prisma migrate deploy
+```
+
+補足:
+- reset はローカル開発DBのデータを消去するため、ローカルで再生成可能な状態に限定して実施する。
+- `migrate resolve` は最終手段とし、通常は reset + migrate 再適用を優先する。
+
 ## よく使うコマンド
 ```bash
 pnpm run dev
