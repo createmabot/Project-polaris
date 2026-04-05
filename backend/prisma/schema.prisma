@@ -394,10 +394,27 @@ model InternalBacktestExecution {
   engineVersion         String                          @default("ibtx-v0")
   createdAt             DateTime                        @default(now())
   updatedAt             DateTime                        @updatedAt
+  artifacts             InternalBacktestExecutionArtifact[]
 
   @@index([strategyRuleVersionId, requestedAt])
   @@index([status, requestedAt])
   @@map("internal_backtest_executions")
+}
+
+model InternalBacktestExecutionArtifact {
+  id          String                    @id @default(uuid())
+  executionId String                    @map("execution_id")
+  execution   InternalBacktestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  kind        String
+  path        String
+  payloadJson Json                      @map("payload_json")
+  createdAt   DateTime                  @default(now()) @map("created_at")
+  updatedAt   DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([executionId, kind])
+  @@unique([path])
+  @@index([executionId, createdAt])
+  @@map("internal_backtest_execution_artifacts")
 }
 
 model InternalBacktestDataSourceFailureEvent {

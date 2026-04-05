@@ -269,6 +269,9 @@ describe('internal backtest execution service contracts', () => {
       execution_id: 'ibtx-actual-1',
       path: '/internal-backtests/executions/ibtx-actual-1/artifacts/engine_actual/trades-and-equity',
     });
+    expect(output.artifactPayload).toBeDefined();
+    expect(output.artifactPayload?.trades).toBeInstanceOf(Array);
+    expect(output.artifactPayload?.equity_curve).toBeInstanceOf(Array);
     expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(20);
   });
 
@@ -335,6 +338,10 @@ describe('internal backtest execution service contracts', () => {
     });
     expect(output.resultSummary.metrics.first_trade_at).toBeNull();
     expect(output.resultSummary.metrics.last_trade_at).toBeNull();
+    expect(output.artifactPayload).toEqual({
+      trades: [],
+      equity_curve: [],
+    });
     expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(0);
   });
 

@@ -85,18 +85,33 @@ describe('internal backtest worker scaffold', () => {
     outcome: string;
     occurredAt: Date;
   }>;
+  let artifactStore: Map<
+    string,
+    {
+      id: string;
+      executionId: string;
+      kind: string;
+      path: string;
+      payloadJson: Record<string, unknown>;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  >;
   let seq: number;
   let eventSeq: number;
   let retryEventSeq: number;
+  let artifactSeq: number;
   let prismaMock: any;
 
   beforeEach(() => {
     executionStore = new Map();
     failureEvents = [];
     retryOutcomeEvents = [];
+    artifactStore = new Map();
     seq = 0;
     eventSeq = 0;
     retryEventSeq = 0;
+    artifactSeq = 0;
     prismaMock = {
       internalBacktestExecution: {
         findUnique: async ({ where }: any) => executionStore.get(where.id) ?? null,
@@ -168,6 +183,30 @@ describe('internal backtest worker scaffold', () => {
           retryOutcomeEvents
             .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
             .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+      },
+      internalBacktestExecutionArtifact: {
+        upsert: async ({ where, create, update }: any) => {
+          const key = `${where.executionId_kind.executionId}::${where.executionId_kind.kind}`;
+          const existing = artifactStore.get(key);
+          const now = new Date(Date.now() + seq++);
+          const row = existing
+            ? {
+                ...existing,
+                ...update,
+                updatedAt: now,
+              }
+            : {
+                id: `artifact-${++artifactSeq}`,
+                executionId: create.executionId,
+                kind: create.kind,
+                path: create.path,
+                payloadJson: create.payloadJson,
+                createdAt: now,
+                updatedAt: now,
+              };
+          artifactStore.set(key, row);
+          return row;
+        },
       },
     };
   });
@@ -400,6 +439,74 @@ describe('internal backtest worker scaffold', () => {
     expect(saved?.artifactPointerJson).toMatchObject({
       path: '/internal-backtests/executions/ibtx-actual/artifacts/engine_actual/trades-and-equity',
     });
+  });
+
+  it('persists engine_actual artifact payload when worker output includes artifactPayload', async () => {
+    executionStore.set('ibtx-actual-artifact', createExecutionRow({ id: 'ibtx-actual-artifact', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-actual-artifact' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            summary_kind: 'engine_actual',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2024-01-10' },
+            metrics: {
+              bar_count: 10,
+              first_close: 100,
+              last_close: 109,
+              price_change: 9,
+              price_change_percent: 9,
+              period_high: 112,
+              period_low: 98,
+              range_percent: 14.2857,
+              trade_count: 1,
+              win_rate: 100,
+              total_return_percent: 1.1,
+              max_drawdown_percent: 0.2,
+              holding_period_avg_bars: 2,
+              first_trade_at: '2024-01-03T00:00:00.000Z',
+              last_trade_at: '2024-01-05T00:00:00.000Z',
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'engine_actual sample',
+          },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-actual-artifact',
+            path: '/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+          },
+          artifactPayload: {
+            trades: [
+              {
+                entry_at: '2024-01-03T00:00:00.000Z',
+                entry_price: 101,
+                exit_at: '2024-01-05T00:00:00.000Z',
+                exit_price: 102.1,
+                return_percent: 1.0891,
+                holding_bars: 2,
+              },
+            ],
+            equity_curve: [
+              { at: '2024-01-01T00:00:00.000Z', equity_index: 100 },
+              { at: '2024-01-05T00:00:00.000Z', equity_index: 101.0891 },
+            ],
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('succeeded');
+    const storedArtifact = artifactStore.get('ibtx-actual-artifact::engine_actual_trades_and_equity');
+    expect(storedArtifact).toBeDefined();
+    expect(storedArtifact?.path).toBe(
+      '/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+    );
+    expect((storedArtifact?.payloadJson as any).trades).toHaveLength(1);
   });
 
   it('moves queued execution to failed and stores error on runExecution failure', async () => {
