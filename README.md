@@ -43,6 +43,9 @@ pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
 
+補足:
+- `prisma generate` で Windows の `EPERM ... query_engine-windows.dll.node` が出る場合は、`backend/frontend` の dev プロセスを停止してから再実行する。
+
 ### Prisma migration drift 対応手順（ローカル開発）
 `prisma migrate dev` で drift が出た場合は、以下の順で切り分ける。
 
