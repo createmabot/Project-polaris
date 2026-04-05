@@ -62,6 +62,7 @@ npx prisma migrate deploy
 補足:
 - reset はローカル開発DBのデータを消去するため、ローカルで再生成可能な状態に限定して実施する。
 - `migrate resolve` は最終手段とし、通常は reset + migrate 再適用を優先する。
+- Prisma 設定は `backend/prisma.config.ts` を正とし、`package.json#prisma` は利用しない。
 
 ## よく使うコマンド
 ```bash
