@@ -74,6 +74,19 @@ type Runtime = {
     outcome: string;
     occurredAt: Date;
   }>;
+  artifacts: Map<
+    string,
+    {
+      id: string;
+      executionId: string;
+      kind: string;
+      path: string;
+      payloadJson: Record<string, unknown>;
+      createdAt: Date;
+      updatedAt: Date;
+    }
+  >;
+  artifactSeq: number;
 };
 
 let runtime: Runtime;
@@ -88,6 +101,8 @@ function createRuntime(): Runtime {
     failureEvents: [],
     retryOutcomeEventSeq: 1,
     retryOutcomeEvents: [],
+    artifacts: new Map(),
+    artifactSeq: 1,
   };
 }
 
@@ -183,8 +198,39 @@ vi.mock('../src/db', () => {
       },
       findMany: async ({ where }: any) =>
         runtime.retryOutcomeEvents
-          .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
-          .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+            .filter((row) => row.occurredAt >= where.occurredAt.gte && row.occurredAt <= where.occurredAt.lte)
+            .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || b.id.localeCompare(a.id)),
+    },
+    internalBacktestExecutionArtifact: {
+      findUnique: async ({ where }: any) => {
+        if (where?.executionId_kind) {
+          const key = `${where.executionId_kind.executionId}::${where.executionId_kind.kind}`;
+          return runtime.artifacts.get(key) ?? null;
+        }
+        return null;
+      },
+      upsert: async ({ where, create, update }: any) => {
+        const key = `${where.executionId_kind.executionId}::${where.executionId_kind.kind}`;
+        const existing = runtime.artifacts.get(key);
+        const now = new Date(Date.now() + runtime.nowSeq++);
+        const row = existing
+          ? {
+              ...existing,
+              ...update,
+              updatedAt: now,
+            }
+          : {
+              id: `ibtx-artifact-${runtime.artifactSeq++}`,
+              executionId: create.executionId,
+              kind: create.kind,
+              path: create.path,
+              payloadJson: create.payloadJson,
+              createdAt: now,
+              updatedAt: now,
+            };
+        runtime.artifacts.set(key, row);
+        return row;
+      },
     },
   };
 
@@ -821,6 +867,143 @@ describe('internal backtests scaffold routes', () => {
     expect(body.data.result_summary.metrics.bar_count).toBe(0);
     expect(body.data.input_snapshot.data_source_snapshot.bar_count).toBe(0);
     expect(body.error).toBeNull();
+
+    await app.close();
+  });
+
+  it('returns engine_actual artifact payload via dedicated artifact read route', async () => {
+    const app = await createApp();
+    const now = new Date();
+    runtime.executions.set('ibtx-actual-artifact', {
+      id: 'ibtx-actual-artifact',
+      strategyRuleVersionId: 'ver-1',
+      status: 'succeeded',
+      requestedAt: now,
+      startedAt: now,
+      finishedAt: now,
+      inputSnapshotJson: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2024-01-10' },
+      },
+      resultSummaryJson: {
+        schema_version: '1.0',
+        summary_kind: 'engine_actual',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        period: { from: '2024-01-01', to: '2024-01-10' },
+        metrics: {
+          bar_count: 10,
+          first_close: 100,
+          last_close: 110,
+          price_change: 10,
+          price_change_percent: 10,
+          period_high: 112,
+          period_low: 95,
+          range_percent: 17.8947,
+          trade_count: 1,
+          win_rate: 100,
+          total_return_percent: 1.2,
+          max_drawdown_percent: 0.4,
+          holding_period_avg_bars: 2,
+          first_trade_at: '2024-01-03T00:00:00.000Z',
+          last_trade_at: '2024-01-05T00:00:00.000Z',
+        },
+        engine: { version: 'ibtx-v0' },
+        notes: 'engine_actual sample',
+      },
+      artifactPointerJson: {
+        type: 'internal_backtest_execution',
+        execution_id: 'ibtx-actual-artifact',
+        path: '/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+      },
+      errorCode: null,
+      errorMessage: null,
+      engineVersion: 'ibtx-v0',
+      createdAt: now,
+      updatedAt: now,
+    });
+    runtime.artifacts.set('ibtx-actual-artifact::engine_actual_trades_and_equity', {
+      id: 'ibtx-artifact-1',
+      executionId: 'ibtx-actual-artifact',
+      kind: 'engine_actual_trades_and_equity',
+      path: '/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+      payloadJson: {
+        trades: [
+          {
+            entry_at: '2024-01-03T00:00:00.000Z',
+            entry_price: 101,
+            exit_at: '2024-01-05T00:00:00.000Z',
+            exit_price: 102.2,
+            return_percent: 1.1881,
+            holding_bars: 2,
+          },
+        ],
+        equity_curve: [
+          {
+            at: '2024-01-01T00:00:00.000Z',
+            equity_index: 100,
+          },
+          {
+            at: '2024-01-05T00:00:00.000Z',
+            equity_index: 101.1881,
+          },
+        ],
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.data.artifact_pointer.path).toBe(
+      '/internal-backtests/executions/ibtx-actual-artifact/artifacts/engine_actual/trades-and-equity',
+    );
+    expect(body.data.artifact.trades).toHaveLength(1);
+    expect(body.data.artifact.equity_curve).toHaveLength(2);
+
+    await app.close();
+  });
+
+  it('returns RESULT_NOT_READY for artifact route when execution is not succeeded', async () => {
+    const app = await createApp();
+    const now = new Date();
+    runtime.executions.set('ibtx-actual-running', {
+      id: 'ibtx-actual-running',
+      strategyRuleVersionId: 'ver-1',
+      status: 'running',
+      requestedAt: now,
+      startedAt: now,
+      finishedAt: null,
+      inputSnapshotJson: {},
+      resultSummaryJson: null,
+      artifactPointerJson: null,
+      errorCode: null,
+      errorMessage: null,
+      engineVersion: 'ibtx-v0',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/internal-backtests/executions/ibtx-actual-running/artifacts/engine_actual/trades-and-equity',
+    });
+
+    expect(res.statusCode).toBe(409);
+    const body = res.json();
+    expect(body.error.code).toBe('RESULT_NOT_READY');
+    expect(body.error.details.status).toBe('running');
 
     await app.close();
   });

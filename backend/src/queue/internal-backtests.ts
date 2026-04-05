@@ -31,6 +31,7 @@ export type InternalBacktestExecutionJobData = {
 type ExecutionOutput = {
   resultSummary: unknown;
   artifactPointer?: Prisma.InputJsonValue | null;
+  artifactPayload?: Prisma.InputJsonValue | null;
   inputSnapshot?: Prisma.InputJsonValue | null;
   dataSourceFetchObservation?: InternalBacktestDataSourceFetchObservation;
 };
@@ -151,6 +152,7 @@ const defaultRunExecution: RunExecutionFn = async (execution) => {
   return {
     resultSummary: output.resultSummary as unknown as Prisma.InputJsonValue,
     artifactPointer: output.artifactPointer as unknown as Prisma.InputJsonValue,
+    artifactPayload: output.artifactPayload as unknown as Prisma.InputJsonValue,
     inputSnapshot: output.inputSnapshot as unknown as Prisma.InputJsonValue,
     dataSourceFetchObservation: output.dataSourceFetchObservation,
   };
@@ -226,6 +228,35 @@ export async function processInternalBacktestExecution(
         errorMessage: null,
       },
     });
+
+    if (
+      output.artifactPayload &&
+      typeof output.artifactPayload === 'object' &&
+      output.artifactPointer &&
+      typeof output.artifactPointer === 'object' &&
+      'path' in (output.artifactPointer as Record<string, unknown>) &&
+      typeof (output.artifactPointer as Record<string, unknown>).path === 'string'
+    ) {
+      const artifactPath = (output.artifactPointer as Record<string, unknown>).path as string;
+      await db.internalBacktestExecutionArtifact.upsert({
+        where: {
+          executionId_kind: {
+            executionId: execution.id,
+            kind: 'engine_actual_trades_and_equity',
+          },
+        },
+        create: {
+          executionId: execution.id,
+          kind: 'engine_actual_trades_and_equity',
+          path: artifactPath,
+          payloadJson: output.artifactPayload as Prisma.InputJsonValue,
+        },
+        update: {
+          path: artifactPath,
+          payloadJson: output.artifactPayload as Prisma.InputJsonValue,
+        },
+      });
+    }
 
     if (output.dataSourceFetchObservation?.retryAttempted) {
       await recordInternalBacktestDataSourceRetryOutcomeEvent(

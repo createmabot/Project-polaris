@@ -1,4 +1,8 @@
-import type { InternalBacktestDataSourceSnapshot, InternalBacktestExecutionInput } from './contracts';
+import type {
+  InternalBacktestActualArtifactPayload,
+  InternalBacktestDataSourceSnapshot,
+  InternalBacktestExecutionInput,
+} from './contracts';
 import {
   StubInternalBacktestDataSourceAdapter,
   type InternalBacktestDataSourceFetchObservation,
@@ -31,6 +35,7 @@ export type InternalBacktestEngineRunResult = {
   data_source_snapshot?: InternalBacktestDataSourceSnapshot;
   data_source_fetch_observation?: InternalBacktestDataSourceFetchObservation;
   artifact_path_suffix?: string;
+  artifact_payload?: InternalBacktestActualArtifactPayload;
 };
 
 export type InternalBacktestEngineAdapter = (args: {
@@ -55,6 +60,11 @@ type ActualTrade = {
   return_percent: number;
   holding_bars: number;
   exit_reason: 'signal_reversal' | 'end_of_period';
+};
+
+type ActualSimulationResult = {
+  metrics: EngineMetrics;
+  artifactPayload: InternalBacktestActualArtifactPayload;
 };
 
 const TIMEFRAME_BARS_PER_DAY: Record<string, number> = {
@@ -178,7 +188,7 @@ function computeMaxDrawdownPercent(equitySeries: number[]): number {
 function buildActualMetricsFromBars(args: {
   bars: EngineBar[];
   engineConfig: Record<string, unknown>;
-}): EngineMetrics {
+}): ActualSimulationResult {
   const bars = args.bars;
   const priceSummary = buildPriceSummaryFromBars(bars);
   const commissionPercent =
@@ -192,19 +202,28 @@ function buildActualMetricsFromBars(args: {
 
   if (bars.length === 0) {
     return {
-      ...priceSummary,
-      trade_count: 0,
-      win_rate: 0,
-      total_return_percent: 0,
-      max_drawdown_percent: 0,
-      holding_period_avg_bars: 0,
-      first_trade_at: null,
-      last_trade_at: null,
+      metrics: {
+        ...priceSummary,
+        trade_count: 0,
+        win_rate: 0,
+        total_return_percent: 0,
+        max_drawdown_percent: 0,
+        holding_period_avg_bars: 0,
+        first_trade_at: null,
+        last_trade_at: null,
+      },
+      artifactPayload: {
+        trades: [],
+        equity_curve: [],
+      },
     };
   }
 
   const trades: ActualTrade[] = [];
   const equitySeries: number[] = [100];
+  const equityCurve: InternalBacktestActualArtifactPayload['equity_curve'] = [
+    { at: bars[0]!.timestamp, equity_index: 100 },
+  ];
   let equity = 100;
   let openPosition:
     | {
@@ -238,6 +257,10 @@ function buildActualMetricsFromBars(args: {
       const returnPercent = roundTo(netReturnRate * 100, 4);
       equity = roundTo(equity * (1 + netReturnRate), 6);
       equitySeries.push(equity);
+      equityCurve.push({
+        at: nextBar.timestamp,
+        equity_index: roundTo(equity, 6),
+      });
       trades.push({
         entry_at: openPosition.entryAt,
         exit_at: nextBar.timestamp,
@@ -260,6 +283,10 @@ function buildActualMetricsFromBars(args: {
     const returnPercent = roundTo(netReturnRate * 100, 4);
     equity = roundTo(equity * (1 + netReturnRate), 6);
     equitySeries.push(equity);
+    equityCurve.push({
+      at: lastBar.timestamp,
+      equity_index: roundTo(equity, 6),
+    });
     trades.push({
       entry_at: openPosition.entryAt,
       exit_at: lastBar.timestamp,
@@ -285,14 +312,27 @@ function buildActualMetricsFromBars(args: {
         );
 
   return {
-    ...priceSummary,
-    trade_count: tradeCount,
-    win_rate: winRate,
-    total_return_percent: totalReturnPercent,
-    max_drawdown_percent: maxDrawdownPercent,
-    holding_period_avg_bars: holdingPeriodAvgBars,
-    first_trade_at: tradeCount > 0 ? trades[0]!.entry_at : null,
-    last_trade_at: tradeCount > 0 ? trades[tradeCount - 1]!.exit_at : null,
+    metrics: {
+      ...priceSummary,
+      trade_count: tradeCount,
+      win_rate: winRate,
+      total_return_percent: totalReturnPercent,
+      max_drawdown_percent: maxDrawdownPercent,
+      holding_period_avg_bars: holdingPeriodAvgBars,
+      first_trade_at: tradeCount > 0 ? trades[0]!.entry_at : null,
+      last_trade_at: tradeCount > 0 ? trades[tradeCount - 1]!.exit_at : null,
+    },
+    artifactPayload: {
+      trades: trades.map((trade) => ({
+        entry_at: trade.entry_at,
+        entry_price: trade.entry_price,
+        exit_at: trade.exit_at,
+        exit_price: trade.exit_price,
+        return_percent: trade.return_percent,
+        holding_bars: trade.holding_bars,
+      })),
+      equity_curve: equityCurve,
+    },
   };
 }
 
@@ -323,6 +363,7 @@ export function createDummyInternalBacktestEngineAdapter(
     let dataSourceSnapshot: InternalBacktestDataSourceSnapshot | undefined;
     let dataSourceFetchObservation: InternalBacktestDataSourceFetchObservation | undefined;
     let artifactPathSuffix: string | undefined;
+    let artifactPayload: InternalBacktestActualArtifactPayload | undefined;
     let metrics = calculateDeterministicMetrics(input);
 
     if (useEstimated || useActual) {
@@ -335,12 +376,16 @@ export function createDummyInternalBacktestEngineAdapter(
         source_kind: 'daily_ohlcv',
       });
       const bars = dataSourceResult.bars as EngineBar[];
-      metrics = useActual
-        ? buildActualMetricsFromBars({
-            bars,
-            engineConfig: input.engineConfig,
-          })
-        : buildPriceSummaryFromBars(bars);
+      if (useActual) {
+        const actualResult = buildActualMetricsFromBars({
+          bars,
+          engineConfig: input.engineConfig,
+        });
+        metrics = actualResult.metrics;
+        artifactPayload = actualResult.artifactPayload;
+      } else {
+        metrics = buildPriceSummaryFromBars(bars);
+      }
       dataSourceSnapshot = dataSourceResult.snapshot;
       dataSourceFetchObservation = dataSourceResult.fetchObservation;
       if (useActual) {
@@ -361,6 +406,7 @@ export function createDummyInternalBacktestEngineAdapter(
       data_source_snapshot: dataSourceSnapshot,
       data_source_fetch_observation: dataSourceFetchObservation,
       artifact_path_suffix: artifactPathSuffix,
+      artifact_payload: artifactPayload,
     };
   };
 }

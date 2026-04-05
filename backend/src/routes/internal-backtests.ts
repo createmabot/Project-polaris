@@ -11,6 +11,7 @@ import {
   type CreateExecutionRequestInput,
   type NormalizedCreateExecutionRequest,
 } from '../internal-backtests/contracts';
+import { getEngineActualArtifactByExecutionId } from '../internal-backtests/artifact-store';
 
 export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { window?: string } }>(
@@ -190,4 +191,43 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
       }),
     );
   });
+
+  fastify.get<{ Params: { executionId: string } }>(
+    '/executions/:executionId/artifacts/engine_actual/trades-and-equity',
+    async (request, reply) => {
+      const execution = await prisma.internalBacktestExecution.findUnique({
+        where: { id: request.params.executionId },
+      });
+      if (!execution) {
+        throw new AppError(404, 'NOT_FOUND', 'internal backtest execution was not found.');
+      }
+      if (execution.status !== 'succeeded') {
+        throw new AppError(
+          409,
+          'RESULT_NOT_READY',
+          'artifact is not ready. execution status must be succeeded.',
+          { status: execution.status },
+        );
+      }
+
+      const artifactRecord = await getEngineActualArtifactByExecutionId(request.params.executionId);
+      if (!artifactRecord) {
+        throw new AppError(
+          404,
+          'NOT_FOUND',
+          'engine_actual artifact was not found for this execution.',
+        );
+      }
+
+      return reply.status(200).send(
+        formatSuccess(request, {
+          execution_id: execution.id,
+          status: execution.status,
+          artifact_pointer: artifactRecord.pointer,
+          artifact: artifactRecord.artifact,
+          finished_at: execution.finishedAt,
+        }),
+      );
+    },
+  );
 };

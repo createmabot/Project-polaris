@@ -118,6 +118,21 @@ export type InternalBacktestArtifactPointer = {
   path: string;
 };
 
+export type InternalBacktestActualArtifactPayload = {
+  trades: Array<{
+    entry_at: string;
+    entry_price: number;
+    exit_at: string;
+    exit_price: number;
+    return_percent: number;
+    holding_bars: number;
+  }>;
+  equity_curve: Array<{
+    at: string;
+    equity_index: number;
+  }>;
+};
+
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireTrimmedString(value: unknown): string | null {
@@ -692,5 +707,82 @@ export function validateDataSourceSnapshotSchema(input: unknown): InternalBackte
     fetched_at: fetchedAt,
     data_revision: dataRevision,
     bar_count: barCount,
+  };
+}
+
+export function validateEngineActualArtifactPayloadSchema(
+  input: unknown,
+): InternalBacktestActualArtifactPayload {
+  const root = asPlainObject(input);
+  if (!root) {
+    throw new Error('engine_actual_artifact must be an object.');
+  }
+
+  const tradesRaw = root.trades;
+  const equityCurveRaw = root.equity_curve;
+  if (!Array.isArray(tradesRaw) || !Array.isArray(equityCurveRaw)) {
+    throw new Error('engine_actual_artifact.trades and equity_curve must be arrays.');
+  }
+
+  const trades = tradesRaw.map((item, index) => {
+    const row = asPlainObject(item);
+    if (!row) {
+      throw new Error(`engine_actual_artifact.trades[${index}] must be an object.`);
+    }
+    const entryAt = requireTrimmedString(row.entry_at);
+    const exitAt = requireTrimmedString(row.exit_at);
+    if (!entryAt || !exitAt || !isValidIsoDateTime(entryAt) || !isValidIsoDateTime(exitAt)) {
+      throw new Error(
+        `engine_actual_artifact.trades[${index}].entry_at/exit_at must be ISO datetime.`,
+      );
+    }
+    assertFiniteNumber(
+      row.entry_price,
+      `engine_actual_artifact.trades[${index}].entry_price`,
+    );
+    assertFiniteNumber(
+      row.exit_price,
+      `engine_actual_artifact.trades[${index}].exit_price`,
+    );
+    assertFiniteNumber(
+      row.return_percent,
+      `engine_actual_artifact.trades[${index}].return_percent`,
+    );
+    const holdingBars = assertNonNegativeInteger(
+      row.holding_bars,
+      `engine_actual_artifact.trades[${index}].holding_bars`,
+    );
+    return {
+      entry_at: entryAt,
+      entry_price: row.entry_price as number,
+      exit_at: exitAt,
+      exit_price: row.exit_price as number,
+      return_percent: row.return_percent as number,
+      holding_bars: holdingBars,
+    };
+  });
+
+  const equityCurve = equityCurveRaw.map((item, index) => {
+    const row = asPlainObject(item);
+    if (!row) {
+      throw new Error(`engine_actual_artifact.equity_curve[${index}] must be an object.`);
+    }
+    const at = requireTrimmedString(row.at);
+    if (!at || !isValidIsoDateTime(at)) {
+      throw new Error(`engine_actual_artifact.equity_curve[${index}].at must be ISO datetime.`);
+    }
+    assertFiniteNumber(
+      row.equity_index,
+      `engine_actual_artifact.equity_curve[${index}].equity_index`,
+    );
+    return {
+      at,
+      equity_index: row.equity_index as number,
+    };
+  });
+
+  return {
+    trades,
+    equity_curve: equityCurve,
   };
 }

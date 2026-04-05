@@ -5,7 +5,9 @@ import {
   createExecutionArtifactPointer,
   normalizeExecutionInputSnapshot,
   validateDataSourceSnapshotSchema,
+  validateEngineActualArtifactPayloadSchema,
   validateResultSummarySchema,
+  type InternalBacktestActualArtifactPayload,
   type InternalBacktestInputSnapshot,
   type InternalBacktestArtifactPointer,
   type InternalBacktestResultSummary,
@@ -26,6 +28,7 @@ export type RunExecutionServiceInput = {
 export type RunExecutionServiceOutput = {
   resultSummary: InternalBacktestResultSummary;
   artifactPointer: InternalBacktestArtifactPointer;
+  artifactPayload?: InternalBacktestActualArtifactPayload;
   inputSnapshot: InternalBacktestInputSnapshot;
   dataSourceFetchObservation?: InternalBacktestDataSourceFetchObservation;
 };
@@ -145,6 +148,11 @@ export async function runInternalBacktestExecutionService(
       executionId: input.executionId,
       pathSuffix: engineResult.artifact_path_suffix,
     }),
+    artifactPayload: engineResult.artifact_payload
+      ? validateEngineActualArtifactPayloadSchema(
+          engineResult.artifact_payload as unknown as Prisma.InputJsonValue,
+        )
+      : undefined,
     inputSnapshot: nextInputSnapshot,
     dataSourceFetchObservation: engineResult.data_source_fetch_observation,
   };
