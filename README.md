@@ -32,13 +32,19 @@ cp .env.example .env
 docker compose up -d
 ```
 
-5. DB マイグレーションと seed（必要時）
+5. DB マイグレーションと seed（クリーン環境推奨順）
 
 ```bash
 cd backend
-pnpm exec prisma migrate dev
+pnpm exec prisma validate
+pnpm exec prisma migrate deploy
+pnpm exec prisma migrate dev --name verify_noop_after_deploy
+pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
+
+補足:
+- `prisma generate` で Windows の `EPERM ... query_engine-windows.dll.node` が出る場合は、`backend/frontend` の dev プロセスを停止してから再実行する。
 
 ### Prisma migration drift 対応手順（ローカル開発）
 `prisma migrate dev` で drift が出た場合は、以下の順で切り分ける。
