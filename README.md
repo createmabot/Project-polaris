@@ -13,6 +13,8 @@
 - Infra: Docker Compose
 
 ## セットアップ
+最短オンボーディング（5〜10分）:
+
 1. リポジトリをクローン
 2. 依存関係をインストール
 
@@ -46,29 +48,18 @@ pnpm exec prisma db seed
 補足:
 - `prisma generate` で Windows の `EPERM ... query_engine-windows.dll.node` が出る場合は、`backend/frontend` の dev プロセスを停止してから再実行する。
 
-### Prisma migration drift 対応手順（ローカル開発）
-`prisma migrate dev` で drift が出た場合は、以下の順で切り分ける。
+セットアップ docs の役割分担:
 
-1. `cd backend && npx prisma validate`
-2. `cd backend && npx prisma migrate status`
-3. `cd backend && npx prisma migrate dev`
-4. `cd backend && npx prisma migrate deploy`
+- 詳細手順の正本: [`docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`](docs/24.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E9%96%8B%E7%99%BA%E7%9D%80%E6%89%8B%E7%94%A8%20README%20%E3%82%BB%E3%83%83%E3%83%88%E3%82%A2%E3%83%83%E3%83%97%E6%89%8B%E9%A0%86%E6%9B%B8%EF%BC%88MVP%EF%BC%89.md)
+- セットアップ後チェック: [`docs/20.北極星 初期開発チェックリスト（MVP）.md`](docs/20.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E5%88%9D%E6%9C%9F%E9%96%8B%E7%99%BA%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF%E3%83%AA%E3%82%B9%E3%83%88%EF%BC%88MVP%EF%BC%89.md)
+- トラブルシュート（drift / seed / 起動）: `docs/24` の「19. よくある詰まりどころ」「Prisma drift troubleshooting（追加）」
 
-`The migration ... was modified after it was applied` のような checksum 不一致が出た場合は、  
-**repo の `schema.prisma` と `prisma/migrations/*` を正本**として、ローカル開発DBを reset して再適用する。
+### Prisma migration drift 対応（要約）
+`prisma migrate dev` で drift が出た場合は、`docs/24` の「Prisma drift troubleshooting（追加）」の手順を実行する。
 
-```bash
-cd backend
-npx prisma migrate reset --force --skip-seed
-npx prisma migrate status
-npx prisma migrate dev --name verify_noop
-npx prisma migrate deploy
-```
-
-補足:
-- reset はローカル開発DBのデータを消去するため、ローカルで再生成可能な状態に限定して実施する。
-- `migrate resolve` は最終手段とし、通常は reset + migrate 再適用を優先する。
-- Prisma 設定は `backend/prisma.config.ts` を正とし、`package.json#prisma` は利用しない。
+原則:
+- repo の `schema.prisma` と `prisma/migrations/*` を正本として扱う
+- Prisma 設定は `backend/prisma.config.ts` を正とし、`package.json#prisma` は利用しない
 
 ## よく使うコマンド
 ```bash
