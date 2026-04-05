@@ -59,3 +59,31 @@ Rules:
   1.
   2.
 - Expected verification at next review:
+
+## 6) Internal-backtests Observability (Optional)
+Use when `internal_backtest_data_source_failure_events` operation is in scope for the week.
+
+- Window checked: `24h` / `7d`
+- `DATA_SOURCE_UNAVAILABLE` total failures:
+- Top `by_reason`:
+  - `provider_http_error`:
+  - `provider_timeout`:
+  - `provider_network_error`:
+  - `provider_invalid_response`:
+  - `provider_parse_error`:
+  - `provider_not_configured`:
+  - `provider_unsupported_target`:
+- `retry_effect`:
+  - `retry_targeted_count`:
+  - `retry_attempted_count`:
+  - `retried_and_succeeded_count`:
+  - `retried_and_failed_count`:
+  - `not_retried_failed_count`:
+- Recent failure execution IDs:
+  1.
+  2.
+- 429 re-evaluation gate check:
+  - 7d 429 count `>= 5`: yes / no
+  - 429 share in `provider_http_error` `>= 20%`: yes / no
+  - 429 observed on `>= 3` separate days: yes / no
+  - Decision: keep non-retry / open re-evaluation task
