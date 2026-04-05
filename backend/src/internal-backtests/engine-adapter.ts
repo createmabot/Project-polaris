@@ -9,6 +9,11 @@ import {
   type InternalBacktestDataSourceAdapter,
 } from './data-source-adapter';
 import { createInternalBacktestMarketDataProvider } from './market-data-provider';
+import {
+  ENGINE_ACTUAL_RULE_KINDS,
+  normalizeEngineActualRuleSet,
+  type EngineActualRule,
+} from './engine-actual-rules';
 
 type EngineMetrics = {
   bar_count: number;
@@ -199,6 +204,7 @@ function buildActualMetricsFromBars(args: {
     parsePercent(args.engineConfig.slippage_percent) || parsePercent(args.engineConfig.slippage) || 0;
   const commissionRate = commissionPercent / 100;
   const slippageRate = slippagePercent / 100;
+  const ruleSet = normalizeEngineActualRuleSet(args.engineConfig);
 
   if (bars.length === 0) {
     return {
@@ -233,13 +239,55 @@ function buildActualMetricsFromBars(args: {
       }
     | undefined;
 
+  function evaluateSmaClose(index: number, period: number): number | null {
+    if (index < period - 1) return null;
+    let sum = 0;
+    const start = index - period + 1;
+    for (let j = start; j <= index; j += 1) {
+      sum += bars[j]!.close;
+    }
+    return sum / period;
+  }
+
+  function isRuleMatched(index: number, rule: EngineActualRule): boolean {
+    const currentBar = bars[index];
+    if (!currentBar) return false;
+
+    switch (rule.kind) {
+      case ENGINE_ACTUAL_RULE_KINDS.CLOSE_ABOVE_PREVIOUS_CLOSE: {
+        const previousBar = bars[index - 1];
+        if (!previousBar) return false;
+        return currentBar.close > previousBar.close;
+      }
+      case ENGINE_ACTUAL_RULE_KINDS.CLOSE_BELOW_PREVIOUS_CLOSE: {
+        const previousBar = bars[index - 1];
+        if (!previousBar) return false;
+        return currentBar.close < previousBar.close;
+      }
+      case ENGINE_ACTUAL_RULE_KINDS.PRICE_ABOVE_SMA: {
+        const sma = evaluateSmaClose(index, rule.period);
+        if (sma === null) return false;
+        return currentBar.close > sma;
+      }
+      case ENGINE_ACTUAL_RULE_KINDS.PRICE_BELOW_SMA: {
+        const sma = evaluateSmaClose(index, rule.period);
+        if (sma === null) return false;
+        return currentBar.close < sma;
+      }
+      case ENGINE_ACTUAL_RULE_KINDS.PRICE_ABOVE_THRESHOLD:
+        return currentBar.close > rule.threshold;
+      case ENGINE_ACTUAL_RULE_KINDS.PRICE_BELOW_THRESHOLD:
+        return currentBar.close < rule.threshold;
+      default:
+        return false;
+    }
+  }
+
   for (let i = 1; i < bars.length - 1; i += 1) {
-    const prevBar = bars[i - 1]!;
-    const bar = bars[i]!;
     const nextBar = bars[i + 1]!;
 
     if (!openPosition) {
-      if (bar.close > prevBar.close) {
+      if (isRuleMatched(i, ruleSet.entryRule)) {
         openPosition = {
           entryIndex: i + 1,
           entryAt: nextBar.timestamp,
@@ -249,7 +297,7 @@ function buildActualMetricsFromBars(args: {
       continue;
     }
 
-    if (bar.close < prevBar.close) {
+    if (isRuleMatched(i, ruleSet.exitRule)) {
       const exitPrice = roundTo(nextBar.open * (1 - slippageRate), 6);
       const grossReturnRate = (exitPrice - openPosition.entryPrice) / openPosition.entryPrice;
       const netReturnRate = grossReturnRate - commissionRate * 2;

@@ -585,6 +585,69 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('returns VALIDATION_ERROR for invalid engine_actual actual_rules config', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: {
+          summary_mode: 'engine_actual',
+          actual_rules: {
+            entry_rule: { kind: 'price_above_sma', period: 1 },
+            exit_rule: { kind: 'close_below_previous_close' },
+          },
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('engine_config.actual_rules.entry_rule.period');
+
+    await app.close();
+  });
+
+  it('returns VALIDATION_ERROR when engine_actual actual_rules is not an object', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: {
+          summary_mode: 'engine_actual',
+          actual_rules: ['invalid'],
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toContain('engine_config.actual_rules must be an object');
+
+    await app.close();
+  });
+
   it('returns INVALID_EXECUTION_TARGET when JP_STOCK symbol is invalid', async () => {
     const app = await createApp();
 

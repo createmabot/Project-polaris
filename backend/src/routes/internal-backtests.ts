@@ -12,6 +12,7 @@ import {
   type NormalizedCreateExecutionRequest,
 } from '../internal-backtests/contracts';
 import { getEngineActualArtifactByExecutionId } from '../internal-backtests/artifact-store';
+import { normalizeEngineActualRuleSet } from '../internal-backtests/engine-actual-rules';
 
 export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { window?: string } }>(
@@ -70,6 +71,15 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
         'INVALID_EXECUTION_TARGET',
         `execution_target.symbol is required when engine_config.summary_mode is ${requestedSummaryMode}.`,
       );
+    }
+    if (requestedSummaryMode === 'engine_actual') {
+      try {
+        normalizeEngineActualRuleSet(resolvedInput.engineConfig);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'invalid engine_config.actual_rules.';
+        throw new AppError(400, 'VALIDATION_ERROR', message);
+      }
     }
 
     const inputSnapshot = buildExecutionInputSnapshot({
