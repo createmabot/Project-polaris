@@ -60,11 +60,14 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
       typeof resolvedInput.engineConfig.summary_mode === 'string'
         ? resolvedInput.engineConfig.summary_mode.trim().toLowerCase()
         : null;
-    if (requestedSummaryMode === 'engine_estimated' && normalizedRequest.executionTarget.symbol === null) {
+    if (
+      (requestedSummaryMode === 'engine_estimated' || requestedSummaryMode === 'engine_actual') &&
+      normalizedRequest.executionTarget.symbol === null
+    ) {
       throw new AppError(
         400,
         'INVALID_EXECUTION_TARGET',
-        'execution_target.symbol is required when engine_config.summary_mode is engine_estimated.',
+        `execution_target.symbol is required when engine_config.summary_mode is ${requestedSummaryMode}.`,
       );
     }
 

@@ -344,6 +344,64 @@ describe('internal backtest worker scaffold', () => {
     });
   });
 
+  it('keeps execution succeeded with engine_actual minimal summary fields', async () => {
+    executionStore.set('ibtx-actual', createExecutionRow({ id: 'ibtx-actual', status: 'queued' }));
+
+    const result = await processInternalBacktestExecution(
+      { executionId: 'ibtx-actual' },
+      {
+        db: prismaMock,
+        runExecution: async () => ({
+          resultSummary: {
+            schema_version: '1.0',
+            summary_kind: 'engine_actual',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            period: { from: '2024-01-01', to: '2024-01-10' },
+            metrics: {
+              bar_count: 10,
+              first_close: 100,
+              last_close: 109,
+              price_change: 9,
+              price_change_percent: 9,
+              period_high: 112,
+              period_low: 98,
+              range_percent: 14.2857,
+              trade_count: 2,
+              win_rate: 50,
+              total_return_percent: 3.25,
+              max_drawdown_percent: 1.75,
+              holding_period_avg_bars: 2.5,
+              first_trade_at: '2024-01-03T00:00:00.000Z',
+              last_trade_at: '2024-01-10T00:00:00.000Z',
+            },
+            engine: { version: 'ibtx-v0' },
+            notes: 'engine_actual minimal',
+          },
+          artifactPointer: {
+            type: 'internal_backtest_execution',
+            execution_id: 'ibtx-actual',
+            path: '/internal-backtests/executions/ibtx-actual/artifacts/engine_actual/trades-and-equity',
+          },
+        }),
+      },
+    );
+
+    expect(result.status).toBe('succeeded');
+    const saved = executionStore.get('ibtx-actual');
+    expect(saved?.status).toBe('succeeded');
+    expect(saved?.resultSummaryJson).toMatchObject({
+      summary_kind: 'engine_actual',
+      metrics: {
+        trade_count: 2,
+        win_rate: 50,
+      },
+    });
+    expect(saved?.artifactPointerJson).toMatchObject({
+      path: '/internal-backtests/executions/ibtx-actual/artifacts/engine_actual/trades-and-equity',
+    });
+  });
+
   it('moves queued execution to failed and stores error on runExecution failure', async () => {
     executionStore.set('ibtx-fail', createExecutionRow({ id: 'ibtx-fail', status: 'queued' }));
 

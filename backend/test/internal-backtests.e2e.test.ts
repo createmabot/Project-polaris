@@ -517,6 +517,28 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('returns INVALID_EXECUTION_TARGET for engine_actual without execution_target.symbol', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: { summary_mode: 'engine_actual' },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    const body = res.json();
+    expect(body.error.code).toBe('INVALID_EXECUTION_TARGET');
+
+    await app.close();
+  });
+
   it('returns INVALID_EXECUTION_TARGET when JP_STOCK symbol is invalid', async () => {
     const app = await createApp();
 
