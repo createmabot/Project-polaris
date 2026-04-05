@@ -150,3 +150,40 @@ Rules:
   - PR merge state observed: `CLEAN`
 - PR cleanup:
   - Drill PR closed without merge after recovery confirmation.
+
+## 9) Internal-backtests Observability Cycle Record (2026-04-05 JST)
+- Measured at (UTC): `2026-04-05T08:09:29.588Z`
+- Scope: selective retry / observability weekly cycle check (`window=24h` and `window=7d`)
+
+### 9-1) Measured values
+- `window=24h`
+  - `total_failures`: `0`
+  - `by_reason`: none
+  - `retry_effect`:
+    - `retry_targeted_count`: `0`
+    - `retry_attempted_count`: `0`
+    - `retried_and_succeeded_count`: `0`
+    - `retried_and_failed_count`: `0`
+    - `not_retried_failed_count`: `0`
+  - `recent_failures`: none
+- `window=7d`
+  - `total_failures`: `0`
+  - `by_reason`: none
+  - `retry_effect`:
+    - `retry_targeted_count`: `0`
+    - `retry_attempted_count`: `0`
+    - `retried_and_succeeded_count`: `0`
+    - `retried_and_failed_count`: `0`
+    - `not_retried_failed_count`: `0`
+  - `recent_failures`: none
+
+### 9-2) 429 re-evaluation gate decision
+- Gate conditions:
+  1. 7d 429 count `>= 5`
+  2. 429 share in `provider_http_error` `>= 20%`
+  3. 429 observed on `>= 3` separate days
+- Result:
+  - Condition 1: `no` (`0`)
+  - Condition 2: `no` (`0/0`, treated as unmet due to no events)
+  - Condition 3: `no` (`0 day`)
+- Decision: keep `provider_http_error(429)` as non-retry.
