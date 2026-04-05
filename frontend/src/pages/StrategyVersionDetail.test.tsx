@@ -149,6 +149,7 @@ function createInternalExecutionResultData(params?: {
   summaryKind?: string;
   metricsBarCount?: number;
   snapshotBarCount?: number;
+  artifactPointerPath?: string | null;
 }) {
   const metricsBarCount = params?.metricsBarCount ?? 12;
   const firstClose = metricsBarCount > 0 ? 100 : 0;
@@ -170,10 +171,55 @@ function createInternalExecutionResultData(params?: {
         range_percent: metricsBarCount > 0 ? 12 : 0,
       },
     },
+    artifact_pointer:
+      params?.artifactPointerPath === null
+        ? null
+        : {
+            type: 'internal_backtest_engine_actual',
+            execution_id: params?.executionId ?? 'exec-1',
+            path:
+              params?.artifactPointerPath ??
+              `/api/internal-backtests/executions/${
+                params?.executionId ?? 'exec-1'
+              }/artifacts/engine_actual/trades-and-equity`,
+          },
     input_snapshot: {
       data_source_snapshot: {
         bar_count: params?.snapshotBarCount ?? metricsBarCount,
       },
+    },
+  };
+}
+
+function createInternalExecutionArtifactData(params?: {
+  executionId?: string;
+  tradesCount?: number;
+  equityCount?: number;
+}) {
+  const executionId = params?.executionId ?? 'exec-1';
+  const tradesCount = params?.tradesCount ?? 2;
+  const equityCount = params?.equityCount ?? 3;
+  return {
+    execution_id: executionId,
+    status: 'succeeded',
+    artifact_pointer: {
+      type: 'internal_backtest_engine_actual',
+      execution_id: executionId,
+      path: `/api/internal-backtests/executions/${executionId}/artifacts/engine_actual/trades-and-equity`,
+    },
+    artifact: {
+      trades: Array.from({ length: tradesCount }).map((_, index) => ({
+        entry_at: `2025-01-${String(index + 1).padStart(2, '0')}`,
+        entry_price: 100 + index,
+        exit_at: `2025-01-${String(index + 2).padStart(2, '0')}`,
+        exit_price: 101 + index,
+        return_percent: 1 + index,
+        holding_bars: 1 + index,
+      })),
+      equity_curve: Array.from({ length: equityCount }).map((_, index) => ({
+        at: `2025-01-${String(index + 1).padStart(2, '0')}`,
+        equity_index: 100 + index,
+      })),
     },
   };
 }
@@ -183,6 +229,8 @@ function setupSWR(
   listPayload = createListPayload(),
   internalStatusData: ReturnType<typeof createInternalExecutionStatusData> | null = null,
   internalResultData: ReturnType<typeof createInternalExecutionResultData> | null = null,
+  internalArtifactData: ReturnType<typeof createInternalExecutionArtifactData> | null = null,
+  internalArtifactError: { message: string; code?: string } | null = null,
 ) {
   mockUseSWR.mockImplementation((key: string) => {
     if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
@@ -207,6 +255,18 @@ function setupSWR(
         error: null,
         mutate: vi.fn(),
         data: internalResultData,
+      };
+    }
+    if (
+      typeof key === 'string' &&
+      key.startsWith('/api/internal-backtests/executions/') &&
+      key.includes('/artifacts/engine_actual/trades-and-equity')
+    ) {
+      return {
+        isLoading: false,
+        error: internalArtifactError,
+        mutate: vi.fn(),
+        data: internalArtifactData,
       };
     }
     if (typeof key === 'string' && key.startsWith('/api/internal-backtests/executions/')) {
@@ -395,5 +455,125 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('判定カテゴリ:</strong> <code>success_with_data</code>');
     expect(html).toContain('<div style="font-weight:600;margin-bottom:0.35rem">metrics</div>');
     expect(html).toContain('bar_count: 12');
+  });
+
+  it('shows engine_actual artifact trades and equity when execution succeeded', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-success', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-success', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-success',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 5,
+        snapshotBarCount: 5,
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-success',
+        tradesCount: 2,
+        equityCount: 3,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('engine_actual artifact（最小）');
+    expect(html).toContain('data-testid="engine-actual-artifact-trades"');
+    expect(html).toContain('entry_at');
+    expect(html).toContain('data-testid="engine-actual-artifact-equity"');
+    expect(html).toContain('equity_index');
+  });
+
+  it('shows engine_actual no-trade artifact as non-error empty state', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-empty', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-empty', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-empty',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 0,
+        snapshotBarCount: 0,
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-empty',
+        tradesCount: 0,
+        equityCount: 0,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-no-trade"');
+    expect(html).toContain('no-trade（trades は 0 件）です。');
+    expect(html).toContain('data-testid="engine-actual-artifact-equity-empty"');
+    expect(html).not.toContain('data-testid="engine-actual-artifact-error"');
+  });
+
+  it('shows RESULT_NOT_READY state for engine_actual artifact read', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-not-ready', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-not-ready', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-not-ready',
+        summaryKind: 'engine_actual',
+      }),
+      null,
+      { message: 'RESULT_NOT_READY', code: 'RESULT_NOT_READY' },
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-not-ready"');
+    expect(html).toContain('artifact はまだ利用できません（RESULT_NOT_READY）。');
+  });
+
+  it('shows NOT_FOUND state for engine_actual artifact read', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-not-found', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-not-found', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-not-found',
+        summaryKind: 'engine_actual',
+      }),
+      null,
+      { message: 'NOT_FOUND', code: 'NOT_FOUND' },
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-not-found"');
+    expect(html).toContain('artifact は見つかりません（NOT_FOUND）。');
+  });
+
+  it('shows generic fetch error state for engine_actual artifact read', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-fetch-error', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-fetch-error', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-fetch-error',
+        summaryKind: 'engine_actual',
+      }),
+      null,
+      { message: 'network failed' },
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-error"');
+    expect(html).toContain('artifact 取得に失敗しました: network failed');
   });
 });
