@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
 import {
+  InternalBacktestEngineActualArtifactData,
   InternalBacktestExecutionCreateData,
   InternalBacktestExecutionResultData,
   InternalBacktestExecutionStatusData,
@@ -154,6 +155,22 @@ function parseInternalExecutionId(locationPath: string): string | null {
   const params = new URLSearchParams(search);
   const rawExecutionId = (params.get('internalExecutionId') ?? '').trim();
   return rawExecutionId.length > 0 ? rawExecutionId : null;
+}
+
+function resolveEngineActualArtifactApiPath(
+  executionId: string,
+  artifactPointerPath: unknown,
+): string {
+  if (typeof artifactPointerPath === 'string' && artifactPointerPath.trim().length > 0) {
+    const trimmed = artifactPointerPath.trim();
+    if (trimmed.startsWith('/api/')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/internal-backtests/')) {
+      return `/api${trimmed}`;
+    }
+  }
+  return `/api/internal-backtests/executions/${executionId}/artifacts/engine_actual/trades-and-equity`;
 }
 
 function getDefaultDateRangeForInternalBacktest() {
@@ -381,6 +398,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     internalExecutionResultApiPath,
     swrFetcher,
   );
+  const isEngineActualResult = internalExecutionResultData?.result_summary?.summary_kind === 'engine_actual';
+  const internalEngineActualArtifactApiPath = internalExecutionId && internalExecutionStatus === 'succeeded' && isEngineActualResult
+    ? resolveEngineActualArtifactApiPath(internalExecutionId, internalExecutionResultData?.artifact_pointer?.path)
+    : null;
+  const {
+    data: internalEngineActualArtifactData,
+    error: internalEngineActualArtifactError,
+    isLoading: internalEngineActualArtifactLoading,
+  } = useSWR<InternalBacktestEngineActualArtifactData>(internalEngineActualArtifactApiPath, swrFetcher);
+  const internalEngineActualArtifactErrorCode =
+    (internalEngineActualArtifactError as { code?: string } | null)?.code ?? null;
+  const isEngineActualArtifactNotReady = internalEngineActualArtifactErrorCode === 'RESULT_NOT_READY';
+  const isEngineActualArtifactNotFound = internalEngineActualArtifactErrorCode === 'NOT_FOUND';
   const internalExecutionViewModel = useMemo(
     () =>
       getInternalBacktestResultViewModel({
@@ -794,6 +824,102 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               <div>price_change_percent: {internalExecutionResultData.result_summary.metrics.price_change_percent}</div>
               <div>range_percent: {internalExecutionResultData.result_summary.metrics.range_percent}</div>
             </div>
+          </div>
+        )}
+
+        {isEngineActualResult && (
+          <div
+            data-testid='engine-actual-artifact-section'
+            style={{ marginTop: '0.75rem', padding: '0.65rem', borderRadius: '4px', background: '#fff', border: '1px solid #ececec' }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>engine_actual artifact（最小）</div>
+            {internalEngineActualArtifactLoading && (
+              <div data-testid='engine-actual-artifact-loading' style={{ color: '#444' }}>artifact を読み込み中です。</div>
+            )}
+            {!internalEngineActualArtifactLoading && internalEngineActualArtifactData && (
+              <div style={{ display: 'grid', gap: '0.6rem' }}>
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>
+                    trades ({internalEngineActualArtifactData.artifact.trades.length})
+                  </div>
+                  {internalEngineActualArtifactData.artifact.trades.length === 0 ? (
+                    <div data-testid='engine-actual-artifact-no-trade' style={{ color: '#1f6a1f' }}>
+                      no-trade（trades は 0 件）です。
+                    </div>
+                  ) : (
+                    <table data-testid='engine-actual-artifact-trades' style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>entry_at</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>entry_price</th>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>exit_at</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>exit_price</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>return_percent</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>holding_bars</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {internalEngineActualArtifactData.artifact.trades.slice(0, 20).map((trade, index) => (
+                          <tr key={`${trade.entry_at}-${trade.exit_at}-${index}`}>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>{trade.entry_at}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>{trade.entry_price}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>{trade.exit_at}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>{trade.exit_price}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>{trade.return_percent}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>{trade.holding_bars}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>
+                    equity_curve ({internalEngineActualArtifactData.artifact.equity_curve.length})
+                  </div>
+                  {internalEngineActualArtifactData.artifact.equity_curve.length === 0 ? (
+                    <div data-testid='engine-actual-artifact-equity-empty' style={{ color: '#555' }}>
+                      equity_curve は 0 件です。
+                    </div>
+                  ) : (
+                    <table data-testid='engine-actual-artifact-equity' style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>at</th>
+                          <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>equity_index</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {internalEngineActualArtifactData.artifact.equity_curve.slice(0, 20).map((point, index) => (
+                          <tr key={`${point.at}-${index}`}>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>{point.at}</td>
+                            <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>{point.equity_index}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            )}
+            {!internalEngineActualArtifactLoading && isEngineActualArtifactNotReady && (
+              <div data-testid='engine-actual-artifact-not-ready' style={{ color: '#0a4a99' }}>
+                artifact はまだ利用できません（RESULT_NOT_READY）。
+              </div>
+            )}
+            {!internalEngineActualArtifactLoading && isEngineActualArtifactNotFound && (
+              <div data-testid='engine-actual-artifact-not-found' style={{ color: '#9a4d00' }}>
+                artifact は見つかりません（NOT_FOUND）。
+              </div>
+            )}
+            {!internalEngineActualArtifactLoading &&
+              internalEngineActualArtifactError &&
+              !isEngineActualArtifactNotReady &&
+              !isEngineActualArtifactNotFound && (
+                <div data-testid='engine-actual-artifact-error' style={{ color: '#a10000' }}>
+                  artifact 取得に失敗しました: {internalEngineActualArtifactError.message}
+                </div>
+              )}
           </div>
         )}
 

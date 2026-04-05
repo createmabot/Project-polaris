@@ -497,3 +497,29 @@ export type InternalBacktestExecutionResultData = {
   finished_at?: string | null;
 };
 
+export type InternalBacktestEngineActualArtifactData = {
+  execution_id: string;
+  status: 'succeeded' | string;
+  artifact_pointer?: {
+    type?: string;
+    execution_id?: string;
+    path?: string;
+    [key: string]: unknown;
+  } | null;
+  artifact: {
+    trades: Array<{
+      entry_at: string;
+      entry_price: number;
+      exit_at: string;
+      exit_price: number;
+      return_percent: number;
+      holding_bars: number;
+    }>;
+    equity_curve: Array<{
+      at: string;
+      equity_index: number;
+    }>;
+  };
+  finished_at?: string | null;
+};
+
