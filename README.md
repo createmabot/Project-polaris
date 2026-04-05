@@ -32,11 +32,14 @@ cp .env.example .env
 docker compose up -d
 ```
 
-5. DB マイグレーションと seed（必要時）
+5. DB マイグレーションと seed（クリーン環境推奨順）
 
 ```bash
 cd backend
-pnpm exec prisma migrate dev
+pnpm exec prisma validate
+pnpm exec prisma migrate deploy
+pnpm exec prisma migrate dev --name verify_noop_after_deploy
+pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
 
