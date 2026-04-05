@@ -53,6 +53,7 @@ pnpm exec prisma db seed
 - 詳細手順の正本: [`docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`](docs/24.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E9%96%8B%E7%99%BA%E7%9D%80%E6%89%8B%E7%94%A8%20README%20%E3%82%BB%E3%83%83%E3%83%88%E3%82%A2%E3%83%83%E3%83%97%E6%89%8B%E9%A0%86%E6%9B%B8%EF%BC%88MVP%EF%BC%89.md)
 - セットアップ後チェック: [`docs/20.北極星 初期開発チェックリスト（MVP）.md`](docs/20.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E5%88%9D%E6%9C%9F%E9%96%8B%E7%99%BA%E3%83%81%E3%82%A7%E3%83%83%E3%82%AF%E3%83%AA%E3%82%B9%E3%83%88%EF%BC%88MVP%EF%BC%89.md)
 - トラブルシュート（drift / seed / 起動）: `docs/24` の「19. よくある詰まりどころ」「Prisma drift troubleshooting（追加）」
+- 1ページ版クイックスタート docs は現時点で新設せず、本 README を最短入口（クイックスタート）として維持する。
 
 ### Prisma migration drift 対応（要約）
 `prisma migrate dev` で drift が出た場合は、`docs/24` の「Prisma drift troubleshooting（追加）」の手順を実行する。
