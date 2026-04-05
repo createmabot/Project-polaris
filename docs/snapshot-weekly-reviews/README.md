@@ -40,3 +40,25 @@ Manual fallback:
 - See runbook in root `README.md` section:
   - `Required-check failure drill（運用確認）`
 - Record drill date/result in the weekly review log when executed.
+
+## Internal-backtests observability weekly check (minimum)
+- Endpoint:
+  - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`
+- Weekly required fields:
+  - `total_failures`
+  - `by_reason`
+  - `retry_effect`:
+    - `retry_targeted_count`
+    - `retry_attempted_count`
+    - `retried_and_succeeded_count`
+    - `retried_and_failed_count`
+    - `not_retried_failed_count`
+  - `recent_failures`
+- Window usage:
+  - `24h`: current-state check
+  - `7d`: trend and re-evaluation gate check
+- `provider_http_error(429)` re-evaluation gate (all required):
+  1. 429 count in `window=7d` is `>= 5`
+  2. 429 share in `provider_http_error` is `>= 20%`
+  3. 429 appears on `>= 3` separate days in the week
+- If the gate is not met, keep 429 as non-retry and record the reason in the weekly review.

@@ -128,6 +128,21 @@ pnpm run down
   - consumer 向け outward error code は常に `DATA_SOURCE_UNAVAILABLE` のまま
   - internal reason code は運用切り分け専用（UI/public API 契約は変更しない）
 
+#### internal-backtests observability 週次確認（最小）
+- 毎週確認する項目:
+  - `total_failures`
+  - `by_reason`
+  - `retry_effect`（`retry_targeted_count`, `retry_attempted_count`, `retried_and_succeeded_count`, `retried_and_failed_count`, `not_retried_failed_count`）
+  - `recent_failures`
+- `window` の使い分け:
+  - `24h`: 直近状態の一次判断
+  - `7d`: 反復傾向の判断
+- `provider_http_error(429)` の再判定条件（全条件一致時のみ検討）:
+  1. `window=7d` で 429 件数 `>= 5`
+  2. 429 件数が `provider_http_error` 全体の `>= 20%`
+  3. 429 発生日が週内 `>= 3日`
+- 上記未達時は 429 非対象を維持し、週次レビューへ理由を記録する。
+
 ### ルール version 再閲覧（MVP最小）
 - API:
   - `GET /api/strategies/:strategyId/versions`
