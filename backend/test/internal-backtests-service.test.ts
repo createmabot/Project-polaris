@@ -233,6 +233,111 @@ describe('internal backtest execution service contracts', () => {
     expect(estimatedOutput.inputSnapshot.data_source_snapshot?.bar_count).toBeGreaterThan(0);
   });
 
+  it('returns engine_actual summary with minimal trade metrics and artifact path', async () => {
+    const output = await runInternalBacktestExecutionService({
+      executionId: 'ibtx-actual-1',
+      strategyRuleVersionId: 'ver-1',
+      engineVersion: 'ibtx-v0',
+      inputSnapshotJson: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2024-01-20' },
+        engine_config: { summary_mode: 'engine_actual', commission_percent: 0, slippage_percent: 0 },
+        strategy_snapshot: {
+          natural_language_rule: 'rule',
+          generated_pine: 'strategy("x")',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+        },
+      },
+    });
+
+    expect(output.resultSummary.summary_kind).toBe('engine_actual');
+    expect(output.resultSummary.metrics.bar_count).toBe(20);
+    expect(output.resultSummary.metrics.trade_count).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.win_rate).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.total_return_percent).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.max_drawdown_percent).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.holding_period_avg_bars).toBeTypeOf('number');
+    expect(output.artifactPointer).toMatchObject({
+      type: 'internal_backtest_execution',
+      execution_id: 'ibtx-actual-1',
+      path: '/internal-backtests/executions/ibtx-actual-1/artifacts/engine_actual/trades-and-equity',
+    });
+    expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(20);
+  });
+
+  it('keeps engine_actual succeeded with no-trade summary when bars are empty', async () => {
+    const engineAdapter = createDummyInternalBacktestEngineAdapter({
+      fetchDailyOhlcv: async () => ({
+        bars: [],
+        snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-10',
+          fetched_at: '2024-01-10T00:00:00.000Z',
+          data_revision: 'stub-zero-bars',
+          bar_count: 0,
+        },
+        fetchObservation: {
+          providerName: 'stub',
+          internalReasonCode: null,
+          retryTarget: false,
+          retryAttempted: false,
+          retryAttempts: 1,
+          httpStatus: null,
+          endpointKind: 'stub_daily_ohlcv',
+        },
+      }),
+    });
+
+    const output = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-zero-bars',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-10' },
+          engine_config: { summary_mode: 'engine_actual' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(output.resultSummary.summary_kind).toBe('engine_actual');
+    expect(output.resultSummary.metrics).toMatchObject({
+      bar_count: 0,
+      trade_count: 0,
+      win_rate: 0,
+      total_return_percent: 0,
+      max_drawdown_percent: 0,
+      holding_period_avg_bars: 0,
+    });
+    expect(output.resultSummary.metrics.first_trade_at).toBeNull();
+    expect(output.resultSummary.metrics.last_trade_at).toBeNull();
+    expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(0);
+  });
+
   it('builds engine_estimated metrics from normalized bars deterministically', async () => {
     const inputSnapshot = {
       strategy_rule_version_id: 'ver-1',
@@ -322,6 +427,29 @@ describe('internal backtest execution service contracts', () => {
           timeframe: 'D',
           data_range: { from: '2024-01-01', to: '2025-12-31' },
           engine_config: { summary_mode: 'engine_estimated' },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy(\"x\")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_EXECUTION_TARGET' });
+  });
+
+  it('fails with INVALID_EXECUTION_TARGET when actual mode has no execution_target.symbol', async () => {
+    await expect(
+      runInternalBacktestExecutionService({
+        executionId: 'ibtx-actual-no-target',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          data_range: { from: '2024-01-01', to: '2025-12-31' },
+          engine_config: { summary_mode: 'engine_actual' },
           strategy_snapshot: {
             natural_language_rule: 'rule',
             generated_pine: 'strategy(\"x\")',

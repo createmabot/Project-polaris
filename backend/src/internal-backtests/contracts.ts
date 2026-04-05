@@ -77,6 +77,13 @@ export type InternalBacktestResultSummary = {
     period_high: number;
     period_low: number;
     range_percent: number;
+    trade_count?: number;
+    win_rate?: number;
+    total_return_percent?: number;
+    max_drawdown_percent?: number;
+    holding_period_avg_bars?: number;
+    first_trade_at?: string | null;
+    last_trade_at?: string | null;
   };
   engine: {
     version: string;
@@ -468,11 +475,16 @@ export function createDefaultResultSummary(args: {
 
 export function createExecutionArtifactPointer(args: {
   executionId: string;
+  pathSuffix?: string;
 }): InternalBacktestArtifactPointer {
+  const pathSuffix =
+    typeof args.pathSuffix === 'string' && args.pathSuffix.trim().length > 0
+      ? args.pathSuffix.trim()
+      : '';
   return {
     type: 'internal_backtest_execution',
     execution_id: args.executionId,
-    path: `/internal-backtests/executions/${args.executionId}`,
+    path: `/internal-backtests/executions/${args.executionId}${pathSuffix}`,
   };
 }
 
@@ -518,6 +530,63 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
   assertFiniteNumber(metrics.period_high, 'result_summary.metrics.period_high');
   assertFiniteNumber(metrics.period_low, 'result_summary.metrics.period_low');
   assertFiniteNumber(metrics.range_percent, 'result_summary.metrics.range_percent');
+  const optionalTradeCount =
+    metrics.trade_count === undefined
+      ? undefined
+      : assertNonNegativeInteger(metrics.trade_count, 'result_summary.metrics.trade_count');
+  const optionalWinRate =
+    metrics.win_rate === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(metrics.win_rate, 'result_summary.metrics.win_rate');
+          return metrics.win_rate as number;
+        })();
+  const optionalTotalReturnPercent =
+    metrics.total_return_percent === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(
+            metrics.total_return_percent,
+            'result_summary.metrics.total_return_percent',
+          );
+          return metrics.total_return_percent as number;
+        })();
+  const optionalMaxDrawdownPercent =
+    metrics.max_drawdown_percent === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(
+            metrics.max_drawdown_percent,
+            'result_summary.metrics.max_drawdown_percent',
+          );
+          return metrics.max_drawdown_percent as number;
+        })();
+  const optionalHoldingPeriodAvgBars =
+    metrics.holding_period_avg_bars === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(
+            metrics.holding_period_avg_bars,
+            'result_summary.metrics.holding_period_avg_bars',
+          );
+          return metrics.holding_period_avg_bars as number;
+        })();
+  const optionalFirstTradeAtRaw = metrics.first_trade_at;
+  const optionalLastTradeAtRaw = metrics.last_trade_at;
+  const optionalFirstTradeAt =
+    optionalFirstTradeAtRaw === undefined || optionalFirstTradeAtRaw === null
+      ? optionalFirstTradeAtRaw ?? undefined
+      : requireTrimmedString(optionalFirstTradeAtRaw);
+  const optionalLastTradeAt =
+    optionalLastTradeAtRaw === undefined || optionalLastTradeAtRaw === null
+      ? optionalLastTradeAtRaw ?? undefined
+      : requireTrimmedString(optionalLastTradeAtRaw);
+  if (optionalFirstTradeAt && !isValidIsoDateTime(optionalFirstTradeAt)) {
+    throw new Error('result_summary.metrics.first_trade_at must be valid ISO datetime or null.');
+  }
+  if (optionalLastTradeAt && !isValidIsoDateTime(optionalLastTradeAt)) {
+    throw new Error('result_summary.metrics.last_trade_at must be valid ISO datetime or null.');
+  }
 
   const engine = asPlainObject(root.engine);
   const engineVersion = requireTrimmedString(engine?.version);
@@ -542,6 +611,19 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
       period_high: metrics.period_high as number,
       period_low: metrics.period_low as number,
       range_percent: metrics.range_percent as number,
+      ...(optionalTradeCount !== undefined ? { trade_count: optionalTradeCount } : {}),
+      ...(optionalWinRate !== undefined ? { win_rate: optionalWinRate } : {}),
+      ...(optionalTotalReturnPercent !== undefined
+        ? { total_return_percent: optionalTotalReturnPercent }
+        : {}),
+      ...(optionalMaxDrawdownPercent !== undefined
+        ? { max_drawdown_percent: optionalMaxDrawdownPercent }
+        : {}),
+      ...(optionalHoldingPeriodAvgBars !== undefined
+        ? { holding_period_avg_bars: optionalHoldingPeriodAvgBars }
+        : {}),
+      ...(optionalFirstTradeAtRaw !== undefined ? { first_trade_at: optionalFirstTradeAt ?? null } : {}),
+      ...(optionalLastTradeAtRaw !== undefined ? { last_trade_at: optionalLastTradeAt ?? null } : {}),
     },
     engine: {
       version: engineVersion,

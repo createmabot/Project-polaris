@@ -62,6 +62,19 @@ function mergeEngineResult(args: {
       period_high: metrics.period_high ?? args.base.metrics.period_high,
       period_low: metrics.period_low ?? args.base.metrics.period_low,
       range_percent: metrics.range_percent ?? args.base.metrics.range_percent,
+      ...(metrics.trade_count !== undefined ? { trade_count: metrics.trade_count } : {}),
+      ...(metrics.win_rate !== undefined ? { win_rate: metrics.win_rate } : {}),
+      ...(metrics.total_return_percent !== undefined
+        ? { total_return_percent: metrics.total_return_percent }
+        : {}),
+      ...(metrics.max_drawdown_percent !== undefined
+        ? { max_drawdown_percent: metrics.max_drawdown_percent }
+        : {}),
+      ...(metrics.holding_period_avg_bars !== undefined
+        ? { holding_period_avg_bars: metrics.holding_period_avg_bars }
+        : {}),
+      ...(metrics.first_trade_at !== undefined ? { first_trade_at: metrics.first_trade_at } : {}),
+      ...(metrics.last_trade_at !== undefined ? { last_trade_at: metrics.last_trade_at } : {}),
     },
     notes,
   };
@@ -86,9 +99,12 @@ export async function runInternalBacktestExecutionService(
     typeof normalizedInput.engineConfig.summary_mode === 'string'
       ? normalizedInput.engineConfig.summary_mode.trim().toLowerCase()
       : null;
-  if (requestedSummaryMode === 'engine_estimated' && normalizedInput.executionTarget.symbol.startsWith('legacy:')) {
+  if (
+    (requestedSummaryMode === 'engine_estimated' || requestedSummaryMode === 'engine_actual') &&
+    normalizedInput.executionTarget.symbol.startsWith('legacy:')
+  ) {
     throw new InvalidExecutionTargetError(
-      'engine_estimated requires execution_target.symbol for data source resolution.',
+      `${requestedSummaryMode} requires execution_target.symbol for data source resolution.`,
     );
   }
 
@@ -125,7 +141,10 @@ export async function runInternalBacktestExecutionService(
 
   return {
     resultSummary: validatedSummary,
-    artifactPointer: createExecutionArtifactPointer({ executionId: input.executionId }),
+    artifactPointer: createExecutionArtifactPointer({
+      executionId: input.executionId,
+      pathSuffix: engineResult.artifact_path_suffix,
+    }),
     inputSnapshot: nextInputSnapshot,
     dataSourceFetchObservation: engineResult.data_source_fetch_observation,
   };
