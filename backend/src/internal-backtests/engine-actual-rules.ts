@@ -118,7 +118,11 @@ function parseRule(
 export function normalizeEngineActualRuleSet(
   engineConfig: PlainObject,
 ): EngineActualRuleSet {
+  const hasActualRules = Object.prototype.hasOwnProperty.call(engineConfig, 'actual_rules');
   const actualRulesRaw = asObject(engineConfig.actual_rules);
+  if (hasActualRules && !actualRulesRaw) {
+    throw new Error('engine_config.actual_rules must be an object.');
+  }
   if (!actualRulesRaw) {
     return DEFAULT_ENGINE_ACTUAL_RULE_SET;
   }
