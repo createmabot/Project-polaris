@@ -92,6 +92,7 @@ pnpm run down
   - provider fetch には selective retry（最小）を導入:
     - retry対象: `provider_timeout` / `provider_network_error` / `provider_http_error(5xx)`
     - retry非対象: `provider_parse_error` / `provider_invalid_response` / `provider_not_configured` / `provider_unsupported_target` / `provider_http_error(4xx)`
+    - `provider_http_error(429)` は現時点観測（24h/7d）で改善根拠が不足するため非対象維持
     - 追加試行は 1 回のみ（最大 2 試行）、最終失敗時の outward 契約は従来どおり `DATA_SOURCE_UNAVAILABLE`
   - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
   - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
