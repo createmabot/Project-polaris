@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -150,6 +150,15 @@ function createInternalExecutionResultData(params?: {
   metricsBarCount?: number;
   snapshotBarCount?: number;
   artifactPointerPath?: string | null;
+  // engine_actual 固有
+  tradeCount?: number | null;
+  winRate?: number | null;
+  totalReturnPercent?: number | null;
+  maxDrawdownPercent?: number | null;
+  holdingPeriodAvgBars?: number | null;
+  firstTradeAt?: string | null;
+  lastTradeAt?: string | null;
+  actualRules?: Array<{ kind: string; [key: string]: unknown }> | null;
 }) {
   const metricsBarCount = params?.metricsBarCount ?? 12;
   const firstClose = metricsBarCount > 0 ? 100 : 0;
@@ -169,6 +178,14 @@ function createInternalExecutionResultData(params?: {
         period_high: metricsBarCount > 0 ? 110 : 0,
         period_low: metricsBarCount > 0 ? 98 : 0,
         range_percent: metricsBarCount > 0 ? 12 : 0,
+        // engine_actual 固有（optional）
+        trade_count: params?.tradeCount ?? null,
+        win_rate: params?.winRate ?? null,
+        total_return_percent: params?.totalReturnPercent ?? null,
+        max_drawdown_percent: params?.maxDrawdownPercent ?? null,
+        holding_period_avg_bars: params?.holdingPeriodAvgBars ?? null,
+        first_trade_at: params?.firstTradeAt ?? null,
+        last_trade_at: params?.lastTradeAt ?? null,
       },
     },
     artifact_pointer:
@@ -187,6 +204,7 @@ function createInternalExecutionResultData(params?: {
       data_source_snapshot: {
         bar_count: params?.snapshotBarCount ?? metricsBarCount,
       },
+      actual_rules: params?.actualRules ?? null,
     },
   };
 }
@@ -575,5 +593,115 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-error"');
     expect(html).toContain('artifact 取得に失敗しました: network failed');
+  });
+
+  it('shows engine_actual summary card with trade metrics and rule pattern', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-with-metrics', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-with-metrics', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-with-metrics',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 50,
+        snapshotBarCount: 50,
+        tradeCount: 8,
+        winRate: 62.5,
+        totalReturnPercent: 8.34,
+        maxDrawdownPercent: -5.12,
+        holdingPeriodAvgBars: 3,
+        firstTradeAt: '2025-01-05',
+        lastTradeAt: '2025-03-28',
+        actualRules: [{ kind: 'price_above_sma', period: 25 }],
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-with-metrics',
+        tradesCount: 8,
+        equityCount: 50,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    // summary card 表示
+    expect(html).toContain('data-testid="engine-actual-summary-card"');
+    expect(html).toContain('実行サマリー');
+    // rule パターン
+    expect(html).toContain('data-testid="engine-actual-rule-pattern"');
+    expect(html).toContain('price_above_sma (period=25)');
+    // 主要指標
+    expect(html).toContain('data-testid="engine-actual-trade-count"');
+    expect(html).toContain('>8<');
+    expect(html).toContain('data-testid="engine-actual-win-rate"');
+    expect(html).toContain('62.5%');
+    expect(html).toContain('data-testid="engine-actual-total-return"');
+    expect(html).toContain('+8.34%');
+    expect(html).toContain('data-testid="engine-actual-max-drawdown"');
+    expect(html).toContain('-5.12%');
+    // オプショナル項目
+    expect(html).toContain('3 bar');
+    expect(html).toContain('2025-01-05');
+    expect(html).toContain('2025-03-28');
+    // 既存 artifact テーブルも維持
+    expect(html).toContain('data-testid="engine-actual-artifact-trades"');
+    expect(html).toContain('data-testid="engine-actual-artifact-equity"');
+  });
+
+  it('shows engine_actual summary card with default rule label when actual_rules is null', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-default-rule', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-default-rule', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-default-rule',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 30,
+        tradeCount: 3,
+        winRate: 66.7,
+        totalReturnPercent: 4.0,
+        maxDrawdownPercent: -2.0,
+        actualRules: null,
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-default-rule',
+        tradesCount: 3,
+        equityCount: 30,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-summary-card"');
+    expect(html).toContain('data-testid="engine-actual-rule-pattern"');
+    expect(html).toContain('>default<');
+  });
+
+  it('engine_estimated display is not broken after engine_actual summary card addition', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-estimated-regression', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-estimated-regression', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-estimated-regression',
+        summaryKind: 'engine_estimated',
+        metricsBarCount: 12,
+        snapshotBarCount: 12,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    // engine_estimated 表示は変わらない
+    expect(html).toContain('判定カテゴリ:</strong> <code>success_with_data</code>');
+    expect(html).toContain('<div style="font-weight:600;margin-bottom:0.35rem">metrics</div>');
+    expect(html).toContain('bar_count: 12');
+    // engine_actual summary card は表示されない（該当 execution が engine_actual でないため）
+    expect(html).not.toContain('data-testid="engine-actual-summary-card"');
   });
 });

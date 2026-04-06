@@ -1,4 +1,4 @@
-﻿// Defines the frontend response shape mimicking docs/3
+// Defines the frontend response shape mimicking docs/3
 
 export type ApiResponse<T> = {
   data: T | null;
@@ -483,6 +483,14 @@ export type InternalBacktestExecutionResultData = {
       period_high: number;
       period_low: number;
       range_percent: number;
+      // engine_actual 専用（optional）
+      trade_count?: number | null;
+      win_rate?: number | null;
+      total_return_percent?: number | null;
+      max_drawdown_percent?: number | null;
+      holding_period_avg_bars?: number | null;
+      first_trade_at?: string | null;
+      last_trade_at?: string | null;
     };
   };
   input_snapshot?: {
@@ -490,6 +498,11 @@ export type InternalBacktestExecutionResultData = {
       bar_count?: number;
       [key: string]: unknown;
     };
+    // engine_actual で使用するルール設定（optional）
+    actual_rules?: Array<{
+      kind: string;
+      [key: string]: unknown;
+    }> | null;
     [key: string]: unknown;
   } | null;
   artifact_pointer?: Record<string, unknown> | null;

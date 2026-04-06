@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -11,6 +11,7 @@ import {
   StrategyVersionListData,
 } from '../api/types';
 import {
+  buildEngineActualSummaryDisplay,
   getInternalBacktestMessageText,
   getInternalBacktestResultViewModel,
 } from './internalBacktestResultViewModel';
@@ -425,6 +426,20 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const internalExecutionMessageText = getInternalBacktestMessageText(
     internalExecutionViewModel.recommendedMessageKey,
   );
+  const engineActualSummaryDisplay = useMemo(() => {
+    if (!isEngineActualResult || !internalEngineActualArtifactData) {
+      return null;
+    }
+    return buildEngineActualSummaryDisplay(
+      internalExecutionResultData?.result_summary?.metrics,
+      (internalExecutionResultData?.input_snapshot as { actual_rules?: Array<{ kind: string; [key: string]: unknown }> | null } | null | undefined)?.actual_rules,
+    );
+  }, [
+    isEngineActualResult,
+    internalEngineActualArtifactData,
+    internalExecutionResultData?.result_summary?.metrics,
+    internalExecutionResultData?.input_snapshot,
+  ]);
 
   useEffect(() => {
     setInternalExecutionId(parseInternalExecutionId(location));
@@ -833,6 +848,88 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             style={{ marginTop: '0.75rem', padding: '0.65rem', borderRadius: '4px', background: '#fff', border: '1px solid #ececec' }}
           >
             <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>engine_actual artifact（最小）</div>
+
+            {/* summary card: artifact 取得成功時のみ先頭に表示 */}
+            {!internalEngineActualArtifactLoading && internalEngineActualArtifactData && engineActualSummaryDisplay && (
+              <div
+                data-testid='engine-actual-summary-card'
+                style={{
+                  marginBottom: '0.75rem',
+                  padding: '0.6rem 0.8rem',
+                  borderRadius: '4px',
+                  background: '#f5f8ff',
+                  border: '1px solid #c5d8f8',
+                }}
+              >
+                <div style={{ fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.9rem', color: '#0a3d7a' }}>実行サマリー</div>
+                <div style={{ marginBottom: '0.35rem', fontSize: '0.88rem', color: '#333' }}>
+                  <strong>ルールパターン: </strong>
+                  <span data-testid='engine-actual-rule-pattern'>{engineActualSummaryDisplay.rulePatternLabel}</span>
+                </div>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(2, minmax(160px, 1fr))',
+                    gap: '0.2rem 0.8rem',
+                    fontSize: '0.88rem',
+                  }}
+                >
+                  <div>
+                    取引数:{' '}
+                    <strong data-testid='engine-actual-trade-count'>
+                      {engineActualSummaryDisplay.tradeCount !== null ? engineActualSummaryDisplay.tradeCount : '-'}
+                    </strong>
+                  </div>
+                  <div>
+                    勝率:{' '}
+                    <strong data-testid='engine-actual-win-rate'>
+                      {engineActualSummaryDisplay.winRatePct ?? '-'}
+                    </strong>
+                  </div>
+                  <div>
+                    総リターン:{' '}
+                    <strong
+                      data-testid='engine-actual-total-return'
+                      style={{
+                        color:
+                          engineActualSummaryDisplay.totalReturnPct !== null
+                            ? engineActualSummaryDisplay.totalReturnPct.startsWith('+')
+                              ? '#1f6a1f'
+                              : '#a10000'
+                            : undefined,
+                      }}
+                    >
+                      {engineActualSummaryDisplay.totalReturnPct ?? '-'}
+                    </strong>
+                  </div>
+                  <div>
+                    最大DD:{' '}
+                    <strong data-testid='engine-actual-max-drawdown'>
+                      {engineActualSummaryDisplay.maxDrawdownPct ?? '-'}
+                    </strong>
+                  </div>
+                  {engineActualSummaryDisplay.holdingAvgBars !== null && (
+                    <div>
+                      平均保有期間:{' '}
+                      <strong>{engineActualSummaryDisplay.holdingAvgBars} bar</strong>
+                    </div>
+                  )}
+                  {engineActualSummaryDisplay.firstTradeAt && (
+                    <div>
+                      初回取引:{' '}
+                      <strong>{engineActualSummaryDisplay.firstTradeAt}</strong>
+                    </div>
+                  )}
+                  {engineActualSummaryDisplay.lastTradeAt && (
+                    <div>
+                      最終取引:{' '}
+                      <strong>{engineActualSummaryDisplay.lastTradeAt}</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {internalEngineActualArtifactLoading && (
               <div data-testid='engine-actual-artifact-loading' style={{ color: '#444' }}>artifact を読み込み中です。</div>
             )}
