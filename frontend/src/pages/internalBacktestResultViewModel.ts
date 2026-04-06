@@ -162,7 +162,128 @@ export function getInternalBacktestMessageText(
 }
 
 // ──────────────────────────────────────────────────
-// engine_actual summary 整形ヘルパー
+// engine_actual rule preset 選択 UI ヘルパー
+// ──────────────────────────────────────────────────
+
+export type EngineActualPresetId =
+  | 'default_previous_close'
+  | 'sma_cross'
+  | 'threshold_cross';
+
+export const ENGINE_ACTUAL_PRESETS: ReadonlyArray<{
+  id: EngineActualPresetId;
+  label: string;
+  description: string;
+  needsPeriod: boolean;
+  needsThreshold: boolean;
+}> = [
+  {
+    id: 'default_previous_close',
+    label: 'デフォルト（前日比）',
+    description: '前日終値より上昇で entry、下落で exit。パラメータ不要。',
+    needsPeriod: false,
+    needsThreshold: false,
+  },
+  {
+    id: 'sma_cross',
+    label: 'SMA クロス',
+    description: '終値が SMA（単純移動平均）を上抜けで entry、下抜けで exit。period (2〜200) を指定。',
+    needsPeriod: true,
+    needsThreshold: false,
+  },
+  {
+    id: 'threshold_cross',
+    label: '価格閾値クロス',
+    description: '終値が閾値を上抜けで entry、下抜けで exit。threshold（正の数）を指定。',
+    needsPeriod: false,
+    needsThreshold: true,
+  },
+] as const;
+
+export type EngineActualFormState = {
+  presetId: EngineActualPresetId;
+  /** sma_cross 時の SMA period（数値文字列）。空文字 = 未入力 */
+  smaPeriod: string;
+  /** threshold_cross 時の threshold（数値文字列）。空文字 = 未入力 */
+  thresholdValue: string;
+};
+
+export function createDefaultEngineActualFormState(): EngineActualFormState {
+  return {
+    presetId: 'default_previous_close',
+    smaPeriod: '',
+    thresholdValue: '',
+  };
+}
+
+/**
+ * engine_actual フォームのバリデーションを行う。
+ * @returns エラーメッセージ文字列（null = valid）
+ */
+export function validateEngineActualForm(form: EngineActualFormState): string | null {
+  if (form.presetId === 'sma_cross') {
+    const period = Number(form.smaPeriod);
+    if (form.smaPeriod.trim() === '') {
+      return 'SMA period を入力してください。';
+    }
+    if (!Number.isInteger(period) || period < 2 || period > 200) {
+      return 'SMA period は 2〜200 の整数で入力してください。';
+    }
+  }
+  if (form.presetId === 'threshold_cross') {
+    const threshold = Number(form.thresholdValue);
+    if (form.thresholdValue.trim() === '') {
+      return 'threshold を入力してください。';
+    }
+    if (!Number.isFinite(threshold) || threshold <= 0) {
+      return 'threshold は 0 より大きい数値で入力してください。';
+    }
+  }
+  return null;
+}
+
+type ActualRulesPayload = {
+  entry_rule: { kind: string; period?: number; threshold?: number };
+  exit_rule: { kind: string; period?: number; threshold?: number };
+};
+
+/**
+ * engine_actual フォームの状態から engine_config.actual_rules payload を組み立てる。
+ * default_previous_close の場合は undefined を返す（backend がデフォルトを適用する）。
+ */
+export function buildEngineActualPayload(form: EngineActualFormState): {
+  actual_rules: ActualRulesPayload | undefined;
+} {
+  switch (form.presetId) {
+    case 'default_previous_close':
+      return { actual_rules: undefined };
+
+    case 'sma_cross': {
+      const period = parseInt(form.smaPeriod, 10);
+      return {
+        actual_rules: {
+          entry_rule: { kind: 'price_above_sma', period },
+          exit_rule: { kind: 'price_below_sma', period },
+        },
+      };
+    }
+
+    case 'threshold_cross': {
+      const threshold = parseFloat(form.thresholdValue);
+      return {
+        actual_rules: {
+          entry_rule: { kind: 'price_above_threshold', threshold },
+          exit_rule: { kind: 'price_below_threshold', threshold },
+        },
+      };
+    }
+
+    default:
+      return { actual_rules: undefined };
+  }
+}
+
+
 // ──────────────────────────────────────────────────
 
 export type EngineActualSummaryDisplay = {
