@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -11,9 +11,14 @@ import {
   StrategyVersionListData,
 } from '../api/types';
 import {
+  buildEngineActualPayload,
   buildEngineActualSummaryDisplay,
+  createDefaultEngineActualFormState,
+  ENGINE_ACTUAL_PRESETS,
+  type EngineActualFormState,
   getInternalBacktestMessageText,
   getInternalBacktestResultViewModel,
+  validateEngineActualForm,
 } from './internalBacktestResultViewModel';
 import {
   buildStrategyVersionDetailUrl,
@@ -344,6 +349,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [startingInternalBacktest, setStartingInternalBacktest] = useState(false);
   const [startInternalBacktestError, setStartInternalBacktestError] = useState<string | null>(null);
   const [internalBacktestSymbol, setInternalBacktestSymbol] = useState('7203');
+  const [summaryMode, setSummaryMode] = useState<'engine_estimated' | 'engine_actual'>('engine_estimated');
+  const [engineActualForm, setEngineActualForm] = useState<EngineActualFormState>(
+    () => createDefaultEngineActualFormState(),
+  );
+  const [engineActualFormError, setEngineActualFormError] = useState<string | null>(null);
   const [internalExecutionId, setInternalExecutionId] = useState<string | null>(() => parseInternalExecutionId(location));
 
   const version = data?.strategy_version ?? null;
@@ -578,6 +588,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         forward_validation_note: editingForwardValidationNote,
       });
       await mutate(response, false);
+      await mutate(response, false);
       setSaveForwardNoteMessage('フォワード検証ノートを保存しました。');
     } catch (requestError: any) {
       setSaveForwardNoteError(requestError?.message ?? 'フォワード検証ノート保存に失敗しました。');
@@ -588,9 +599,30 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const onStartInternalBacktest = async () => {
     if (!version) return;
+
+    if (summaryMode === 'engine_actual') {
+      const formError = validateEngineActualForm(engineActualForm);
+      if (formError) {
+        setEngineActualFormError(formError);
+        return;
+      }
+      setEngineActualFormError(null);
+    }
+
     setStartingInternalBacktest(true);
     setStartInternalBacktestError(null);
     try {
+      const { actual_rules } = summaryMode === 'engine_actual'
+        ? buildEngineActualPayload(engineActualForm)
+        : { actual_rules: undefined };
+
+      const engineConfig: Record<string, unknown> = {
+        summary_mode: summaryMode,
+      };
+      if (summaryMode === 'engine_actual' && actual_rules !== undefined) {
+        engineConfig['actual_rules'] = actual_rules;
+      }
+
       const response = await postApi<InternalBacktestExecutionCreateData>('/api/internal-backtests/executions', {
         strategy_rule_version_id: version.id,
         market: version.market,
@@ -603,9 +635,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           symbol: internalBacktestSymbol.trim(),
           source_kind: 'daily_ohlcv',
         },
-        engine_config: {
-          summary_mode: 'engine_estimated',
-        },
+        engine_config: engineConfig,
       });
       setInternalExecutionId(response.execution.id);
     } catch (requestError: any) {
@@ -808,6 +838,113 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.35rem 0.45rem', minWidth: '9rem' }}
             />
           </label>
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span>モード</span>
+            <select
+              data-testid='summary-mode-select'
+              value={summaryMode}
+              onChange={(event) => {
+                const val = event.target.value as 'engine_estimated' | 'engine_actual';
+                setSummaryMode(val);
+                setEngineActualFormError(null);
+              }}
+              style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.35rem 0.4rem' }}
+            >
+              <option value='engine_estimated'>engine_estimated</option>
+              <option value='engine_actual'>engine_actual</option>
+            </select>
+          </label>
+        </div>
+
+        {summaryMode === 'engine_actual' && (
+          <div
+            data-testid='engine-actual-form'
+            style={{
+              marginTop: '0.55rem',
+              padding: '0.6rem 0.75rem',
+              background: '#f0f4ff',
+              border: '1px solid #b8cef4',
+              borderRadius: '4px',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '0.35rem', fontSize: '0.9rem' }}>engine_actual ルール設定</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+              <span>preset</span>
+              <select
+                data-testid='engine-actual-preset-select'
+                value={engineActualForm.presetId}
+                onChange={(event) => {
+                  setEngineActualForm((prev) => ({
+                    ...prev,
+                    presetId: event.target.value as EngineActualFormState['presetId'],
+                  }));
+                  setEngineActualFormError(null);
+                }}
+                style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem' }}
+              >
+                {ENGINE_ACTUAL_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div style={{ marginTop: '0.3rem', color: '#555', fontSize: '0.84rem' }}>
+              {ENGINE_ACTUAL_PRESETS.find((p) => p.id === engineActualForm.presetId)?.description}
+            </div>
+
+            {ENGINE_ACTUAL_PRESETS.find((p) => p.id === engineActualForm.presetId)?.needsPeriod && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem', fontSize: '0.9rem' }}>
+                <span>period (2-200)</span>
+                <input
+                  data-testid='engine-actual-period-input'
+                  type='number'
+                  min={2}
+                  max={200}
+                  step={1}
+                  value={engineActualForm.smaPeriod}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, smaPeriod: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 25'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '6rem' }}
+                />
+              </label>
+            )}
+
+            {ENGINE_ACTUAL_PRESETS.find((p) => p.id === engineActualForm.presetId)?.needsThreshold && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.4rem', fontSize: '0.9rem' }}>
+                <span>threshold</span>
+                <input
+                  data-testid='engine-actual-threshold-input'
+                  type='number'
+                  min={0}
+                  step='any'
+                  value={engineActualForm.thresholdValue}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, thresholdValue: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 500'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '8rem' }}
+                />
+              </label>
+            )}
+
+            {engineActualFormError && (
+              <div
+                data-testid='engine-actual-form-error'
+                style={{ marginTop: '0.4rem', color: '#a10000', fontSize: '0.88rem' }}
+              >
+                {engineActualFormError}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{ marginTop: '0.55rem', display: 'flex', gap: '0.55rem', alignItems: 'center' }}>
           <button
             type='button'
             onClick={onStartInternalBacktest}
@@ -821,11 +958,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               cursor: startingInternalBacktest ? 'default' : 'pointer',
             }}
           >
-            {startingInternalBacktest ? '開始中...' : '内製バックテストを開始'}
+            {startingInternalBacktest ? '開始中...' : `内製バックテストを開始 (${summaryMode})`}
           </button>
         </div>
-        <div style={{ marginTop: '0.45rem', color: '#666', fontSize: '0.85rem' }}>
-          期間: {defaultRangeFrom} 〜 {defaultRangeTo} / summary_mode: engine_estimated
+        <div style={{ marginTop: '0.3rem', color: '#666', fontSize: '0.85rem' }}>
+          期間: {defaultRangeFrom} 〜 {defaultRangeTo}
         </div>
 
         {internalExecutionViewModel.canShowMetrics && internalExecutionResultData?.result_summary?.metrics && (
