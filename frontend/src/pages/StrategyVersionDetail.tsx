@@ -164,6 +164,13 @@ function parseInternalExecutionId(locationPath: string): string | null {
   return rawExecutionId.length > 0 ? rawExecutionId : null;
 }
 
+function parseInternalCompareSourceExecutionId(locationPath: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const rawExecutionId = (params.get('internalCompareSourceExecutionId') ?? '').trim();
+  return rawExecutionId.length > 0 ? rawExecutionId : null;
+}
+
 function resolveEngineActualArtifactApiPath(
   executionId: string,
   artifactPointerPath: unknown,
@@ -356,6 +363,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   );
   const [engineActualFormError, setEngineActualFormError] = useState<string | null>(null);
   const [internalExecutionId, setInternalExecutionId] = useState<string | null>(() => parseInternalExecutionId(location));
+  const [pendingEngineActualCompareSourceExecutionId, setPendingEngineActualCompareSourceExecutionId] = useState<
+    string | null
+  >(null);
+  const [engineActualCompareSourceExecutionId, setEngineActualCompareSourceExecutionId] = useState<string | null>(
+    () => parseInternalCompareSourceExecutionId(location),
+  );
 
   const version = data?.strategy_version ?? null;
   const compareBase = data?.compare_base ?? null;
@@ -413,6 +426,27 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     swrFetcher,
   );
   const isEngineActualResult = internalExecutionResultData?.result_summary?.summary_kind === 'engine_actual';
+  const compareSourceExecutionStatusApiPath = engineActualCompareSourceExecutionId
+    ? `/api/internal-backtests/executions/${engineActualCompareSourceExecutionId}`
+    : null;
+  const {
+    data: compareSourceExecutionStatusData,
+    error: compareSourceExecutionStatusError,
+  } = useSWR<InternalBacktestExecutionStatusData>(compareSourceExecutionStatusApiPath, swrFetcher);
+  const compareSourceExecutionStatus = compareSourceExecutionStatusData?.execution?.status ?? null;
+  const compareSourceExecutionResultApiPath = engineActualCompareSourceExecutionId &&
+    compareSourceExecutionStatus === 'succeeded'
+      ? `/api/internal-backtests/executions/${engineActualCompareSourceExecutionId}/result`
+      : null;
+  const {
+    data: compareSourceExecutionResultData,
+    error: compareSourceExecutionResultError,
+  } = useSWR<InternalBacktestExecutionResultData>(compareSourceExecutionResultApiPath, swrFetcher);
+  const isComparableEngineActualExecution =
+    internalExecutionStatus === 'succeeded' &&
+    compareSourceExecutionStatus === 'succeeded' &&
+    internalExecutionResultData?.result_summary?.summary_kind === 'engine_actual' &&
+    compareSourceExecutionResultData?.result_summary?.summary_kind === 'engine_actual';
   const internalEngineActualArtifactApiPath = internalExecutionId && internalExecutionStatus === 'succeeded' && isEngineActualResult
     ? resolveEngineActualArtifactApiPath(internalExecutionId, internalExecutionResultData?.artifact_pointer?.path)
     : null;
@@ -453,6 +487,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     internalExecutionResultData?.result_summary?.metrics,
     internalExecutionResultData?.input_snapshot,
   ]);
+  const compareSourceEngineActualSummaryDisplay = useMemo(() => {
+    if (!isComparableEngineActualExecution) {
+      return null;
+    }
+    return buildEngineActualSummaryDisplay(
+      compareSourceExecutionResultData?.result_summary?.metrics,
+      (compareSourceExecutionResultData?.input_snapshot as {
+        actual_rules?: Array<{ kind: string; [key: string]: unknown }> | null;
+      } | null | undefined)?.actual_rules,
+    );
+  }, [compareSourceExecutionResultData, isComparableEngineActualExecution]);
+  const showEngineActualComparison =
+    isComparableEngineActualExecution &&
+    engineActualSummaryDisplay !== null &&
+    compareSourceEngineActualSummaryDisplay !== null &&
+    internalExecutionId !== null &&
+    engineActualCompareSourceExecutionId !== null;
   const engineActualRestorePayload = useMemo(
     () => buildEngineActualRestorePayloadFromInputSnapshot(internalExecutionResultData?.input_snapshot),
     [internalExecutionResultData?.input_snapshot],
@@ -460,6 +511,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   useEffect(() => {
     setInternalExecutionId(parseInternalExecutionId(location));
+    setEngineActualCompareSourceExecutionId(parseInternalCompareSourceExecutionId(location));
     setStartInternalBacktestError(null);
   }, [location, versionId]);
 
@@ -650,6 +702,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         engine_config: engineConfig,
       });
       setInternalExecutionId(response.execution.id);
+      if (summaryMode === 'engine_actual' && pendingEngineActualCompareSourceExecutionId) {
+        setEngineActualCompareSourceExecutionId(pendingEngineActualCompareSourceExecutionId);
+      } else {
+        setEngineActualCompareSourceExecutionId(null);
+      }
+      setPendingEngineActualCompareSourceExecutionId(null);
     } catch (requestError: any) {
       setStartInternalBacktestError(requestError?.message ?? '内製バックテストの開始に失敗しました。');
     } finally {
@@ -672,6 +730,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
     setEngineActualFormError(null);
     setStartInternalBacktestError(null);
+    setPendingEngineActualCompareSourceExecutionId(internalExecutionId);
   };
 
   if (isLoading) {
@@ -1033,6 +1092,85 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </div>
         )}
 
+        {showEngineActualComparison && (
+          <div
+            data-testid='engine-actual-rerun-compare'
+            style={{
+              marginTop: '0.75rem',
+              padding: '0.65rem',
+              borderRadius: '4px',
+              background: '#fff',
+              border: '1px solid #d9e3f5',
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>
+              engine_actual 再実行比較（元 execution vs 再実行 execution）
+            </div>
+            <div style={{ fontSize: '0.88rem', color: '#444', marginBottom: '0.5rem' }}>
+              元: <code>{engineActualCompareSourceExecutionId}</code> / 再実行: <code>{internalExecutionId}</code>
+            </div>
+            <table
+              data-testid='engine-actual-rerun-compare-table'
+              style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>項目</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>元 execution</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>再実行 execution</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>rule</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.rulePatternLabel}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.rulePatternLabel}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>trade_count</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.tradeCount ?? '-'}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.tradeCount ?? '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>win_rate</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.winRatePct ?? '-'}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.winRatePct ?? '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>total_return_percent</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.totalReturnPct ?? '-'}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.totalReturnPct ?? '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '0.2rem 0' }}>max_drawdown_percent</td>
+                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.maxDrawdownPct ?? '-'}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.maxDrawdownPct ?? '-'}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {isEngineActualResult && (
           <div
             data-testid='engine-actual-artifact-section'
@@ -1244,6 +1382,16 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         {internalExecutionResultError && (
           <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
             result 取得に失敗しました: {internalExecutionResultError.message}
+          </div>
+        )}
+        {compareSourceExecutionStatusError && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            比較元 status 取得に失敗しました: {compareSourceExecutionStatusError.message}
+          </div>
+        )}
+        {compareSourceExecutionResultError && (
+          <div style={{ marginTop: '0.7rem', padding: '0.6rem', borderRadius: '4px', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000' }}>
+            比較元 result 取得に失敗しました: {compareSourceExecutionResultError.message}
           </div>
         )}
       </section>
