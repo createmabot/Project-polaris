@@ -426,17 +426,32 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     swrFetcher,
   );
   const isEngineActualResult = internalExecutionResultData?.result_summary?.summary_kind === 'engine_actual';
-  const compareSourceExecutionStatusApiPath = engineActualCompareSourceExecutionId
-    ? `/api/internal-backtests/executions/${engineActualCompareSourceExecutionId}`
+  const persistedCompareBaseExecutionId = useMemo(() => {
+    const inputSnapshot = internalExecutionResultData?.input_snapshot as
+      | { engine_config?: { compare_base_execution_id?: unknown } | null }
+      | null
+      | undefined;
+    const rawValue = inputSnapshot?.engine_config?.compare_base_execution_id;
+    if (typeof rawValue !== 'string') {
+      return null;
+    }
+    const trimmed = rawValue.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }, [internalExecutionResultData?.input_snapshot]);
+  const resolvedCompareSourceExecutionId =
+    engineActualCompareSourceExecutionId ??
+    (isEngineActualResult ? persistedCompareBaseExecutionId : null);
+  const compareSourceExecutionStatusApiPath = resolvedCompareSourceExecutionId
+    ? `/api/internal-backtests/executions/${resolvedCompareSourceExecutionId}`
     : null;
   const {
     data: compareSourceExecutionStatusData,
     error: compareSourceExecutionStatusError,
   } = useSWR<InternalBacktestExecutionStatusData>(compareSourceExecutionStatusApiPath, swrFetcher);
   const compareSourceExecutionStatus = compareSourceExecutionStatusData?.execution?.status ?? null;
-  const compareSourceExecutionResultApiPath = engineActualCompareSourceExecutionId &&
+  const compareSourceExecutionResultApiPath = resolvedCompareSourceExecutionId &&
     compareSourceExecutionStatus === 'succeeded'
-      ? `/api/internal-backtests/executions/${engineActualCompareSourceExecutionId}/result`
+      ? `/api/internal-backtests/executions/${resolvedCompareSourceExecutionId}/result`
       : null;
   const {
     data: compareSourceExecutionResultData,
@@ -503,7 +518,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     engineActualSummaryDisplay !== null &&
     compareSourceEngineActualSummaryDisplay !== null &&
     internalExecutionId !== null &&
-    engineActualCompareSourceExecutionId !== null;
+    resolvedCompareSourceExecutionId !== null;
   const engineActualRestorePayload = useMemo(
     () => buildEngineActualRestorePayloadFromInputSnapshot(internalExecutionResultData?.input_snapshot),
     [internalExecutionResultData?.input_snapshot],
@@ -685,6 +700,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       };
       if (summaryMode === 'engine_actual' && actual_rules !== undefined) {
         engineConfig['actual_rules'] = actual_rules;
+      }
+      if (summaryMode === 'engine_actual' && pendingEngineActualCompareSourceExecutionId) {
+        engineConfig['compare_base_execution_id'] = pendingEngineActualCompareSourceExecutionId;
       }
 
       const response = await postApi<InternalBacktestExecutionCreateData>('/api/internal-backtests/executions', {
@@ -1107,7 +1125,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               engine_actual 再実行比較（元 execution vs 再実行 execution）
             </div>
             <div style={{ fontSize: '0.88rem', color: '#444', marginBottom: '0.5rem' }}>
-              元: <code>{engineActualCompareSourceExecutionId}</code> / 再実行: <code>{internalExecutionId}</code>
+              元: <code>{resolvedCompareSourceExecutionId}</code> / 再実行: <code>{internalExecutionId}</code>
             </div>
             <table
               data-testid='engine-actual-rerun-compare-table'

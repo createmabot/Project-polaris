@@ -373,6 +373,43 @@ describe('internal backtests scaffold routes', () => {
     await app.close();
   });
 
+  it('persists compare linkage in input_snapshot.engine_config for rerun executions', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/internal-backtests/executions',
+      payload: {
+        strategy_rule_version_id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        execution_target: {
+          symbol: '7203',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2024-01-01', to: '2025-12-31' },
+        engine_config: {
+          summary_mode: 'engine_actual',
+          compare_base_execution_id: 'ibtx-source-1',
+          actual_rules: {
+            entry_rule: { kind: 'price_above_sma', period: 25 },
+            exit_rule: { kind: 'price_below_sma', period: 25 },
+          },
+        },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const executionId = res.json().data.execution.id as string;
+    const saved = runtime.executions.get(executionId);
+    expect(saved?.inputSnapshotJson.engine_config).toMatchObject({
+      summary_mode: 'engine_actual',
+      compare_base_execution_id: 'ibtx-source-1',
+    });
+
+    await app.close();
+  });
+
   it('falls back to strategy version market/timeframe when request omits them', async () => {
     const app = await createApp();
 
