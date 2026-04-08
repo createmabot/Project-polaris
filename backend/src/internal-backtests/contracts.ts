@@ -81,6 +81,8 @@ export type InternalBacktestResultSummary = {
     win_rate?: number;
     total_return_percent?: number;
     max_drawdown_percent?: number;
+    average_trade_return_percent?: number;
+    profit_factor?: number;
     holding_period_avg_bars?: number;
     first_trade_at?: string | null;
     last_trade_at?: string | null;
@@ -576,6 +578,23 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
           );
           return metrics.max_drawdown_percent as number;
         })();
+  const optionalAverageTradeReturnPercent =
+    metrics.average_trade_return_percent === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(
+            metrics.average_trade_return_percent,
+            'result_summary.metrics.average_trade_return_percent',
+          );
+          return metrics.average_trade_return_percent as number;
+        })();
+  const optionalProfitFactor =
+    metrics.profit_factor === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(metrics.profit_factor, 'result_summary.metrics.profit_factor');
+          return metrics.profit_factor as number;
+        })();
   const optionalHoldingPeriodAvgBars =
     metrics.holding_period_avg_bars === undefined
       ? undefined
@@ -634,6 +653,10 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
       ...(optionalMaxDrawdownPercent !== undefined
         ? { max_drawdown_percent: optionalMaxDrawdownPercent }
         : {}),
+      ...(optionalAverageTradeReturnPercent !== undefined
+        ? { average_trade_return_percent: optionalAverageTradeReturnPercent }
+        : {}),
+      ...(optionalProfitFactor !== undefined ? { profit_factor: optionalProfitFactor } : {}),
       ...(optionalHoldingPeriodAvgBars !== undefined
         ? { holding_period_avg_bars: optionalHoldingPeriodAvgBars }
         : {}),

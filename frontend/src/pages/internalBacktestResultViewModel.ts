@@ -418,6 +418,10 @@ export type EngineActualSummaryDisplay = {
   totalReturnPct: string | null;
   /** 例: "-5.20%" */
   maxDrawdownPct: string | null;
+  /** 例: "+0.42%" */
+  averageTradeReturnPct: string | null;
+  /** 例: "1.35" */
+  profitFactor: string | null;
   holdingAvgBars: number | null;
   firstTradeAt: string | null;
   lastTradeAt: string | null;
@@ -430,6 +434,8 @@ type EngineActualMetrics = {
   win_rate?: number | null;
   total_return_percent?: number | null;
   max_drawdown_percent?: number | null;
+  average_trade_return_percent?: number | null;
+  profit_factor?: number | null;
   holding_period_avg_bars?: number | null;
   first_trade_at?: string | null;
   last_trade_at?: string | null;
@@ -453,6 +459,13 @@ function formatPct(value: number | null | undefined): string | null {
     return null;
   }
   return `${value.toFixed(1)}%`;
+}
+
+function formatFixed(value: number | null | undefined, digits: number): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return null;
+  }
+  return value.toFixed(digits);
 }
 
 const KNOWN_DEFAULT_RULE_KINDS: ReadonlySet<string> = new Set([
@@ -505,6 +518,8 @@ export function buildEngineActualSummaryDisplay(
     winRatePct: formatPct(metrics?.win_rate),
     totalReturnPct: formatSignedPct(metrics?.total_return_percent),
     maxDrawdownPct: formatSignedPct(metrics?.max_drawdown_percent),
+    averageTradeReturnPct: formatSignedPct(metrics?.average_trade_return_percent),
+    profitFactor: formatFixed(metrics?.profit_factor, 2),
     holdingAvgBars:
       typeof metrics?.holding_period_avg_bars === 'number' && Number.isFinite(metrics.holding_period_avg_bars)
         ? metrics.holding_period_avg_bars

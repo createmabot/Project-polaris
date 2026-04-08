@@ -1176,12 +1176,32 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ padding: '0.2rem 0' }}>max_drawdown_percent</td>
-                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>max_drawdown_percent</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
                     {compareSourceEngineActualSummaryDisplay.maxDrawdownPct ?? '-'}
                   </td>
-                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
                     {engineActualSummaryDisplay.maxDrawdownPct ?? '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>
+                    average_trade_return_percent
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.averageTradeReturnPct ?? '-'}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.averageTradeReturnPct ?? '-'}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ padding: '0.2rem 0' }}>profit_factor</td>
+                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.profitFactor ?? '-'}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.profitFactor ?? '-'}
                   </td>
                 </tr>
               </tbody>

@@ -73,6 +73,10 @@ function mergeEngineResult(args: {
       ...(metrics.max_drawdown_percent !== undefined
         ? { max_drawdown_percent: metrics.max_drawdown_percent }
         : {}),
+      ...(metrics.average_trade_return_percent !== undefined
+        ? { average_trade_return_percent: metrics.average_trade_return_percent }
+        : {}),
+      ...(metrics.profit_factor !== undefined ? { profit_factor: metrics.profit_factor } : {}),
       ...(metrics.holding_period_avg_bars !== undefined
         ? { holding_period_avg_bars: metrics.holding_period_avg_bars }
         : {}),

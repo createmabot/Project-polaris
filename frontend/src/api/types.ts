@@ -488,6 +488,8 @@ export type InternalBacktestExecutionResultData = {
       win_rate?: number | null;
       total_return_percent?: number | null;
       max_drawdown_percent?: number | null;
+      average_trade_return_percent?: number | null;
+      profit_factor?: number | null;
       holding_period_avg_bars?: number | null;
       first_trade_at?: string | null;
       last_trade_at?: string | null;

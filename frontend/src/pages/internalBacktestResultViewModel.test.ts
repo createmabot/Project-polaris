@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEngineActualRestorePayloadFromInputSnapshot,
+  buildEngineActualSummaryDisplay,
   buildEngineActualPayload,
   buildInternalBacktestResultViewModel,
   getInternalBacktestResultViewModel,
@@ -202,6 +203,47 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       },
     });
     expect(restored).toBeNull();
+  });
+});
+
+describe('buildEngineActualSummaryDisplay', () => {
+  it('formats average_trade_return_percent and profit_factor for compare UI', () => {
+    const summary = buildEngineActualSummaryDisplay(
+      {
+        trade_count: 4,
+        win_rate: 50,
+        total_return_percent: 3.21,
+        max_drawdown_percent: -1.9,
+        average_trade_return_percent: 0.8123,
+        profit_factor: 1.4567,
+      },
+      [{ kind: 'price_above_sma', period: 25 }],
+    );
+
+    expect(summary.tradeCount).toBe(4);
+    expect(summary.winRatePct).toBe('50.0%');
+    expect(summary.totalReturnPct).toBe('+3.21%');
+    expect(summary.maxDrawdownPct).toBe('-1.90%');
+    expect(summary.averageTradeReturnPct).toBe('+0.81%');
+    expect(summary.profitFactor).toBe('1.46');
+  });
+
+  it('keeps new metrics safe for no-trade values', () => {
+    const summary = buildEngineActualSummaryDisplay(
+      {
+        trade_count: 0,
+        win_rate: 0,
+        total_return_percent: 0,
+        max_drawdown_percent: 0,
+        average_trade_return_percent: 0,
+        profit_factor: 0,
+      },
+      null,
+    );
+
+    expect(summary.tradeCount).toBe(0);
+    expect(summary.averageTradeReturnPct).toBe('+0.00%');
+    expect(summary.profitFactor).toBe('0.00');
   });
 });
 
