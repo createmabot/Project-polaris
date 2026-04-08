@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildEngineActualRestorePayloadFromInputSnapshot,
   buildEngineActualPayload,
   buildInternalBacktestResultViewModel,
   getInternalBacktestResultViewModel,
@@ -131,6 +132,76 @@ describe('validateEngineActualForm', () => {
     expect(
       validateEngineActualForm({ presetId: 'threshold_cross', smaPeriod: '', thresholdValue: '500' }),
     ).toBeNull();
+  });
+});
+
+describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
+  it('restores default_previous_close when actual_rules is absent', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: { summary_mode: 'engine_actual' },
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.summaryMode).toBe('engine_actual');
+    expect(restored?.form.presetId).toBe('default_previous_close');
+    expect(restored?.symbol).toBe('7203');
+    expect(restored?.dataRange).toEqual({ from: '2024-01-01', to: '2024-12-31' });
+  });
+
+  it('restores sma_cross with period from actual_rules', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        actual_rules: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_sma', period: 25 },
+        },
+      },
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.form).toEqual({
+      presetId: 'sma_cross',
+      smaPeriod: '25',
+      thresholdValue: '',
+    });
+  });
+
+  it('restores threshold_cross with threshold from actual_rules', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        actual_rules: {
+          entry_rule: { kind: 'price_above_threshold', threshold: 500 },
+          exit_rule: { kind: 'price_below_threshold', threshold: 500 },
+        },
+      },
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.form).toEqual({
+      presetId: 'threshold_cross',
+      smaPeriod: '',
+      thresholdValue: '500',
+    });
+  });
+
+  it('returns null when actual_rules cannot be mapped to supported preset', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        actual_rules: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_threshold', threshold: 500 },
+        },
+      },
+    });
+    expect(restored).toBeNull();
   });
 });
 

@@ -159,6 +159,12 @@ function createInternalExecutionResultData(params?: {
   firstTradeAt?: string | null;
   lastTradeAt?: string | null;
   actualRules?: Array<{ kind: string; [key: string]: unknown }> | null;
+  actualRulesObject?: {
+    entry_rule?: { kind: string; [key: string]: unknown };
+    exit_rule?: { kind: string; [key: string]: unknown };
+  } | null;
+  executionTargetSymbol?: string | null;
+  dataRange?: { from: string; to: string } | null;
 }) {
   const metricsBarCount = params?.metricsBarCount ?? 12;
   const firstClose = metricsBarCount > 0 ? 100 : 0;
@@ -203,6 +209,18 @@ function createInternalExecutionResultData(params?: {
     input_snapshot: {
       data_source_snapshot: {
         bar_count: params?.snapshotBarCount ?? metricsBarCount,
+      },
+      execution_target: {
+        symbol: params?.executionTargetSymbol ?? '7203',
+        source_kind: 'daily_ohlcv',
+      },
+      data_range: params?.dataRange ?? {
+        from: '2024-01-01',
+        to: '2025-12-31',
+      },
+      engine_config: {
+        summary_mode: params?.summaryKind ?? 'engine_estimated',
+        actual_rules: params?.actualRulesObject ?? null,
       },
       actual_rules: params?.actualRules ?? null,
     },
@@ -703,5 +721,63 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('bar_count: 12');
     // engine_actual summary card は表示されない（該当 execution が engine_actual でないため）
     expect(html).not.toContain('data-testid="engine-actual-summary-card"');
+  });
+
+  it('shows restore button when engine_actual execution has restorable preset in input_snapshot', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-restore', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-restore', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-restore',
+        summaryKind: 'engine_actual',
+        actualRulesObject: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_sma', period: 25 },
+        },
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-restore',
+        tradesCount: 1,
+        equityCount: 2,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-restore-button"');
+    expect(html).toContain('この条件で再実行');
+    expect(html).not.toContain('data-testid="engine-actual-restore-unavailable"');
+  });
+
+  it('shows restore-unavailable message when preset cannot be mapped', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-restore-unavailable', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-restore-unavailable', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-restore-unavailable',
+        summaryKind: 'engine_actual',
+        actualRulesObject: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_threshold', threshold: 500 },
+        },
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-restore-unavailable',
+        tradesCount: 1,
+        equityCount: 2,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-restore-unavailable"');
+    expect(html).toContain('この execution のルール条件は preset 復元できません。');
+    expect(html).not.toContain('data-testid="engine-actual-restore-button"');
   });
 });

@@ -11,6 +11,7 @@ import {
   StrategyVersionListData,
 } from '../api/types';
 import {
+  buildEngineActualRestorePayloadFromInputSnapshot,
   buildEngineActualPayload,
   buildEngineActualSummaryDisplay,
   createDefaultEngineActualFormState,
@@ -388,6 +389,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     () => getDefaultDateRangeForInternalBacktest(),
     [],
   );
+  const [internalBacktestRangeFrom, setInternalBacktestRangeFrom] = useState(defaultRangeFrom);
+  const [internalBacktestRangeTo, setInternalBacktestRangeTo] = useState(defaultRangeTo);
   const internalExecutionStatusApiPath = internalExecutionId
     ? `/api/internal-backtests/executions/${internalExecutionId}`
     : null;
@@ -450,11 +453,20 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     internalExecutionResultData?.result_summary?.metrics,
     internalExecutionResultData?.input_snapshot,
   ]);
+  const engineActualRestorePayload = useMemo(
+    () => buildEngineActualRestorePayloadFromInputSnapshot(internalExecutionResultData?.input_snapshot),
+    [internalExecutionResultData?.input_snapshot],
+  );
 
   useEffect(() => {
     setInternalExecutionId(parseInternalExecutionId(location));
     setStartInternalBacktestError(null);
   }, [location, versionId]);
+
+  useEffect(() => {
+    setInternalBacktestRangeFrom(defaultRangeFrom);
+    setInternalBacktestRangeTo(defaultRangeTo);
+  }, [defaultRangeFrom, defaultRangeTo]);
 
   useEffect(() => {
     if (version) {
@@ -628,8 +640,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         market: version.market,
         timeframe: version.timeframe,
         data_range: {
-          from: defaultRangeFrom,
-          to: defaultRangeTo,
+          from: internalBacktestRangeFrom,
+          to: internalBacktestRangeTo,
         },
         execution_target: {
           symbol: internalBacktestSymbol.trim(),
@@ -643,6 +655,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     } finally {
       setStartingInternalBacktest(false);
     }
+  };
+
+  const onRestoreEngineActualPreset = () => {
+    if (!engineActualRestorePayload) {
+      return;
+    }
+    setSummaryMode('engine_actual');
+    setEngineActualForm(engineActualRestorePayload.form);
+    if (engineActualRestorePayload.symbol) {
+      setInternalBacktestSymbol(engineActualRestorePayload.symbol);
+    }
+    if (engineActualRestorePayload.dataRange) {
+      setInternalBacktestRangeFrom(engineActualRestorePayload.dataRange.from);
+      setInternalBacktestRangeTo(engineActualRestorePayload.dataRange.to);
+    }
+    setEngineActualFormError(null);
+    setStartInternalBacktestError(null);
   };
 
   if (isLoading) {
@@ -962,8 +991,33 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </button>
         </div>
         <div style={{ marginTop: '0.3rem', color: '#666', fontSize: '0.85rem' }}>
-          期間: {defaultRangeFrom} 〜 {defaultRangeTo}
+          期間: {internalBacktestRangeFrom} 〜 {internalBacktestRangeTo}
         </div>
+        {isEngineActualResult && (
+          <div style={{ marginTop: '0.45rem' }}>
+            {engineActualRestorePayload ? (
+              <button
+                type='button'
+                data-testid='engine-actual-restore-button'
+                onClick={onRestoreEngineActualPreset}
+                style={{
+                  padding: '0.35rem 0.65rem',
+                  border: '1px solid #0a5bb5',
+                  borderRadius: '4px',
+                  background: '#fff',
+                  color: '#0a5bb5',
+                  cursor: 'pointer',
+                }}
+              >
+                この条件で再実行
+              </button>
+            ) : (
+              <div data-testid='engine-actual-restore-unavailable' style={{ color: '#9a4d00', fontSize: '0.85rem' }}>
+                この execution のルール条件は preset 復元できません。
+              </div>
+            )}
+          </div>
+        )}
 
         {internalExecutionViewModel.canShowMetrics && internalExecutionResultData?.result_summary?.metrics && (
           <div style={{ marginTop: '0.75rem', padding: '0.65rem', borderRadius: '4px', background: '#fff', border: '1px solid #ececec' }}>
