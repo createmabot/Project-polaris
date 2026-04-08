@@ -612,6 +612,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-not-ready"');
     expect(html).toContain('artifact はまだ利用できません（RESULT_NOT_READY）。');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-not-ready');
   });
 
   it('shows NOT_FOUND state for engine_actual artifact read', () => {
@@ -633,6 +635,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-not-found"');
     expect(html).toContain('artifact は見つかりません（NOT_FOUND）。');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-not-found');
   });
 
   it('shows generic fetch error state for engine_actual artifact read', () => {
@@ -654,6 +658,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-error"');
     expect(html).toContain('artifact 取得に失敗しました: network failed');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-fetch-error');
   });
 
   it('shows engine_actual summary card with trade metrics and rule pattern', () => {
@@ -764,6 +770,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('bar_count: 12');
     // engine_actual summary card は表示されない（該当 execution が engine_actual でないため）
     expect(html).not.toContain('data-testid="engine-actual-summary-card"');
+    expect(html).not.toContain('data-testid="engine-actual-execution-overview"');
   });
 
   it('shows restore button when engine_actual execution has restorable preset in input_snapshot', () => {
@@ -873,6 +880,10 @@ describe('StrategyVersionDetail', () => {
         averageTradeReturnPercent: 1.25,
         profitFactor: 1.8,
         actualRules: [{ kind: 'price_above_sma', period: 25 }],
+        actualRulesObject: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_sma', period: 25 },
+        },
       }),
       createInternalExecutionArtifactData({
         executionId: 'exec-rerun',
@@ -891,10 +902,21 @@ describe('StrategyVersionDetail', () => {
         averageTradeReturnPercent: 0.4,
         profitFactor: 0.75,
         actualRules: [{ kind: 'price_above_threshold', threshold: 500 }],
+        actualRulesObject: {
+          entry_rule: { kind: 'price_above_threshold', threshold: 500 },
+          exit_rule: { kind: 'price_below_threshold', threshold: 500 },
+        },
       }),
     );
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-execution-overview"');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('data-testid="engine-actual-overview-role-base"');
+    expect(html).toContain('data-testid="engine-actual-overview-role-rerun"');
+    expect(html).toContain('SMA クロス');
+    expect(html).toContain('価格閾値クロス');
+    expect(html).toContain('data-testid="engine-actual-overview-compare-linkage"');
     expect(html).toContain('data-testid="engine-actual-rerun-compare"');
     expect(html).toContain('data-testid="engine-actual-rerun-compare-table"');
     expect(html).toContain('元: <code>exec-source</code> / 再実行: <code>exec-rerun</code>');

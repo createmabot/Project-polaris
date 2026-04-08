@@ -69,6 +69,17 @@ type CompareSummaryItem = {
   detail: string;
 };
 
+type EngineActualExecutionOverviewItem = {
+  executionId: string;
+  roleLabel: '比較元' | '再実行';
+  presetLabel: string;
+  ruleLabel: string;
+  tradeCount: number | null;
+  totalReturnPct: string | null;
+  maxDrawdownPct: string | null;
+  isCompareLinked: boolean;
+};
+
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
 }
@@ -195,6 +206,16 @@ function getDefaultDateRangeForInternalBacktest() {
     from: from.toISOString().slice(0, 10),
     to: to.toISOString().slice(0, 10),
   };
+}
+
+function toEngineActualPresetLabel(
+  restorePayload: ReturnType<typeof buildEngineActualRestorePayloadFromInputSnapshot>,
+): string {
+  if (!restorePayload) {
+    return 'preset不明';
+  }
+  const preset = ENGINE_ACTUAL_PRESETS.find((item) => item.id === restorePayload.form.presetId);
+  return preset?.label ?? 'preset不明';
 }
 
 function buildLineDiff(beforeText: string, afterText: string): DiffLine[] {
@@ -489,7 +510,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     internalExecutionViewModel.recommendedMessageKey,
   );
   const engineActualSummaryDisplay = useMemo(() => {
-    if (!isEngineActualResult || !internalEngineActualArtifactData) {
+    if (!isEngineActualResult) {
       return null;
     }
     return buildEngineActualSummaryDisplay(
@@ -498,7 +519,6 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     );
   }, [
     isEngineActualResult,
-    internalEngineActualArtifactData,
     internalExecutionResultData?.result_summary?.metrics,
     internalExecutionResultData?.input_snapshot,
   ]);
@@ -523,6 +543,55 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     () => buildEngineActualRestorePayloadFromInputSnapshot(internalExecutionResultData?.input_snapshot),
     [internalExecutionResultData?.input_snapshot],
   );
+  const compareSourceEngineActualRestorePayload = useMemo(
+    () => buildEngineActualRestorePayloadFromInputSnapshot(compareSourceExecutionResultData?.input_snapshot),
+    [compareSourceExecutionResultData?.input_snapshot],
+  );
+  const engineActualExecutionOverviewItems = useMemo<EngineActualExecutionOverviewItem[]>(() => {
+    if (
+      !isEngineActualResult ||
+      !internalExecutionId ||
+      !engineActualSummaryDisplay
+    ) {
+      return [];
+    }
+
+    const rows: EngineActualExecutionOverviewItem[] = [];
+    if (
+      resolvedCompareSourceExecutionId &&
+      compareSourceEngineActualSummaryDisplay
+    ) {
+      rows.push({
+        executionId: resolvedCompareSourceExecutionId,
+        roleLabel: '比較元',
+        presetLabel: toEngineActualPresetLabel(compareSourceEngineActualRestorePayload),
+        ruleLabel: compareSourceEngineActualSummaryDisplay.rulePatternLabel,
+        tradeCount: compareSourceEngineActualSummaryDisplay.tradeCount,
+        totalReturnPct: compareSourceEngineActualSummaryDisplay.totalReturnPct,
+        maxDrawdownPct: compareSourceEngineActualSummaryDisplay.maxDrawdownPct,
+        isCompareLinked: true,
+      });
+    }
+    rows.push({
+      executionId: internalExecutionId,
+      roleLabel: '再実行',
+      presetLabel: toEngineActualPresetLabel(engineActualRestorePayload),
+      ruleLabel: engineActualSummaryDisplay.rulePatternLabel,
+      tradeCount: engineActualSummaryDisplay.tradeCount,
+      totalReturnPct: engineActualSummaryDisplay.totalReturnPct,
+      maxDrawdownPct: engineActualSummaryDisplay.maxDrawdownPct,
+      isCompareLinked: Boolean(resolvedCompareSourceExecutionId),
+    });
+    return rows;
+  }, [
+    compareSourceEngineActualRestorePayload,
+    compareSourceEngineActualSummaryDisplay,
+    engineActualRestorePayload,
+    engineActualSummaryDisplay,
+    internalExecutionId,
+    isEngineActualResult,
+    resolvedCompareSourceExecutionId,
+  ]);
 
   useEffect(() => {
     setInternalExecutionId(parseInternalExecutionId(location));
@@ -1071,28 +1140,121 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           期間: {internalBacktestRangeFrom} 〜 {internalBacktestRangeTo}
         </div>
         {isEngineActualResult && (
-          <div style={{ marginTop: '0.45rem' }}>
-            {engineActualRestorePayload ? (
-              <button
-                type='button'
-                data-testid='engine-actual-restore-button'
-                onClick={onRestoreEngineActualPreset}
-                style={{
-                  padding: '0.35rem 0.65rem',
-                  border: '1px solid #0a5bb5',
-                  borderRadius: '4px',
-                  background: '#fff',
-                  color: '#0a5bb5',
-                  cursor: 'pointer',
-                }}
-              >
-                この条件で再実行
-              </button>
-            ) : (
-              <div data-testid='engine-actual-restore-unavailable' style={{ color: '#9a4d00', fontSize: '0.85rem' }}>
-                この execution のルール条件は preset 復元できません。
-              </div>
-            )}
+          <div
+            data-testid='engine-actual-execution-overview'
+            style={{
+              marginTop: '0.75rem',
+              padding: '0.65rem',
+              borderRadius: '4px',
+              border: '1px solid #d9e3f5',
+              background: '#fff',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '0.6rem',
+                flexWrap: 'wrap',
+                marginBottom: '0.5rem',
+              }}
+            >
+              <div style={{ fontWeight: 600 }}>engine_actual 実行一覧（比較文脈）</div>
+              {engineActualRestorePayload ? (
+                <button
+                  type='button'
+                  data-testid='engine-actual-restore-button'
+                  onClick={onRestoreEngineActualPreset}
+                  style={{
+                    padding: '0.35rem 0.65rem',
+                    border: '1px solid #0a5bb5',
+                    borderRadius: '4px',
+                    background: '#fff',
+                    color: '#0a5bb5',
+                    cursor: 'pointer',
+                  }}
+                >
+                  この条件で再実行
+                </button>
+              ) : (
+                <div data-testid='engine-actual-restore-unavailable' style={{ color: '#9a4d00', fontSize: '0.85rem' }}>
+                  この execution のルール条件は preset 復元できません。
+                </div>
+              )}
+            </div>
+            <table
+              data-testid='engine-actual-execution-overview-table'
+              style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}
+            >
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>execution</th>
+                  <th style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>preset / rule</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>trade_count</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>total_return_percent</th>
+                  <th style={{ textAlign: 'right', borderBottom: '1px solid #ddd' }}>max_drawdown_percent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {engineActualExecutionOverviewItems.map((item, index) => (
+                  <tr key={`${item.executionId}-${item.roleLabel}-${index}`}>
+                    <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.25rem 0' }}>
+                      <code>{item.executionId}</code>{' '}
+                      <span
+                        data-testid={
+                          item.roleLabel === '比較元'
+                            ? 'engine-actual-overview-role-base'
+                            : 'engine-actual-overview-role-rerun'
+                        }
+                        style={{
+                          display: 'inline-block',
+                          marginLeft: '0.35rem',
+                          padding: '0.05rem 0.4rem',
+                          borderRadius: '999px',
+                          background: item.roleLabel === '比較元' ? '#eef3ff' : '#eaf7ea',
+                          color: item.roleLabel === '比較元' ? '#3457a4' : '#1f6a1f',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {item.roleLabel}
+                      </span>
+                      {item.isCompareLinked && (
+                        <span
+                          data-testid='engine-actual-overview-compare-linkage'
+                          style={{
+                            display: 'inline-block',
+                            marginLeft: '0.35rem',
+                            padding: '0.05rem 0.4rem',
+                            borderRadius: '999px',
+                            background: '#fff6e8',
+                            color: '#9a4d00',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          比較リンクあり
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.25rem 0' }}>
+                      <div style={{ fontWeight: 600 }}>{item.presetLabel}</div>
+                      <div style={{ color: '#555' }}>{item.ruleLabel}</div>
+                    </td>
+                    <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.25rem 0' }}>
+                      {item.tradeCount ?? '-'}
+                    </td>
+                    <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.25rem 0' }}>
+                      {item.totalReturnPct ?? '-'}
+                    </td>
+                    <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.25rem 0' }}>
+                      {item.maxDrawdownPct ?? '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
