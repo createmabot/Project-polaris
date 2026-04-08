@@ -612,6 +612,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-not-ready"');
     expect(html).toContain('artifact はまだ利用できません（RESULT_NOT_READY）。');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-not-ready');
   });
 
   it('shows NOT_FOUND state for engine_actual artifact read', () => {
@@ -633,6 +635,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-not-found"');
     expect(html).toContain('artifact は見つかりません（NOT_FOUND）。');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-not-found');
   });
 
   it('shows generic fetch error state for engine_actual artifact read', () => {
@@ -654,6 +658,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-artifact-error"');
     expect(html).toContain('artifact 取得に失敗しました: network failed');
+    expect(html).toContain('data-testid="engine-actual-execution-overview-table"');
+    expect(html).toContain('exec-actual-fetch-error');
   });
 
   it('shows engine_actual summary card with trade metrics and rule pattern', () => {

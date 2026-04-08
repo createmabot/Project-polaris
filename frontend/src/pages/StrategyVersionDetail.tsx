@@ -510,7 +510,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     internalExecutionViewModel.recommendedMessageKey,
   );
   const engineActualSummaryDisplay = useMemo(() => {
-    if (!isEngineActualResult || !internalEngineActualArtifactData) {
+    if (!isEngineActualResult) {
       return null;
     }
     return buildEngineActualSummaryDisplay(
@@ -519,7 +519,6 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     );
   }, [
     isEngineActualResult,
-    internalEngineActualArtifactData,
     internalExecutionResultData?.result_summary?.metrics,
     internalExecutionResultData?.input_snapshot,
   ]);
