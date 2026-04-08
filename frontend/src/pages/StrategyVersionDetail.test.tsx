@@ -155,6 +155,8 @@ function createInternalExecutionResultData(params?: {
   winRate?: number | null;
   totalReturnPercent?: number | null;
   maxDrawdownPercent?: number | null;
+  averageTradeReturnPercent?: number | null;
+  profitFactor?: number | null;
   holdingPeriodAvgBars?: number | null;
   firstTradeAt?: string | null;
   lastTradeAt?: string | null;
@@ -190,6 +192,8 @@ function createInternalExecutionResultData(params?: {
         win_rate: params?.winRate ?? null,
         total_return_percent: params?.totalReturnPercent ?? null,
         max_drawdown_percent: params?.maxDrawdownPercent ?? null,
+        average_trade_return_percent: params?.averageTradeReturnPercent ?? null,
+        profit_factor: params?.profitFactor ?? null,
         holding_period_avg_bars: params?.holdingPeriodAvgBars ?? null,
         first_trade_at: params?.firstTradeAt ?? null,
         last_trade_at: params?.lastTradeAt ?? null,
@@ -866,6 +870,8 @@ describe('StrategyVersionDetail', () => {
         winRate: 66.7,
         totalReturnPercent: 7.5,
         maxDrawdownPercent: -2.4,
+        averageTradeReturnPercent: 1.25,
+        profitFactor: 1.8,
         actualRules: [{ kind: 'price_above_sma', period: 25 }],
       }),
       createInternalExecutionArtifactData({
@@ -882,6 +888,8 @@ describe('StrategyVersionDetail', () => {
         winRate: 33.3,
         totalReturnPercent: 1.2,
         maxDrawdownPercent: -4.1,
+        averageTradeReturnPercent: 0.4,
+        profitFactor: 0.75,
         actualRules: [{ kind: 'price_above_threshold', threshold: 500 }],
       }),
     );
@@ -894,6 +902,12 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('win_rate');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('max_drawdown_percent');
+    expect(html).toContain('average_trade_return_percent');
+    expect(html).toContain('profit_factor');
+    expect(html).toContain('+1.25%');
+    expect(html).toContain('1.80');
+    expect(html).toContain('+0.40%');
+    expect(html).toContain('0.75');
   });
 
   it('restores rerun compare linkage from persisted input_snapshot engine_config on revisit', () => {

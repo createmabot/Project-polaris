@@ -263,6 +263,8 @@ describe('internal backtest execution service contracts', () => {
     expect(output.resultSummary.metrics.win_rate).toBeTypeOf('number');
     expect(output.resultSummary.metrics.total_return_percent).toBeTypeOf('number');
     expect(output.resultSummary.metrics.max_drawdown_percent).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.average_trade_return_percent).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.profit_factor).toBeTypeOf('number');
     expect(output.resultSummary.metrics.holding_period_avg_bars).toBeTypeOf('number');
     expect(output.artifactPointer).toMatchObject({
       type: 'internal_backtest_execution',
@@ -334,6 +336,8 @@ describe('internal backtest execution service contracts', () => {
       win_rate: 0,
       total_return_percent: 0,
       max_drawdown_percent: 0,
+      average_trade_return_percent: 0,
+      profit_factor: 0,
       holding_period_avg_bars: 0,
     });
     expect(output.resultSummary.metrics.first_trade_at).toBeNull();

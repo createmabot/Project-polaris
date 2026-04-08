@@ -28,6 +28,8 @@ type EngineMetrics = {
   win_rate?: number;
   total_return_percent?: number;
   max_drawdown_percent?: number;
+  average_trade_return_percent?: number;
+  profit_factor?: number;
   holding_period_avg_bars?: number;
   first_trade_at?: string | null;
   last_trade_at?: string | null;
@@ -214,6 +216,8 @@ function buildActualMetricsFromBars(args: {
         win_rate: 0,
         total_return_percent: 0,
         max_drawdown_percent: 0,
+        average_trade_return_percent: 0,
+        profit_factor: 0,
         holding_period_avg_bars: 0,
         first_trade_at: null,
         last_trade_at: null,
@@ -351,6 +355,31 @@ function buildActualMetricsFromBars(args: {
   const winRate = tradeCount === 0 ? 0 : roundTo((wins / tradeCount) * 100, 4);
   const totalReturnPercent = roundTo(equity - 100, 4);
   const maxDrawdownPercent = computeMaxDrawdownPercent(equitySeries);
+  const averageTradeReturnPercent =
+    tradeCount === 0
+      ? 0
+      : roundTo(
+          trades.reduce((sum, trade) => sum + trade.return_percent, 0) / tradeCount,
+          4,
+        );
+  const grossProfit = roundTo(
+    trades
+      .filter((trade) => trade.return_percent > 0)
+      .reduce((sum, trade) => sum + trade.return_percent, 0),
+    6,
+  );
+  const grossLossAbs = roundTo(
+    trades
+      .filter((trade) => trade.return_percent < 0)
+      .reduce((sum, trade) => sum + Math.abs(trade.return_percent), 0),
+    6,
+  );
+  const profitFactor =
+    tradeCount === 0
+      ? 0
+      : grossLossAbs === 0
+        ? roundTo(grossProfit, 4)
+        : roundTo(grossProfit / grossLossAbs, 4);
   const holdingPeriodAvgBars =
     tradeCount === 0
       ? 0
@@ -366,6 +395,8 @@ function buildActualMetricsFromBars(args: {
       win_rate: winRate,
       total_return_percent: totalReturnPercent,
       max_drawdown_percent: maxDrawdownPercent,
+      average_trade_return_percent: averageTradeReturnPercent,
+      profit_factor: profitFactor,
       holding_period_avg_bars: holdingPeriodAvgBars,
       first_trade_at: tradeCount > 0 ? trades[0]!.entry_at : null,
       last_trade_at: tradeCount > 0 ? trades[tradeCount - 1]!.exit_at : null,
