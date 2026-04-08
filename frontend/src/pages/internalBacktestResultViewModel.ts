@@ -208,6 +208,16 @@ export type EngineActualFormState = {
   thresholdValue: string;
 };
 
+export type EngineActualRestorePayload = {
+  summaryMode: 'engine_actual';
+  form: EngineActualFormState;
+  symbol: string | null;
+  dataRange: {
+    from: string;
+    to: string;
+  } | null;
+};
+
 export function createDefaultEngineActualFormState(): EngineActualFormState {
   return {
     presetId: 'default_previous_close',
@@ -281,6 +291,120 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
     default:
       return { actual_rules: undefined };
   }
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function asRule(value: unknown): ActualRule | null {
+  const obj = asObject(value);
+  if (!obj || typeof obj.kind !== 'string') return null;
+  return obj as ActualRule;
+}
+
+function extractRulesFromInputSnapshot(
+  inputSnapshot: unknown,
+): { entryRule: ActualRule | null; exitRule: ActualRule | null } {
+  const snapshot = asObject(inputSnapshot);
+  if (!snapshot) {
+    return { entryRule: null, exitRule: null };
+  }
+
+  const engineConfig = asObject(snapshot.engine_config);
+  const actualRulesObject = asObject(engineConfig?.actual_rules);
+  const entryRule = asRule(actualRulesObject?.entry_rule);
+  const exitRule = asRule(actualRulesObject?.exit_rule);
+  if (entryRule || exitRule) {
+    return { entryRule, exitRule };
+  }
+
+  // Backward compatibility for older frontend-only fixtures.
+  const fallbackRules = Array.isArray(snapshot.actual_rules)
+    ? (snapshot.actual_rules as unknown[])
+    : null;
+  if (fallbackRules && fallbackRules.length > 0) {
+    return {
+      entryRule: asRule(fallbackRules[0]),
+      exitRule: asRule(fallbackRules[1]),
+    };
+  }
+
+  return { entryRule: null, exitRule: null };
+}
+
+function buildPresetStateFromRules(
+  entryRule: ActualRule | null,
+  exitRule: ActualRule | null,
+): EngineActualFormState | null {
+  if (!entryRule && !exitRule) {
+    return createDefaultEngineActualFormState();
+  }
+
+  const entryKind = entryRule?.kind ?? null;
+  const exitKind = exitRule?.kind ?? null;
+
+  if (entryKind === 'close_above_previous_close' && exitKind === 'close_below_previous_close') {
+    return createDefaultEngineActualFormState();
+  }
+  if (entryKind === 'price_above_sma' && exitKind === 'price_below_sma') {
+    const period = typeof entryRule?.period === 'number' ? entryRule.period : null;
+    if (!period || !Number.isInteger(period) || period < 2 || period > 200) {
+      return null;
+    }
+    return {
+      presetId: 'sma_cross',
+      smaPeriod: String(period),
+      thresholdValue: '',
+    };
+  }
+  if (entryKind === 'price_above_threshold' && exitKind === 'price_below_threshold') {
+    const threshold = typeof entryRule?.threshold === 'number' ? entryRule.threshold : null;
+    if (!threshold || !Number.isFinite(threshold) || threshold <= 0) {
+      return null;
+    }
+    return {
+      presetId: 'threshold_cross',
+      smaPeriod: '',
+      thresholdValue: String(threshold),
+    };
+  }
+
+  return null;
+}
+
+function extractExecutionTargetSymbol(inputSnapshot: unknown): string | null {
+  const snapshot = asObject(inputSnapshot);
+  const executionTarget = asObject(snapshot?.execution_target);
+  const symbol = typeof executionTarget?.symbol === 'string' ? executionTarget.symbol.trim() : '';
+  return symbol.length > 0 ? symbol : null;
+}
+
+function extractDataRange(inputSnapshot: unknown): { from: string; to: string } | null {
+  const snapshot = asObject(inputSnapshot);
+  const dataRange = asObject(snapshot?.data_range);
+  const from = typeof dataRange?.from === 'string' ? dataRange.from.trim() : '';
+  const to = typeof dataRange?.to === 'string' ? dataRange.to.trim() : '';
+  if (!from || !to) {
+    return null;
+  }
+  return { from, to };
+}
+
+export function buildEngineActualRestorePayloadFromInputSnapshot(
+  inputSnapshot: unknown,
+): EngineActualRestorePayload | null {
+  const { entryRule, exitRule } = extractRulesFromInputSnapshot(inputSnapshot);
+  const form = buildPresetStateFromRules(entryRule, exitRule);
+  if (!form) {
+    return null;
+  }
+  return {
+    summaryMode: 'engine_actual',
+    form,
+    symbol: extractExecutionTargetSymbol(inputSnapshot),
+    dataRange: extractDataRange(inputSnapshot),
+  };
 }
 
 
