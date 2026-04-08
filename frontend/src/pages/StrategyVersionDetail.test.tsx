@@ -163,6 +163,7 @@ function createInternalExecutionResultData(params?: {
     entry_rule?: { kind: string; [key: string]: unknown };
     exit_rule?: { kind: string; [key: string]: unknown };
   } | null;
+  compareBaseExecutionId?: string | null;
   executionTargetSymbol?: string | null;
   dataRange?: { from: string; to: string } | null;
 }) {
@@ -221,6 +222,7 @@ function createInternalExecutionResultData(params?: {
       engine_config: {
         summary_mode: params?.summaryKind ?? 'engine_estimated',
         actual_rules: params?.actualRulesObject ?? null,
+        compare_base_execution_id: params?.compareBaseExecutionId ?? null,
       },
       actual_rules: params?.actualRules ?? null,
     },
@@ -892,5 +894,49 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('win_rate');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('max_drawdown_percent');
+  });
+
+  it('restores rerun compare linkage from persisted input_snapshot engine_config on revisit', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue([
+      '/strategy-versions/ver-1?internalExecutionId=exec-rerun-persisted',
+      vi.fn(),
+    ]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-rerun-persisted', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-rerun-persisted',
+        summaryKind: 'engine_actual',
+        tradeCount: 5,
+        winRate: 60,
+        totalReturnPercent: 6.1,
+        maxDrawdownPercent: -2.0,
+        actualRules: [{ kind: 'price_above_sma', period: 25 }],
+        compareBaseExecutionId: 'exec-source-persisted',
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-rerun-persisted',
+        tradesCount: 5,
+        equityCount: 8,
+      }),
+      null,
+      createInternalExecutionStatusData({ executionId: 'exec-source-persisted', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-source-persisted',
+        summaryKind: 'engine_actual',
+        tradeCount: 2,
+        winRate: 50,
+        totalReturnPercent: 1.0,
+        maxDrawdownPercent: -3.8,
+        actualRules: [{ kind: 'price_above_threshold', threshold: 500 }],
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-rerun-compare"');
+    expect(html).toContain('元: <code>exec-source-persisted</code> / 再実行: <code>exec-rerun-persisted</code>');
   });
 });
