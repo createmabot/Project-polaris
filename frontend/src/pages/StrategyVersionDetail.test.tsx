@@ -267,7 +267,11 @@ function setupSWR(
   internalResultData: ReturnType<typeof createInternalExecutionResultData> | null = null,
   internalArtifactData: ReturnType<typeof createInternalExecutionArtifactData> | null = null,
   internalArtifactError: { message: string; code?: string } | null = null,
+  compareSourceStatusData: ReturnType<typeof createInternalExecutionStatusData> | null = null,
+  compareSourceResultData: ReturnType<typeof createInternalExecutionResultData> | null = null,
 ) {
+  const compareSourceExecutionId = compareSourceStatusData?.execution?.id ?? null;
+  const currentExecutionId = internalStatusData?.execution?.id ?? null;
   mockUseSWR.mockImplementation((key: string) => {
     if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
       return {
@@ -286,6 +290,17 @@ function setupSWR(
       };
     }
     if (typeof key === 'string' && key.startsWith('/api/internal-backtests/executions/') && key.endsWith('/result')) {
+      if (
+        compareSourceExecutionId &&
+        key.includes(`/api/internal-backtests/executions/${compareSourceExecutionId}/result`)
+      ) {
+        return {
+          isLoading: false,
+          error: null,
+          mutate: vi.fn(),
+          data: compareSourceResultData,
+        };
+      }
       return {
         isLoading: false,
         error: null,
@@ -306,6 +321,28 @@ function setupSWR(
       };
     }
     if (typeof key === 'string' && key.startsWith('/api/internal-backtests/executions/')) {
+      if (
+        compareSourceExecutionId &&
+        key === `/api/internal-backtests/executions/${compareSourceExecutionId}`
+      ) {
+        return {
+          isLoading: false,
+          error: null,
+          mutate: vi.fn(),
+          data: compareSourceStatusData,
+        };
+      }
+      if (
+        currentExecutionId &&
+        key === `/api/internal-backtests/executions/${currentExecutionId}`
+      ) {
+        return {
+          isLoading: false,
+          error: null,
+          mutate: vi.fn(),
+          data: internalStatusData,
+        };
+      }
       return {
         isLoading: false,
         error: null,
@@ -779,5 +816,81 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('data-testid="engine-actual-restore-unavailable"');
     expect(html).toContain('この execution のルール条件は preset 復元できません。');
     expect(html).not.toContain('data-testid="engine-actual-restore-button"');
+  });
+
+  it('does not render engine_actual rerun compare before compare target exists', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-no-compare', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-no-compare', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-no-compare',
+        summaryKind: 'engine_actual',
+        tradeCount: 4,
+        winRate: 50,
+        totalReturnPercent: 2.5,
+        maxDrawdownPercent: -1.2,
+        actualRules: [{ kind: 'price_above_sma', period: 25 }],
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-no-compare',
+        tradesCount: 4,
+        equityCount: 6,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).not.toContain('data-testid="engine-actual-rerun-compare"');
+  });
+
+  it('renders engine_actual rerun compare when source and rerun executions are available', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue([
+      '/strategy-versions/ver-1?internalExecutionId=exec-rerun&internalCompareSourceExecutionId=exec-source',
+      vi.fn(),
+    ]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-rerun', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-rerun',
+        summaryKind: 'engine_actual',
+        tradeCount: 6,
+        winRate: 66.7,
+        totalReturnPercent: 7.5,
+        maxDrawdownPercent: -2.4,
+        actualRules: [{ kind: 'price_above_sma', period: 25 }],
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-rerun',
+        tradesCount: 6,
+        equityCount: 10,
+      }),
+      null,
+      createInternalExecutionStatusData({ executionId: 'exec-source', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-source',
+        summaryKind: 'engine_actual',
+        tradeCount: 3,
+        winRate: 33.3,
+        totalReturnPercent: 1.2,
+        maxDrawdownPercent: -4.1,
+        actualRules: [{ kind: 'price_above_threshold', threshold: 500 }],
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-rerun-compare"');
+    expect(html).toContain('data-testid="engine-actual-rerun-compare-table"');
+    expect(html).toContain('元: <code>exec-source</code> / 再実行: <code>exec-rerun</code>');
+    expect(html).toContain('trade_count');
+    expect(html).toContain('win_rate');
+    expect(html).toContain('total_return_percent');
+    expect(html).toContain('max_drawdown_percent');
   });
 });
