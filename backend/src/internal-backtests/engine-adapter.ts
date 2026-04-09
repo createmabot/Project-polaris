@@ -30,6 +30,8 @@ type EngineMetrics = {
   max_drawdown_percent?: number;
   average_trade_return_percent?: number;
   profit_factor?: number;
+  fee_rate_bps?: number;
+  slippage_bps?: number;
   holding_period_avg_bars?: number;
   first_trade_at?: string | null;
   last_trade_at?: string | null;
@@ -112,9 +114,47 @@ function roundTo(value: number, digits: number): number {
   return Math.round(value * factor) / factor;
 }
 
-function parsePercent(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+function parsePercent(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return value;
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function parseNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function resolveActualCostBps(engineConfig: Record<string, unknown>): {
+  feeRateBps: number;
+  slippageBps: number;
+} {
+  const costs = asObject(engineConfig.costs);
+  const legacyCommissionPercent = parsePercent(engineConfig.commission_percent);
+  const legacyCommission = parsePercent(engineConfig.commission);
+  const legacySlippagePercent = parsePercent(engineConfig.slippage_percent);
+  const legacySlippage = parsePercent(engineConfig.slippage);
+  const feeRateBps =
+    parseNonNegativeNumber(costs?.fee_rate_bps) ??
+    parseNonNegativeNumber(engineConfig.fee_rate_bps) ??
+    (legacyCommissionPercent !== null ? legacyCommissionPercent * 100 : null) ??
+    (legacyCommission !== null ? legacyCommission * 100 : null) ??
+    0;
+  const slippageBps =
+    parseNonNegativeNumber(costs?.slippage_bps) ??
+    parseNonNegativeNumber(engineConfig.slippage_bps) ??
+    (legacySlippagePercent !== null ? legacySlippagePercent * 100 : null) ??
+    (legacySlippage !== null ? legacySlippage * 100 : null) ??
+    0;
+  return {
+    feeRateBps: roundTo(feeRateBps, 4),
+    slippageBps: roundTo(slippageBps, 4),
+  };
 }
 
 function calculateDeterministicMetrics(input: InternalBacktestExecutionInput): EngineMetrics {
@@ -198,14 +238,9 @@ function buildActualMetricsFromBars(args: {
 }): ActualSimulationResult {
   const bars = args.bars;
   const priceSummary = buildPriceSummaryFromBars(bars);
-  const commissionPercent =
-    parsePercent(args.engineConfig.commission_percent) ||
-    parsePercent(args.engineConfig.commission) ||
-    0;
-  const slippagePercent =
-    parsePercent(args.engineConfig.slippage_percent) || parsePercent(args.engineConfig.slippage) || 0;
-  const commissionRate = commissionPercent / 100;
-  const slippageRate = slippagePercent / 100;
+  const costs = resolveActualCostBps(args.engineConfig);
+  const feeRate = costs.feeRateBps / 10000;
+  const slippageRate = costs.slippageBps / 10000;
   const ruleSet = normalizeEngineActualRuleSet(args.engineConfig);
 
   if (bars.length === 0) {
@@ -218,6 +253,8 @@ function buildActualMetricsFromBars(args: {
         max_drawdown_percent: 0,
         average_trade_return_percent: 0,
         profit_factor: 0,
+        fee_rate_bps: costs.feeRateBps,
+        slippage_bps: costs.slippageBps,
         holding_period_avg_bars: 0,
         first_trade_at: null,
         last_trade_at: null,
@@ -304,7 +341,7 @@ function buildActualMetricsFromBars(args: {
     if (isRuleMatched(i, ruleSet.exitRule)) {
       const exitPrice = roundTo(nextBar.open * (1 - slippageRate), 6);
       const grossReturnRate = (exitPrice - openPosition.entryPrice) / openPosition.entryPrice;
-      const netReturnRate = grossReturnRate - commissionRate * 2;
+      const netReturnRate = grossReturnRate - feeRate * 2;
       const holdingBars = Math.max(1, i + 1 - openPosition.entryIndex + 1);
       const returnPercent = roundTo(netReturnRate * 100, 4);
       equity = roundTo(equity * (1 + netReturnRate), 6);
@@ -330,7 +367,7 @@ function buildActualMetricsFromBars(args: {
     const lastBar = bars[bars.length - 1]!;
     const exitPrice = roundTo(lastBar.close * (1 - slippageRate), 6);
     const grossReturnRate = (exitPrice - openPosition.entryPrice) / openPosition.entryPrice;
-    const netReturnRate = grossReturnRate - commissionRate * 2;
+    const netReturnRate = grossReturnRate - feeRate * 2;
     const holdingBars = Math.max(1, bars.length - openPosition.entryIndex);
     const returnPercent = roundTo(netReturnRate * 100, 4);
     equity = roundTo(equity * (1 + netReturnRate), 6);
@@ -397,6 +434,8 @@ function buildActualMetricsFromBars(args: {
       max_drawdown_percent: maxDrawdownPercent,
       average_trade_return_percent: averageTradeReturnPercent,
       profit_factor: profitFactor,
+      fee_rate_bps: costs.feeRateBps,
+      slippage_bps: costs.slippageBps,
       holding_period_avg_bars: holdingPeriodAvgBars,
       first_trade_at: tradeCount > 0 ? trades[0]!.entry_at : null,
       last_trade_at: tradeCount > 0 ? trades[tradeCount - 1]!.exit_at : null,

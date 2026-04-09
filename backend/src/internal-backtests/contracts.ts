@@ -83,6 +83,8 @@ export type InternalBacktestResultSummary = {
     max_drawdown_percent?: number;
     average_trade_return_percent?: number;
     profit_factor?: number;
+    fee_rate_bps?: number;
+    slippage_bps?: number;
     holding_period_avg_bars?: number;
     first_trade_at?: string | null;
     last_trade_at?: string | null;
@@ -595,6 +597,26 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
           assertFiniteNumber(metrics.profit_factor, 'result_summary.metrics.profit_factor');
           return metrics.profit_factor as number;
         })();
+  const optionalFeeRateBps =
+    metrics.fee_rate_bps === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(metrics.fee_rate_bps, 'result_summary.metrics.fee_rate_bps');
+          if ((metrics.fee_rate_bps as number) < 0) {
+            throw new Error('result_summary.metrics.fee_rate_bps must be non-negative.');
+          }
+          return metrics.fee_rate_bps as number;
+        })();
+  const optionalSlippageBps =
+    metrics.slippage_bps === undefined
+      ? undefined
+      : (() => {
+          assertFiniteNumber(metrics.slippage_bps, 'result_summary.metrics.slippage_bps');
+          if ((metrics.slippage_bps as number) < 0) {
+            throw new Error('result_summary.metrics.slippage_bps must be non-negative.');
+          }
+          return metrics.slippage_bps as number;
+        })();
   const optionalHoldingPeriodAvgBars =
     metrics.holding_period_avg_bars === undefined
       ? undefined
@@ -657,6 +679,8 @@ export function validateResultSummarySchema(input: unknown): InternalBacktestRes
         ? { average_trade_return_percent: optionalAverageTradeReturnPercent }
         : {}),
       ...(optionalProfitFactor !== undefined ? { profit_factor: optionalProfitFactor } : {}),
+      ...(optionalFeeRateBps !== undefined ? { fee_rate_bps: optionalFeeRateBps } : {}),
+      ...(optionalSlippageBps !== undefined ? { slippage_bps: optionalSlippageBps } : {}),
       ...(optionalHoldingPeriodAvgBars !== undefined
         ? { holding_period_avg_bars: optionalHoldingPeriodAvgBars }
         : {}),
