@@ -760,15 +760,18 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     setStartingInternalBacktest(true);
     setStartInternalBacktestError(null);
     try {
-      const { actual_rules } = summaryMode === 'engine_actual'
+      const { actual_rules, costs } = summaryMode === 'engine_actual'
         ? buildEngineActualPayload(engineActualForm)
-        : { actual_rules: undefined };
+        : { actual_rules: undefined, costs: undefined };
 
       const engineConfig: Record<string, unknown> = {
         summary_mode: summaryMode,
       };
       if (summaryMode === 'engine_actual' && actual_rules !== undefined) {
         engineConfig['actual_rules'] = actual_rules;
+      }
+      if (summaryMode === 'engine_actual' && costs !== undefined) {
+        engineConfig['costs'] = costs;
       }
       if (summaryMode === 'engine_actual' && pendingEngineActualCompareSourceExecutionId) {
         engineConfig['compare_base_execution_id'] = pendingEngineActualCompareSourceExecutionId;
@@ -1108,6 +1111,42 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               </label>
             )}
 
+            <div style={{ marginTop: '0.45rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+                <span>fee rate (bps)</span>
+                <input
+                  data-testid='engine-actual-fee-bps-input'
+                  type='number'
+                  min={0}
+                  step='any'
+                  value={engineActualForm.feeRateBps}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, feeRateBps: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 10'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+                <span>slippage (bps)</span>
+                <input
+                  data-testid='engine-actual-slippage-bps-input'
+                  type='number'
+                  min={0}
+                  step='any'
+                  value={engineActualForm.slippageBps}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, slippageBps: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 5'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
+                />
+              </label>
+            </div>
+
             {engineActualFormError && (
               <div
                 data-testid='engine-actual-form-error'
@@ -1347,6 +1386,24 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                   </td>
                 </tr>
                 <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>fee_rate_bps</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.feeRateBps ?? 0}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.feeRateBps ?? 0}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>slippage_bps</td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {compareSourceEngineActualSummaryDisplay.slippageBps ?? 0}
+                  </td>
+                  <td style={{ borderBottom: '1px solid #f0f0f0', textAlign: 'right', padding: '0.2rem 0' }}>
+                    {engineActualSummaryDisplay.slippageBps ?? 0}
+                  </td>
+                </tr>
+                <tr>
                   <td style={{ borderBottom: '1px solid #f0f0f0', padding: '0.2rem 0' }}>
                     average_trade_return_percent
                   </td>
@@ -1395,6 +1452,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                   <strong>ルールパターン: </strong>
                   <span data-testid='engine-actual-rule-pattern'>{engineActualSummaryDisplay.rulePatternLabel}</span>
                 </div>
+                {(engineActualSummaryDisplay.feeRateBps !== null || engineActualSummaryDisplay.slippageBps !== null) && (
+                  <div style={{ marginBottom: '0.35rem', fontSize: '0.85rem', color: '#4b5f80' }}>
+                    コスト前提: fee {engineActualSummaryDisplay.feeRateBps ?? 0} bps / slippage{' '}
+                    {engineActualSummaryDisplay.slippageBps ?? 0} bps
+                  </div>
+                )}
                 <div
                   style={{
                     display: 'grid',

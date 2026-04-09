@@ -247,7 +247,10 @@ describe('internal backtest execution service contracts', () => {
           source_kind: 'daily_ohlcv',
         },
         data_range: { from: '2024-01-01', to: '2024-01-20' },
-        engine_config: { summary_mode: 'engine_actual', commission_percent: 0, slippage_percent: 0 },
+        engine_config: {
+          summary_mode: 'engine_actual',
+          costs: { fee_rate_bps: 0, slippage_bps: 0 },
+        },
         strategy_snapshot: {
           natural_language_rule: 'rule',
           generated_pine: 'strategy("x")',
@@ -265,6 +268,8 @@ describe('internal backtest execution service contracts', () => {
     expect(output.resultSummary.metrics.max_drawdown_percent).toBeTypeOf('number');
     expect(output.resultSummary.metrics.average_trade_return_percent).toBeTypeOf('number');
     expect(output.resultSummary.metrics.profit_factor).toBeTypeOf('number');
+    expect(output.resultSummary.metrics.fee_rate_bps).toBe(0);
+    expect(output.resultSummary.metrics.slippage_bps).toBe(0);
     expect(output.resultSummary.metrics.holding_period_avg_bars).toBeTypeOf('number');
     expect(output.artifactPointer).toMatchObject({
       type: 'internal_backtest_execution',
@@ -275,6 +280,103 @@ describe('internal backtest execution service contracts', () => {
     expect(output.artifactPayload?.trades).toBeInstanceOf(Array);
     expect(output.artifactPayload?.equity_curve).toBeInstanceOf(Array);
     expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(20);
+  });
+
+  it('applies fee/slippage bps to engine_actual net metrics', async () => {
+    const engineAdapter = createDummyInternalBacktestEngineAdapter({
+      fetchDailyOhlcv: async () => ({
+        bars: [
+          { timestamp: '2024-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100, volume: 1000 },
+          { timestamp: '2024-01-02T00:00:00.000Z', open: 100, high: 105, low: 100, close: 104, volume: 1000 },
+          { timestamp: '2024-01-03T00:00:00.000Z', open: 105, high: 106, low: 104, close: 105, volume: 1000 },
+          { timestamp: '2024-01-04T00:00:00.000Z', open: 104, high: 104, low: 99, close: 100, volume: 1000 },
+          { timestamp: '2024-01-05T00:00:00.000Z', open: 99, high: 100, low: 98, close: 99, volume: 1000 },
+        ],
+        snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-05',
+          fetched_at: '2024-01-05T00:00:00.000Z',
+          data_revision: 'stub-cost-comparison',
+          bar_count: 5,
+        },
+        fetchObservation: {
+          providerName: 'stub',
+          internalReasonCode: null,
+          retryTarget: false,
+          retryAttempted: false,
+          retryAttempts: 1,
+          httpStatus: null,
+          endpointKind: 'stub_daily_ohlcv',
+        },
+      }),
+    });
+
+    const baseSnapshot = {
+      strategy_rule_version_id: 'ver-1',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      execution_target: {
+        symbol: '7203',
+        source_kind: 'daily_ohlcv',
+      },
+      data_range: { from: '2024-01-01', to: '2024-01-05' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        costs: {
+          fee_rate_bps: 0,
+          slippage_bps: 0,
+        },
+      },
+      strategy_snapshot: {
+        natural_language_rule: 'rule',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    };
+
+    const noCost = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-no-cost',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: baseSnapshot,
+      },
+      { engineAdapter },
+    );
+
+    const withCost = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-with-cost',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          ...baseSnapshot,
+          engine_config: {
+            summary_mode: 'engine_actual',
+            costs: {
+              fee_rate_bps: 10,
+              slippage_bps: 5,
+            },
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(noCost.resultSummary.metrics.fee_rate_bps).toBe(0);
+    expect(noCost.resultSummary.metrics.slippage_bps).toBe(0);
+    expect(withCost.resultSummary.metrics.fee_rate_bps).toBe(10);
+    expect(withCost.resultSummary.metrics.slippage_bps).toBe(5);
+    expect(withCost.resultSummary.metrics.total_return_percent).toBeLessThanOrEqual(
+      noCost.resultSummary.metrics.total_return_percent ?? 0,
+    );
+    expect(withCost.resultSummary.metrics.average_trade_return_percent).toBeLessThanOrEqual(
+      noCost.resultSummary.metrics.average_trade_return_percent ?? 0,
+    );
   });
 
   it('keeps engine_actual succeeded with no-trade summary when bars are empty', async () => {

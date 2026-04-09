@@ -206,6 +206,10 @@ export type EngineActualFormState = {
   smaPeriod: string;
   /** threshold_cross 時の threshold（数値文字列）。空文字 = 未入力 */
   thresholdValue: string;
+  /** 片道手数料（bps）。空文字は 0 扱い */
+  feeRateBps: string;
+  /** 片道スリッページ（bps）。空文字は 0 扱い */
+  slippageBps: string;
 };
 
 export type EngineActualRestorePayload = {
@@ -223,7 +227,21 @@ export function createDefaultEngineActualFormState(): EngineActualFormState {
     presetId: 'default_previous_close',
     smaPeriod: '',
     thresholdValue: '',
+    feeRateBps: '0',
+    slippageBps: '0',
   };
+}
+
+function parseBpsInput(value: string): number {
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return 0;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return Number.NaN;
+  }
+  return parsed;
 }
 
 /**
@@ -231,6 +249,14 @@ export function createDefaultEngineActualFormState(): EngineActualFormState {
  * @returns エラーメッセージ文字列（null = valid）
  */
 export function validateEngineActualForm(form: EngineActualFormState): string | null {
+  const feeRateBps = parseBpsInput(form.feeRateBps);
+  if (!Number.isFinite(feeRateBps)) {
+    return 'fee rate (bps) は 0 以上の数値で入力してください。';
+  }
+  const slippageBps = parseBpsInput(form.slippageBps);
+  if (!Number.isFinite(slippageBps)) {
+    return 'slippage (bps) は 0 以上の数値で入力してください。';
+  }
   if (form.presetId === 'sma_cross') {
     const period = Number(form.smaPeriod);
     if (form.smaPeriod.trim() === '') {
@@ -263,10 +289,18 @@ type ActualRulesPayload = {
  */
 export function buildEngineActualPayload(form: EngineActualFormState): {
   actual_rules: ActualRulesPayload | undefined;
+  costs: {
+    fee_rate_bps: number;
+    slippage_bps: number;
+  };
 } {
+  const costs = {
+    fee_rate_bps: parseBpsInput(form.feeRateBps),
+    slippage_bps: parseBpsInput(form.slippageBps),
+  };
   switch (form.presetId) {
     case 'default_previous_close':
-      return { actual_rules: undefined };
+      return { actual_rules: undefined, costs };
 
     case 'sma_cross': {
       const period = parseInt(form.smaPeriod, 10);
@@ -275,6 +309,7 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
           entry_rule: { kind: 'price_above_sma', period },
           exit_rule: { kind: 'price_below_sma', period },
         },
+        costs,
       };
     }
 
@@ -285,11 +320,12 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
           entry_rule: { kind: 'price_above_threshold', threshold },
           exit_rule: { kind: 'price_below_threshold', threshold },
         },
+        costs,
       };
     }
 
     default:
-      return { actual_rules: undefined };
+      return { actual_rules: undefined, costs };
   }
 }
 
@@ -336,38 +372,48 @@ function extractRulesFromInputSnapshot(
 function buildPresetStateFromRules(
   entryRule: ActualRule | null,
   exitRule: ActualRule | null,
+  costs?: { feeRateBps: string; slippageBps: string },
 ): EngineActualFormState | null {
+  const withCosts = (state: EngineActualFormState): EngineActualFormState => ({
+    ...state,
+    feeRateBps: costs?.feeRateBps ?? '0',
+    slippageBps: costs?.slippageBps ?? '0',
+  });
   if (!entryRule && !exitRule) {
-    return createDefaultEngineActualFormState();
+    return withCosts(createDefaultEngineActualFormState());
   }
 
   const entryKind = entryRule?.kind ?? null;
   const exitKind = exitRule?.kind ?? null;
 
   if (entryKind === 'close_above_previous_close' && exitKind === 'close_below_previous_close') {
-    return createDefaultEngineActualFormState();
+    return withCosts(createDefaultEngineActualFormState());
   }
   if (entryKind === 'price_above_sma' && exitKind === 'price_below_sma') {
     const period = typeof entryRule?.period === 'number' ? entryRule.period : null;
     if (!period || !Number.isInteger(period) || period < 2 || period > 200) {
       return null;
     }
-    return {
+    return withCosts({
       presetId: 'sma_cross',
       smaPeriod: String(period),
       thresholdValue: '',
-    };
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
   }
   if (entryKind === 'price_above_threshold' && exitKind === 'price_below_threshold') {
     const threshold = typeof entryRule?.threshold === 'number' ? entryRule.threshold : null;
     if (!threshold || !Number.isFinite(threshold) || threshold <= 0) {
       return null;
     }
-    return {
+    return withCosts({
       presetId: 'threshold_cross',
       smaPeriod: '',
       thresholdValue: String(threshold),
-    };
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
   }
 
   return null;
@@ -391,11 +437,46 @@ function extractDataRange(inputSnapshot: unknown): { from: string; to: string } 
   return { from, to };
 }
 
+function extractEngineActualCosts(inputSnapshot: unknown): { feeRateBps: string; slippageBps: string } {
+  const snapshot = asObject(inputSnapshot);
+  const engineConfig = asObject(snapshot?.engine_config);
+  const costs = asObject(engineConfig?.costs);
+
+  const feeRateBpsRaw =
+    typeof costs?.fee_rate_bps === 'number'
+      ? costs.fee_rate_bps
+      : typeof engineConfig?.commission_percent === 'number'
+        ? engineConfig.commission_percent * 100
+        : typeof engineConfig?.commission === 'number'
+          ? engineConfig.commission * 100
+          : 0;
+
+  const slippageBpsRaw =
+    typeof costs?.slippage_bps === 'number'
+      ? costs.slippage_bps
+      : typeof engineConfig?.slippage_percent === 'number'
+        ? engineConfig.slippage_percent * 100
+        : typeof engineConfig?.slippage === 'number'
+          ? engineConfig.slippage * 100
+          : 0;
+
+  return {
+    feeRateBps:
+      Number.isFinite(feeRateBpsRaw) && feeRateBpsRaw >= 0 ? String(feeRateBpsRaw) : '0',
+    slippageBps:
+      Number.isFinite(slippageBpsRaw) && slippageBpsRaw >= 0 ? String(slippageBpsRaw) : '0',
+  };
+}
+
 export function buildEngineActualRestorePayloadFromInputSnapshot(
   inputSnapshot: unknown,
 ): EngineActualRestorePayload | null {
   const { entryRule, exitRule } = extractRulesFromInputSnapshot(inputSnapshot);
-  const form = buildPresetStateFromRules(entryRule, exitRule);
+  const form = buildPresetStateFromRules(
+    entryRule,
+    exitRule,
+    extractEngineActualCosts(inputSnapshot),
+  );
   if (!form) {
     return null;
   }
@@ -422,6 +503,8 @@ export type EngineActualSummaryDisplay = {
   averageTradeReturnPct: string | null;
   /** 例: "1.35" */
   profitFactor: string | null;
+  feeRateBps: number | null;
+  slippageBps: number | null;
   holdingAvgBars: number | null;
   firstTradeAt: string | null;
   lastTradeAt: string | null;
@@ -436,6 +519,8 @@ type EngineActualMetrics = {
   max_drawdown_percent?: number | null;
   average_trade_return_percent?: number | null;
   profit_factor?: number | null;
+  fee_rate_bps?: number | null;
+  slippage_bps?: number | null;
   holding_period_avg_bars?: number | null;
   first_trade_at?: string | null;
   last_trade_at?: string | null;
@@ -520,6 +605,14 @@ export function buildEngineActualSummaryDisplay(
     maxDrawdownPct: formatSignedPct(metrics?.max_drawdown_percent),
     averageTradeReturnPct: formatSignedPct(metrics?.average_trade_return_percent),
     profitFactor: formatFixed(metrics?.profit_factor, 2),
+    feeRateBps:
+      typeof metrics?.fee_rate_bps === 'number' && Number.isFinite(metrics.fee_rate_bps)
+        ? metrics.fee_rate_bps
+        : null,
+    slippageBps:
+      typeof metrics?.slippage_bps === 'number' && Number.isFinite(metrics.slippage_bps)
+        ? metrics.slippage_bps
+        : null,
     holdingAvgBars:
       typeof metrics?.holding_period_avg_bars === 'number' && Number.isFinite(metrics.holding_period_avg_bars)
         ? metrics.holding_period_avg_bars

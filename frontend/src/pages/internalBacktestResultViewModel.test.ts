@@ -64,8 +64,11 @@ describe('buildEngineActualPayload', () => {
       presetId: 'default_previous_close',
       smaPeriod: '',
       thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
     });
     expect(result.actual_rules).toBeUndefined();
+    expect(result.costs).toEqual({ fee_rate_bps: 0, slippage_bps: 0 });
   });
 
   it('sma_cross returns entry price_above_sma / exit price_below_sma with period', () => {
@@ -73,11 +76,14 @@ describe('buildEngineActualPayload', () => {
       presetId: 'sma_cross',
       smaPeriod: '25',
       thresholdValue: '',
+      feeRateBps: '10',
+      slippageBps: '5',
     });
     expect(result.actual_rules).toEqual({
       entry_rule: { kind: 'price_above_sma', period: 25 },
       exit_rule: { kind: 'price_below_sma', period: 25 },
     });
+    expect(result.costs).toEqual({ fee_rate_bps: 10, slippage_bps: 5 });
   });
 
   it('threshold_cross returns entry price_above_threshold / exit price_below_threshold with threshold', () => {
@@ -85,54 +91,120 @@ describe('buildEngineActualPayload', () => {
       presetId: 'threshold_cross',
       smaPeriod: '',
       thresholdValue: '500',
+      feeRateBps: '0',
+      slippageBps: '2.5',
     });
     expect(result.actual_rules).toEqual({
       entry_rule: { kind: 'price_above_threshold', threshold: 500 },
       exit_rule: { kind: 'price_below_threshold', threshold: 500 },
     });
+    expect(result.costs).toEqual({ fee_rate_bps: 0, slippage_bps: 2.5 });
   });
 });
 
 describe('validateEngineActualForm', () => {
   it('default_previous_close is always valid with no params', () => {
     expect(
-      validateEngineActualForm({ presetId: 'default_previous_close', smaPeriod: '', thresholdValue: '' }),
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '0',
+      }),
     ).toBeNull();
   });
 
   it('sma_cross with empty period returns error message', () => {
-    const error = validateEngineActualForm({ presetId: 'sma_cross', smaPeriod: '', thresholdValue: '' });
+    const error = validateEngineActualForm({
+      presetId: 'sma_cross',
+      smaPeriod: '',
+      thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
     expect(error).not.toBeNull();
     expect(error).toContain('period');
   });
 
   it('sma_cross with period = 1 (out of range) returns error message', () => {
-    const error = validateEngineActualForm({ presetId: 'sma_cross', smaPeriod: '1', thresholdValue: '' });
+    const error = validateEngineActualForm({
+      presetId: 'sma_cross',
+      smaPeriod: '1',
+      thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
     expect(error).not.toBeNull();
     expect(error).toContain('2');
   });
 
   it('sma_cross with valid period 25 is valid', () => {
     expect(
-      validateEngineActualForm({ presetId: 'sma_cross', smaPeriod: '25', thresholdValue: '' }),
+      validateEngineActualForm({
+        presetId: 'sma_cross',
+        smaPeriod: '25',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '0',
+      }),
     ).toBeNull();
   });
 
   it('threshold_cross with empty threshold returns error message', () => {
-    const error = validateEngineActualForm({ presetId: 'threshold_cross', smaPeriod: '', thresholdValue: '' });
+    const error = validateEngineActualForm({
+      presetId: 'threshold_cross',
+      smaPeriod: '',
+      thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
     expect(error).not.toBeNull();
     expect(error).toContain('threshold');
   });
 
   it('threshold_cross with threshold = 0 returns error message', () => {
-    const error = validateEngineActualForm({ presetId: 'threshold_cross', smaPeriod: '', thresholdValue: '0' });
+    const error = validateEngineActualForm({
+      presetId: 'threshold_cross',
+      smaPeriod: '',
+      thresholdValue: '0',
+      feeRateBps: '0',
+      slippageBps: '0',
+    });
     expect(error).not.toBeNull();
   });
 
   it('threshold_cross with valid threshold 500 is valid', () => {
     expect(
-      validateEngineActualForm({ presetId: 'threshold_cross', smaPeriod: '', thresholdValue: '500' }),
+      validateEngineActualForm({
+        presetId: 'threshold_cross',
+        smaPeriod: '',
+        thresholdValue: '500',
+        feeRateBps: '0',
+        slippageBps: '0',
+      }),
     ).toBeNull();
+  });
+
+  it('returns error when fee/slippage bps is invalid', () => {
+    expect(
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '-1',
+        slippageBps: '0',
+      }),
+    ).toContain('fee rate');
+    expect(
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '-2',
+      }),
+    ).toContain('slippage');
   });
 });
 
@@ -146,6 +218,8 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
     expect(restored).not.toBeNull();
     expect(restored?.summaryMode).toBe('engine_actual');
     expect(restored?.form.presetId).toBe('default_previous_close');
+    expect(restored?.form.feeRateBps).toBe('0');
+    expect(restored?.form.slippageBps).toBe('0');
     expect(restored?.symbol).toBe('7203');
     expect(restored?.dataRange).toEqual({ from: '2024-01-01', to: '2024-12-31' });
   });
@@ -167,6 +241,8 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       presetId: 'sma_cross',
       smaPeriod: '25',
       thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
     });
   });
 
@@ -187,6 +263,8 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       presetId: 'threshold_cross',
       smaPeriod: '',
       thresholdValue: '500',
+      feeRateBps: '0',
+      slippageBps: '0',
     });
   });
 
@@ -203,6 +281,23 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       },
     });
     expect(restored).toBeNull();
+  });
+
+  it('restores fee/slippage bps from engine_config.costs', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        costs: {
+          fee_rate_bps: 12,
+          slippage_bps: 7.5,
+        },
+      },
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.form.feeRateBps).toBe('12');
+    expect(restored?.form.slippageBps).toBe('7.5');
   });
 });
 
