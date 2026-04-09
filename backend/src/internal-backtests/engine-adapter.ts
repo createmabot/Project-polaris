@@ -68,7 +68,7 @@ type ActualTrade = {
   exit_price: number;
   return_percent: number;
   holding_bars: number;
-  exit_reason: 'signal_reversal' | 'end_of_period';
+  exit_reason: 'signal_exit' | 'take_profit' | 'stop_loss' | 'max_holding_bars' | 'end_of_period';
 };
 
 type ActualSimulationResult = {
@@ -324,6 +324,53 @@ function buildActualMetricsFromBars(args: {
     }
   }
 
+  function calculateCurrentNetReturnPercent(index: number, entryPrice: number): number | null {
+    const currentBar = bars[index];
+    if (!currentBar || entryPrice <= 0) {
+      return null;
+    }
+    const markToMarketExitPrice = roundTo(currentBar.close * (1 - slippageRate), 6);
+    const grossReturnRate = (markToMarketExitPrice - entryPrice) / entryPrice;
+    const netReturnRate = grossReturnRate - feeRate * 2;
+    return roundTo(netReturnRate * 100, 4);
+  }
+
+  function resolveExitReason(index: number): ActualTrade['exit_reason'] | null {
+    if (!openPosition) {
+      return null;
+    }
+    const currentNetReturnPercent = calculateCurrentNetReturnPercent(index, openPosition.entryPrice);
+
+    if (
+      ruleSet.exitOverrides.stopLossPercent !== undefined &&
+      currentNetReturnPercent !== null &&
+      currentNetReturnPercent <= -ruleSet.exitOverrides.stopLossPercent
+    ) {
+      return 'stop_loss';
+    }
+
+    if (
+      ruleSet.exitOverrides.takeProfitPercent !== undefined &&
+      currentNetReturnPercent !== null &&
+      currentNetReturnPercent >= ruleSet.exitOverrides.takeProfitPercent
+    ) {
+      return 'take_profit';
+    }
+
+    if (ruleSet.exitOverrides.maxHoldingBars !== undefined) {
+      const holdingBarsCandidate = Math.max(1, index + 1 - openPosition.entryIndex + 1);
+      if (holdingBarsCandidate >= ruleSet.exitOverrides.maxHoldingBars) {
+        return 'max_holding_bars';
+      }
+    }
+
+    if (isRuleMatched(index, ruleSet.exitRule)) {
+      return 'signal_exit';
+    }
+
+    return null;
+  }
+
   for (let i = 1; i < bars.length - 1; i += 1) {
     const nextBar = bars[i + 1]!;
 
@@ -338,7 +385,8 @@ function buildActualMetricsFromBars(args: {
       continue;
     }
 
-    if (isRuleMatched(i, ruleSet.exitRule)) {
+    const exitReason = resolveExitReason(i);
+    if (exitReason) {
       const exitPrice = roundTo(nextBar.open * (1 - slippageRate), 6);
       const grossReturnRate = (exitPrice - openPosition.entryPrice) / openPosition.entryPrice;
       const netReturnRate = grossReturnRate - feeRate * 2;
@@ -357,7 +405,7 @@ function buildActualMetricsFromBars(args: {
         exit_price: roundTo(exitPrice, 6),
         return_percent: returnPercent,
         holding_bars: holdingBars,
-        exit_reason: 'signal_reversal',
+        exit_reason: exitReason,
       });
       openPosition = undefined;
     }

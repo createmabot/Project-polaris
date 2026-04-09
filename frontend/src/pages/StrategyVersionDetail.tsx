@@ -1145,6 +1145,57 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                   style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
                 />
               </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+                <span>max_holding_bars</span>
+                <input
+                  data-testid='engine-actual-max-holding-bars-input'
+                  type='number'
+                  min={1}
+                  step={1}
+                  value={engineActualForm.maxHoldingBars}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, maxHoldingBars: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 20'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+                <span>take_profit_percent</span>
+                <input
+                  data-testid='engine-actual-take-profit-percent-input'
+                  type='number'
+                  min={0}
+                  step='any'
+                  value={engineActualForm.takeProfitPercent}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, takeProfitPercent: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 8'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
+                />
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.9rem' }}>
+                <span>stop_loss_percent</span>
+                <input
+                  data-testid='engine-actual-stop-loss-percent-input'
+                  type='number'
+                  min={0}
+                  step='any'
+                  value={engineActualForm.stopLossPercent}
+                  onChange={(event) => {
+                    setEngineActualForm((prev) => ({ ...prev, stopLossPercent: event.target.value }));
+                    setEngineActualFormError(null);
+                  }}
+                  placeholder='例: 4'
+                  style={{ border: '1px solid #bbb', borderRadius: '4px', padding: '0.3rem 0.4rem', width: '7rem' }}
+                />
+              </label>
             </div>
 
             {engineActualFormError && (

@@ -210,6 +210,12 @@ export type EngineActualFormState = {
   feeRateBps: string;
   /** 片道スリッページ（bps）。空文字は 0 扱い */
   slippageBps: string;
+  /** 最大保有バー数（正の整数）。空文字 = 未指定 */
+  maxHoldingBars: string;
+  /** 利確ライン（%）。正の数。空文字 = 未指定 */
+  takeProfitPercent: string;
+  /** 損切りライン（%）。正の数。空文字 = 未指定 */
+  stopLossPercent: string;
 };
 
 export type EngineActualRestorePayload = {
@@ -229,6 +235,9 @@ export function createDefaultEngineActualFormState(): EngineActualFormState {
     thresholdValue: '',
     feeRateBps: '0',
     slippageBps: '0',
+    maxHoldingBars: '',
+    takeProfitPercent: '',
+    stopLossPercent: '',
   };
 }
 
@@ -257,6 +266,24 @@ export function validateEngineActualForm(form: EngineActualFormState): string | 
   if (!Number.isFinite(slippageBps)) {
     return 'slippage (bps) は 0 以上の数値で入力してください。';
   }
+  if (form.maxHoldingBars.trim() !== '') {
+    const maxHoldingBars = Number(form.maxHoldingBars);
+    if (!Number.isInteger(maxHoldingBars) || maxHoldingBars <= 0) {
+      return 'max_holding_bars は 1 以上の整数で入力してください。';
+    }
+  }
+  if (form.takeProfitPercent.trim() !== '') {
+    const takeProfitPercent = Number(form.takeProfitPercent);
+    if (!Number.isFinite(takeProfitPercent) || takeProfitPercent <= 0) {
+      return 'take_profit_percent は 0 より大きい数値で入力してください。';
+    }
+  }
+  if (form.stopLossPercent.trim() !== '') {
+    const stopLossPercent = Number(form.stopLossPercent);
+    if (!Number.isFinite(stopLossPercent) || stopLossPercent <= 0) {
+      return 'stop_loss_percent は 0 より大きい数値で入力してください。';
+    }
+  }
   if (form.presetId === 'sma_cross') {
     const period = Number(form.smaPeriod);
     if (form.smaPeriod.trim() === '') {
@@ -281,6 +308,11 @@ export function validateEngineActualForm(form: EngineActualFormState): string | 
 type ActualRulesPayload = {
   entry_rule: { kind: string; period?: number; threshold?: number };
   exit_rule: { kind: string; period?: number; threshold?: number };
+  exit_overrides?: {
+    max_holding_bars?: number;
+    take_profit_percent?: number;
+    stop_loss_percent?: number;
+  };
 };
 
 /**
@@ -294,13 +326,35 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
     slippage_bps: number;
   };
 } {
+  const maxHoldingBars =
+    form.maxHoldingBars.trim() === '' ? undefined : parseInt(form.maxHoldingBars, 10);
+  const takeProfitPercent =
+    form.takeProfitPercent.trim() === '' ? undefined : parseFloat(form.takeProfitPercent);
+  const stopLossPercent =
+    form.stopLossPercent.trim() === '' ? undefined : parseFloat(form.stopLossPercent);
+  const exitOverrides: ActualRulesPayload['exit_overrides'] = {
+    ...(maxHoldingBars !== undefined ? { max_holding_bars: maxHoldingBars } : {}),
+    ...(takeProfitPercent !== undefined ? { take_profit_percent: takeProfitPercent } : {}),
+    ...(stopLossPercent !== undefined ? { stop_loss_percent: stopLossPercent } : {}),
+  };
+
   const costs = {
     fee_rate_bps: parseBpsInput(form.feeRateBps),
     slippage_bps: parseBpsInput(form.slippageBps),
   };
   switch (form.presetId) {
     case 'default_previous_close':
-      return { actual_rules: undefined, costs };
+      return {
+        actual_rules:
+          Object.keys(exitOverrides).length > 0
+            ? {
+                entry_rule: { kind: 'close_above_previous_close' },
+                exit_rule: { kind: 'close_below_previous_close' },
+                exit_overrides: exitOverrides,
+              }
+            : undefined,
+        costs,
+      };
 
     case 'sma_cross': {
       const period = parseInt(form.smaPeriod, 10);
@@ -308,6 +362,7 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
         actual_rules: {
           entry_rule: { kind: 'price_above_sma', period },
           exit_rule: { kind: 'price_below_sma', period },
+          ...(Object.keys(exitOverrides).length > 0 ? { exit_overrides: exitOverrides } : {}),
         },
         costs,
       };
@@ -319,6 +374,7 @@ export function buildEngineActualPayload(form: EngineActualFormState): {
         actual_rules: {
           entry_rule: { kind: 'price_above_threshold', threshold },
           exit_rule: { kind: 'price_below_threshold', threshold },
+          ...(Object.keys(exitOverrides).length > 0 ? { exit_overrides: exitOverrides } : {}),
         },
         costs,
       };
@@ -372,12 +428,23 @@ function extractRulesFromInputSnapshot(
 function buildPresetStateFromRules(
   entryRule: ActualRule | null,
   exitRule: ActualRule | null,
+  exitOverrides: {
+    maxHoldingBars?: number;
+    takeProfitPercent?: number;
+    stopLossPercent?: number;
+  },
   costs?: { feeRateBps: string; slippageBps: string },
 ): EngineActualFormState | null {
   const withCosts = (state: EngineActualFormState): EngineActualFormState => ({
     ...state,
     feeRateBps: costs?.feeRateBps ?? '0',
     slippageBps: costs?.slippageBps ?? '0',
+    maxHoldingBars:
+      exitOverrides.maxHoldingBars !== undefined ? String(exitOverrides.maxHoldingBars) : '',
+    takeProfitPercent:
+      exitOverrides.takeProfitPercent !== undefined ? String(exitOverrides.takeProfitPercent) : '',
+    stopLossPercent:
+      exitOverrides.stopLossPercent !== undefined ? String(exitOverrides.stopLossPercent) : '',
   });
   if (!entryRule && !exitRule) {
     return withCosts(createDefaultEngineActualFormState());
@@ -400,6 +467,9 @@ function buildPresetStateFromRules(
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
   }
   if (entryKind === 'price_above_threshold' && exitKind === 'price_below_threshold') {
@@ -413,6 +483,9 @@ function buildPresetStateFromRules(
       thresholdValue: String(threshold),
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
   }
 
@@ -435,6 +508,36 @@ function extractDataRange(inputSnapshot: unknown): { from: string; to: string } 
     return null;
   }
   return { from, to };
+}
+
+function extractExitOverrides(inputSnapshot: unknown): {
+  maxHoldingBars?: number;
+  takeProfitPercent?: number;
+  stopLossPercent?: number;
+} {
+  const snapshot = asObject(inputSnapshot);
+  const engineConfig = asObject(snapshot?.engine_config);
+  const actualRules = asObject(engineConfig?.actual_rules);
+  const exitOverrides = asObject(actualRules?.exit_overrides);
+
+  const maxHoldingBars =
+    typeof exitOverrides?.max_holding_bars === 'number' && Number.isInteger(exitOverrides.max_holding_bars)
+      ? exitOverrides.max_holding_bars
+      : undefined;
+  const takeProfitPercent =
+    typeof exitOverrides?.take_profit_percent === 'number' && Number.isFinite(exitOverrides.take_profit_percent)
+      ? exitOverrides.take_profit_percent
+      : undefined;
+  const stopLossPercent =
+    typeof exitOverrides?.stop_loss_percent === 'number' && Number.isFinite(exitOverrides.stop_loss_percent)
+      ? exitOverrides.stop_loss_percent
+      : undefined;
+
+  return {
+    ...(maxHoldingBars !== undefined ? { maxHoldingBars } : {}),
+    ...(takeProfitPercent !== undefined ? { takeProfitPercent } : {}),
+    ...(stopLossPercent !== undefined ? { stopLossPercent } : {}),
+  };
 }
 
 function extractEngineActualCosts(inputSnapshot: unknown): { feeRateBps: string; slippageBps: string } {
@@ -472,9 +575,11 @@ export function buildEngineActualRestorePayloadFromInputSnapshot(
   inputSnapshot: unknown,
 ): EngineActualRestorePayload | null {
   const { entryRule, exitRule } = extractRulesFromInputSnapshot(inputSnapshot);
+  const exitOverrides = extractExitOverrides(inputSnapshot);
   const form = buildPresetStateFromRules(
     entryRule,
     exitRule,
+    exitOverrides,
     extractEngineActualCosts(inputSnapshot),
   );
   if (!form) {

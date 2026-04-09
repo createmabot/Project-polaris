@@ -23,11 +23,17 @@ export type EngineActualRule =
 export type EngineActualRuleSet = {
   entryRule: EngineActualRule;
   exitRule: EngineActualRule;
+  exitOverrides: {
+    maxHoldingBars?: number;
+    takeProfitPercent?: number;
+    stopLossPercent?: number;
+  };
 };
 
 const DEFAULT_ENGINE_ACTUAL_RULE_SET: EngineActualRuleSet = {
   entryRule: { kind: ENGINE_ACTUAL_RULE_KINDS.CLOSE_ABOVE_PREVIOUS_CLOSE },
   exitRule: { kind: ENGINE_ACTUAL_RULE_KINDS.CLOSE_BELOW_PREVIOUS_CLOSE },
+  exitOverrides: {},
 };
 
 function asObject(input: unknown): PlainObject | null {
@@ -56,6 +62,13 @@ function parseSmaPeriod(
     value > 200
   ) {
     throw new Error(`${fieldName} must be an integer between 2 and 200.`);
+  }
+  return value;
+}
+
+function parsePositiveInteger(value: unknown, fieldName: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`${fieldName} must be a positive integer.`);
   }
   return value;
 }
@@ -129,8 +142,42 @@ export function normalizeEngineActualRuleSet(
 
   const entryRule = parseRule(actualRulesRaw.entry_rule, 'engine_config.actual_rules.entry_rule');
   const exitRule = parseRule(actualRulesRaw.exit_rule, 'engine_config.actual_rules.exit_rule');
+  const parsedExitOverrides =
+    actualRulesRaw.exit_overrides === undefined
+      ? {}
+      : asObject(actualRulesRaw.exit_overrides);
+  if (actualRulesRaw.exit_overrides !== undefined && !parsedExitOverrides) {
+    throw new Error('engine_config.actual_rules.exit_overrides must be an object when provided.');
+  }
+  const exitOverridesRaw = (parsedExitOverrides ?? {}) as PlainObject;
+  const maxHoldingBars =
+    exitOverridesRaw.max_holding_bars === undefined
+      ? undefined
+      : parsePositiveInteger(
+          exitOverridesRaw.max_holding_bars,
+          'engine_config.actual_rules.exit_overrides.max_holding_bars',
+        );
+  const takeProfitPercent =
+    exitOverridesRaw.take_profit_percent === undefined
+      ? undefined
+      : parsePositiveFiniteNumber(
+          exitOverridesRaw.take_profit_percent,
+          'engine_config.actual_rules.exit_overrides.take_profit_percent',
+        );
+  const stopLossPercent =
+    exitOverridesRaw.stop_loss_percent === undefined
+      ? undefined
+      : parsePositiveFiniteNumber(
+          exitOverridesRaw.stop_loss_percent,
+          'engine_config.actual_rules.exit_overrides.stop_loss_percent',
+        );
   return {
     entryRule,
     exitRule,
+    exitOverrides: {
+      ...(maxHoldingBars !== undefined ? { maxHoldingBars } : {}),
+      ...(takeProfitPercent !== undefined ? { takeProfitPercent } : {}),
+      ...(stopLossPercent !== undefined ? { stopLossPercent } : {}),
+    },
   };
 }
