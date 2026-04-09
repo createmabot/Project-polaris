@@ -77,6 +77,8 @@ function mergeEngineResult(args: {
         ? { average_trade_return_percent: metrics.average_trade_return_percent }
         : {}),
       ...(metrics.profit_factor !== undefined ? { profit_factor: metrics.profit_factor } : {}),
+      ...(metrics.fee_rate_bps !== undefined ? { fee_rate_bps: metrics.fee_rate_bps } : {}),
+      ...(metrics.slippage_bps !== undefined ? { slippage_bps: metrics.slippage_bps } : {}),
       ...(metrics.holding_period_avg_bars !== undefined
         ? { holding_period_avg_bars: metrics.holding_period_avg_bars }
         : {}),
