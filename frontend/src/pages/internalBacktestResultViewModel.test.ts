@@ -66,6 +66,9 @@ describe('buildEngineActualPayload', () => {
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(result.actual_rules).toBeUndefined();
     expect(result.costs).toEqual({ fee_rate_bps: 0, slippage_bps: 0 });
@@ -78,6 +81,9 @@ describe('buildEngineActualPayload', () => {
       thresholdValue: '',
       feeRateBps: '10',
       slippageBps: '5',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(result.actual_rules).toEqual({
       entry_rule: { kind: 'price_above_sma', period: 25 },
@@ -93,12 +99,37 @@ describe('buildEngineActualPayload', () => {
       thresholdValue: '500',
       feeRateBps: '0',
       slippageBps: '2.5',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(result.actual_rules).toEqual({
       entry_rule: { kind: 'price_above_threshold', threshold: 500 },
       exit_rule: { kind: 'price_below_threshold', threshold: 500 },
     });
     expect(result.costs).toEqual({ fee_rate_bps: 0, slippage_bps: 2.5 });
+  });
+
+  it('adds exit_overrides when optional exit settings are provided', () => {
+    const result = buildEngineActualPayload({
+      presetId: 'sma_cross',
+      smaPeriod: '20',
+      thresholdValue: '',
+      feeRateBps: '0',
+      slippageBps: '0',
+      maxHoldingBars: '15',
+      takeProfitPercent: '8',
+      stopLossPercent: '4',
+    });
+    expect(result.actual_rules).toEqual({
+      entry_rule: { kind: 'price_above_sma', period: 20 },
+      exit_rule: { kind: 'price_below_sma', period: 20 },
+      exit_overrides: {
+        max_holding_bars: 15,
+        take_profit_percent: 8,
+        stop_loss_percent: 4,
+      },
+    });
   });
 });
 
@@ -111,6 +142,9 @@ describe('validateEngineActualForm', () => {
         thresholdValue: '',
         feeRateBps: '0',
         slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '',
       }),
     ).toBeNull();
   });
@@ -122,6 +156,9 @@ describe('validateEngineActualForm', () => {
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(error).not.toBeNull();
     expect(error).toContain('period');
@@ -134,6 +171,9 @@ describe('validateEngineActualForm', () => {
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(error).not.toBeNull();
     expect(error).toContain('2');
@@ -147,6 +187,9 @@ describe('validateEngineActualForm', () => {
         thresholdValue: '',
         feeRateBps: '0',
         slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '',
       }),
     ).toBeNull();
   });
@@ -158,6 +201,9 @@ describe('validateEngineActualForm', () => {
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(error).not.toBeNull();
     expect(error).toContain('threshold');
@@ -170,6 +216,9 @@ describe('validateEngineActualForm', () => {
       thresholdValue: '0',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
     expect(error).not.toBeNull();
   });
@@ -182,6 +231,9 @@ describe('validateEngineActualForm', () => {
         thresholdValue: '500',
         feeRateBps: '0',
         slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '',
       }),
     ).toBeNull();
   });
@@ -194,6 +246,9 @@ describe('validateEngineActualForm', () => {
         thresholdValue: '',
         feeRateBps: '-1',
         slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '',
       }),
     ).toContain('fee rate');
     expect(
@@ -203,8 +258,50 @@ describe('validateEngineActualForm', () => {
         thresholdValue: '',
         feeRateBps: '0',
         slippageBps: '-2',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '',
       }),
     ).toContain('slippage');
+  });
+
+  it('returns error when optional exit override fields are invalid', () => {
+    expect(
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '0',
+        maxHoldingBars: '0',
+        takeProfitPercent: '',
+        stopLossPercent: '',
+      }),
+    ).toContain('max_holding_bars');
+    expect(
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '-1',
+        stopLossPercent: '',
+      }),
+    ).toContain('take_profit_percent');
+    expect(
+      validateEngineActualForm({
+        presetId: 'default_previous_close',
+        smaPeriod: '',
+        thresholdValue: '',
+        feeRateBps: '0',
+        slippageBps: '0',
+        maxHoldingBars: '',
+        takeProfitPercent: '',
+        stopLossPercent: '0',
+      }),
+    ).toContain('stop_loss_percent');
   });
 });
 
@@ -243,6 +340,9 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       thresholdValue: '',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
   });
 
@@ -265,6 +365,9 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
       thresholdValue: '500',
       feeRateBps: '0',
       slippageBps: '0',
+      maxHoldingBars: '',
+      takeProfitPercent: '',
+      stopLossPercent: '',
     });
   });
 
@@ -298,6 +401,29 @@ describe('buildEngineActualRestorePayloadFromInputSnapshot', () => {
     expect(restored).not.toBeNull();
     expect(restored?.form.feeRateBps).toBe('12');
     expect(restored?.form.slippageBps).toBe('7.5');
+  });
+
+  it('restores exit_overrides from input_snapshot.engine_config.actual_rules', () => {
+    const restored = buildEngineActualRestorePayloadFromInputSnapshot({
+      execution_target: { symbol: '7203' },
+      data_range: { from: '2024-01-01', to: '2024-12-31' },
+      engine_config: {
+        summary_mode: 'engine_actual',
+        actual_rules: {
+          entry_rule: { kind: 'price_above_sma', period: 25 },
+          exit_rule: { kind: 'price_below_sma', period: 25 },
+          exit_overrides: {
+            max_holding_bars: 12,
+            take_profit_percent: 7.5,
+            stop_loss_percent: 3.2,
+          },
+        },
+      },
+    });
+    expect(restored).not.toBeNull();
+    expect(restored?.form.maxHoldingBars).toBe('12');
+    expect(restored?.form.takeProfitPercent).toBe('7.5');
+    expect(restored?.form.stopLossPercent).toBe('3.2');
   });
 });
 

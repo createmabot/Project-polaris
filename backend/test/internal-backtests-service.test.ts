@@ -594,6 +594,192 @@ describe('internal backtest execution service contracts', () => {
     ]);
   });
 
+  it('exits earlier when max_holding_bars override is set', async () => {
+    const engineAdapter = createDummyInternalBacktestEngineAdapter({
+      fetchDailyOhlcv: async () => ({
+        bars: [
+          { timestamp: '2024-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100, volume: 1000 },
+          { timestamp: '2024-01-02T00:00:00.000Z', open: 100, high: 103, low: 100, close: 102, volume: 1000 },
+          { timestamp: '2024-01-03T00:00:00.000Z', open: 102, high: 105, low: 101, close: 104, volume: 1000 },
+          { timestamp: '2024-01-04T00:00:00.000Z', open: 104, high: 106, low: 103, close: 105, volume: 1000 },
+          { timestamp: '2024-01-05T00:00:00.000Z', open: 105, high: 107, low: 104, close: 106, volume: 1000 },
+          { timestamp: '2024-01-06T00:00:00.000Z', open: 106, high: 108, low: 105, close: 107, volume: 1000 },
+        ],
+        snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-06',
+          fetched_at: '2024-01-06T00:00:00.000Z',
+          data_revision: 'stub-max-holding',
+          bar_count: 6,
+        },
+        fetchObservation: {
+          providerName: 'stub',
+          internalReasonCode: null,
+          retryTarget: false,
+          retryAttempted: false,
+          retryAttempts: 1,
+          httpStatus: null,
+          endpointKind: 'stub_daily_ohlcv',
+        },
+      }),
+    });
+
+    const output = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-max-holding',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-06' },
+          engine_config: {
+            summary_mode: 'engine_actual',
+            actual_rules: {
+              entry_rule: { kind: 'price_above_threshold', threshold: 101 },
+              exit_rule: { kind: 'price_below_threshold', threshold: 1 },
+              exit_overrides: {
+                max_holding_bars: 2,
+              },
+            },
+          },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(output.resultSummary.summary_kind).toBe('engine_actual');
+    expect(output.resultSummary.metrics.trade_count).toBeGreaterThanOrEqual(1);
+    expect(output.resultSummary.metrics.holding_period_avg_bars).toBeLessThanOrEqual(2);
+    expect(output.artifactPayload?.trades?.length ?? 0).toBeGreaterThanOrEqual(1);
+    const maxHoldingBars = Math.max(...(output.artifactPayload?.trades ?? []).map((trade) => trade.holding_bars));
+    expect(maxHoldingBars).toBeLessThanOrEqual(2);
+  });
+
+  it('applies take_profit_percent and stop_loss_percent overrides', async () => {
+    const engineAdapter = createDummyInternalBacktestEngineAdapter({
+      fetchDailyOhlcv: async () => ({
+        bars: [
+          { timestamp: '2024-01-01T00:00:00.000Z', open: 100, high: 101, low: 99, close: 100, volume: 1000 },
+          { timestamp: '2024-01-02T00:00:00.000Z', open: 100, high: 103, low: 99, close: 102, volume: 1000 },
+          { timestamp: '2024-01-03T00:00:00.000Z', open: 102, high: 111, low: 101, close: 110, volume: 1000 },
+          { timestamp: '2024-01-04T00:00:00.000Z', open: 110, high: 111, low: 95, close: 96, volume: 1000 },
+          { timestamp: '2024-01-05T00:00:00.000Z', open: 96, high: 97, low: 90, close: 92, volume: 1000 },
+        ],
+        snapshot: {
+          source_kind: 'daily_ohlcv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          from: '2024-01-01',
+          to: '2024-01-05',
+          fetched_at: '2024-01-05T00:00:00.000Z',
+          data_revision: 'stub-tp-sl',
+          bar_count: 5,
+        },
+        fetchObservation: {
+          providerName: 'stub',
+          internalReasonCode: null,
+          retryTarget: false,
+          retryAttempted: false,
+          retryAttempts: 1,
+          httpStatus: null,
+          endpointKind: 'stub_daily_ohlcv',
+        },
+      }),
+    });
+
+    const takeProfitOutput = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-take-profit',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-05' },
+          engine_config: {
+            summary_mode: 'engine_actual',
+            actual_rules: {
+              entry_rule: { kind: 'price_above_threshold', threshold: 101 },
+              exit_rule: { kind: 'price_below_threshold', threshold: 1 },
+              exit_overrides: {
+                take_profit_percent: 3,
+              },
+            },
+          },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    const stopLossOutput = await runInternalBacktestExecutionService(
+      {
+        executionId: 'ibtx-actual-stop-loss',
+        strategyRuleVersionId: 'ver-1',
+        engineVersion: 'ibtx-v0',
+        inputSnapshotJson: {
+          strategy_rule_version_id: 'ver-1',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: {
+            symbol: '7203',
+            source_kind: 'daily_ohlcv',
+          },
+          data_range: { from: '2024-01-01', to: '2024-01-05' },
+          engine_config: {
+            summary_mode: 'engine_actual',
+            actual_rules: {
+              entry_rule: { kind: 'price_above_threshold', threshold: 101 },
+              exit_rule: { kind: 'price_below_threshold', threshold: 1 },
+              exit_overrides: {
+                stop_loss_percent: 3,
+              },
+            },
+          },
+          strategy_snapshot: {
+            natural_language_rule: 'rule',
+            generated_pine: 'strategy("x")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+      { engineAdapter },
+    );
+
+    expect(takeProfitOutput.resultSummary.metrics.trade_count).toBe(1);
+    expect(stopLossOutput.resultSummary.metrics.trade_count).toBe(1);
+    expect(
+      (takeProfitOutput.resultSummary.metrics.total_return_percent ?? 0) >
+        (stopLossOutput.resultSummary.metrics.total_return_percent ?? 0),
+    ).toBe(true);
+  });
+
   it('builds engine_estimated metrics from normalized bars deterministically', async () => {
     const inputSnapshot = {
       strategy_rule_version_id: 'ver-1',
