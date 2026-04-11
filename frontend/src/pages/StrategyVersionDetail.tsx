@@ -1252,21 +1252,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             >
               <div style={{ fontWeight: 600 }}>engine_actual 実行一覧（比較文脈）</div>
               {engineActualRestorePayload ? (
-                <button
-                  type='button'
-                  data-testid='engine-actual-restore-button'
-                  onClick={onRestoreEngineActualPreset}
-                  style={{
-                    padding: '0.35rem 0.65rem',
-                    border: '1px solid #0a5bb5',
-                    borderRadius: '4px',
-                    background: '#fff',
-                    color: '#0a5bb5',
-                    cursor: 'pointer',
-                  }}
-                >
-                  この条件で再実行
-                </button>
+                <div style={{ display: 'grid', gap: '0.25rem', justifyItems: 'end' }}>
+                  <button
+                    type='button'
+                    data-testid='engine-actual-restore-button'
+                    onClick={onRestoreEngineActualPreset}
+                    style={{
+                      padding: '0.35rem 0.65rem',
+                      border: '1px solid #0a5bb5',
+                      borderRadius: '4px',
+                      background: '#fff',
+                      color: '#0a5bb5',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    この条件をフォームに復元
+                  </button>
+                  <div
+                    data-testid='engine-actual-restore-help'
+                    style={{ color: '#555', fontSize: '0.8rem' }}
+                  >
+                    押すと条件をフォームに復元します。実行は「内製バックテストを開始」で行います。
+                  </div>
+                </div>
               ) : (
                 <div data-testid='engine-actual-restore-unavailable' style={{ color: '#9a4d00', fontSize: '0.85rem' }}>
                   この execution のルール条件は preset 復元できません。
