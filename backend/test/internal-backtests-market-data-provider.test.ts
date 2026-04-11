@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createInternalBacktestMarketDataProvider,
   InternalBacktestProviderUnavailableError,
   StooqDailyInternalBacktestMarketDataProvider,
   StubInternalBacktestMarketDataProvider,
+  YahooDailyInternalBacktestMarketDataProvider,
 } from '../src/internal-backtests/market-data-provider';
 
 describe('internal backtest market data provider', () => {
@@ -16,50 +17,87 @@ describe('internal backtest market data provider', () => {
     expect(provider).toBeInstanceOf(StubInternalBacktestMarketDataProvider);
   });
 
-  it('selects stooq provider when mode is stooq', () => {
+  it('selects yahoo provider when mode is yahoo', () => {
+    const provider = createInternalBacktestMarketDataProvider('yahoo');
+    expect(provider).toBeInstanceOf(YahooDailyInternalBacktestMarketDataProvider);
+  });
+
+  it('keeps stooq provider selectable for explicit compatibility mode', () => {
     const provider = createInternalBacktestMarketDataProvider('stooq');
     expect(provider).toBeInstanceOf(StooqDailyInternalBacktestMarketDataProvider);
   });
 
-  it('fetches and filters JP_STOCK daily bars from stooq csv', async () => {
-    const csv = [
-      'Date,Open,High,Low,Close,Volume',
-      '2024-01-01,100,110,90,105,1000',
-      '2024-01-02,106,112,102,110,1200',
-      '2024-01-03,109,115,108,114,1300',
-    ].join('\n');
+  it('fetches and filters JP_STOCK daily bars from yahoo chart', async () => {
+    const body = {
+      chart: {
+        result: [
+          {
+            timestamp: [1704067200, 1704153600, 1704240000],
+            indicators: {
+              quote: [
+                {
+                  open: [100, 106, null],
+                  high: [110, 112, null],
+                  low: [90, 102, null],
+                  close: [105, 110, null],
+                  volume: [1000, 1200, null],
+                },
+              ],
+            },
+          },
+        ],
+        error: null,
+      },
+    };
 
-    const fetchMock = vi.fn(async () => new Response(csv, { status: 200 }));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+    const provider = new YahooDailyInternalBacktestMarketDataProvider();
     const result = await provider.fetchDailyOhlcv({
       symbol: '7203',
       market: 'JP_STOCK',
       timeframe: 'D',
-      from: '2024-01-02',
+      from: '2024-01-01',
       to: '2024-01-03',
       source_kind: 'daily_ohlcv',
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('stooq.com');
-    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('7203.jp');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('query1.finance.yahoo.com');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('7203.T');
     expect(result.bars).toHaveLength(2);
-    expect(result.bars[0]?.timestamp).toBe('2024-01-02T00:00:00.000Z');
-    expect(result.bars[1]?.close).toBe(114);
-    expect(result.data_revision).toContain('stooq-daily-v1:7203.jp:2024-01-03');
+    expect(result.bars[0]?.timestamp).toBe('2024-01-01T00:00:00.000Z');
+    expect(result.bars[1]?.close).toBe(110);
+    expect(result.data_revision).toContain('yahoo-chart-v8:7203.T:2024-01-02');
   });
 
   it('returns empty bars when range has no rows', async () => {
-    const csv = [
-      'Date,Open,High,Low,Close,Volume',
-      '2024-01-01,100,110,90,105,1000',
-    ].join('\n');
+    const body = {
+      chart: {
+        result: [
+          {
+            timestamp: [1704067200],
+            indicators: {
+              quote: [
+                {
+                  open: [100],
+                  high: [110],
+                  low: [90],
+                  close: [105],
+                  volume: [1000],
+                },
+              ],
+            },
+          },
+        ],
+        error: null,
+      },
+    };
 
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(csv, { status: 200 })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })));
 
-    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+    const provider = new YahooDailyInternalBacktestMarketDataProvider();
     const result = await provider.fetchDailyOhlcv({
       symbol: '7203',
       market: 'JP_STOCK',
@@ -74,8 +112,8 @@ describe('internal backtest market data provider', () => {
   });
 
   it('throws provider unavailable on non-200 response', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('upstream error', { status: 503 })));
-    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('too many requests', { status: 429 })));
+    const provider = new YahooDailyInternalBacktestMarketDataProvider();
 
     try {
       await provider.fetchDailyOhlcv({
@@ -91,8 +129,8 @@ describe('internal backtest market data provider', () => {
       expect(error).toBeInstanceOf(InternalBacktestProviderUnavailableError);
       const e = error as InternalBacktestProviderUnavailableError;
       expect(e.reasonCode).toBe('provider_http_error');
-      expect(e.providerName).toBe('stooq');
-      expect(e.details?.http_status).toBe(503);
+      expect(e.providerName).toBe('yahoo_chart');
+      expect(e.details?.http_status).toBe(429);
     }
   });
 
@@ -100,7 +138,7 @@ describe('internal backtest market data provider', () => {
     vi.stubGlobal('fetch', vi.fn(async () => {
       throw new TypeError('fetch failed');
     }));
-    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+    const provider = new YahooDailyInternalBacktestMarketDataProvider();
 
     await expect(
       provider.fetchDailyOhlcv({
@@ -113,13 +151,13 @@ describe('internal backtest market data provider', () => {
       }),
     ).rejects.toMatchObject({
       reasonCode: 'provider_network_error',
-      providerName: 'stooq',
+      providerName: 'yahoo_chart',
     });
   });
 
-  it('classifies invalid csv response as provider_parse_error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('invalid_csv_payload', { status: 200 })));
-    const provider = new StooqDailyInternalBacktestMarketDataProvider();
+  it('classifies invalid json response as provider_parse_error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('not_json', { status: 200 })));
+    const provider = new YahooDailyInternalBacktestMarketDataProvider();
 
     await expect(
       provider.fetchDailyOhlcv({
@@ -132,7 +170,7 @@ describe('internal backtest market data provider', () => {
       }),
     ).rejects.toMatchObject({
       reasonCode: 'provider_parse_error',
-      providerName: 'stooq',
+      providerName: 'yahoo_chart',
     });
   });
 });

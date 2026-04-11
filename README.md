@@ -117,7 +117,7 @@ pnpm run down
     - `provider_http_error(429)` は現時点観測（24h/7d）で改善根拠が不足するため非対象維持
     - 追加試行は 1 回のみ（最大 2 試行）、最終失敗時の outward 契約は従来どおり `DATA_SOURCE_UNAVAILABLE`
   - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
-  - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=stooq`
+  - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=yahoo`
   - `DATA_SOURCE_UNAVAILABLE` 運用確認は summary API（DB集計）を正本として扱う
 - 役割分担は維持:
   - TradingView: 表示 / 監視 / 一次検証

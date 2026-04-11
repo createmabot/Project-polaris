@@ -79,7 +79,7 @@ export interface InternalBacktestMarketDataProvider {
   fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult>;
 }
 
-export type InternalBacktestMarketDataProviderMode = 'stub' | 'stooq';
+export type InternalBacktestMarketDataProviderMode = 'stub' | 'yahoo' | 'stooq';
 
 function toDate(value: string): Date {
   return new Date(`${value}T00:00:00.000Z`);
@@ -140,6 +140,10 @@ function buildDeterministicBars(args: {
 
 function toStooqCodeForJpStock(symbol: string): string {
   return `${symbol.toLowerCase()}.jp`;
+}
+
+function toYahooCodeForJpStock(symbol: string): string {
+  return `${symbol.toUpperCase()}.T`;
 }
 
 type CsvRow = {
@@ -215,6 +219,123 @@ function toIsoDateTimeFromDate(date: string): string {
 
 function isDateInRange(date: string, from: string, to: string): boolean {
   return date >= from && date <= to;
+}
+
+function toUnixSecondsStartOfDay(date: string): number {
+  return Math.floor(Date.parse(`${date}T00:00:00.000Z`) / 1000);
+}
+
+function toDateTextFromTimestamp(timestamp: number): string {
+  return new Date(timestamp * 1000).toISOString().slice(0, 10);
+}
+
+function buildYahooDailyUrl(input: InternalBacktestProviderFetchInput, yahooCode: string): string {
+  if (!env.SNAPSHOT_YAHOO_CHART_URL_TEMPLATE.includes('{symbol}')) {
+    throw new InternalBacktestProviderUnavailableError('yahoo chart url template is not configured', {
+      reasonCode: 'provider_not_configured',
+      providerName: 'yahoo_chart',
+      details: { endpoint_kind: 'yahoo_chart_v8_daily' },
+    });
+  }
+  const base = env.SNAPSHOT_YAHOO_CHART_URL_TEMPLATE.replace('{symbol}', encodeURIComponent(yahooCode));
+  const period1 = toUnixSecondsStartOfDay(input.from);
+  // Yahoo period2 is exclusive; add one day to include `to`.
+  const period2 = toUnixSecondsStartOfDay(input.to) + 86400;
+  const query = `interval=1d&period1=${period1}&period2=${period2}&events=history`;
+  return `${base}${base.includes('?') ? '&' : '?'}${query}`;
+}
+
+type YahooChartDailyPayload = {
+  chart?: {
+    error?: { code?: string; description?: string } | null;
+    result?: Array<{
+      timestamp?: number[];
+      indicators?: {
+        quote?: Array<{
+          open?: Array<number | null>;
+          high?: Array<number | null>;
+          low?: Array<number | null>;
+          close?: Array<number | null>;
+          volume?: Array<number | null>;
+        }>;
+      };
+    }>;
+  };
+};
+
+function parseYahooDailyPayload(
+  body: YahooChartDailyPayload,
+  input: InternalBacktestProviderFetchInput,
+): InternalBacktestProviderBar[] {
+  const endpointKind = 'yahoo_chart_v8_daily';
+  const providerName = 'yahoo_chart';
+  const chartError = body.chart?.error;
+  if (chartError) {
+    throw new InternalBacktestProviderInvalidResponseError('yahoo chart response contains chart.error', {
+      reasonCode: 'provider_invalid_response',
+      providerName,
+      details: { endpoint_kind: endpointKind, provider_error_code: chartError.code ?? null },
+    });
+  }
+
+  const result = Array.isArray(body.chart?.result) ? body.chart?.result[0] : null;
+  if (!result) {
+    throw new InternalBacktestProviderInvalidResponseError('yahoo chart result is missing', {
+      reasonCode: 'provider_parse_error',
+      providerName,
+      details: { endpoint_kind: endpointKind },
+    });
+  }
+
+  const timestamps = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const quote = Array.isArray(result.indicators?.quote) ? result.indicators?.quote[0] : null;
+  const opens = quote?.open ?? [];
+  const highs = quote?.high ?? [];
+  const lows = quote?.low ?? [];
+  const closes = quote?.close ?? [];
+  const volumes = quote?.volume ?? [];
+  const maxLength = timestamps.length;
+
+  const bars: InternalBacktestProviderBar[] = [];
+  for (let i = 0; i < maxLength; i += 1) {
+    const ts = timestamps[i];
+    const open = opens[i];
+    const high = highs[i];
+    const low = lows[i];
+    const close = closes[i];
+    const volume = volumes[i];
+
+    if (
+      typeof ts !== 'number' ||
+      !Number.isFinite(ts) ||
+      typeof open !== 'number' ||
+      !Number.isFinite(open) ||
+      typeof high !== 'number' ||
+      !Number.isFinite(high) ||
+      typeof low !== 'number' ||
+      !Number.isFinite(low) ||
+      typeof close !== 'number' ||
+      !Number.isFinite(close)
+    ) {
+      continue;
+    }
+
+    const dateText = toDateTextFromTimestamp(ts);
+    if (!isDateInRange(dateText, input.from, input.to)) {
+      continue;
+    }
+
+    bars.push({
+      timestamp: `${dateText}T00:00:00.000Z`,
+      open,
+      high,
+      low,
+      close,
+      volume: typeof volume === 'number' && Number.isFinite(volume) ? volume : 0,
+    });
+  }
+
+  return bars;
 }
 
 export class StooqDailyInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
@@ -304,6 +425,87 @@ export class StooqDailyInternalBacktestMarketDataProvider implements InternalBac
   }
 }
 
+export class YahooDailyInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
+  async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
+    const providerName = 'yahoo_chart';
+    const endpointKind = 'yahoo_chart_v8_daily';
+
+    if (input.source_kind !== 'daily_ohlcv') {
+      throw new InternalBacktestProviderUnavailableError(
+        `unsupported source_kind: ${input.source_kind}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
+      );
+    }
+    if (input.market !== 'JP_STOCK' || input.timeframe !== 'D') {
+      throw new InternalBacktestProviderUnavailableError(
+        `unsupported market/timeframe: ${input.market}/${input.timeframe}`,
+        {
+          reasonCode: 'provider_unsupported_target',
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
+      );
+    }
+
+    const yahooCode = toYahooCodeForJpStock(input.symbol);
+    const url = buildYahooDailyUrl(input, yahooCode);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: AbortSignal.timeout(env.SNAPSHOT_FETCH_TIMEOUT_MS),
+        headers: {
+          'User-Agent': env.INTERNAL_BACKTEST_YAHOO_USER_AGENT,
+          Accept: 'application/json,text/plain,*/*',
+        },
+      });
+    } catch (error) {
+      const reasonCode: InternalBacktestProviderFailureReasonCode =
+        error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')
+          ? 'provider_timeout'
+          : 'provider_network_error';
+      throw new InternalBacktestProviderUnavailableError(
+        error instanceof Error ? error.message : 'yahoo fetch failed',
+        {
+          reasonCode,
+          providerName,
+          details: { endpoint_kind: endpointKind },
+        },
+      );
+    }
+
+    if (!response.ok) {
+      throw new InternalBacktestProviderUnavailableError(`yahoo_http_${response.status}`, {
+        reasonCode: 'provider_http_error',
+        providerName,
+        details: { http_status: response.status, endpoint_kind: endpointKind },
+      });
+    }
+
+    let body: YahooChartDailyPayload;
+    try {
+      body = (await response.json()) as YahooChartDailyPayload;
+    } catch {
+      throw new InternalBacktestProviderInvalidResponseError('yahoo chart payload is not valid json', {
+        reasonCode: 'provider_parse_error',
+        providerName,
+        details: { endpoint_kind: endpointKind },
+      });
+    }
+    const bars = parseYahooDailyPayload(body, input);
+    const latestDate = bars.length > 0 ? bars[bars.length - 1]!.timestamp.slice(0, 10) : input.to;
+    return {
+      bars,
+      fetched_at: new Date().toISOString(),
+      data_revision: `yahoo-chart-v8:${yahooCode}:${latestDate}`,
+    };
+  }
+}
+
 export class StubInternalBacktestMarketDataProvider implements InternalBacktestMarketDataProvider {
   async fetchDailyOhlcv(input: InternalBacktestProviderFetchInput): Promise<InternalBacktestProviderFetchResult> {
     const providerName = 'stub';
@@ -350,10 +552,13 @@ export function createInternalBacktestMarketDataProvider(mode?: InternalBacktest
   const selectedMode =
     mode ??
     env.INTERNAL_BACKTEST_MARKET_DATA_PROVIDER ??
-    (isTestRuntime ? 'stub' : 'stooq');
+    (isTestRuntime ? 'stub' : 'yahoo');
 
   if (selectedMode === 'stooq') {
     return new StooqDailyInternalBacktestMarketDataProvider();
+  }
+  if (selectedMode === 'yahoo') {
+    return new YahooDailyInternalBacktestMarketDataProvider();
   }
   return new StubInternalBacktestMarketDataProvider();
 }
