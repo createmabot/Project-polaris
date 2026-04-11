@@ -798,7 +798,9 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-restore-button"');
-    expect(html).toContain('この条件で再実行');
+    expect(html).toContain('この条件をフォームに復元');
+    expect(html).toContain('data-testid="engine-actual-restore-help"');
+    expect(html).toContain('実行は「内製バックテストを開始」で行います。');
     expect(html).not.toContain('data-testid="engine-actual-restore-unavailable"');
   });
 
