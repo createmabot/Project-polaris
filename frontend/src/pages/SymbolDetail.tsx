@@ -44,25 +44,6 @@ export default function SymbolDetail() {
     swrFetcher
   );
 
-  if (isLoading) return <div style={{ padding: '2rem' }}>銘柄情報を読み込み中...</div>;
-
-  if (error) {
-    if (error.code === 'NOT_FOUND' || error.message.includes('404')) {
-      return (
-        <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-          <h2>銘柄が見つかりません</h2>
-          <p>指定された銘柄IDは存在しないか、削除されています。</p>
-          <Link href="/">ホームへ戻る</Link>
-        </div>
-      );
-    }
-    return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
-  }
-
-  if (!data) return null;
-
-  const thesisPoints = getThesisPoints(data.latest_ai_thesis_summary?.structured_json);
-
   useEffect(() => {
     if (!data?.chart?.widget_symbol || !tvContainerRef.current) return;
 
@@ -92,6 +73,25 @@ export default function SymbolDetail() {
     };
     tvContainerRef.current.appendChild(script);
   }, [data?.chart?.widget_symbol, data?.chart?.default_interval]);
+
+  if (isLoading) return <div style={{ padding: '2rem' }}>銘柄情報を読み込み中...</div>;
+
+  if (error) {
+    if (error.code === 'NOT_FOUND' || error.message.includes('404')) {
+      return (
+        <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+          <h2>銘柄が見つかりません</h2>
+          <p>指定された銘柄IDは存在しないか、削除されています。</p>
+          <Link href="/">ホームへ戻る</Link>
+        </div>
+      );
+    }
+    return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
+  }
+
+  if (!data) return null;
+
+  const thesisPoints = getThesisPoints(data.latest_ai_thesis_summary?.structured_json);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
