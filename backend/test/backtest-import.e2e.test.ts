@@ -195,17 +195,36 @@ vi.mock('../src/db', () => {
     },
     aiSummary: {
       findFirst: async ({ where, orderBy }: any) => {
-        let rows = [...runtime.aiSummaries.values()].filter((row) => {
-          if (where?.targetEntityId && row.targetEntityId !== where.targetEntityId) return false;
-          if (where?.summaryScope && row.summaryScope !== where.summaryScope) return false;
-          if (where?.targetEntityType?.in && Array.isArray(where.targetEntityType.in)) {
-            return where.targetEntityType.in.includes(row.targetEntityType);
+        const matchesAiSummaryWhere = (row: AiSummaryRow, clause: any): boolean => {
+          if (!clause || typeof clause !== 'object') return true;
+
+          if (Array.isArray(clause.OR)) {
+            const matched = clause.OR.some((child) => matchesAiSummaryWhere(row, child));
+            if (!matched) return false;
           }
-          if (typeof where?.targetEntityType === 'string') {
-            return row.targetEntityType === where.targetEntityType;
+
+          if (clause.summaryScope && row.summaryScope !== clause.summaryScope) return false;
+
+          if (clause.targetEntityId && typeof clause.targetEntityId === 'string') {
+            if (row.targetEntityId !== clause.targetEntityId) return false;
           }
+
+          if (clause.targetEntityId?.in && Array.isArray(clause.targetEntityId.in)) {
+            if (!clause.targetEntityId.in.includes(row.targetEntityId)) return false;
+          }
+
+          if (clause.targetEntityType?.in && Array.isArray(clause.targetEntityType.in)) {
+            if (!clause.targetEntityType.in.includes(row.targetEntityType)) return false;
+          }
+
+          if (typeof clause.targetEntityType === 'string') {
+            if (row.targetEntityType !== clause.targetEntityType) return false;
+          }
+
           return true;
-        });
+        };
+
+        let rows = [...runtime.aiSummaries.values()].filter((row) => matchesAiSummaryWhere(row, where));
 
         if (Array.isArray(orderBy)) {
           rows = rows.sort((a, b) => {
@@ -433,6 +452,60 @@ describe('backtest import vertical slice', () => {
       title: 'Review title',
       body_markdown: 'Review body markdown',
       generated_at: '2026-01-01T00:00:00.000Z',
+    });
+
+    await app.close();
+  });
+
+  it('returns ai_review when backtest_run summary exists for import id', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'ai-review-run-check',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'ok.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV,
+      },
+    });
+    const importId = imported.json().data.import.id as string;
+
+    runtime.aiSummaries.set('sum-run-1', {
+      id: 'sum-run-1',
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest_run',
+      targetEntityId: importId,
+      title: 'Run review title',
+      bodyMarkdown: 'Run review body markdown',
+      generatedAt: new Date('2026-02-01T00:00:00.000Z'),
+      createdAt: new Date('2026-02-01T00:00:00.000Z'),
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    expect(body.data.ai_review).toEqual({
+      summary_id: 'sum-run-1',
+      title: 'Run review title',
+      body_markdown: 'Run review body markdown',
+      generated_at: '2026-02-01T00:00:00.000Z',
     });
 
     await app.close();
