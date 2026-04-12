@@ -315,6 +315,17 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, 'NOT_FOUND', 'backtest was not found.');
     }
 
+    const aiReview = await prisma.aiSummary.findFirst({
+      where: {
+        targetEntityId: backtest.id,
+        targetEntityType: {
+          in: ['backtest', 'backtest_run'],
+        },
+        summaryScope: 'backtest_review',
+      },
+      orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+
     const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
     const strategyVersion = backtest.strategyRuleVersion;
 
@@ -371,6 +382,14 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         created_at: item.createdAt,
         updated_at: item.updatedAt,
       })),
+      ai_review: aiReview
+        ? {
+            summary_id: aiReview.id,
+            title: aiReview.title,
+            body_markdown: aiReview.bodyMarkdown,
+            generated_at: aiReview.generatedAt,
+          }
+        : null,
     }));
   });
 

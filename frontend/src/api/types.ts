@@ -410,6 +410,12 @@ export type BacktestDetailData = {
   };
   latest_import: BacktestImportData['import'] | null;
   imports: Array<BacktestImportData['import']>;
+  ai_review: {
+    summary_id: string;
+    title: string | null;
+    body_markdown: string;
+    generated_at: string | null;
+  } | null;
 };
 
 export type BacktestListData = {

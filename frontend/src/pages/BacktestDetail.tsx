@@ -149,16 +149,16 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
       </div>
 
-      <h1>検証レポート（最小）</h1>
+      <h1>検証レポート（詳細）</h1>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>基本情報</h2>
         <div><strong>backtest ID:</strong> <code>{data.backtest.id}</code></div>
         <div><strong>strategy version:</strong> <code>{data.backtest.strategy_version_id}</code></div>
-        <div><strong>表示名:</strong> {data.backtest.title}</div>
-        <div><strong>検証ソース:</strong> {data.backtest.execution_source}</div>
+        <div><strong>実行名:</strong> {data.backtest.title}</div>
+        <div><strong>実行ソース:</strong> {data.backtest.execution_source}</div>
         <div><strong>市場:</strong> {data.backtest.market}</div>
-        <div><strong>時間足:</strong> {data.backtest.timeframe}</div>
+        <div><strong>時間軸:</strong> {data.backtest.timeframe}</div>
         <div><strong>状態:</strong> <code>{data.backtest.status}</code></div>
       </section>
 
@@ -169,10 +169,10 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         {snapshot ? (
           <>
             <div><strong>市場:</strong> {snapshot.market}</div>
-            <div><strong>時間足:</strong> {snapshot.timeframe}</div>
+            <div><strong>時間軸:</strong> {snapshot.timeframe}</div>
             <div><strong>snapshot captured at:</strong> {snapshot.captured_at ?? '-'}</div>
             <div style={{ marginTop: '0.6rem' }}>
-              <strong>実行時ルール（自然言語）:</strong>
+              <strong>実行時ルール（自然言語）</strong>
               <pre style={{ margin: '0.4rem 0 0', padding: '0.8rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
                 <code>{snapshot.natural_language_rule}</code>
               </pre>
@@ -195,12 +195,12 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600 }}>次アクション（Rule Lab）</div>
           <div style={{ marginTop: '0.35rem', color: '#555', fontSize: '0.92rem' }}>
-            この backtest の結果をもとに、version の見直し・再生成へ戻れます。
+            この backtest の元になった version の確認・再生成へ戻れます。
           </div>
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', marginTop: '0.6rem' }}>
             {strategyVersionDetailPath && (
               <Link href={strategyVersionDetailPath} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-                この version を Rule Lab で見直す
+                この version を Rule Lab で確認
               </Link>
             )}
             {strategyVersionsPath && (
@@ -273,6 +273,36 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       </section>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+        <h2 style={{ marginTop: 0 }}>AI 総評</h2>
+        {data.ai_review ? (
+          <>
+            {data.ai_review.title && (
+              <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{data.ai_review.title}</div>
+            )}
+            {data.ai_review.generated_at && (
+              <div style={{ marginBottom: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
+                生成日時: {data.ai_review.generated_at}
+              </div>
+            )}
+            <div
+              style={{
+                whiteSpace: 'pre-wrap',
+                lineHeight: 1.6,
+                background: '#fafafa',
+                border: '1px solid #e6e6e6',
+                borderRadius: '6px',
+                padding: '0.75rem',
+              }}
+            >
+              {data.ai_review.body_markdown}
+            </div>
+          </>
+        ) : (
+          <p style={{ margin: 0, color: '#666' }}>AI総評はまだ生成されていません。</p>
+        )}
+      </section>
+
+      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>import 履歴</h2>
         {data.imports.length === 0 ? (
           <p style={{ margin: 0, color: '#666' }}>履歴はありません。</p>
@@ -290,3 +320,4 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     </div>
   );
 }
+

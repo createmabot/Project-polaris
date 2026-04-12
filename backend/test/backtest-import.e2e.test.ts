@@ -41,6 +41,17 @@ type BacktestImportRow = {
   updatedAt: Date;
 };
 
+type AiSummaryRow = {
+  id: string;
+  summaryScope: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  title: string | null;
+  bodyMarkdown: string;
+  generatedAt: Date | null;
+  createdAt: Date;
+};
+
 type Runtime = {
   backtestSeq: number;
   importSeq: number;
@@ -48,6 +59,7 @@ type Runtime = {
   strategyVersions: Map<string, StrategyVersionRow>;
   backtests: Map<string, BacktestRow>;
   imports: Map<string, BacktestImportRow>;
+  aiSummaries: Map<string, AiSummaryRow>;
 };
 
 let runtime: Runtime;
@@ -60,6 +72,7 @@ function createRuntime(): Runtime {
     strategyVersions: new Map(),
     backtests: new Map(),
     imports: new Map(),
+    aiSummaries: new Map(),
   };
 }
 
@@ -178,6 +191,41 @@ vi.mock('../src/db', () => {
         return [...runtime.imports.values()]
           .filter((item) => item.backtestId === where.backtestId)
           .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+      },
+    },
+    aiSummary: {
+      findFirst: async ({ where, orderBy }: any) => {
+        let rows = [...runtime.aiSummaries.values()].filter((row) => {
+          if (where?.targetEntityId && row.targetEntityId !== where.targetEntityId) return false;
+          if (where?.summaryScope && row.summaryScope !== where.summaryScope) return false;
+          if (where?.targetEntityType?.in && Array.isArray(where.targetEntityType.in)) {
+            return where.targetEntityType.in.includes(row.targetEntityType);
+          }
+          if (typeof where?.targetEntityType === 'string') {
+            return row.targetEntityType === where.targetEntityType;
+          }
+          return true;
+        });
+
+        if (Array.isArray(orderBy)) {
+          rows = rows.sort((a, b) => {
+            for (const order of orderBy) {
+              if (order.generatedAt) {
+                const av = a.generatedAt?.getTime() ?? 0;
+                const bv = b.generatedAt?.getTime() ?? 0;
+                if (av !== bv) return order.generatedAt === 'desc' ? bv - av : av - bv;
+              }
+              if (order.createdAt) {
+                const av = a.createdAt.getTime();
+                const bv = b.createdAt.getTime();
+                if (av !== bv) return order.createdAt === 'desc' ? bv - av : av - bv;
+              }
+            }
+            return 0;
+          });
+        }
+
+        return rows[0] ?? null;
       },
     },
   };
@@ -343,6 +391,49 @@ describe('backtest import vertical slice', () => {
     expect(body.data.used_strategy.strategy_version_id).toBe('ver-1');
     expect(body.data.used_strategy.snapshot.natural_language_rule).toContain('25日移動平均');
     expect(body.data.used_strategy.snapshot.generated_pine).toBe('strategy("base")');
+
+    await app.close();
+  });
+
+  it('returns ai_review when backtest review summary exists', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'ai-review-check',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    runtime.aiSummaries.set('sum-bt-1', {
+      id: 'sum-bt-1',
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest',
+      targetEntityId: backtestId,
+      title: 'Review title',
+      bodyMarkdown: 'Review body markdown',
+      generatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    expect(body.data.ai_review).toEqual({
+      summary_id: 'sum-bt-1',
+      title: 'Review title',
+      body_markdown: 'Review body markdown',
+      generated_at: '2026-01-01T00:00:00.000Z',
+    });
 
     await app.close();
   });
