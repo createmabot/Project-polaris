@@ -565,18 +565,18 @@ async function main() {
       payloadJson: {
         trades: [
           {
-            entry_at: '2026-02-05',
+            entry_at: '2026-02-05T00:00:00.000Z',
             entry_price: 2890,
-            exit_at: '2026-02-20',
+            exit_at: '2026-02-20T00:00:00.000Z',
             exit_price: 2968,
             return_percent: 2.7,
             holding_bars: 11,
           },
         ],
         equity_curve: [
-          { at: '2026-02-05', equity_index: 100 },
-          { at: '2026-02-20', equity_index: 102.7 },
-          { at: '2026-03-09', equity_index: 103.2 },
+          { at: '2026-02-05T00:00:00.000Z', equity_index: 100 },
+          { at: '2026-02-20T00:00:00.000Z', equity_index: 102.7 },
+          { at: '2026-03-09T00:00:00.000Z', equity_index: 103.2 },
         ],
       } as Prisma.InputJsonValue,
     },
@@ -587,18 +587,18 @@ async function main() {
       payloadJson: {
         trades: [
           {
-            entry_at: '2026-02-05',
+            entry_at: '2026-02-05T00:00:00.000Z',
             entry_price: 2890,
-            exit_at: '2026-02-20',
+            exit_at: '2026-02-20T00:00:00.000Z',
             exit_price: 2968,
             return_percent: 2.7,
             holding_bars: 11,
           },
         ],
         equity_curve: [
-          { at: '2026-02-05', equity_index: 100 },
-          { at: '2026-02-20', equity_index: 102.7 },
-          { at: '2026-03-09', equity_index: 103.2 },
+          { at: '2026-02-05T00:00:00.000Z', equity_index: 100 },
+          { at: '2026-02-20T00:00:00.000Z', equity_index: 102.7 },
+          { at: '2026-03-09T00:00:00.000Z', equity_index: 103.2 },
         ],
       } as Prisma.InputJsonValue,
     },
