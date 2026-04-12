@@ -1,8 +1,9 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
 import {
+  BacktestCreateData,
   InternalBacktestEngineActualArtifactData,
   InternalBacktestExecutionCreateData,
   InternalBacktestExecutionResultData,
@@ -372,6 +373,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [savingForwardNote, setSavingForwardNote] = useState(false);
   const [saveForwardNoteError, setSaveForwardNoteError] = useState<string | null>(null);
   const [saveForwardNoteMessage, setSaveForwardNoteMessage] = useState<string | null>(null);
+
+  const [creatingBacktest, setCreatingBacktest] = useState(false);
+  const [createBacktestError, setCreateBacktestError] = useState<string | null>(null);
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
   const [editingForwardValidationNote, setEditingForwardValidationNote] = useState('');
@@ -768,6 +772,26 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   };
 
+  const onCreateTradingViewBacktest = async () => {
+    if (!version) return;
+    setCreatingBacktest(true);
+    setCreateBacktestError(null);
+    try {
+      const response = await postApi<BacktestCreateData>('/api/backtests', {
+        strategy_version_id: version.id,
+        title: `${version.strategy_id} のTradingView検証`,
+        execution_source: 'tradingview',
+        market: version.market,
+        timeframe: version.timeframe,
+      });
+      setLocation(`/backtests/${response.backtest.id}`);
+    } catch (requestError: any) {
+      setCreateBacktestError(requestError?.message ?? 'バックテストの作成に失敗しました。');
+    } finally {
+      setCreatingBacktest(false);
+    }
+  };
+
   const onStartInternalBacktest = async () => {
     if (!version) return;
 
@@ -1015,6 +1039,33 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         {saveForwardNoteMessage && (
           <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f', borderRadius: '4px' }}>
             {saveForwardNoteMessage}
+          </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: '1.2rem', border: '1px solid #ddd', borderRadius: '6px', padding: '0.85rem', background: '#eef8ee' }}>
+        <h2 style={{ marginTop: 0, marginBottom: '0.6rem' }}>TradingView 検証用バックテスト</h2>
+        <div style={{ marginBottom: '0.6rem', color: '#1f6a1f', fontSize: '0.9rem' }}>
+          TradingViewでバックテストを実行し、その結果CSVを取り込むためのコンテナを作成します。
+        </div>
+        <button
+          type='button'
+          onClick={onCreateTradingViewBacktest}
+          disabled={creatingBacktest}
+          style={{
+            padding: '0.55rem 0.95rem',
+            border: 'none',
+            borderRadius: '4px',
+            background: creatingBacktest ? '#abc8ab' : '#2e8b57',
+            color: '#fff',
+            cursor: creatingBacktest ? 'default' : 'pointer',
+          }}
+        >
+          {creatingBacktest ? '作成中...' : 'TradingView検証用バックテストを作成'}
+        </button>
+        {createBacktestError && (
+          <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+            {createBacktestError}
           </div>
         )}
       </section>
