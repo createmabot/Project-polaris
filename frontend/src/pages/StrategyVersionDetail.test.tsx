@@ -952,8 +952,13 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('価格閾値クロス');
     expect(html).toContain('data-testid="engine-actual-overview-compare-linkage"');
     expect(html).toContain('data-testid="engine-actual-rerun-compare"');
+    expect(html).toContain('data-testid="engine-actual-rerun-compare-title"');
+    expect(html).toContain('engine_actual 再実行比較（比較元と今回の実行）');
+    expect(html).toContain('data-testid="engine-actual-rerun-compare-help"');
+    expect(html).toContain('比較元は「この条件をフォームに復元」で読み込んだ元 execution');
     expect(html).toContain('data-testid="engine-actual-rerun-compare-table"');
-    expect(html).toContain('元: <code>exec-source</code> / 再実行: <code>exec-rerun</code>');
+    expect(html).toContain('data-testid="engine-actual-rerun-compare-ids"');
+    expect(html).toContain('比較元 execution: <code>exec-source</code> / 今回の実行: <code>exec-rerun</code>');
     expect(html).toContain('trade_count');
     expect(html).toContain('win_rate');
     expect(html).toContain('total_return_percent');
@@ -1007,6 +1012,6 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="engine-actual-rerun-compare"');
-    expect(html).toContain('元: <code>exec-source-persisted</code> / 再実行: <code>exec-rerun-persisted</code>');
+    expect(html).toContain('比較元 execution: <code>exec-source-persisted</code> / 今回の実行: <code>exec-rerun-persisted</code>');
   });
 });

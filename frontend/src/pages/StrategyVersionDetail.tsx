@@ -1381,11 +1381,17 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               border: '1px solid #d9e3f5',
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>
-              engine_actual 再実行比較（元 execution vs 再実行 execution）
+            <div data-testid='engine-actual-rerun-compare-title' style={{ fontWeight: 600, marginBottom: '0.35rem' }}>
+              engine_actual 再実行比較（比較元と今回の実行）
             </div>
-            <div style={{ fontSize: '0.88rem', color: '#444', marginBottom: '0.5rem' }}>
-              元: <code>{resolvedCompareSourceExecutionId}</code> / 再実行: <code>{internalExecutionId}</code>
+            <div
+              data-testid='engine-actual-rerun-compare-help'
+              style={{ fontSize: '0.85rem', color: '#444', marginBottom: '0.45rem' }}
+            >
+              比較元は「この条件をフォームに復元」で読み込んだ元 execution、今回の実行はその条件で開始した execution です。
+            </div>
+            <div data-testid='engine-actual-rerun-compare-ids' style={{ fontSize: '0.88rem', color: '#333', marginBottom: '0.5rem' }}>
+              比較元 execution: <code>{resolvedCompareSourceExecutionId}</code> / 今回の実行: <code>{internalExecutionId}</code>
             </div>
             <table
               data-testid='engine-actual-rerun-compare-table'
