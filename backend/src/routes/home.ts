@@ -231,8 +231,57 @@ export async function homeRoutes(fastify: FastifyInstance) {
     });
     const dailySummary = selectDailySummary(dailySummaries, summaryType);
 
-    // 3. Watchlists and key events (Empty placeholders for MVP)
-    const watchlist_symbols: any[] = [];
+    // 3. watchlist_symbols: Symbol テーブル全件 + snapshot（watchlist_items 未実装のため全件を代替とする）
+    const symbolRows = await prisma.symbol.findMany({
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // 最新アラートを一括取得（N+1 回避）
+    const symbolIds = symbolRows.map((s: any) => s.id);
+    const latestAlertsRaw = symbolIds.length > 0
+      ? await prisma.alertEvent.findMany({
+          where: { symbolId: { in: symbolIds } },
+          orderBy: { triggeredAt: 'desc' },
+        })
+      : [];
+
+    // symbolId → 最初に見つかった（= 最新）アラートのステータス
+    const latestAlertStatusBySymbolId = new Map<string, string>();
+    for (const alert of latestAlertsRaw) {
+      if (alert.symbolId && !latestAlertStatusBySymbolId.has(alert.symbolId)) {
+        latestAlertStatusBySymbolId.set(alert.symbolId, alert.processingStatus);
+      }
+    }
+
+    // スナップショット取得
+    const watchlistSymbolRefs = symbolRows.map((s: any) => ({
+      id: s.id,
+      symbol: s.symbol,
+      symbolCode: s.symbolCode,
+      marketCode: s.marketCode,
+      tradingviewSymbol: s.tradingviewSymbol,
+    }));
+    const watchlistSnapshotMap = watchlistSymbolRefs.length > 0
+      ? await getCurrentSnapshotsForSymbols(watchlistSymbolRefs, fastify.log)
+      : new Map();
+
+    const watchlist_symbols = symbolRows.map((s: any) => {
+      const snap = watchlistSnapshotMap.get(s.id) ?? null;
+      return {
+        symbol_id: s.id,
+        display_name: s.displayName ?? s.symbolCode ?? s.symbol ?? null,
+        tradingview_symbol: s.tradingviewSymbol ?? null,
+        latest_price: snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)
+          ? snap.last_price
+          : null,
+        change_rate: snap && typeof snap.change_percent === 'number' && Number.isFinite(snap.change_percent)
+          ? snap.change_percent
+          : null,
+        latest_alert_status: latestAlertStatusBySymbolId.get(s.id) ?? null,
+        user_priority: null, // watchlist_items 未実装のため null
+      };
+    });
+
     const positions: any[] = [];
     const key_events: any[] = [];
     const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);

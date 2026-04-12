@@ -8,6 +8,7 @@ type AlertRow = {
   symbolId: string | null;
   alertName: string;
   alertType: string;
+  processingStatus: string;
   triggeredAt: Date;
   symbol: {
     id: string;
@@ -45,6 +46,7 @@ function createRuntime(): Runtime {
         alertName: 'Price breakout',
         alertType: 'breakout',
         triggeredAt: new Date('2026-04-12T09:00:00+09:00'),
+        processingStatus: 'summarized',
         symbol: {
           id: 'sym-7203',
           symbol: 'TYO:7203',
@@ -157,6 +159,19 @@ vi.mock('../src/db', () => {
         return [];
       },
     },
+    symbol: {
+      findMany: async () => [
+        {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+          displayName: 'Toyota',
+          createdAt: new Date(),
+        },
+      ],
+    },
   };
 
   return { prisma };
@@ -208,6 +223,18 @@ describe('GET /api/home daily_summary query handling', () => {
     });
     expect(body.data.market_overview.fx).toEqual([]);
     expect(body.data.market_overview.sectors).toEqual([]);
+
+    // Check watchlist_symbols
+    expect(body.data.watchlist_symbols).toHaveLength(1);
+    expect(body.data.watchlist_symbols[0]).toMatchObject({
+      symbol_id: 'sym-7203',
+      display_name: 'Toyota',
+      tradingview_symbol: 'TYO:7203',
+      latest_price: 3000,
+      change_rate: 1.23,
+      latest_alert_status: 'summarized',
+      user_priority: null,
+    });
 
     await app.close();
   });
