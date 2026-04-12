@@ -378,3 +378,22 @@ GitHub Actions で以下のチェックを運用しています。
 - セットアップ手順: `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
 - ホーム供給仕様: `docs/25.補助資料_1 北極星 ホームデータ供給仕様（MVP）.md`
 - API設計: `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`
+
+## UI確認用 seed（最小）
+主要画面を目視確認するための最小データを `backend/prisma/seed.ts` で投入できます。
+
+```bash
+cd backend
+pnpm exec prisma db seed
+```
+
+起動後の確認導線（最小）:
+
+1. `/home`（daily summary / alerts / watchlist / market overview）
+2. `/symbols/:symbolId`（例: Homeの監視銘柄リンクから遷移）
+3. `/notes/:noteId`（例: Symbol Detail の最新ノートリンクから遷移）
+4. `/compare` → 比較作成 → `/comparisons/:comparisonId`
+5. `/backtests` → `/backtests/:backtestId`
+6. `/strategies/:strategyId/versions` → `/strategy-versions/:versionId`
+
+詳細チェック観点は `docs/walkthrough.md` の「UI確認用 seed walkthrough（最小）」を参照。
