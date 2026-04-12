@@ -20,6 +20,8 @@ function toSummaryPreview(bodyMarkdown: string): string {
   return bodyMarkdown.length <= 220 ? bodyMarkdown : `${bodyMarkdown.slice(0, 220)}...`;
 }
 
+const EMPTY_STATE_HINT = 'データ未生成の場合は「比較総評を生成」を実行し、ページを再読み込みしてください。';
+
 export default function ComparisonDetail() {
   const [, params] = useRoute('/comparisons/:comparisonId');
   const comparisonId = params?.comparisonId;
@@ -94,6 +96,9 @@ export default function ComparisonDetail() {
         件数: {data.comparison_header.symbol_count} |
         更新: {formatDate(data.comparison_header.updated_at)}
       </p>
+      <p style={{ marginTop: '-0.35rem', marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
+        まず「比較メトリクス」を確認し、次に「AI 比較総評」で要点を確認する流れです。
+      </p>
       <div style={{ marginBottom: '1rem' }}>
         <button
           type="button"
@@ -163,7 +168,10 @@ export default function ComparisonDetail() {
             )}
           </>
         ) : (
-          <p style={{ color: '#666', margin: 0 }}>未生成です。「比較総評を生成」を実行してください。</p>
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>未生成です。「比較総評を生成」を実行してください。</p>
+            <p style={{ margin: 0, fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</p>
+          </div>
         )}
       </section>
 
@@ -197,7 +205,10 @@ export default function ComparisonDetail() {
             </div>
           </>
         ) : (
-          <p style={{ color: '#666', margin: 0 }}>比較総評はまだ生成されていません。</p>
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>比較総評はまだ生成されていません。</p>
+            <p style={{ margin: 0, fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</p>
+          </div>
         )}
       </section>
 

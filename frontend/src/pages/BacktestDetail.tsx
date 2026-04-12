@@ -150,6 +150,9 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       </div>
 
       <h1>検証レポート（詳細）</h1>
+      <p style={{ marginTop: '-0.35rem', marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
+        まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。
+      </p>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>基本情報</h2>
@@ -320,4 +323,3 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     </div>
   );
 }
-

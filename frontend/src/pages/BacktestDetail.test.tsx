@@ -108,6 +108,7 @@ describe('BacktestDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-1' }} />);
     expect(html).toContain('主要指標');
+    expect(html).toContain('まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。');
     expect(html).toContain('総取引数');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
