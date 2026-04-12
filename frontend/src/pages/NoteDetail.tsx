@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import useSWR, { mutate } from 'swr';
 import { useRoute, useLocation, Link } from 'wouter';
 import { swrFetcher, fetchApi } from '../api/client';
@@ -84,11 +84,11 @@ export default function NoteDetail() {
           invalidationText: formData.invalidationText,
           nextReviewAt: formData.nextReviewAt || undefined,
         };
-        const createdNote = await fetchApi<ResearchNoteDto>('/api/notes', {
+        const response = await fetchApi<{ note: ResearchNoteDto; revision: NoteRevisionDto }>('/api/notes', {
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        setLocation(`/notes/${createdNote.id}`);
+        setLocation(`/notes/${response.note.id}`);
       } else if (isEditMatch && noteId) {
         const payload = {
           title: formData.title,
