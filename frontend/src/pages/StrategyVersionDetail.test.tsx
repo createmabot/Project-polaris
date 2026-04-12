@@ -891,6 +891,44 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).not.toContain('data-testid="engine-actual-rerun-compare"');
+    expect(html).not.toContain('data-testid="engine-actual-rerun-compare-pending"');
+  });
+
+  it('shows compare pending hint when linkage exists but compare source is not succeeded yet', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue([
+      '/strategy-versions/ver-1?internalExecutionId=exec-rerun-pending&internalCompareSourceExecutionId=exec-source-pending',
+      vi.fn(),
+    ]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-rerun-pending', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-rerun-pending',
+        summaryKind: 'engine_actual',
+        tradeCount: 4,
+        winRate: 55.0,
+        totalReturnPercent: 3.2,
+        maxDrawdownPercent: -1.8,
+        actualRules: [{ kind: 'price_above_sma', period: 25 }],
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-rerun-pending',
+        tradesCount: 4,
+        equityCount: 8,
+      }),
+      null,
+      createInternalExecutionStatusData({ executionId: 'exec-source-pending', status: 'running' }),
+      null,
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).not.toContain('data-testid="engine-actual-rerun-compare"');
+    expect(html).toContain('data-testid="engine-actual-rerun-compare-pending"');
+    expect(html).toContain('比較元 execution: <code>exec-source-pending</code> / 今回の実行: <code>exec-rerun-pending</code>');
+    expect(html).toContain('比較元 execution の完了待ちです（status: running）。');
   });
 
   it('renders engine_actual rerun compare when source and rerun executions are available', () => {
