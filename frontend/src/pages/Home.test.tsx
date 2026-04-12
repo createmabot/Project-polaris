@@ -12,9 +12,15 @@ vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-import Home from './Home';
+import Home, { buildHomeApiPath } from './Home';
 
 describe('Home', () => {
+  it('builds home api path with summary_type and optional date', () => {
+    expect(buildHomeApiPath('latest', null)).toBe('/api/home?summary_type=latest');
+    expect(buildHomeApiPath('morning', null)).toBe('/api/home?summary_type=morning');
+    expect(buildHomeApiPath('evening', '2026-04-12')).toBe('/api/home?summary_type=evening&date=2026-04-12');
+  });
+
   it('renders empty placeholders for home mvp blocks', () => {
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({
@@ -31,6 +37,11 @@ describe('Home', () => {
     });
 
     const html = renderToStaticMarkup(<Home />);
+    expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
+    expect(html).toContain('デイリーサマリー');
+    expect(html).toContain('最新');
+    expect(html).toContain('朝');
+    expect(html).toContain('夜');
     expect(html).toContain('マーケット概況');
     expect(html).toContain('マーケット概況データはまだありません。');
     expect(html).toContain('監視銘柄はまだありません。');

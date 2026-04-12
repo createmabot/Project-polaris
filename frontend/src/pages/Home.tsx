@@ -1,7 +1,25 @@
-﻿import useSWR from 'swr';
+import useSWR from 'swr';
+import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
+
+type HomeSummaryType = 'latest' | 'morning' | 'evening';
+
+const SUMMARY_OPTIONS: Array<{ value: HomeSummaryType; label: string }> = [
+  { value: 'latest', label: '最新' },
+  { value: 'morning', label: '朝' },
+  { value: 'evening', label: '夜' },
+];
+
+export function buildHomeApiPath(summaryType: HomeSummaryType, date: string | null): string {
+  const params = new URLSearchParams();
+  params.set('summary_type', summaryType);
+  if (date) {
+    params.set('date', date);
+  }
+  return `/api/home?${params.toString()}`;
+}
 
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
@@ -15,7 +33,10 @@ function formatDate(value: string | null): string {
 }
 
 export default function Home() {
-  const { data, error, isLoading } = useSWR<HomeData>('/api/home', swrFetcher);
+  const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
+  const [summaryDate] = useState<string | null>(null);
+  const homeApiPath = useMemo(() => buildHomeApiPath(summaryType, summaryDate), [summaryType, summaryDate]);
+  const { data, error, isLoading } = useSWR<HomeData>(homeApiPath, swrFetcher);
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
@@ -109,6 +130,30 @@ export default function Home() {
 
       <section style={{ marginTop: '1.5rem' }}>
         <h2>デイリーサマリー</h2>
+        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+          {SUMMARY_OPTIONS.map((option) => {
+            const selected = summaryType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setSummaryType(option.value)}
+                style={{
+                  padding: '0.3rem 0.7rem',
+                  borderRadius: '999px',
+                  border: selected ? '1px solid #1f6feb' : '1px solid #ccc',
+                  background: selected ? '#e7f1ff' : '#fff',
+                  color: selected ? '#0b3d91' : '#333',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
+                }}
+                aria-pressed={selected}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
         <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
           {data.daily_summary ? (
             <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{data.daily_summary.bodyMarkdown}</p>
