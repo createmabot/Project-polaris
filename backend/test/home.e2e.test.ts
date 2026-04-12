@@ -199,6 +199,15 @@ describe('GET /api/home daily_summary query handling', () => {
     expect(body.data.recent_alerts).toHaveLength(1);
     expect(body.data.recent_alerts[0].related_ai_summary.id).toBe('alert-summary-1');
     expect(body.data.recent_alerts[0].current_snapshot.last_price).toBe(3000);
+    expect(body.data.market_overview.indices).toHaveLength(1);
+    expect(body.data.market_overview.indices[0]).toMatchObject({
+      code: '7203',
+      display_name: '7203',
+      price: 3000,
+      change_rate: 1.23,
+    });
+    expect(body.data.market_overview.fx).toEqual([]);
+    expect(body.data.market_overview.sectors).toEqual([]);
 
     await app.close();
   });
