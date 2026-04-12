@@ -1,0 +1,18 @@
+﻿query {
+  repository(owner: "createmabot", name: "Project-polaris") {
+    pullRequest(number: 127) {
+      reviewThreads(first: 50) {
+        nodes {
+          id
+          isResolved
+          comments(first: 20) {
+            nodes {
+              databaseId
+              url
+            }
+          }
+        }
+      }
+    }
+  }
+}
