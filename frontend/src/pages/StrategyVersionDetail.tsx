@@ -1586,6 +1586,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             )}
             {!internalEngineActualArtifactLoading && internalEngineActualArtifactData && (
               <div style={{ display: 'grid', gap: '0.6rem' }}>
+                <div
+                  data-testid='engine-actual-artifact-full-json-guide'
+                  style={{
+                    fontSize: '0.82rem',
+                    color: '#555',
+                    display: 'flex',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span>表の表示は先頭20件です。</span>
+                  {internalEngineActualArtifactApiPath && (
+                    <a
+                      data-testid='engine-actual-artifact-open-json'
+                      href={internalEngineActualArtifactApiPath}
+                      target='_blank'
+                      rel='noreferrer'
+                    >
+                      全件JSONを開く
+                    </a>
+                  )}
+                </div>
                 <div>
                   <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>
                     trades ({internalEngineActualArtifactData.artifact.trades.length})
@@ -1620,6 +1643,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                       </tbody>
                     </table>
                   )}
+                  {internalEngineActualArtifactData.artifact.trades.length > 20 && (
+                    <div data-testid='engine-actual-artifact-trades-truncated-note' style={{ marginTop: '0.3rem', fontSize: '0.8rem', color: '#666' }}>
+                      先頭20件を表示中（残り {internalEngineActualArtifactData.artifact.trades.length - 20} 件）
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div style={{ fontWeight: 600, marginBottom: '0.3rem' }}>
@@ -1646,6 +1674,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                         ))}
                       </tbody>
                     </table>
+                  )}
+                  {internalEngineActualArtifactData.artifact.equity_curve.length > 20 && (
+                    <div data-testid='engine-actual-artifact-equity-truncated-note' style={{ marginTop: '0.3rem', fontSize: '0.8rem', color: '#666' }}>
+                      先頭20件を表示中（残り {internalEngineActualArtifactData.artifact.equity_curve.length - 20} 件）
+                    </div>
                   )}
                 </div>
               </div>

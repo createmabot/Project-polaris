@@ -565,6 +565,38 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('equity_index');
   });
 
+  it('shows full-json guidance when engine_actual artifact has more than 20 rows', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-truncated', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-truncated', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-truncated',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 25,
+        snapshotBarCount: 25,
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-truncated',
+        tradesCount: 25,
+        equityCount: 21,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-full-json-guide"');
+    expect(html).toContain('表の表示は先頭20件です。');
+    expect(html).toContain('data-testid="engine-actual-artifact-open-json"');
+    expect(html).toContain('href="/api/internal-backtests/executions/exec-actual-truncated/artifacts/engine_actual/trades-and-equity"');
+    expect(html).toContain('data-testid="engine-actual-artifact-trades-truncated-note"');
+    expect(html).toContain('先頭20件を表示中（残り 5 件）');
+    expect(html).toContain('data-testid="engine-actual-artifact-equity-truncated-note"');
+    expect(html).toContain('先頭20件を表示中（残り 1 件）');
+  });
+
   it('shows engine_actual no-trade artifact as non-error empty state', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
