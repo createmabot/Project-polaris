@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -173,8 +173,27 @@ export default function ComparisonDetail() {
           <>
             <h3 style={{ marginBottom: '0.4rem' }}>{data.latest_result.ai_summary.title || '比較総評'}</h3>
             <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{data.latest_result.ai_summary.body_markdown}</p>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>
+            <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
               model: {data.latest_result.ai_summary.model_name || '-'} | prompt: {data.latest_result.ai_summary.prompt_version || '-'}
+            </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(data.latest_result?.ai_summary?.body_markdown || '');
+                  alert('比較総評をクリップボードにコピーしました。研究ノート等に貼り付けてご利用ください。');
+                }}
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  background: '#f9f9f9',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+              >
+                📋 総評をコピーしてノートで使う
+              </button>
             </div>
           </>
         ) : (
