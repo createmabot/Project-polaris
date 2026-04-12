@@ -127,6 +127,10 @@ export type SymbolDetailData = {
     source_name: string;
   } | null;
   tradingview_symbol: string | null;
+  chart?: {
+    widget_symbol: string | null;
+    default_interval: string;
+  };
   recent_alerts: Array<{
     id: string;
     alert_name: string;

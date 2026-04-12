@@ -203,6 +203,10 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       },
       current_snapshot: currentSnapshot,
       tradingview_symbol: symbol.tradingviewSymbol,
+      chart: {
+        widget_symbol: symbol.tradingviewSymbol || null,
+        default_interval: "D"
+      },
       recent_alerts: recentAlerts,
       latest_ai_thesis_summary: latestAiThesisSummaryRaw
         ? {
