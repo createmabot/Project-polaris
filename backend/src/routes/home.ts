@@ -32,8 +32,16 @@ function normalizeDate(input?: string): string | null {
   if (!DATE_ONLY_PATTERN.test(trimmed)) {
     throw new AppError(400, 'VALIDATION_ERROR', 'date must be YYYY-MM-DD');
   }
-  const parsed = Date.parse(`${trimmed}T00:00:00+09:00`);
-  if (Number.isNaN(parsed)) {
+  const [yearText, monthText, dayText] = trimmed.split('-');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  const isSameDate =
+    utcDate.getUTCFullYear() === year &&
+    utcDate.getUTCMonth() === month - 1 &&
+    utcDate.getUTCDate() === day;
+  if (!isSameDate) {
     throw new AppError(400, 'VALIDATION_ERROR', 'date must be YYYY-MM-DD');
   }
   return trimmed;
@@ -164,7 +172,6 @@ export async function homeRoutes(fastify: FastifyInstance) {
         ...(dateRange ? { generatedAt: { gte: dateRange.gte, lt: dateRange.lt } } : {}),
       },
       orderBy: { generatedAt: 'desc' },
-      take: 30,
     });
     const dailySummary = selectDailySummary(dailySummaries, summaryType);
 

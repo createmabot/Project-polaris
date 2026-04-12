@@ -260,6 +260,13 @@ describe('GET /api/home daily_summary query handling', () => {
     expect(invalidDate.statusCode).toBe(400);
     expect(invalidDate.json().error.code).toBe('VALIDATION_ERROR');
 
+    const impossibleDate = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=latest&date=2026-02-31',
+    });
+    expect(impossibleDate.statusCode).toBe(400);
+    expect(impossibleDate.json().error.code).toBe('VALIDATION_ERROR');
+
     await app.close();
   });
 });
