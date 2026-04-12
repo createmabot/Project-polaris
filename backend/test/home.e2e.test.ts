@@ -1,0 +1,265 @@
+import Fastify from 'fastify';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { homeRoutes } from '../src/routes/home';
+import { errorHandler } from '../src/utils/response';
+
+type AlertRow = {
+  id: string;
+  symbolId: string | null;
+  alertName: string;
+  alertType: string;
+  triggeredAt: Date;
+  symbol: {
+    id: string;
+    symbol: string;
+    symbolCode: string;
+    marketCode: string;
+    tradingviewSymbol: string;
+  } | null;
+};
+
+type SummaryRow = {
+  id: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  summaryScope: string;
+  title: string | null;
+  bodyMarkdown: string;
+  generatedAt: Date | null;
+  generationContextJson: Record<string, unknown> | null;
+};
+
+type Runtime = {
+  alerts: AlertRow[];
+  summaries: SummaryRow[];
+};
+
+let runtime: Runtime;
+
+function createRuntime(): Runtime {
+  return {
+    alerts: [
+      {
+        id: 'alert-1',
+        symbolId: 'sym-7203',
+        alertName: 'Price breakout',
+        alertType: 'breakout',
+        triggeredAt: new Date('2026-04-12T09:00:00+09:00'),
+        symbol: {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+        },
+      },
+    ],
+    summaries: [
+      {
+        id: 'alert-summary-1',
+        targetEntityType: 'alert_event',
+        targetEntityId: 'alert-1',
+        summaryScope: 'alert_reason',
+        title: 'alert summary',
+        bodyMarkdown: 'alert body',
+        generatedAt: new Date('2026-04-12T09:05:00+09:00'),
+        generationContextJson: null,
+      },
+      {
+        id: 'daily-morning-0410',
+        targetEntityType: 'market_snapshot',
+        targetEntityId: 'market:jp',
+        summaryScope: 'daily',
+        title: '2026-04-10 morning',
+        bodyMarkdown: 'morning body',
+        generatedAt: new Date('2026-04-10T08:00:00+09:00'),
+        generationContextJson: { summary_type: 'morning' },
+      },
+      {
+        id: 'daily-evening-0410',
+        targetEntityType: 'market_snapshot',
+        targetEntityId: 'market:jp',
+        summaryScope: 'daily',
+        title: '2026-04-10 evening',
+        bodyMarkdown: 'evening body',
+        generatedAt: new Date('2026-04-10T19:00:00+09:00'),
+        generationContextJson: { summary_type: 'evening' },
+      },
+      {
+        id: 'daily-morning-0412',
+        targetEntityType: 'market_snapshot',
+        targetEntityId: 'market:jp',
+        summaryScope: 'daily',
+        title: '2026-04-12 morning',
+        bodyMarkdown: 'morning body newer',
+        generatedAt: new Date('2026-04-12T08:00:00+09:00'),
+        generationContextJson: { summary_type: 'morning' },
+      },
+      {
+        id: 'daily-latest',
+        targetEntityType: 'market_snapshot',
+        targetEntityId: 'market:jp',
+        summaryScope: 'daily',
+        title: '2026-04-12 evening latest',
+        bodyMarkdown: 'latest body',
+        generatedAt: new Date('2026-04-12T19:00:00+09:00'),
+        generationContextJson: { summary_type: 'evening' },
+      },
+    ],
+  };
+}
+
+vi.mock('../src/db', () => {
+  const prisma = {
+    alertEvent: {
+      findMany: async () =>
+        runtime.alerts
+          .slice()
+          .sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime()),
+    },
+    aiSummary: {
+      findMany: async ({ where }: any) => {
+        if (where?.summaryScope === 'alert_reason') {
+          const ids: string[] = where?.targetEntityId?.in ?? [];
+          return runtime.summaries
+            .filter(
+              (row) =>
+                row.summaryScope === 'alert_reason' &&
+                row.targetEntityType === 'alert_event' &&
+                ids.includes(row.targetEntityId),
+            )
+            .sort(
+              (a, b) =>
+                (b.generatedAt?.getTime() ?? 0) - (a.generatedAt?.getTime() ?? 0),
+            );
+        }
+
+        if (where?.summaryScope === 'daily') {
+          let rows = runtime.summaries.filter(
+            (row) =>
+              row.summaryScope === 'daily' &&
+              row.targetEntityType === 'market_snapshot',
+          );
+          if (where?.generatedAt?.gte && where?.generatedAt?.lt) {
+            const gte = (where.generatedAt.gte as Date).getTime();
+            const lt = (where.generatedAt.lt as Date).getTime();
+            rows = rows.filter((row) => {
+              const ts = row.generatedAt?.getTime();
+              return typeof ts === 'number' && ts >= gte && ts < lt;
+            });
+          }
+          return rows.sort(
+            (a, b) =>
+              (b.generatedAt?.getTime() ?? 0) - (a.generatedAt?.getTime() ?? 0),
+          );
+        }
+
+        return [];
+      },
+    },
+  };
+
+  return { prisma };
+});
+
+vi.mock('../src/market/snapshot', () => ({
+  getCurrentSnapshotsForSymbols: vi.fn(async () => {
+    const map = new Map();
+    map.set('sym-7203', {
+      symbol_id: 'sym-7203',
+      as_of: '2026-04-12T06:00:00.000Z',
+      last_price: 3000,
+      change_percent: 1.23,
+    });
+    return map;
+  }),
+}));
+
+async function createApp() {
+  const app = Fastify({ logger: false });
+  app.setErrorHandler(errorHandler);
+  app.register(homeRoutes, { prefix: '/api/home' });
+  await app.ready();
+  return app;
+}
+
+describe('GET /api/home daily_summary query handling', () => {
+  beforeEach(() => {
+    runtime = createRuntime();
+  });
+
+  it('returns latest daily summary by default and keeps recent_alerts unchanged', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.data.daily_summary.id).toBe('daily-latest');
+    expect(body.data.recent_alerts).toHaveLength(1);
+    expect(body.data.recent_alerts[0].related_ai_summary.id).toBe('alert-summary-1');
+    expect(body.data.recent_alerts[0].current_snapshot.last_price).toBe(3000);
+
+    await app.close();
+  });
+
+  it('switches daily summary by summary_type', async () => {
+    const app = await createApp();
+
+    const morning = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=morning',
+    });
+    expect(morning.statusCode).toBe(200);
+    expect(morning.json().data.daily_summary.id).toBe('daily-morning-0412');
+
+    const evening = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=evening',
+    });
+    expect(evening.statusCode).toBe(200);
+    expect(evening.json().data.daily_summary.id).toBe('daily-latest');
+
+    await app.close();
+  });
+
+  it('applies date filter together with summary_type', async () => {
+    const app = await createApp();
+
+    const eveningOnDate = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=evening&date=2026-04-10',
+    });
+    expect(eveningOnDate.statusCode).toBe(200);
+    expect(eveningOnDate.json().data.daily_summary.id).toBe('daily-evening-0410');
+
+    const morningMissing = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=morning&date=2026-04-11',
+    });
+    expect(morningMissing.statusCode).toBe(200);
+    expect(morningMissing.json().data.daily_summary).toBeNull();
+
+    await app.close();
+  });
+
+  it('returns validation errors for unsupported summary_type and invalid date', async () => {
+    const app = await createApp();
+
+    const invalidType = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=night',
+    });
+    expect(invalidType.statusCode).toBe(400);
+    expect(invalidType.json().error.code).toBe('VALIDATION_ERROR');
+
+    const invalidDate = await app.inject({
+      method: 'GET',
+      url: '/api/home?summary_type=latest&date=2026/04/12',
+    });
+    expect(invalidDate.statusCode).toBe(400);
+    expect(invalidDate.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+});
