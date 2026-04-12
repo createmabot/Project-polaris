@@ -102,7 +102,7 @@ export const noteRoutes: FastifyPluginAsync = async (fastify, opts) => {
           }
         });
 
-        await tx.noteRevision.create({
+        const newRevision = await tx.noteRevision.create({
           data: {
             researchNoteId: newNote.id,
             revisionNo: 1,
@@ -111,7 +111,7 @@ export const noteRoutes: FastifyPluginAsync = async (fastify, opts) => {
           }
         });
 
-        return newNote;
+        return { note: newNote, revision: newRevision };
       });
 
       return reply.code(201).send(formatSuccess(request, result));
@@ -166,7 +166,7 @@ export const noteRoutes: FastifyPluginAsync = async (fastify, opts) => {
         });
         const nextRevNo = lastRevision ? lastRevision.revisionNo + 1 : 1;
 
-        await tx.noteRevision.create({
+        const newRevision = await tx.noteRevision.create({
           data: {
             researchNoteId: updatedNote.id,
             revisionNo: nextRevNo,
@@ -175,7 +175,7 @@ export const noteRoutes: FastifyPluginAsync = async (fastify, opts) => {
           }
         });
 
-        return updatedNote;
+        return { note: updatedNote, revision: newRevision };
       });
 
       return reply.status(200).send(formatSuccess(request, result));
