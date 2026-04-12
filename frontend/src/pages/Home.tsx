@@ -3,6 +3,10 @@ import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
 
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 function formatDate(value: string | null): string {
   if (!value) return '-';
   const date = new Date(value);
@@ -31,6 +35,77 @@ export default function Home() {
           ルール検証ラボを開く
         </Link>
       </div>
+
+      <section style={{ marginTop: '1.5rem' }}>
+        <h2>マーケット概況</h2>
+        <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
+          {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
+          asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
+          asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
+            <p style={{ margin: 0, color: '#777' }}>マーケット概況データはまだありません。</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.6rem' }}>
+              {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
+                <div key={`index-${index}`} style={{ fontSize: '0.9rem' }}>
+                  指数: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
+                </div>
+              ))}
+              {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).map((item, index) => (
+                <div key={`fx-${index}`} style={{ fontSize: '0.9rem' }}>
+                  為替: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
+                </div>
+              ))}
+              {asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).map((item, index) => (
+                <div key={`sector-${index}`} style={{ fontSize: '0.9rem' }}>
+                  セクター: {item.display_name ?? '-'} / 変化率: {item.change_rate ?? '-'}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section style={{ marginTop: '1.5rem' }}>
+        <h2>監視銘柄</h2>
+        {data.watchlist_symbols.length === 0 ? (
+          <p style={{ color: '#777' }}>監視銘柄はまだありません。</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {data.watchlist_symbols.map((symbol: any, index: number) => (
+              <li key={symbol.symbol_id ?? `watch-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
+                {symbol.symbol_id ? (
+                  <Link href={`/symbols/${symbol.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                    {symbol.display_name ?? symbol.symbol_id}
+                  </Link>
+                ) : (
+                  <span>{symbol.display_name ?? '不明'}</span>
+                )}
+                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
+                  価格: {symbol.latest_price ?? '-'} / 変化率: {symbol.change_rate ?? '-'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section style={{ marginTop: '1.5rem' }}>
+        <h2>保有銘柄</h2>
+        {data.positions.length === 0 ? (
+          <p style={{ color: '#777' }}>保有銘柄はまだありません。</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {data.positions.map((position: any, index: number) => (
+              <li key={position.position_id ?? `position-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
+                <span>{position.display_name ?? position.symbol_id ?? '不明'}</span>
+                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
+                  数量: {position.quantity ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section style={{ marginTop: '1.5rem' }}>
         <h2>デイリーサマリー</h2>
@@ -84,7 +159,24 @@ export default function Home() {
           </ul>
         )}
       </section>
+
+      <section style={{ marginTop: '1.5rem' }}>
+        <h2>注目イベント</h2>
+        {data.key_events.length === 0 ? (
+          <p style={{ color: '#777' }}>注目イベントはまだありません。</p>
+        ) : (
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {data.key_events.map((event: any, index: number) => (
+              <li key={`${event.label ?? 'event'}-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
+                <strong>{event.label ?? 'イベント'}</strong>
+                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
+                  日付: {event.date ?? '-'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
-
