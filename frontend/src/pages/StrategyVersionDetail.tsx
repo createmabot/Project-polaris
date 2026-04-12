@@ -539,6 +539,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     compareSourceEngineActualSummaryDisplay !== null &&
     internalExecutionId !== null &&
     resolvedCompareSourceExecutionId !== null;
+  const showEngineActualComparisonPendingHint =
+    isEngineActualResult &&
+    resolvedCompareSourceExecutionId !== null &&
+    !showEngineActualComparison;
+  const engineActualComparisonPendingMessage = useMemo(() => {
+    if (!showEngineActualComparisonPendingHint) {
+      return null;
+    }
+    if (!compareSourceExecutionStatus) {
+      return '比較元 execution の状態を読み込み中です。';
+    }
+    if (compareSourceExecutionStatus !== 'succeeded') {
+      return `比較元 execution の完了待ちです（status: ${compareSourceExecutionStatus}）。`;
+    }
+    if (compareSourceExecutionResultData?.result_summary?.summary_kind !== 'engine_actual') {
+      return '比較元 execution が engine_actual ではないため、比較表示は行いません。';
+    }
+    return '比較表示を準備中です。';
+  }, [
+    compareSourceExecutionResultData?.result_summary?.summary_kind,
+    compareSourceExecutionStatus,
+    showEngineActualComparisonPendingHint,
+  ]);
   const engineActualRestorePayload = useMemo(
     () => buildEngineActualRestorePayloadFromInputSnapshot(internalExecutionResultData?.input_snapshot),
     [internalExecutionResultData?.input_snapshot],
@@ -1490,6 +1513,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                 </tr>
               </tbody>
             </table>
+          </div>
+        )}
+        {showEngineActualComparisonPendingHint && (
+          <div
+            data-testid='engine-actual-rerun-compare-pending'
+            style={{
+              marginTop: '0.55rem',
+              padding: '0.5rem 0.6rem',
+              borderRadius: '4px',
+              background: '#f6f9ff',
+              border: '1px solid #d9e3f5',
+              color: '#1c3f72',
+              fontSize: '0.84rem',
+            }}
+          >
+            比較元 execution: <code>{resolvedCompareSourceExecutionId}</code> / 今回の実行: <code>{internalExecutionId}</code>
+            <div style={{ marginTop: '0.25rem' }}>{engineActualComparisonPendingMessage}</div>
           </div>
         )}
 
