@@ -106,6 +106,62 @@ function selectDailySummary(
   return summaries.find((summary) => inferDailySummaryType(summary) === summaryType) ?? null;
 }
 
+function buildMarketOverviewFromRecentAlerts(
+  recentAlerts: Array<{
+    symbol: {
+      id: string;
+      symbol?: string | null;
+      symbolCode?: string | null;
+      displayName?: string | null;
+    } | null;
+    current_snapshot?: {
+      last_price?: number | null;
+      change?: number | null;
+      change_percent?: number | null;
+    } | null;
+  }>,
+) {
+  const seen = new Set<string>();
+  const indices: Array<{
+    code: string;
+    display_name: string;
+    price: number;
+    change_value: number | null;
+    change_rate: number | null;
+  }> = [];
+
+  for (const alert of recentAlerts) {
+    const symbol = alert.symbol;
+    const snapshot = alert.current_snapshot;
+    if (!symbol?.id || seen.has(symbol.id)) continue;
+    if (!snapshot || typeof snapshot.last_price !== 'number' || !Number.isFinite(snapshot.last_price)) {
+      continue;
+    }
+
+    seen.add(symbol.id);
+    const symbolCode = (symbol.symbolCode ?? '').trim();
+    const fallbackCode = (symbol.symbol ?? '').trim();
+    const code = symbolCode || fallbackCode || symbol.id;
+    indices.push({
+      code,
+      display_name: symbol.displayName ?? code,
+      price: snapshot.last_price,
+      change_value:
+        typeof snapshot.change === 'number' && Number.isFinite(snapshot.change) ? snapshot.change : null,
+      change_rate:
+        typeof snapshot.change_percent === 'number' && Number.isFinite(snapshot.change_percent)
+          ? snapshot.change_percent
+          : null,
+    });
+  }
+
+  return {
+    indices,
+    fx: [],
+    sectors: [],
+  };
+}
+
 export async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as HomeQuery;
@@ -179,7 +235,7 @@ export async function homeRoutes(fastify: FastifyInstance) {
     const watchlist_symbols: any[] = [];
     const positions: any[] = [];
     const key_events: any[] = [];
-    const market_overview = { indices: [], fx: [], sectors: [] };
+    const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);
 
     const data = {
       market_overview,
