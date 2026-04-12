@@ -96,6 +96,12 @@ describe('BacktestDetail', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
+        ai_review: {
+          summary_id: 'sum-bt-1',
+          title: 'AI総評タイトル',
+          body_markdown: 'AI総評本文',
+          generated_at: '2026-01-01T00:00:00.000Z',
+        },
         imports: [],
       },
     });
@@ -105,6 +111,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('総取引数');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
+    expect(html).toContain('AI 総評');
+    expect(html).toContain('AI総評本文');
     expect(html).toContain('使用した Strategy');
     expect(html).toContain('href="/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fsort%3Dupdated_at%26order%3Ddesc%26page%3D1"');
     expect(html).toContain('href="/strategies/str-1/versions?sort=updated_at&amp;order=desc&amp;page=1"');
@@ -155,6 +163,7 @@ describe('BacktestDetail', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
+        ai_review: null,
         imports: [],
       },
     });
@@ -163,6 +172,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析失敗');
     expect(html).toContain('解析エラー');
     expect(html).toContain('Missing required columns');
+    expect(html).toContain('AI総評はまだ生成されていません。');
   });
 
   it('falls back to /backtests when return query is absent', () => {
@@ -189,6 +199,7 @@ describe('BacktestDetail', () => {
           snapshot: null,
         },
         latest_import: null,
+        ai_review: null,
         imports: [],
       },
     });
