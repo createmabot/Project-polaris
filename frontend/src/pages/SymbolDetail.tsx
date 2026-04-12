@@ -1,4 +1,5 @@
-﻿import useSWR from 'swr';
+import { useEffect, useRef } from 'react';
+import useSWR from 'swr';
 import { Link, useRoute } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { SymbolDetailData } from '../api/types';
@@ -36,11 +37,42 @@ function getThesisPoints(structuredJson: any): string[] {
 export default function SymbolDetail() {
   const [, params] = useRoute('/symbols/:symbolId');
   const symbolId = params?.symbolId;
+  const tvContainerRef = useRef<HTMLDivElement>(null);
 
   const { data, error, isLoading } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
     swrFetcher
   );
+
+  useEffect(() => {
+    if (!data?.chart?.widget_symbol || !tvContainerRef.current) return;
+
+    // Remove existing iframe or script if re-rendering
+    tvContainerRef.current.innerHTML = '';
+
+    const script = document.createElement('script');
+    script.src = 'https://s3.tradingview.com/tv.js';
+    script.async = true;
+    script.onload = () => {
+      if (typeof (window as any).TradingView !== 'undefined') {
+        new (window as any).TradingView.widget({
+          autosize: true,
+          symbol: data.chart?.widget_symbol,
+          interval: data.chart?.default_interval || 'D',
+          timezone: 'Asia/Tokyo',
+          theme: 'light',
+          style: '1',
+          locale: 'ja',
+          enable_publishing: false,
+          hide_top_toolbar: false,
+          hide_legend: false,
+          save_image: false,
+          container_id: tvContainerRef.current?.id,
+        });
+      }
+    };
+    tvContainerRef.current.appendChild(script);
+  }, [data?.chart?.widget_symbol, data?.chart?.default_interval]);
 
   if (isLoading) return <div style={{ padding: '2rem' }}>銘柄情報を読み込み中...</div>;
 
@@ -82,6 +114,12 @@ export default function SymbolDetail() {
           比較対象に追加
         </Link>
       </div>
+
+      {data.chart && data.chart.widget_symbol && (
+        <section style={{ marginTop: '1.25rem', height: '500px', width: '100%' }}>
+          <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} style={{ height: '100%', width: '100%' }} />
+        </section>
+      )}
 
       <section style={{ marginTop: '1.25rem' }}>
         <h2>現在スナップショット</h2>
