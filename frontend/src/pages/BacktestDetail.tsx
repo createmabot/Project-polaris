@@ -180,6 +180,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location] = useLocation();
   const { data, error, isLoading } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
+  const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
@@ -193,7 +194,6 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const parsedImports = data.imports.filter((item) => item.parsed_summary);
   const baseImport = parsedImports[0] ?? null;
   const comparisonCandidates = parsedImports.filter((item) => item.id !== baseImport?.id);
-  const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
   const effectiveComparisonImportId = selectedComparisonImportId || comparisonCandidates[0]?.id || null;
   const targetImport = effectiveComparisonImportId
     ? comparisonCandidates.find((item) => item.id === effectiveComparisonImportId) ?? null
