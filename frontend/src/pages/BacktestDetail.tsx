@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { swrFetcher } from '../api/client';
@@ -53,6 +54,62 @@ function metricCard(label: string, value: string) {
       <div style={{ marginTop: '0.3rem', fontSize: '1.05rem', fontWeight: 600 }}>{value}</div>
     </div>
   );
+}
+
+type ParsedImportSummary = NonNullable<BacktestDetailData['latest_import']>['parsed_summary'];
+
+function toNumber(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return Number(value);
+}
+
+function formatDifference(
+  target: number | null | undefined,
+  base: number | null | undefined,
+  suffix = '',
+): string {
+  const targetNum = toNumber(target);
+  const baseNum = toNumber(base);
+  if (targetNum === null || baseNum === null) return '-';
+  const diff = targetNum - baseNum;
+  const sign = diff > 0 ? '+' : '';
+  return `${sign}${diff.toFixed(2)}${suffix}`;
+}
+
+function buildComparisonRows(base: ParsedImportSummary, target: ParsedImportSummary) {
+  if (!base || !target) return [];
+  return [
+    {
+      label: '総取引数',
+      base: formatNumber(base.totalTrades, 0),
+      target: formatNumber(target.totalTrades, 0),
+      diff: formatDifference(target.totalTrades, base.totalTrades),
+    },
+    {
+      label: '勝率',
+      base: formatPercent(base.winRate),
+      target: formatPercent(target.winRate),
+      diff: formatDifference(target.winRate, base.winRate, 'pt'),
+    },
+    {
+      label: 'Profit Factor',
+      base: formatNumber(base.profitFactor, 2),
+      target: formatNumber(target.profitFactor, 2),
+      diff: formatDifference(target.profitFactor, base.profitFactor),
+    },
+    {
+      label: '最大ドローダウン',
+      base: formatNumber(base.maxDrawdown, 2),
+      target: formatNumber(target.maxDrawdown, 2),
+      diff: formatDifference(target.maxDrawdown, base.maxDrawdown),
+    },
+    {
+      label: '純利益',
+      base: formatNumber(base.netProfit, 2),
+      target: formatNumber(target.netProfit, 2),
+      diff: formatDifference(target.netProfit, base.netProfit),
+    },
+  ];
 }
 
 function normalizeBacktestsReturnPath(decodedPath: string): string | null {
@@ -133,6 +190,17 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const latestStatus = parseStatusText(latestImport?.parse_status);
   const latestStatusStyle = parseStatusStyle(latestImport?.parse_status);
   const summary = latestImport?.parsed_summary;
+  const parsedImports = data.imports.filter((item) => item.parsed_summary);
+  const baseImport = parsedImports[0] ?? null;
+  const comparisonCandidates = parsedImports.filter((item) => item.id !== baseImport?.id);
+  const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
+  const effectiveComparisonImportId = selectedComparisonImportId || comparisonCandidates[0]?.id || null;
+  const targetImport = effectiveComparisonImportId
+    ? comparisonCandidates.find((item) => item.id === effectiveComparisonImportId) ?? null
+    : null;
+  const comparisonRows = baseImport?.parsed_summary && targetImport?.parsed_summary
+    ? buildComparisonRows(baseImport.parsed_summary, targetImport.parsed_summary)
+    : [];
   const usedStrategy = data.used_strategy;
   const snapshot = usedStrategy.snapshot;
   const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
@@ -272,6 +340,69 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             {metricCard('対象期間（開始）', valueText(summary.periodFrom))}
             {metricCard('対象期間（終了）', valueText(summary.periodTo))}
           </div>
+        )}
+      </section>
+
+      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+        <h2 style={{ marginTop: 0 }}>バックテスト比較 inline</h2>
+        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: '#666', fontSize: '0.92rem' }}>
+          比較元 run と比較対象 run の parsed summary を同一画面で確認できます（read-only）。
+        </p>
+        {!baseImport || comparisonCandidates.length === 0 ? (
+          <p style={{ margin: 0, color: '#666' }}>
+            比較可能な run が不足しています。解析済み import が2件以上あると比較できます。
+          </p>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem', marginBottom: '0.85rem' }}>
+              <div>
+                <div style={{ fontSize: '0.82rem', color: '#666' }}>比較元 run</div>
+                <div><code>{baseImport.id}</code></div>
+              </div>
+              <div>
+                <div style={{ fontSize: '0.82rem', color: '#666' }}>比較対象 run</div>
+                <select
+                  aria-label='比較対象 run'
+                  value={effectiveComparisonImportId ?? ''}
+                  onChange={(event) => setSelectedComparisonImportId(event.target.value)}
+                  style={{ minWidth: '220px', padding: '0.35rem' }}
+                >
+                  {comparisonCandidates.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {!targetImport ? (
+              <p style={{ margin: 0, color: '#666' }}>比較対象 run を選択してください。</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
+                      <th style={{ padding: '0.5rem' }}>指標</th>
+                      <th style={{ padding: '0.5rem' }}>比較元</th>
+                      <th style={{ padding: '0.5rem' }}>比較対象</th>
+                      <th style={{ padding: '0.5rem' }}>差分（対象-元）</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonRows.map((row) => (
+                      <tr key={row.label} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        <td style={{ padding: '0.5rem' }}>{row.label}</td>
+                        <td style={{ padding: '0.5rem' }}>{row.base}</td>
+                        <td style={{ padding: '0.5rem' }}>{row.target}</td>
+                        <td style={{ padding: '0.5rem' }}>{row.diff}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 
