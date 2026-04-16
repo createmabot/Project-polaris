@@ -166,6 +166,11 @@ function buildMarketOverviewFromRecentAlerts(
       return true;
     }
 
+    // If market code is explicitly non-FX, do not classify as FX by ticker pattern.
+    if (marketCode) {
+      return false;
+    }
+
     const symbolCode = normalizeFxCode(symbol.symbolCode);
     const symbolText = normalizeFxCode(symbol.symbol);
     return FX_CODE_PATTERN.test(symbolCode) || FX_CODE_PATTERN.test(symbolText);
