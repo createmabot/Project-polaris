@@ -33,6 +33,22 @@ type SummaryRow = {
 type Runtime = {
   alerts: AlertRow[];
   summaries: SummaryRow[];
+  positions: Array<{
+    id: string;
+    userId: string;
+    symbolId: string;
+    quantity: { toNumber: () => number };
+    averageCost: { toNumber: () => number };
+    createdAt: Date;
+    symbol: {
+      id: string;
+      symbol: string;
+      symbolCode: string;
+      marketCode: string;
+      tradingviewSymbol: string;
+      displayName: string;
+    };
+  }>;
 };
 
 let runtime: Runtime;
@@ -108,6 +124,24 @@ function createRuntime(): Runtime {
         generationContextJson: { summary_type: 'evening' },
       },
     ],
+    positions: [
+      {
+        id: 'pos-1',
+        userId: 'user-1',
+        symbolId: 'sym-7203',
+        quantity: { toNumber: () => 100 },
+        averageCost: { toNumber: () => 2800 },
+        createdAt: new Date('2026-04-12T08:00:00+09:00'),
+        symbol: {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+          displayName: 'Toyota',
+        },
+      },
+    ],
   };
 }
 
@@ -171,6 +205,12 @@ vi.mock('../src/db', () => {
           createdAt: new Date(),
         },
       ],
+    },
+    position: {
+      findMany: async () =>
+        runtime.positions
+          .slice()
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
     },
   };
 
@@ -242,6 +282,16 @@ describe('GET /api/home daily_summary query handling', () => {
       change_rate: 1.23,
       latest_alert_status: 'summarized',
       user_priority: null,
+    });
+    expect(body.data.positions).toHaveLength(1);
+    expect(body.data.positions[0]).toMatchObject({
+      position_id: 'pos-1',
+      symbol_id: 'sym-7203',
+      display_name: 'Toyota',
+      quantity: 100,
+      avg_cost: 2800,
+      latest_price: 3000,
+      unrealized_pnl: 20000,
     });
     expect(body.data.key_events).toHaveLength(1);
     expect(body.data.key_events[0]).toMatchObject({
@@ -358,11 +408,13 @@ describe('GET /api/home daily_summary query handling', () => {
 
   it('returns empty key_events when there are no recent alerts', async () => {
     runtime.alerts = [];
+    runtime.positions = [];
     const app = await createApp();
 
     const res = await app.inject({ method: 'GET', url: '/api/home' });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.key_events).toEqual([]);
+    expect(res.json().data.positions).toEqual([]);
 
     await app.close();
   });

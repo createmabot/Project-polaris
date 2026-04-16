@@ -378,7 +378,51 @@ export async function homeRoutes(fastify: FastifyInstance) {
       };
     });
 
-    const positions: any[] = [];
+    const positionRows = await prisma.position.findMany({
+      orderBy: { createdAt: 'asc' },
+      include: { symbol: true },
+    });
+    const positionSymbolRefs = positionRows
+      .map((row: any) => row.symbol)
+      .filter((symbol: any) => !!symbol && !!symbol.id)
+      .map((symbol: any) => ({
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        tradingviewSymbol: symbol.tradingviewSymbol,
+      }));
+    const positionSnapshotMap = positionSymbolRefs.length > 0
+      ? await getCurrentSnapshotsForSymbols(positionSymbolRefs, fastify.log)
+      : new Map();
+    const positions = positionRows.map((row: any) => {
+      const symbol = row.symbol;
+      const snap = symbol?.id ? (positionSnapshotMap.get(symbol.id) ?? null) : null;
+      const quantity =
+        typeof row.quantity?.toNumber === 'function' ? row.quantity.toNumber() : Number(row.quantity);
+      const avgCost =
+        typeof row.averageCost?.toNumber === 'function'
+          ? row.averageCost.toNumber()
+          : Number(row.averageCost);
+      const latestPrice =
+        snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)
+          ? snap.last_price
+          : null;
+      const unrealizedPnl =
+        typeof latestPrice === 'number' && Number.isFinite(quantity) && Number.isFinite(avgCost)
+          ? (latestPrice - avgCost) * quantity
+          : null;
+
+      return {
+        position_id: row.id,
+        symbol_id: symbol?.id ?? null,
+        display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+        quantity: Number.isFinite(quantity) ? quantity : null,
+        avg_cost: Number.isFinite(avgCost) ? avgCost : null,
+        latest_price: latestPrice,
+        unrealized_pnl: typeof unrealizedPnl === 'number' && Number.isFinite(unrealizedPnl) ? unrealizedPnl : null,
+      };
+    });
     const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
     const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);
 

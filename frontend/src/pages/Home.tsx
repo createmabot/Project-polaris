@@ -45,7 +45,7 @@ export default function Home() {
   return (
     <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <h1>北極星</h1>
-      <p style={{ color: '#666' }}>アラート、要約、ノートをまとめて確認します。</p>
+      <p style={{ color: '#666' }}>アラート、ノートをまとめて確認します。</p>
       <div style={{ marginBottom: '1.2rem' }}>
         <Link href="/compare" style={{ color: '#0066cc', textDecoration: 'none' }}>
           銘柄比較を開く
@@ -120,7 +120,7 @@ export default function Home() {
               <li key={position.position_id ?? `position-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
                 <span>{position.display_name ?? position.symbol_id ?? '不明'}</span>
                 <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
-                  数量: {position.quantity ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
+                  数量: {position.quantity ?? '-'} / 平均取得: {position.avg_cost ?? '-'} / 現在値: {position.latest_price ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
                 </span>
               </li>
             ))}
@@ -164,7 +164,7 @@ export default function Home() {
       </section>
 
       <section style={{ marginTop: '1.5rem' }}>
-        <h2>最近のアラート</h2>
+        <h2>最新アラート</h2>
         {data.recent_alerts.length === 0 ? (
           <p style={{ color: '#777' }}>アラートはありません。</p>
         ) : (
