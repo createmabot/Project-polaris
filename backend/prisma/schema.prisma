@@ -17,6 +17,7 @@ model User {
   webhookTokens WebhookToken[]
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
+  positions    Position[]
   comparisonSessions ComparisonSession[]
   strategyRules StrategyRule[]
 
@@ -36,9 +37,27 @@ model Symbol {
   alertEvents        AlertEvent[]
   externalReferences ExternalReference[]
   researchNotes      ResearchNote[]
+  positions          Position[]
   comparisonSymbols  ComparisonSymbol[]
 
   @@map("symbols")
+}
+
+model Position {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  symbolId    String
+  symbol      Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  quantity    Decimal  @db.Decimal(18, 6)
+  averageCost Decimal  @db.Decimal(18, 6)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, symbolId])
+  @@index([userId, createdAt])
+  @@index([symbolId])
+  @@map("positions")
 }
 
 model WebhookToken {

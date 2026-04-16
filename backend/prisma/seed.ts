@@ -120,6 +120,25 @@ async function main() {
     throw new Error('required symbols 7203/6758 are missing after seed upsert');
   }
 
+  await prisma.position.upsert({
+    where: {
+      userId_symbolId: {
+        userId: user.id,
+        symbolId: sony.id,
+      },
+    },
+    update: {
+      quantity: new Prisma.Decimal('100'),
+      averageCost: new Prisma.Decimal('12850'),
+    },
+    create: {
+      userId: user.id,
+      symbolId: sony.id,
+      quantity: new Prisma.Decimal('100'),
+      averageCost: new Prisma.Decimal('12850'),
+    },
+  });
+
   const alertToyota = await prisma.alertEvent.upsert({
     where: { dedupeKey: 'seed-home-alert-7203' },
     update: {

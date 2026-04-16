@@ -75,6 +75,8 @@ describe('Home', () => {
             position_id: 'pos_1',
             display_name: 'ソニーグループ',
             quantity: 100,
+            avg_cost: 12850,
+            latest_price: 13120,
             unrealized_pnl: 27000,
           },
         ],
@@ -109,7 +111,7 @@ describe('Home', () => {
     expect(html).toContain('セクター: 半導体 / 変化率: 2.1');
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
-    expect(html).toContain('数量: 100 / 評価損益: 27000');
+    expect(html).toContain('数量: 100 / 平均取得: 12850 / 現在値: 13120 / 評価損益: 27000');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
     expect(html).toContain('決算発表');
