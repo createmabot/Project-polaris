@@ -235,6 +235,12 @@ describe('GET /api/home daily_summary query handling', () => {
       latest_alert_status: 'summarized',
       user_priority: null,
     });
+    expect(body.data.key_events).toHaveLength(1);
+    expect(body.data.key_events[0]).toMatchObject({
+      label: 'Price breakout',
+      date: '2026-04-12',
+      symbol_ids: ['sym-7203'],
+    });
 
     await app.close();
   });
@@ -302,6 +308,17 @@ describe('GET /api/home daily_summary query handling', () => {
     });
     expect(impossibleDate.statusCode).toBe(400);
     expect(impossibleDate.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('returns empty key_events when there are no recent alerts', async () => {
+    runtime.alerts = [];
+    const app = await createApp();
+
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.key_events).toEqual([]);
 
     await app.close();
   });

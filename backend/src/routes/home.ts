@@ -162,6 +162,50 @@ function buildMarketOverviewFromRecentAlerts(
   };
 }
 
+function toJstDateText(input?: Date | string | null): string | null {
+  if (!input) return null;
+  const date = input instanceof Date ? input : new Date(input);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+}
+
+function buildKeyEventsFromRecentAlerts(
+  recentAlerts: Array<{
+    alertName?: string | null;
+    alertType?: string | null;
+    triggeredAt?: Date | string | null;
+    receivedAt?: Date | string | null;
+    symbolId?: string | null;
+  }>,
+) {
+  const rows: Array<{ label: string; date: string; symbol_ids: string[] }> = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const alert of recentAlerts) {
+    const date = toJstDateText(alert.triggeredAt ?? alert.receivedAt);
+    if (!date) continue;
+    const label = (alert.alertName ?? '').trim() || (alert.alertType ?? '').trim() || '注目アラート';
+    const key = `${label}::${date}`;
+    const currentIndex = indexByKey.get(key);
+
+    if (currentIndex === undefined) {
+      rows.push({
+        label,
+        date,
+        symbol_ids: alert.symbolId ? [alert.symbolId] : [],
+      });
+      indexByKey.set(key, rows.length - 1);
+      continue;
+    }
+
+    if (alert.symbolId && !rows[currentIndex].symbol_ids.includes(alert.symbolId)) {
+      rows[currentIndex].symbol_ids.push(alert.symbolId);
+    }
+  }
+
+  return rows.slice(0, 10);
+}
+
 export async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as HomeQuery;
@@ -283,7 +327,7 @@ export async function homeRoutes(fastify: FastifyInstance) {
     });
 
     const positions: any[] = [];
-    const key_events: any[] = [];
+    const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
     const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);
 
     const data = {
