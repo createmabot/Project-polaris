@@ -112,6 +112,8 @@ function buildMarketOverviewFromRecentAlerts(
       id: string;
       symbol?: string | null;
       symbolCode?: string | null;
+      marketCode?: string | null;
+      tradingviewSymbol?: string | null;
       displayName?: string | null;
     } | null;
     current_snapshot?: {
@@ -129,6 +131,45 @@ function buildMarketOverviewFromRecentAlerts(
     change_value: number | null;
     change_rate: number | null;
   }> = [];
+  const fx: Array<{
+    code: string;
+    display_name: string;
+    price: number;
+    change_value: number | null;
+    change_rate: number | null;
+  }> = [];
+
+  const FX_CODE_PATTERN = /^[A-Z]{6}$/;
+  const FX_TV_PREFIXES = ['FOREX:', 'FX_IDC:'];
+
+  function normalizeCandidate(value?: string | null): string {
+    return (value ?? '').trim().toUpperCase();
+  }
+
+  function normalizeFxCode(value?: string | null): string {
+    return normalizeCandidate(value).replace(/[^A-Z]/g, '');
+  }
+
+  function isFxSymbol(symbol: {
+    symbol?: string | null;
+    symbolCode?: string | null;
+    marketCode?: string | null;
+    tradingviewSymbol?: string | null;
+  }): boolean {
+    const marketCode = normalizeCandidate(symbol.marketCode);
+    if (marketCode === 'FX' || marketCode === 'FOREX') {
+      return true;
+    }
+
+    const tradingview = normalizeCandidate(symbol.tradingviewSymbol);
+    if (FX_TV_PREFIXES.some((prefix) => tradingview.startsWith(prefix))) {
+      return true;
+    }
+
+    const symbolCode = normalizeFxCode(symbol.symbolCode);
+    const symbolText = normalizeFxCode(symbol.symbol);
+    return FX_CODE_PATTERN.test(symbolCode) || FX_CODE_PATTERN.test(symbolText);
+  }
 
   for (const alert of recentAlerts) {
     const symbol = alert.symbol;
@@ -142,7 +183,7 @@ function buildMarketOverviewFromRecentAlerts(
     const symbolCode = (symbol.symbolCode ?? '').trim();
     const fallbackCode = (symbol.symbol ?? '').trim();
     const code = symbolCode || fallbackCode || symbol.id;
-    indices.push({
+    const row = {
       code,
       display_name: symbol.displayName ?? code,
       price: snapshot.last_price,
@@ -152,12 +193,18 @@ function buildMarketOverviewFromRecentAlerts(
         typeof snapshot.change_percent === 'number' && Number.isFinite(snapshot.change_percent)
           ? snapshot.change_percent
           : null,
-    });
+    };
+
+    if (isFxSymbol(symbol)) {
+      fx.push(row);
+    } else {
+      indices.push(row);
+    }
   }
 
   return {
     indices,
-    fx: [],
+    fx,
     sectors: [],
   };
 }
