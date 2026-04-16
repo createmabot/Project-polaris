@@ -184,7 +184,15 @@ vi.mock('../src/market/snapshot', () => ({
       symbol_id: 'sym-7203',
       as_of: '2026-04-12T06:00:00.000Z',
       last_price: 3000,
+      change: 36.45,
       change_percent: 1.23,
+    });
+    map.set('sym-usdjpy', {
+      symbol_id: 'sym-usdjpy',
+      as_of: '2026-04-12T06:00:00.000Z',
+      last_price: 149.82,
+      change: 0.45,
+      change_percent: 0.3,
     });
     return map;
   }),
@@ -234,6 +242,12 @@ describe('GET /api/home daily_summary query handling', () => {
       change_rate: 1.23,
       latest_alert_status: 'summarized',
       user_priority: null,
+    });
+    expect(body.data.key_events).toHaveLength(1);
+    expect(body.data.key_events[0]).toMatchObject({
+      label: 'Price breakout',
+      date: '2026-04-12',
+      symbol_ids: ['sym-7203'],
     });
 
     await app.close();
@@ -302,6 +316,53 @@ describe('GET /api/home daily_summary query handling', () => {
     });
     expect(impossibleDate.statusCode).toBe(400);
     expect(impossibleDate.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('builds market_overview.fx from recent alerts and keeps indices unchanged', async () => {
+    runtime.alerts.unshift({
+      id: 'alert-fx-1',
+      symbolId: 'sym-usdjpy',
+      alertName: 'USDJPY intraday move',
+      alertType: 'fx_move',
+      triggeredAt: new Date('2026-04-12T11:30:00+09:00'),
+      processingStatus: 'received',
+      symbol: {
+        id: 'sym-usdjpy',
+        symbol: 'USD/JPY',
+        symbolCode: 'USDJPY',
+        marketCode: 'FX',
+        tradingviewSymbol: 'FOREX:USDJPY',
+      },
+    });
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+
+    const body = res.json();
+    expect(body.data.market_overview.indices).toHaveLength(1);
+    expect(body.data.market_overview.indices[0].code).toBe('7203');
+    expect(body.data.market_overview.fx).toHaveLength(1);
+    expect(body.data.market_overview.fx[0]).toMatchObject({
+      code: 'USDJPY',
+      display_name: 'USDJPY',
+      price: 149.82,
+      change_value: 0.45,
+      change_rate: 0.3,
+    });
+
+    await app.close();
+  });
+
+  it('returns empty key_events when there are no recent alerts', async () => {
+    runtime.alerts = [];
+    const app = await createApp();
+
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.key_events).toEqual([]);
 
     await app.close();
   });

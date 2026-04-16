@@ -16,6 +16,8 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
 }
 
+const EMPTY_STATE_HINT = 'データ未生成の場合は、seed 実行後にページを再読み込みしてください。';
+
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
   if (!payload || typeof payload !== 'object') {
@@ -191,7 +193,10 @@ export default function SymbolDetail() {
             </div>
           </div>
         ) : (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>AI要約はまだ生成されていません。</div>
+          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
+            <div>AI要約はまだ生成されていません。</div>
+            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
+          </div>
         )}
       </section>
 
@@ -228,7 +233,8 @@ export default function SymbolDetail() {
           </div>
         ) : (
           <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666', marginTop: '1rem' }}>
-            アクティブな research note はありません。
+            <div>アクティブな research note はありません。</div>
+            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
           </div>
         )}
       </section>
@@ -236,7 +242,10 @@ export default function SymbolDetail() {
       <section style={{ marginTop: '2rem' }}>
         <h2>関連参照情報</h2>
         {data.related_references.length === 0 ? (
-          <p style={{ color: '#666' }}>関連参照情報はありません。</p>
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>関連参照情報はありません。</p>
+            <p style={{ margin: 0, fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</p>
+          </div>
         ) : (
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {data.related_references.map((reference) => (

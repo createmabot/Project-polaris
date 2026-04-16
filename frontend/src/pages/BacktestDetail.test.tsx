@@ -108,6 +108,7 @@ describe('BacktestDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-1' }} />);
     expect(html).toContain('主要指標');
+    expect(html).toContain('まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。');
     expect(html).toContain('総取引数');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
@@ -117,6 +118,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('href="/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fsort%3Dupdated_at%26order%3Ddesc%26page%3D1"');
     expect(html).toContain('href="/strategies/str-1/versions?sort=updated_at&amp;order=desc&amp;page=1"');
     expect(html).toContain('次アクション（Rule Lab）');
+    expect(html).toContain('比較可能な run が不足しています。解析済み import が2件以上あると比較できます。');
   });
 
   it('shows parse error on failed parse', () => {
@@ -206,5 +208,85 @@ describe('BacktestDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-3' }} />);
     expect(html).toContain('href="/backtests"');
+  });
+
+  it('renders inline comparison when parsed imports are at least two', () => {
+    mockLocation = '/backtests/bt-4';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-4',
+          strategy_version_id: 'ver-4',
+          title: '比較テスト',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'ready',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-4',
+          snapshot: null,
+        },
+        latest_import: null,
+        ai_review: null,
+        imports: [
+          {
+            id: 'imp-compare-base',
+            backtest_id: 'bt-4',
+            file_name: 'a.csv',
+            file_size: 100,
+            content_type: 'text/csv',
+            parse_status: 'parsed',
+            parse_error: null,
+            parsed_summary: {
+              totalTrades: 100,
+              winRate: 50,
+              profitFactor: 1.2,
+              maxDrawdown: -10,
+              netProfit: 100000,
+              periodFrom: '2025-01-01',
+              periodTo: '2025-12-31',
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'imp-compare-target',
+            backtest_id: 'bt-4',
+            file_name: 'b.csv',
+            file_size: 100,
+            content_type: 'text/csv',
+            parse_status: 'parsed',
+            parse_error: null,
+            parsed_summary: {
+              totalTrades: 120,
+              winRate: 55,
+              profitFactor: 1.4,
+              maxDrawdown: -12,
+              netProfit: 140000,
+              periodFrom: '2025-01-01',
+              periodTo: '2025-12-31',
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-4' }} />);
+    expect(html).toContain('バックテスト比較 inline');
+    expect(html).toContain('比較元 run');
+    expect(html).toContain('比較対象 run');
+    expect(html).toContain('差分（対象-元）');
+    expect(html).toContain('imp-compare-base');
+    expect(html).toContain('imp-compare-target');
+    expect(html).toContain('+20.00');
   });
 });
