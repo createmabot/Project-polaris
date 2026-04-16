@@ -144,7 +144,8 @@ vi.mock('../src/db', () => {
     },
     symbol: {
       findMany: async ({ where }: any) => {
-        const ids = where?.id?.in ?? [];
+        const ids = where?.id?.in;
+        if (!Array.isArray(ids)) return symbols;
         return symbols.filter((symbol) => ids.includes(symbol.id));
       },
     },
@@ -163,6 +164,9 @@ vi.mock('../src/db', () => {
       findMany: async () => [],
     },
     externalReference: {
+      findMany: async () => [],
+    },
+    position: {
       findMany: async () => [],
     },
   };
