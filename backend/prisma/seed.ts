@@ -553,6 +553,84 @@ async function main() {
     },
   });
 
+  const backtestImport2 = await prisma.backtestImport.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000403' },
+    update: {
+      backtestId: backtest.id,
+      fileName: 'seed-summary-variant.csv',
+      fileSize: 132,
+      contentType: 'text/csv',
+      rawCsvText: 'Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To\n98000,14,50.00,1.35,-5.10,2026-01-01,2026-03-09\n',
+      parseStatus: 'parsed',
+      parseError: null,
+      parsedSummaryJson: {
+        totalTrades: 14,
+        winRate: 50,
+        profitFactor: 1.35,
+        maxDrawdown: -5.1,
+        netProfit: 98000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-09',
+      } as Prisma.InputJsonValue,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000403',
+      backtestId: backtest.id,
+      fileName: 'seed-summary-variant.csv',
+      fileSize: 132,
+      contentType: 'text/csv',
+      rawCsvText: 'Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To\n98000,14,50.00,1.35,-5.10,2026-01-01,2026-03-09\n',
+      parseStatus: 'parsed',
+      parseError: null,
+      parsedSummaryJson: {
+        totalTrades: 14,
+        winRate: 50,
+        profitFactor: 1.35,
+        maxDrawdown: -5.1,
+        netProfit: 98000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-09',
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  await prisma.backtestComparison.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000404' },
+    update: {
+      baseBacktestId: backtest.id,
+      baseImportId: backtestImport.id,
+      targetBacktestId: backtest.id,
+      targetImportId: backtestImport2.id,
+      metricsDiffJson: {
+        schema_version: '1.0',
+        total_trades_diff: 2,
+        win_rate_diff_pt: -8.33,
+        profit_factor_diff: -0.37,
+        max_drawdown_diff: -0.9,
+        net_profit_diff: -22000,
+      } as Prisma.InputJsonValue,
+      tradeoffSummary: '- 総取引数差分: +2\n- 勝率差分(pt): -8.33\n- Profit Factor差分: -0.37\n- 最大ドローダウン差分: -0.90\n- 純利益差分: -22000.00',
+      aiSummary: '比較元に対して、比較先は取引回数が増える一方で勝率と純利益が低下しています。ドローダウンはやや改善しています。',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000404',
+      baseBacktestId: backtest.id,
+      baseImportId: backtestImport.id,
+      targetBacktestId: backtest.id,
+      targetImportId: backtestImport2.id,
+      metricsDiffJson: {
+        schema_version: '1.0',
+        total_trades_diff: 2,
+        win_rate_diff_pt: -8.33,
+        profit_factor_diff: -0.37,
+        max_drawdown_diff: -0.9,
+        net_profit_diff: -22000,
+      } as Prisma.InputJsonValue,
+      tradeoffSummary: '- 総取引数差分: +2\n- 勝率差分(pt): -8.33\n- Profit Factor差分: -0.37\n- 最大ドローダウン差分: -0.90\n- 純利益差分: -22000.00',
+      aiSummary: '比較元に対して、比較先は取引回数が増える一方で勝率と純利益が低下しています。ドローダウンはやや改善しています。',
+    },
+  });
+
   await upsertAiSummaryByFingerprint({
     summaryScope: 'backtest_review',
     targetEntityType: 'backtest',
@@ -683,6 +761,7 @@ async function main() {
   console.log(`Seeded note: ${note.id}`);
   console.log(`Seeded comparison: ${comparisonSession.id}`);
   console.log(`Seeded backtest/import: ${backtest.id} / ${backtestImport.id}`);
+  console.log(`Seeded backtest comparison: 00000000-0000-4000-8000-000000000404`);
   console.log('Seed completed for UI walkthrough dataset.');
 }
 

@@ -219,6 +219,10 @@ pnpm run down
   - 取込状態（parsed / failed / pending / 未取込）
   - parse failed 時の `parse_error`
   - 主要指標（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
+  - inline 比較（同一 backtest 内 import の read-only 差分確認）
+  - 保存比較（pairwise）:
+    - `この2件で比較を保存する`
+    - `保存済み比較を見る`（`/backtest-comparisons/:comparisonId`）
 
 ### backtest 履歴一覧
 - URL: `/backtests`
