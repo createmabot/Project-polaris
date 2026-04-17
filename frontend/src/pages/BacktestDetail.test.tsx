@@ -285,8 +285,115 @@ describe('BacktestDetail', () => {
     expect(html).toContain('比較元 run');
     expect(html).toContain('比較対象 run');
     expect(html).toContain('差分（対象-元）');
+    expect(html).toContain('この2件で比較を保存する');
     expect(html).toContain('imp-compare-base');
     expect(html).toContain('imp-compare-target');
     expect(html).toContain('+20.00');
+  });
+
+  it('restores saved comparison summary from comparisonId query', () => {
+    mockLocation = '/backtests/bt-5?comparisonId=cmp-1';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === '/api/backtest-comparisons/cmp-1') {
+        return {
+          isLoading: false,
+          error: null,
+          data: {
+            comparison: {
+              comparison_id: 'cmp-1',
+              base_backtest_id: 'bt-5',
+              base_import_id: 'imp-base',
+              target_backtest_id: 'bt-5',
+              target_import_id: 'imp-target',
+              metrics_diff: {
+                schema_version: '1.0',
+                total_trades_diff: 2,
+                win_rate_diff_pt: 3.5,
+                profit_factor_diff: 0.2,
+                max_drawdown_diff: -0.8,
+                net_profit_diff: 12000,
+              },
+              tradeoff_summary: '- 総取引数差分: +2',
+              ai_summary: 'AI比較総評',
+              created_at: new Date().toISOString(),
+            },
+          },
+        };
+      }
+
+      return {
+        isLoading: false,
+        error: null,
+        data: {
+          backtest: {
+            id: 'bt-5',
+            strategy_version_id: 'ver-5',
+            title: '比較保存確認',
+            execution_source: 'tradingview',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            status: 'ready',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          used_strategy: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-5',
+            snapshot: null,
+          },
+          latest_import: null,
+          ai_review: null,
+          imports: [
+            {
+              id: 'imp-base',
+              backtest_id: 'bt-5',
+              file_name: 'a.csv',
+              file_size: 100,
+              content_type: 'text/csv',
+              parse_status: 'parsed',
+              parse_error: null,
+              parsed_summary: {
+                totalTrades: 10,
+                winRate: 45,
+                profitFactor: 1.1,
+                maxDrawdown: -6,
+                netProfit: 50000,
+                periodFrom: '2025-01-01',
+                periodTo: '2025-12-31',
+              },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            {
+              id: 'imp-target',
+              backtest_id: 'bt-5',
+              file_name: 'b.csv',
+              file_size: 100,
+              content_type: 'text/csv',
+              parse_status: 'parsed',
+              parse_error: null,
+              parsed_summary: {
+                totalTrades: 12,
+                winRate: 48.5,
+                profitFactor: 1.3,
+                maxDrawdown: -6.8,
+                netProfit: 62000,
+                periodFrom: '2025-01-01',
+                periodTo: '2025-12-31',
+              },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ],
+        },
+      };
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-5' }} />);
+    expect(html).toContain('保存済み比較（要約）');
+    expect(html).toContain('比較ID:');
+    expect(html).toContain('AI比較総評');
+    expect(html).toContain('href="/backtest-comparisons/cmp-1"');
   });
 });

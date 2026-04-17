@@ -418,6 +418,27 @@ export type BacktestDetailData = {
   } | null;
 };
 
+export type BacktestComparisonData = {
+  comparison: {
+    comparison_id: string;
+    base_backtest_id: string;
+    base_import_id: string;
+    target_backtest_id: string;
+    target_import_id: string;
+    metrics_diff: {
+      schema_version: string;
+      total_trades_diff: number | null;
+      win_rate_diff_pt: number | null;
+      profit_factor_diff: number | null;
+      max_drawdown_diff: number | null;
+      net_profit_diff: number | null;
+    };
+    tradeoff_summary: string;
+    ai_summary: string | null;
+    created_at: string;
+  };
+};
+
 export type BacktestListData = {
   backtests: Array<{
     strategy_id: string | null;

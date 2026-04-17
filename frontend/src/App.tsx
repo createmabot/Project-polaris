@@ -7,6 +7,7 @@ import CompareCreate from "./pages/CompareCreate";
 import ComparisonDetail from "./pages/ComparisonDetail";
 import StrategyLab from "./pages/StrategyLab";
 import BacktestDetail from "./pages/BacktestDetail";
+import BacktestComparisonDetail from "./pages/BacktestComparisonDetail";
 import BacktestList from "./pages/BacktestList";
 import StrategyVersionList from "./pages/StrategyVersionList";
 import StrategyVersionDetail from "./pages/StrategyVersionDetail";
@@ -26,6 +27,7 @@ function App() {
       <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
       <Route path="/backtests" component={BacktestList} />
       <Route path="/backtests/:backtestId" component={BacktestDetail} />
+      <Route path="/backtest-comparisons/:comparisonId" component={BacktestComparisonDetail} />
       <Route path="/comparisons/:comparisonId" component={ComparisonDetail} />
       <Route>404: No such page!</Route>
     </Switch>

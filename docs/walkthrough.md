@@ -122,6 +122,13 @@ pnpm run dev
    - version詳細: `http://localhost:5173/strategy-versions/00000000-0000-4000-8000-000000000202`  
    - 確認: strategy/version 表示、既存導線（internal-backtests は既存契約を維持）
 
+7. Backtest 保存比較（pairwise）  
+   - `http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401` を開く  
+   - inline 比較ブロックで比較対象 run を選択  
+   - `この2件で比較を保存する` を押下  
+   - `保存済み比較を見る` から保存比較詳細（`/backtest-comparisons/:comparisonId`）へ遷移  
+   - 確認: `metrics_diff` / `tradeoff_summary` / `ai_summary` が再訪で維持される
+
 ### 4. 補足
 
 - `market_overview.indices` は runtime snapshot 取得結果を使うため、ネットワーク条件によっては空になる場合があります。

@@ -399,6 +399,8 @@ model Backtest {
   updatedAt             DateTime            @updatedAt
 
   imports BacktestImport[]
+  comparisonsAsBase   BacktestComparison[] @relation("BacktestComparisonBase")
+  comparisonsAsTarget BacktestComparison[] @relation("BacktestComparisonTarget")
 
   @@index([strategyRuleVersionId, createdAt])
   @@index([status])
@@ -422,6 +424,26 @@ model BacktestImport {
   @@index([backtestId, createdAt])
   @@index([parseStatus])
   @@map("backtest_imports")
+}
+
+model BacktestComparison {
+  id              String   @id @default(uuid())
+  baseBacktestId  String   @map("base_backtest_id")
+  baseBacktest    Backtest @relation("BacktestComparisonBase", fields: [baseBacktestId], references: [id], onDelete: Cascade)
+  baseImportId    String   @map("base_import_id")
+  targetBacktestId String   @map("target_backtest_id")
+  targetBacktest  Backtest @relation("BacktestComparisonTarget", fields: [targetBacktestId], references: [id], onDelete: Cascade)
+  targetImportId  String   @map("target_import_id")
+  metricsDiffJson Json     @map("metrics_diff_json")
+  tradeoffSummary String   @map("tradeoff_summary") @db.Text
+  aiSummary       String?  @map("ai_summary") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([baseBacktestId, createdAt])
+  @@index([targetBacktestId, createdAt])
+  @@index([createdAt])
+  @@map("backtest_comparisons")
 }
 
 enum InternalBacktestExecutionStatus {
