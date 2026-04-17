@@ -260,6 +260,7 @@ function buildKeyEventsFromRecentAlerts(
 
 export async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+    const prismaAny = prisma as any;
     const query = (request.query ?? {}) as HomeQuery;
     const summaryType = normalizeSummaryType(query.summary_type ?? query.summaryType);
     const date = normalizeDate(query.date);
@@ -327,13 +328,30 @@ export async function homeRoutes(fastify: FastifyInstance) {
     });
     const dailySummary = selectDailySummary(dailySummaries, summaryType);
 
-    // 3. watchlist_symbols: Symbol テーブル全件 + snapshot（watchlist_items 未実装のため全件を代替とする）
-    const symbolRows = await prisma.symbol.findMany({
-      orderBy: { createdAt: 'asc' },
+    // 3. watchlist_symbols: watchlist_items を正本にする
+    const defaultWatchlist = await prismaAny.watchlist.findFirst({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
+    const watchlistItemsRaw = defaultWatchlist
+      ? await prismaAny.watchlistItem.findMany({
+          where: { watchlistId: defaultWatchlist.id },
+          include: { symbol: true },
+          orderBy: [{ addedAt: 'asc' }],
+        })
+      : [];
+    const watchlistItems = watchlistItemsRaw
+      .slice()
+      .sort((a: any, b: any) => {
+        const aPriority = typeof a.priority === 'number' ? a.priority : Number.MAX_SAFE_INTEGER;
+        const bPriority = typeof b.priority === 'number' ? b.priority : Number.MAX_SAFE_INTEGER;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime();
+      });
 
     // 最新アラートを一括取得（N+1 回避）
-    const symbolIds = symbolRows.map((s: any) => s.id);
+    const symbolIds = watchlistItems
+      .map((item: any) => item.symbolId)
+      .filter((id: any) => typeof id === 'string' && id.length > 0);
     const latestAlertsRaw = symbolIds.length > 0
       ? await prisma.alertEvent.findMany({
           where: { symbolId: { in: symbolIds } },
@@ -350,31 +368,35 @@ export async function homeRoutes(fastify: FastifyInstance) {
     }
 
     // スナップショット取得
-    const watchlistSymbolRefs = symbolRows.map((s: any) => ({
-      id: s.id,
-      symbol: s.symbol,
-      symbolCode: s.symbolCode,
-      marketCode: s.marketCode,
-      tradingviewSymbol: s.tradingviewSymbol,
-    }));
+    const watchlistSymbolRefs = watchlistItems
+      .map((item: any) => item.symbol)
+      .filter((symbol: any) => !!symbol && !!symbol.id)
+      .map((symbol: any) => ({
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        tradingviewSymbol: symbol.tradingviewSymbol,
+      }));
     const watchlistSnapshotMap = watchlistSymbolRefs.length > 0
       ? await getCurrentSnapshotsForSymbols(watchlistSymbolRefs, fastify.log)
       : new Map();
 
-    const watchlist_symbols = symbolRows.map((s: any) => {
-      const snap = watchlistSnapshotMap.get(s.id) ?? null;
+    const watchlist_symbols = watchlistItems.map((item: any) => {
+      const symbol = item.symbol;
+      const snap = symbol?.id ? (watchlistSnapshotMap.get(symbol.id) ?? null) : null;
       return {
-        symbol_id: s.id,
-        display_name: s.displayName ?? s.symbolCode ?? s.symbol ?? null,
-        tradingview_symbol: s.tradingviewSymbol ?? null,
+        symbol_id: symbol?.id ?? null,
+        display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+        tradingview_symbol: symbol?.tradingviewSymbol ?? null,
         latest_price: snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)
           ? snap.last_price
           : null,
         change_rate: snap && typeof snap.change_percent === 'number' && Number.isFinite(snap.change_percent)
           ? snap.change_percent
           : null,
-        latest_alert_status: latestAlertStatusBySymbolId.get(s.id) ?? null,
-        user_priority: null, // watchlist_items 未実装のため null
+        latest_alert_status: symbol?.id ? (latestAlertStatusBySymbolId.get(symbol.id) ?? null) : null,
+        user_priority: typeof item.priority === 'number' ? item.priority : null,
       };
     });
 

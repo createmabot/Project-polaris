@@ -397,3 +397,7 @@ pnpm exec prisma db seed
 6. `/strategies/:strategyId/versions` → `/strategy-versions/:versionId`
 
 詳細チェック観点は `docs/walkthrough.md` の「UI確認用 seed walkthrough（最小）」を参照。
+
+補足:
+- `watchlist_symbols` は `watchlists / watchlist_items` 正本（`sort_order` 先頭の watchlist）を利用します。
+- seed では default watchlist と items（7203 / 6758）を投入するため、`/home` で監視銘柄が確認できます。
