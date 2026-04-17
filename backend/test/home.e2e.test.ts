@@ -49,6 +49,30 @@ type Runtime = {
       displayName: string;
     };
   }>;
+  watchlists: Array<{
+    id: string;
+    userId: string;
+    name: string;
+    description: string | null;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  watchlistItems: Array<{
+    id: string;
+    watchlistId: string;
+    symbolId: string;
+    priority: number | null;
+    addedAt: Date;
+    symbol: {
+      id: string;
+      symbol: string;
+      symbolCode: string;
+      marketCode: string;
+      tradingviewSymbol: string;
+      displayName: string;
+    };
+  }>;
 };
 
 let runtime: Runtime;
@@ -142,6 +166,34 @@ function createRuntime(): Runtime {
         },
       },
     ],
+    watchlists: [
+      {
+        id: 'wl-1',
+        userId: 'user-1',
+        name: 'default',
+        description: 'default watchlist',
+        sortOrder: 0,
+        createdAt: new Date('2026-04-12T00:00:00+09:00'),
+        updatedAt: new Date('2026-04-12T00:00:00+09:00'),
+      },
+    ],
+    watchlistItems: [
+      {
+        id: 'wli-1',
+        watchlistId: 'wl-1',
+        symbolId: 'sym-7203',
+        priority: 1,
+        addedAt: new Date('2026-04-12T00:00:00+09:00'),
+        symbol: {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+          displayName: 'Toyota',
+        },
+      },
+    ],
   };
 }
 
@@ -193,18 +245,18 @@ vi.mock('../src/db', () => {
         return [];
       },
     },
-    symbol: {
-      findMany: async () => [
-        {
-          id: 'sym-7203',
-          symbol: 'TYO:7203',
-          symbolCode: '7203',
-          marketCode: 'JP',
-          tradingviewSymbol: 'TYO:7203',
-          displayName: 'Toyota',
-          createdAt: new Date(),
-        },
-      ],
+    watchlist: {
+      findFirst: async () =>
+        runtime.watchlists
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null,
+    },
+    watchlistItem: {
+      findMany: async ({ where }: any) =>
+        runtime.watchlistItems
+          .filter((item) => item.watchlistId === where?.watchlistId)
+          .slice()
+          .sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime()),
     },
     position: {
       findMany: async () =>
@@ -281,7 +333,7 @@ describe('GET /api/home daily_summary query handling', () => {
       latest_price: 3000,
       change_rate: 1.23,
       latest_alert_status: 'summarized',
-      user_priority: null,
+      user_priority: 1,
     });
     expect(body.data.positions).toHaveLength(1);
     expect(body.data.positions[0]).toMatchObject({
@@ -409,6 +461,7 @@ describe('GET /api/home daily_summary query handling', () => {
   it('returns empty key_events when there are no recent alerts', async () => {
     runtime.alerts = [];
     runtime.positions = [];
+    runtime.watchlistItems = [];
     const app = await createApp();
 
     const res = await app.inject({ method: 'GET', url: '/api/home' });

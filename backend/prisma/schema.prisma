@@ -18,6 +18,7 @@ model User {
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
   positions    Position[]
+  watchlists   Watchlist[]
   comparisonSessions ComparisonSession[]
   strategyRules StrategyRule[]
 
@@ -38,9 +39,43 @@ model Symbol {
   externalReferences ExternalReference[]
   researchNotes      ResearchNote[]
   positions          Position[]
+  watchlistItems     WatchlistItem[]
   comparisonSymbols  ComparisonSymbol[]
 
   @@map("symbols")
+}
+
+model Watchlist {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       WatchlistItem[]
+
+  @@index([userId, sortOrder, createdAt])
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id          String    @id @default(uuid())
+  watchlistId String
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  symbolId    String
+  symbol      Symbol    @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  memo        String?
+  priority    Int?
+  addedAt     DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([watchlistId, symbolId])
+  @@index([symbolId])
+  @@index([watchlistId, priority, addedAt])
+  @@map("watchlist_items")
 }
 
 model Position {

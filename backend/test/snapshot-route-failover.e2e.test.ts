@@ -149,6 +149,33 @@ vi.mock('../src/db', () => {
         return symbols.filter((symbol) => ids.includes(symbol.id));
       },
     },
+    watchlist: {
+      findFirst: async () => ({
+        id: 'wl-1',
+        sortOrder: 0,
+        createdAt: new Date('2026-03-20T00:00:00.000Z'),
+      }),
+    },
+    watchlistItem: {
+      findMany: async () => [
+        {
+          id: 'wli-1',
+          watchlistId: 'wl-1',
+          symbolId: 'sym-1',
+          priority: 1,
+          addedAt: new Date('2026-03-20T00:00:00.000Z'),
+          symbol: symbols[0],
+        },
+        {
+          id: 'wli-2',
+          watchlistId: 'wl-1',
+          symbolId: 'sym-2',
+          priority: 2,
+          addedAt: new Date('2026-03-20T00:01:00.000Z'),
+          symbol: symbols[1],
+        },
+      ],
+    },
     alertEvent: {
       findMany: async ({ where }: any) => {
         const ids = where?.symbolId?.in;

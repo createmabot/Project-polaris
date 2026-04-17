@@ -120,6 +120,61 @@ async function main() {
     throw new Error('required symbols 7203/6758 are missing after seed upsert');
   }
 
+  const defaultWatchlist = await prisma.watchlist.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000011' },
+    update: {
+      userId: user.id,
+      name: 'default',
+      description: 'UI walkthrough default watchlist',
+      sortOrder: 0,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000011',
+      userId: user.id,
+      name: 'default',
+      description: 'UI walkthrough default watchlist',
+      sortOrder: 0,
+    },
+  });
+
+  await prisma.watchlistItem.upsert({
+    where: {
+      watchlistId_symbolId: {
+        watchlistId: defaultWatchlist.id,
+        symbolId: toyota.id,
+      },
+    },
+    update: {
+      priority: 1,
+      memo: 'core watch target',
+    },
+    create: {
+      watchlistId: defaultWatchlist.id,
+      symbolId: toyota.id,
+      priority: 1,
+      memo: 'core watch target',
+    },
+  });
+
+  await prisma.watchlistItem.upsert({
+    where: {
+      watchlistId_symbolId: {
+        watchlistId: defaultWatchlist.id,
+        symbolId: sony.id,
+      },
+    },
+    update: {
+      priority: 2,
+      memo: 'secondary watch target',
+    },
+    create: {
+      watchlistId: defaultWatchlist.id,
+      symbolId: sony.id,
+      priority: 2,
+      memo: 'secondary watch target',
+    },
+  });
+
   await prisma.position.upsert({
     where: {
       userId_symbolId: {
