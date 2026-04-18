@@ -405,3 +405,5 @@ pnpm exec prisma db seed
 補足:
 - `watchlist_symbols` は `watchlists / watchlist_items` 正本（`sort_order` 先頭の watchlist）を利用します。
 - seed では default watchlist と items（7203 / 6758）を投入するため、`/home` で監視銘柄が確認できます。
+- `positions` は `portfolios / transactions` から導出した read model を利用します。
+- seed では default portfolio + transactions（buy / buy / partial sell）を投入するため、`/home` で保有一覧を確認できます。

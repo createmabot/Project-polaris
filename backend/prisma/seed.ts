@@ -175,22 +175,109 @@ async function main() {
     },
   });
 
-  await prisma.position.upsert({
+  const defaultPortfolio = await prisma.portfolio.upsert({
     where: {
-      userId_symbolId: {
+      userId_name: {
         userId: user.id,
-        symbolId: sony.id,
+        name: 'default',
       },
     },
     update: {
-      quantity: new Prisma.Decimal('100'),
-      averageCost: new Prisma.Decimal('12850'),
+      isDefault: true,
+      baseCurrency: 'JPY',
     },
     create: {
       userId: user.id,
+      name: 'default',
+      isDefault: true,
+      baseCurrency: 'JPY',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000021' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
       symbolId: sony.id,
+      side: 'buy',
       quantity: new Prisma.Decimal('100'),
-      averageCost: new Prisma.Decimal('12850'),
+      price: new Prisma.Decimal('12000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-01T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'initial buy',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000021',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('100'),
+      price: new Prisma.Decimal('12000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-01T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'initial buy',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000022' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('60'),
+      price: new Prisma.Decimal('13000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-05T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'add position',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000022',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('60'),
+      price: new Prisma.Decimal('13000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-05T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'add position',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000023' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'sell',
+      quantity: new Prisma.Decimal('40'),
+      price: new Prisma.Decimal('13200'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-08T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'partial sell',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000023',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'sell',
+      quantity: new Prisma.Decimal('40'),
+      price: new Prisma.Decimal('13200'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-08T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'partial sell',
     },
   });
 

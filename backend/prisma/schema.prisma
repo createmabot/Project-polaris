@@ -17,6 +17,8 @@ model User {
   webhookTokens WebhookToken[]
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
+  portfolios   Portfolio[]
+  transactions Transaction[]
   positions    Position[]
   watchlists   Watchlist[]
   comparisonSessions ComparisonSession[]
@@ -38,11 +40,58 @@ model Symbol {
   alertEvents        AlertEvent[]
   externalReferences ExternalReference[]
   researchNotes      ResearchNote[]
+  transactions       Transaction[]
   positions          Position[]
   watchlistItems     WatchlistItem[]
   comparisonSymbols  ComparisonSymbol[]
 
   @@map("symbols")
+}
+
+model Portfolio {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  isDefault    Boolean       @default(false)
+  baseCurrency String        @default("JPY")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+  positions    Position[]
+
+  @@index([userId, createdAt])
+  @@unique([userId, name])
+  @@map("portfolios")
+}
+
+enum TransactionSide {
+  buy
+  sell
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  symbolId    String
+  symbol      Symbol          @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  side        TransactionSide
+  quantity    Decimal         @db.Decimal(18, 6)
+  price       Decimal         @db.Decimal(18, 6)
+  feeAmount   Decimal         @default(0) @db.Decimal(18, 6)
+  executedAt  DateTime
+  source      String          @default("manual")
+  memo        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([portfolioId, symbolId, executedAt, id])
+  @@index([userId, executedAt])
+  @@index([symbolId, executedAt])
+  @@map("transactions")
 }
 
 model Watchlist {
@@ -82,6 +131,8 @@ model Position {
   id          String   @id @default(uuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   symbolId    String
   symbol      Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
   quantity    Decimal  @db.Decimal(18, 6)
@@ -89,8 +140,9 @@ model Position {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([userId, symbolId])
+  @@unique([portfolioId, symbolId])
   @@index([userId, createdAt])
+  @@index([portfolioId, createdAt])
   @@index([symbolId])
   @@map("positions")
 }

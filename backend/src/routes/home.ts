@@ -2,6 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
+import { rebuildPositionsReadModel } from '../home/positions-read-model';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
 
@@ -400,6 +401,7 @@ export async function homeRoutes(fastify: FastifyInstance) {
       };
     });
 
+    await rebuildPositionsReadModel(prismaAny);
     const positionRows = await prisma.position.findMany({
       orderBy: { createdAt: 'asc' },
       include: { symbol: true },
