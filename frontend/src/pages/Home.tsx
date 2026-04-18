@@ -155,8 +155,17 @@ export default function Home() {
           })}
         </div>
         <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-          {data.daily_summary ? (
-            <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{data.daily_summary.bodyMarkdown}</p>
+          {data.daily_summary && data.daily_summary.status === 'available' ? (
+            <div>
+              <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                {data.daily_summary.body_markdown ?? '-'}
+              </p>
+              {data.daily_summary.insufficient_context ? (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#666' }}>
+                  参考情報が不足しているため、要約の精度が限定的です。
+                </p>
+              ) : null}
+            </div>
           ) : (
             <p style={{ margin: 0, color: '#777' }}>サマリーはまだありません。</p>
           )}

@@ -64,7 +64,17 @@ export type HomeData = {
   watchlist_symbols: any[];
   positions: any[];
   recent_alerts: AlertEventDto[];
-  daily_summary: AiSummaryDto | null;
+  daily_summary: {
+    id: string | null;
+    title: string | null;
+    body_markdown: string | null;
+    structured_json: Record<string, unknown> | null;
+    generated_at: string | null;
+    status: 'available' | 'unavailable';
+    insufficient_context: boolean;
+    summary_type: 'latest' | 'morning' | 'evening';
+    date: string | null;
+  } | null;
   key_events: any[];
 };
 

@@ -33,6 +33,11 @@ type SummaryRow = {
 type Runtime = {
   alerts: AlertRow[];
   summaries: SummaryRow[];
+  externalReferences: Array<{
+    id: string;
+    publishedAt: Date | null;
+    createdAt: Date;
+  }>;
   positions: Array<{
     id: string;
     userId: string;
@@ -157,6 +162,13 @@ function createRuntime(): Runtime {
         generationContextJson: { summary_type: 'evening' },
       },
     ],
+    externalReferences: [
+      {
+        id: 'ref-1',
+        publishedAt: new Date('2026-04-12T10:00:00+09:00'),
+        createdAt: new Date('2026-04-12T10:00:00+09:00'),
+      },
+    ],
     positions: [
       {
         id: 'pos-1',
@@ -247,10 +259,36 @@ function createRuntime(): Runtime {
 vi.mock('../src/db', () => {
   const prisma = {
     alertEvent: {
-      findMany: async () =>
-        runtime.alerts
-          .slice()
-          .sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime()),
+      findMany: async ({ where }: any = {}) => {
+        let rows = runtime.alerts.slice();
+        if (where?.symbolId?.in) {
+          const ids: string[] = where.symbolId.in;
+          rows = rows.filter((row) => !!row.symbolId && ids.includes(row.symbolId));
+        }
+        return rows.sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime());
+      },
+      count: async ({ where }: any = {}) => {
+        if (!where?.OR) {
+          return runtime.alerts.length;
+        }
+        return runtime.alerts.filter((row) => {
+          const triggeredTs = row.triggeredAt.getTime();
+          return where.OR.some((condition: any) => {
+            if (condition.triggeredAt?.gte && condition.triggeredAt?.lt) {
+              const gte = (condition.triggeredAt.gte as Date).getTime();
+              const lt = (condition.triggeredAt.lt as Date).getTime();
+              return triggeredTs >= gte && triggeredTs < lt;
+            }
+            if (condition.receivedAt?.gte && condition.receivedAt?.lt) {
+              const receivedTs = row.triggeredAt.getTime();
+              const gte = (condition.receivedAt.gte as Date).getTime();
+              const lt = (condition.receivedAt.lt as Date).getTime();
+              return receivedTs >= gte && receivedTs < lt;
+            }
+            return false;
+          });
+        }).length;
+      },
     },
     aiSummary: {
       findMany: async ({ where }: any) => {
@@ -322,6 +360,40 @@ vi.mock('../src/db', () => {
           })
           .slice()
           .sort((a, b) => b.asOf.getTime() - a.asOf.getTime()),
+      count: async ({ where }: any = {}) =>
+        runtime.marketSnapshots.filter((row) => {
+          if (!where?.asOf?.gte || !where?.asOf?.lt) return true;
+          const ts = row.asOf.getTime();
+          const gte = (where.asOf.gte as Date).getTime();
+          const lt = (where.asOf.lt as Date).getTime();
+          return ts >= gte && ts < lt;
+        }).length,
+    },
+    externalReference: {
+      count: async ({ where }: any = {}) => {
+        const rows = runtime.externalReferences;
+        if (!where?.OR) {
+          return rows.length;
+        }
+        return rows.filter((row) => {
+          return where.OR.some((condition: any) => {
+            if (condition.publishedAt?.gte && condition.publishedAt?.lt) {
+              const ts = row.publishedAt?.getTime();
+              if (typeof ts !== 'number') return false;
+              const gte = (condition.publishedAt.gte as Date).getTime();
+              const lt = (condition.publishedAt.lt as Date).getTime();
+              return ts >= gte && ts < lt;
+            }
+            if (condition.createdAt?.gte && condition.createdAt?.lt) {
+              const ts = row.createdAt.getTime();
+              const gte = (condition.createdAt.gte as Date).getTime();
+              const lt = (condition.createdAt.lt as Date).getTime();
+              return ts >= gte && ts < lt;
+            }
+            return false;
+          });
+        }).length;
+      },
     },
   };
 
@@ -373,7 +445,12 @@ describe('GET /api/home daily_summary query handling', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.data.daily_summary.id).toBe('daily-latest');
+    expect(body.data.daily_summary).toMatchObject({
+      id: 'daily-latest',
+      status: 'available',
+      insufficient_context: false,
+      summary_type: 'latest',
+    });
     expect(body.data.recent_alerts).toHaveLength(1);
     expect(body.data.recent_alerts[0].related_ai_summary.id).toBe('alert-summary-1');
     expect(body.data.recent_alerts[0].current_snapshot.last_price).toBe(3000);
@@ -451,14 +528,22 @@ describe('GET /api/home daily_summary query handling', () => {
       url: '/api/home?summary_type=morning',
     });
     expect(morning.statusCode).toBe(200);
-    expect(morning.json().data.daily_summary.id).toBe('daily-morning-0412');
+    expect(morning.json().data.daily_summary).toMatchObject({
+      id: 'daily-morning-0412',
+      status: 'available',
+      summary_type: 'morning',
+    });
 
     const evening = await app.inject({
       method: 'GET',
       url: '/api/home?summary_type=evening',
     });
     expect(evening.statusCode).toBe(200);
-    expect(evening.json().data.daily_summary.id).toBe('daily-latest');
+    expect(evening.json().data.daily_summary).toMatchObject({
+      id: 'daily-latest',
+      status: 'available',
+      summary_type: 'evening',
+    });
 
     await app.close();
   });
@@ -471,14 +556,25 @@ describe('GET /api/home daily_summary query handling', () => {
       url: '/api/home?summary_type=evening&date=2026-04-10',
     });
     expect(eveningOnDate.statusCode).toBe(200);
-    expect(eveningOnDate.json().data.daily_summary.id).toBe('daily-evening-0410');
+    expect(eveningOnDate.json().data.daily_summary).toMatchObject({
+      id: 'daily-evening-0410',
+      status: 'available',
+      summary_type: 'evening',
+      date: '2026-04-10',
+    });
 
     const morningMissing = await app.inject({
       method: 'GET',
       url: '/api/home?summary_type=morning&date=2026-04-11',
     });
     expect(morningMissing.statusCode).toBe(200);
-    expect(morningMissing.json().data.daily_summary).toBeNull();
+    expect(morningMissing.json().data.daily_summary).toMatchObject({
+      id: null,
+      status: 'unavailable',
+      summary_type: 'morning',
+      date: '2026-04-11',
+      insufficient_context: true,
+    });
 
     await app.close();
   });

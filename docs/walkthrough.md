@@ -136,3 +136,20 @@ pnpm run dev
 - それ以外の seed データ（note/comparison/backtest/strategy）は id 固定で再利用可能です。
 - `positions` は `portfolios / transactions` から導出した read model を `/api/home` で返します。
   - seed は default portfolio + transactions（buy / buy / partial sell）を投入済みです。
+
+### 5. Home AI要約フロー確認（最小）
+
+1. 日次要約切替（Home BFF）
+   - `GET /api/home?summary_type=latest`
+   - `GET /api/home?summary_type=morning&date=2026-04-18`
+   - `GET /api/home?summary_type=evening&date=2026-04-18`
+   - 確認: `daily_summary.status` が `available|unavailable` で返ること、材料不足時に `insufficient_context=true` となること
+
+2. alert 起点要約
+   - `POST /api/alerts/:alertId/summary/generate`
+   - `GET /api/alerts/:alertId/summary`
+   - 確認: summary が保存され、`ai_jobs` の `queued -> running -> succeeded|failed` が残ること
+
+3. 日次要約 API
+   - `GET /api/summaries/daily?type=latest|morning|evening&date=YYYY-MM-DD`
+   - 確認: `latest` は再生成ではなく既存 summary 選択であること、未生成時は `status=unavailable` で部分成立すること
