@@ -436,6 +436,35 @@ async function main() {
     generationContextJson: { summary_type: 'evening', date: '2026-03-09' },
   });
 
+  await prisma.aiJob.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000081' },
+    update: {
+      jobType: 'generate_daily_summary',
+      targetEntityType: 'market_snapshot',
+      targetEntityId: 'home-seed-daily-2026-03-09-evening',
+      status: 'succeeded',
+      modelName: 'mock-v1',
+      promptVersion: 'v1.0.0-mock',
+      startedAt: new Date('2026-03-09T17:59:00+09:00'),
+      completedAt: new Date('2026-03-09T18:00:00+09:00'),
+      requestPayload: { summary_type: 'evening', date: '2026-03-09' } as Prisma.InputJsonValue,
+      responsePayload: { summary_scope: 'daily' } as Prisma.InputJsonValue,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000081',
+      jobType: 'generate_daily_summary',
+      targetEntityType: 'market_snapshot',
+      targetEntityId: 'home-seed-daily-2026-03-09-evening',
+      status: 'succeeded',
+      modelName: 'mock-v1',
+      promptVersion: 'v1.0.0-mock',
+      startedAt: new Date('2026-03-09T17:59:00+09:00'),
+      completedAt: new Date('2026-03-09T18:00:00+09:00'),
+      requestPayload: { summary_type: 'evening', date: '2026-03-09' } as Prisma.InputJsonValue,
+      responsePayload: { summary_scope: 'daily' } as Prisma.InputJsonValue,
+    },
+  });
+
   await upsertAiSummaryByFingerprint({
     summaryScope: 'thesis',
     targetEntityType: 'symbol',

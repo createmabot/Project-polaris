@@ -14,6 +14,7 @@ import { strategyVersionRoutes } from './routes/strategy-versions';
 import { backtestRoutes } from './routes/backtests';
 import { backtestComparisonRoutes } from './routes/backtest-comparisons';
 import { internalBacktestRoutes } from './routes/internal-backtests';
+import { summaryRoutes } from './routes/summaries';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import { setupInternalBacktestWorker } from './queue/internal-backtests';
@@ -39,6 +40,7 @@ fastify.register(webhookRoutes, { prefix: '/api/integrations' });
 fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 
 fastify.register(homeRoutes, { prefix: '/api/home' });
+fastify.register(summaryRoutes, { prefix: '/api/summaries' });
 fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
 fastify.register(noteRoutes, { prefix: '/api/notes' });
