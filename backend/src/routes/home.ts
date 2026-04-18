@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
 import { rebuildPositionsReadModel } from '../home/positions-read-model';
+import { HOME_SECTOR_MASTER } from '../home/sector-master';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
 
@@ -213,6 +214,68 @@ function buildMarketOverviewFromRecentAlerts(
     fx,
     sectors: [],
   };
+}
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (value && typeof value === 'object' && typeof (value as { toNumber?: unknown }).toNumber === 'function') {
+    const numeric = (value as { toNumber: () => number }).toNumber();
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+  return null;
+}
+
+async function buildHomeSectors(prismaAny: any) {
+  const sectorCodes = HOME_SECTOR_MASTER.map((row) => row.code);
+  if (sectorCodes.length === 0) return [];
+
+  const rows: Array<{
+    snapshotType?: string;
+    targetCode?: string;
+    price?: unknown;
+    changeValue?: unknown;
+    changeRate?: unknown;
+    asOf?: Date | string | null;
+  }> = await prismaAny.marketSnapshot.findMany({
+    where: {
+      snapshotType: 'sector',
+      targetCode: { in: sectorCodes },
+    },
+    orderBy: [{ asOf: 'desc' }],
+  });
+
+  const latestByCode = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const code = typeof row.targetCode === 'string' ? row.targetCode : '';
+    if (!code || latestByCode.has(code)) continue;
+    latestByCode.set(code, row);
+  }
+
+  return HOME_SECTOR_MASTER
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((master) => {
+      const row = latestByCode.get(master.code);
+      if (!row) return null;
+      const price = toFiniteNumber(row.price);
+      if (price === null) return null;
+
+      const changeValue = toFiniteNumber(row.changeValue);
+      const changeRate = toFiniteNumber(row.changeRate);
+      const asOfValue = row.asOf instanceof Date ? row.asOf.toISOString() : row.asOf ? String(row.asOf) : null;
+
+      return {
+        code: master.code,
+        display_name: master.display_name,
+        price,
+        change_value: changeValue,
+        change_rate: changeRate,
+        as_of: asOfValue,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
 }
 
 function toJstDateText(input?: Date | string | null): string | null {
@@ -448,7 +511,12 @@ export async function homeRoutes(fastify: FastifyInstance) {
       };
     });
     const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
-    const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);
+    const market_overview_from_alerts = buildMarketOverviewFromRecentAlerts(recentAlerts);
+    const sectors = await buildHomeSectors(prismaAny);
+    const market_overview = {
+      ...market_overview_from_alerts,
+      sectors,
+    };
 
     const data = {
       market_overview,

@@ -73,6 +73,15 @@ type Runtime = {
       displayName: string;
     };
   }>;
+  marketSnapshots: Array<{
+    id: string;
+    snapshotType: string;
+    targetCode: string;
+    price: { toNumber: () => number };
+    changeValue: { toNumber: () => number } | null;
+    changeRate: { toNumber: () => number } | null;
+    asOf: Date;
+  }>;
 };
 
 let runtime: Runtime;
@@ -194,6 +203,44 @@ function createRuntime(): Runtime {
         },
       },
     ],
+    marketSnapshots: [
+      {
+        id: 'sector-transport-new',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_TRANSPORT',
+        price: { toNumber: () => 1520.12 },
+        changeValue: { toNumber: () => 12.34 },
+        changeRate: { toNumber: () => 0.82 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-transport-old',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_TRANSPORT',
+        price: { toNumber: () => 1500.1 },
+        changeValue: { toNumber: () => 10.0 },
+        changeRate: { toNumber: () => 0.67 },
+        asOf: new Date('2026-04-11T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-electric',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_ELECTRIC',
+        price: { toNumber: () => 2840.5 },
+        changeValue: { toNumber: () => -8.5 },
+        changeRate: { toNumber: () => -0.3 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-banks',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_BANKS',
+        price: { toNumber: () => 920.2 },
+        changeValue: null,
+        changeRate: null,
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+    ],
   };
 }
 
@@ -264,6 +311,18 @@ vi.mock('../src/db', () => {
           .slice()
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
     },
+    marketSnapshot: {
+      findMany: async ({ where }: any) =>
+        runtime.marketSnapshots
+          .filter((row) => {
+            if (where?.snapshotType && row.snapshotType !== where.snapshotType) return false;
+            const targetCodes: string[] = where?.targetCode?.in ?? [];
+            if (targetCodes.length > 0 && !targetCodes.includes(row.targetCode)) return false;
+            return true;
+          })
+          .slice()
+          .sort((a, b) => b.asOf.getTime() - a.asOf.getTime()),
+    },
   };
 
   return { prisma };
@@ -326,7 +385,32 @@ describe('GET /api/home daily_summary query handling', () => {
       change_rate: 1.23,
     });
     expect(body.data.market_overview.fx).toEqual([]);
-    expect(body.data.market_overview.sectors).toEqual([]);
+    expect(body.data.market_overview.sectors).toEqual([
+      {
+        code: 'TOPIX_TRANSPORT',
+        display_name: '輸送用機器',
+        price: 1520.12,
+        change_value: 12.34,
+        change_rate: 0.82,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'TOPIX_ELECTRIC',
+        display_name: '電気機器',
+        price: 2840.5,
+        change_value: -8.5,
+        change_rate: -0.3,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'TOPIX_BANKS',
+        display_name: '銀行業',
+        price: 920.2,
+        change_value: null,
+        change_rate: null,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
 
     // Check watchlist_symbols
     expect(body.data.watchlist_symbols).toHaveLength(1);
@@ -472,6 +556,39 @@ describe('GET /api/home daily_summary query handling', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().data.key_events).toEqual([]);
     expect(res.json().data.positions).toEqual([]);
+
+    await app.close();
+  });
+
+  it('keeps sectors as partial success when some sector snapshots are missing', async () => {
+    runtime.marketSnapshots = runtime.marketSnapshots.filter(
+      (row) => row.targetCode === 'TOPIX_TRANSPORT',
+    );
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.market_overview.sectors).toEqual([
+      {
+        code: 'TOPIX_TRANSPORT',
+        display_name: '輸送用機器',
+        price: 1520.12,
+        change_value: 12.34,
+        change_rate: 0.82,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
+
+    await app.close();
+  });
+
+  it('returns sectors as empty when all sector snapshots are missing', async () => {
+    runtime.marketSnapshots = [];
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.market_overview.sectors).toEqual([]);
 
     await app.close();
   });

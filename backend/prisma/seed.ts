@@ -120,6 +120,71 @@ async function main() {
     throw new Error('required symbols 7203/6758 are missing after seed upsert');
   }
 
+  const sectorSnapshots = [
+    {
+      id: '00000000-0000-4000-8000-000000000071',
+      targetCode: 'TOPIX_TRANSPORT',
+      price: '1520.12',
+      changeValue: '12.34',
+      changeRate: '0.82',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000072',
+      targetCode: 'TOPIX_ELECTRIC',
+      price: '2840.50',
+      changeValue: '-8.50',
+      changeRate: '-0.30',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000073',
+      targetCode: 'TOPIX_BANKS',
+      price: '920.20',
+      changeValue: '2.10',
+      changeRate: '0.23',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000074',
+      targetCode: 'TOPIX_RETAIL',
+      price: '1340.80',
+      changeValue: '-3.20',
+      changeRate: '-0.24',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000075',
+      targetCode: 'TOPIX_INFO_TECH',
+      price: '2150.60',
+      changeValue: '6.40',
+      changeRate: '0.30',
+    },
+  ] as const;
+
+  for (const snapshot of sectorSnapshots) {
+    await prisma.marketSnapshot.upsert({
+      where: { id: snapshot.id },
+      update: {
+        snapshotType: 'sector',
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+      create: {
+        id: snapshot.id,
+        snapshotType: 'sector',
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+    });
+  }
+
   const defaultWatchlist = await prisma.watchlist.upsert({
     where: { id: '00000000-0000-4000-8000-000000000011' },
     update: {
