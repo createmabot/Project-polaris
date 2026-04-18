@@ -290,6 +290,10 @@ vi.mock('../src/market/snapshot', () => ({
   }),
 }));
 
+vi.mock('../src/home/positions-read-model', () => ({
+  rebuildPositionsReadModel: vi.fn(async () => {}),
+}));
+
 async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);

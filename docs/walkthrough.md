@@ -133,3 +133,5 @@ pnpm run dev
 
 - `market_overview.indices` は runtime snapshot 取得結果を使うため、ネットワーク条件によっては空になる場合があります。
 - それ以外の seed データ（note/comparison/backtest/strategy）は id 固定で再利用可能です。
+- `positions` は `portfolios / transactions` から導出した read model を `/api/home` で返します。
+  - seed は default portfolio + transactions（buy / buy / partial sell）を投入済みです。

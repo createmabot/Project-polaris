@@ -200,6 +200,10 @@ vi.mock('../src/db', () => {
   return { prisma };
 });
 
+vi.mock('../src/home/positions-read-model', () => ({
+  rebuildPositionsReadModel: vi.fn(async () => {}),
+}));
+
 import { errorHandler } from '../src/utils/response';
 import { comparisonRoutes } from '../src/routes/comparisons';
 import { homeRoutes } from '../src/routes/home';
