@@ -64,7 +64,17 @@ export type HomeData = {
   watchlist_symbols: any[];
   positions: any[];
   recent_alerts: AlertEventDto[];
-  daily_summary: AiSummaryDto | null;
+  daily_summary: {
+    id: string | null;
+    title: string | null;
+    body_markdown: string | null;
+    structured_json: Record<string, unknown> | null;
+    generated_at: string | null;
+    status: 'available' | 'unavailable';
+    insufficient_context: boolean;
+    summary_type: 'latest' | 'morning' | 'evening';
+    date: string | null;
+  } | null;
   key_events: any[];
 };
 
@@ -416,6 +426,27 @@ export type BacktestDetailData = {
     body_markdown: string;
     generated_at: string | null;
   } | null;
+};
+
+export type BacktestComparisonData = {
+  comparison: {
+    comparison_id: string;
+    base_backtest_id: string;
+    base_import_id: string;
+    target_backtest_id: string;
+    target_import_id: string;
+    metrics_diff: {
+      schema_version: string;
+      total_trades_diff: number | null;
+      win_rate_diff_pt: number | null;
+      profit_factor_diff: number | null;
+      max_drawdown_diff: number | null;
+      net_profit_diff: number | null;
+    };
+    tradeoff_summary: string;
+    ai_summary: string | null;
+    created_at: string;
+  };
 };
 
 export type BacktestListData = {

@@ -1,9 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../db';
-import { AppError, formatSuccess } from '../utils/response';
+import { formatSuccess } from '../utils/response';
 import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
-
-type HomeSummaryType = 'latest' | 'morning' | 'evening';
+import { rebuildPositionsReadModel } from '../home/positions-read-model';
+import { HOME_SECTOR_MASTER } from '../home/sector-master';
+import {
+  normalizeDate,
+  normalizeSummaryType,
+  resolveDailySummary,
+} from '../summaries/daily';
 
 type HomeQuery = {
   summary_type?: string;
@@ -11,100 +16,6 @@ type HomeQuery = {
   date?: string;
 };
 
-const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-
-function normalizeSummaryType(input?: string): HomeSummaryType {
-  const normalized = (input ?? 'latest').trim().toLowerCase();
-  if (normalized === '' || normalized === 'latest') {
-    return 'latest';
-  }
-  if (normalized === 'morning' || normalized === 'evening') {
-    return normalized;
-  }
-  throw new AppError(400, 'VALIDATION_ERROR', 'summary_type must be one of latest|morning|evening');
-}
-
-function normalizeDate(input?: string): string | null {
-  if (!input) {
-    return null;
-  }
-  const trimmed = input.trim();
-  if (!DATE_ONLY_PATTERN.test(trimmed)) {
-    throw new AppError(400, 'VALIDATION_ERROR', 'date must be YYYY-MM-DD');
-  }
-  const [yearText, monthText, dayText] = trimmed.split('-');
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const utcDate = new Date(Date.UTC(year, month - 1, day));
-  const isSameDate =
-    utcDate.getUTCFullYear() === year &&
-    utcDate.getUTCMonth() === month - 1 &&
-    utcDate.getUTCDate() === day;
-  if (!isSameDate) {
-    throw new AppError(400, 'VALIDATION_ERROR', 'date must be YYYY-MM-DD');
-  }
-  return trimmed;
-}
-
-function buildJstDayRange(date: string): { gte: Date; lt: Date } {
-  const start = new Date(`${date}T00:00:00+09:00`);
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  return { gte: start, lt: end };
-}
-
-function inferDailySummaryType(summary: any): HomeSummaryType {
-  const context = summary?.generationContextJson && typeof summary.generationContextJson === 'object'
-    ? summary.generationContextJson
-    : null;
-  const candidates = [
-    context?.summary_type,
-    context?.summaryType,
-    context?.time_of_day,
-    context?.timeOfDay,
-    context?.slot,
-    context?.summary_slot,
-  ];
-
-  for (const candidate of candidates) {
-    const normalized = typeof candidate === 'string' ? candidate.trim().toLowerCase() : '';
-    if (normalized === 'morning' || normalized === 'evening' || normalized === 'latest') {
-      return normalized as HomeSummaryType;
-    }
-  }
-
-  const generatedAt =
-    summary?.generatedAt instanceof Date
-      ? summary.generatedAt
-      : summary?.generatedAt
-        ? new Date(summary.generatedAt)
-        : null;
-  if (generatedAt && !Number.isNaN(generatedAt.getTime())) {
-    const hourInJst = Number(
-      generatedAt.toLocaleString('en-US', {
-        hour: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Tokyo',
-      }),
-    );
-    return hourInJst < 15 ? 'morning' : 'evening';
-  }
-
-  return 'latest';
-}
-
-function selectDailySummary(
-  summaries: any[],
-  summaryType: HomeSummaryType,
-): any | null {
-  if (summaries.length === 0) {
-    return null;
-  }
-  if (summaryType === 'latest') {
-    return summaries[0] ?? null;
-  }
-  return summaries.find((summary) => inferDailySummaryType(summary) === summaryType) ?? null;
-}
 
 function buildMarketOverviewFromRecentAlerts(
   recentAlerts: Array<{
@@ -214,6 +125,68 @@ function buildMarketOverviewFromRecentAlerts(
   };
 }
 
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (value && typeof value === 'object' && typeof (value as { toNumber?: unknown }).toNumber === 'function') {
+    const numeric = (value as { toNumber: () => number }).toNumber();
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+  return null;
+}
+
+async function buildHomeSectors(prismaAny: any) {
+  const sectorCodes = HOME_SECTOR_MASTER.map((row) => row.code);
+  if (sectorCodes.length === 0) return [];
+
+  const rows: Array<{
+    snapshotType?: string;
+    targetCode?: string;
+    price?: unknown;
+    changeValue?: unknown;
+    changeRate?: unknown;
+    asOf?: Date | string | null;
+  }> = await prismaAny.marketSnapshot.findMany({
+    where: {
+      snapshotType: 'sector',
+      targetCode: { in: sectorCodes },
+    },
+    orderBy: [{ asOf: 'desc' }],
+  });
+
+  const latestByCode = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const code = typeof row.targetCode === 'string' ? row.targetCode : '';
+    if (!code || latestByCode.has(code)) continue;
+    latestByCode.set(code, row);
+  }
+
+  return HOME_SECTOR_MASTER
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((master) => {
+      const row = latestByCode.get(master.code);
+      if (!row) return null;
+      const price = toFiniteNumber(row.price);
+      if (price === null) return null;
+
+      const changeValue = toFiniteNumber(row.changeValue);
+      const changeRate = toFiniteNumber(row.changeRate);
+      const asOfValue = row.asOf instanceof Date ? row.asOf.toISOString() : row.asOf ? String(row.asOf) : null;
+
+      return {
+        code: master.code,
+        display_name: master.display_name,
+        price,
+        change_value: changeValue,
+        change_rate: changeRate,
+        as_of: asOfValue,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+}
+
 function toJstDateText(input?: Date | string | null): string | null {
   if (!input) return null;
   const date = input instanceof Date ? input : new Date(input);
@@ -260,6 +233,7 @@ function buildKeyEventsFromRecentAlerts(
 
 export async function homeRoutes(fastify: FastifyInstance) {
   fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
+    const prismaAny = prisma as any;
     const query = (request.query ?? {}) as HomeQuery;
     const summaryType = normalizeSummaryType(query.summary_type ?? query.summaryType);
     const date = normalizeDate(query.date);
@@ -316,24 +290,35 @@ export async function homeRoutes(fastify: FastifyInstance) {
 
     // 2. Fetch daily summary
     // Latest / morning / evening can be selected via query while preserving existing response shape.
-    const dateRange = date ? buildJstDayRange(date) : null;
-    const dailySummaries = await prisma.aiSummary.findMany({
-      where: {
-        targetEntityType: 'market_snapshot',
-        summaryScope: 'daily',
-        ...(dateRange ? { generatedAt: { gte: dateRange.gte, lt: dateRange.lt } } : {}),
-      },
-      orderBy: { generatedAt: 'desc' },
+    const dailySummary = await resolveDailySummary(prismaAny, {
+      summaryType,
+      date,
     });
-    const dailySummary = selectDailySummary(dailySummaries, summaryType);
 
-    // 3. watchlist_symbols: Symbol テーブル全件 + snapshot（watchlist_items 未実装のため全件を代替とする）
-    const symbolRows = await prisma.symbol.findMany({
-      orderBy: { createdAt: 'asc' },
+    // 3. watchlist_symbols: watchlist_items を正本にする
+    const defaultWatchlist = await prismaAny.watchlist.findFirst({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
+    const watchlistItemsRaw = defaultWatchlist
+      ? await prismaAny.watchlistItem.findMany({
+          where: { watchlistId: defaultWatchlist.id },
+          include: { symbol: true },
+          orderBy: [{ addedAt: 'asc' }],
+        })
+      : [];
+    const watchlistItems = watchlistItemsRaw
+      .slice()
+      .sort((a: any, b: any) => {
+        const aPriority = typeof a.priority === 'number' ? a.priority : Number.MAX_SAFE_INTEGER;
+        const bPriority = typeof b.priority === 'number' ? b.priority : Number.MAX_SAFE_INTEGER;
+        if (aPriority !== bPriority) return aPriority - bPriority;
+        return new Date(a.addedAt).getTime() - new Date(b.addedAt).getTime();
+      });
 
     // 最新アラートを一括取得（N+1 回避）
-    const symbolIds = symbolRows.map((s: any) => s.id);
+    const symbolIds = watchlistItems
+      .map((item: any) => item.symbolId)
+      .filter((id: any) => typeof id === 'string' && id.length > 0);
     const latestAlertsRaw = symbolIds.length > 0
       ? await prisma.alertEvent.findMany({
           where: { symbolId: { in: symbolIds } },
@@ -350,34 +335,39 @@ export async function homeRoutes(fastify: FastifyInstance) {
     }
 
     // スナップショット取得
-    const watchlistSymbolRefs = symbolRows.map((s: any) => ({
-      id: s.id,
-      symbol: s.symbol,
-      symbolCode: s.symbolCode,
-      marketCode: s.marketCode,
-      tradingviewSymbol: s.tradingviewSymbol,
-    }));
+    const watchlistSymbolRefs = watchlistItems
+      .map((item: any) => item.symbol)
+      .filter((symbol: any) => !!symbol && !!symbol.id)
+      .map((symbol: any) => ({
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        tradingviewSymbol: symbol.tradingviewSymbol,
+      }));
     const watchlistSnapshotMap = watchlistSymbolRefs.length > 0
       ? await getCurrentSnapshotsForSymbols(watchlistSymbolRefs, fastify.log)
       : new Map();
 
-    const watchlist_symbols = symbolRows.map((s: any) => {
-      const snap = watchlistSnapshotMap.get(s.id) ?? null;
+    const watchlist_symbols = watchlistItems.map((item: any) => {
+      const symbol = item.symbol;
+      const snap = symbol?.id ? (watchlistSnapshotMap.get(symbol.id) ?? null) : null;
       return {
-        symbol_id: s.id,
-        display_name: s.displayName ?? s.symbolCode ?? s.symbol ?? null,
-        tradingview_symbol: s.tradingviewSymbol ?? null,
+        symbol_id: symbol?.id ?? null,
+        display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+        tradingview_symbol: symbol?.tradingviewSymbol ?? null,
         latest_price: snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)
           ? snap.last_price
           : null,
         change_rate: snap && typeof snap.change_percent === 'number' && Number.isFinite(snap.change_percent)
           ? snap.change_percent
           : null,
-        latest_alert_status: latestAlertStatusBySymbolId.get(s.id) ?? null,
-        user_priority: null, // watchlist_items 未実装のため null
+        latest_alert_status: symbol?.id ? (latestAlertStatusBySymbolId.get(symbol.id) ?? null) : null,
+        user_priority: typeof item.priority === 'number' ? item.priority : null,
       };
     });
 
+    await rebuildPositionsReadModel(prismaAny);
     const positionRows = await prisma.position.findMany({
       orderBy: { createdAt: 'asc' },
       include: { symbol: true },
@@ -424,7 +414,12 @@ export async function homeRoutes(fastify: FastifyInstance) {
       };
     });
     const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
-    const market_overview = buildMarketOverviewFromRecentAlerts(recentAlerts);
+    const market_overview_from_alerts = buildMarketOverviewFromRecentAlerts(recentAlerts);
+    const sectors = await buildHomeSectors(prismaAny);
+    const market_overview = {
+      ...market_overview_from_alerts,
+      sectors,
+    };
 
     const data = {
       market_overview,

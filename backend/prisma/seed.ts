@@ -120,22 +120,229 @@ async function main() {
     throw new Error('required symbols 7203/6758 are missing after seed upsert');
   }
 
-  await prisma.position.upsert({
+  const sectorSnapshots = [
+    {
+      id: '00000000-0000-4000-8000-000000000071',
+      targetCode: 'TOPIX_TRANSPORT',
+      price: '1520.12',
+      changeValue: '12.34',
+      changeRate: '0.82',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000072',
+      targetCode: 'TOPIX_ELECTRIC',
+      price: '2840.50',
+      changeValue: '-8.50',
+      changeRate: '-0.30',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000073',
+      targetCode: 'TOPIX_BANKS',
+      price: '920.20',
+      changeValue: '2.10',
+      changeRate: '0.23',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000074',
+      targetCode: 'TOPIX_RETAIL',
+      price: '1340.80',
+      changeValue: '-3.20',
+      changeRate: '-0.24',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000075',
+      targetCode: 'TOPIX_INFO_TECH',
+      price: '2150.60',
+      changeValue: '6.40',
+      changeRate: '0.30',
+    },
+  ] as const;
+
+  for (const snapshot of sectorSnapshots) {
+    await prisma.marketSnapshot.upsert({
+      where: { id: snapshot.id },
+      update: {
+        snapshotType: 'sector',
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+      create: {
+        id: snapshot.id,
+        snapshotType: 'sector',
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+    });
+  }
+
+  const defaultWatchlist = await prisma.watchlist.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000011' },
+    update: {
+      userId: user.id,
+      name: 'default',
+      description: 'UI walkthrough default watchlist',
+      sortOrder: 0,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000011',
+      userId: user.id,
+      name: 'default',
+      description: 'UI walkthrough default watchlist',
+      sortOrder: 0,
+    },
+  });
+
+  await prisma.watchlistItem.upsert({
     where: {
-      userId_symbolId: {
-        userId: user.id,
+      watchlistId_symbolId: {
+        watchlistId: defaultWatchlist.id,
+        symbolId: toyota.id,
+      },
+    },
+    update: {
+      priority: 1,
+      memo: 'core watch target',
+    },
+    create: {
+      watchlistId: defaultWatchlist.id,
+      symbolId: toyota.id,
+      priority: 1,
+      memo: 'core watch target',
+    },
+  });
+
+  await prisma.watchlistItem.upsert({
+    where: {
+      watchlistId_symbolId: {
+        watchlistId: defaultWatchlist.id,
         symbolId: sony.id,
       },
     },
     update: {
-      quantity: new Prisma.Decimal('100'),
-      averageCost: new Prisma.Decimal('12850'),
+      priority: 2,
+      memo: 'secondary watch target',
+    },
+    create: {
+      watchlistId: defaultWatchlist.id,
+      symbolId: sony.id,
+      priority: 2,
+      memo: 'secondary watch target',
+    },
+  });
+
+  const defaultPortfolio = await prisma.portfolio.upsert({
+    where: {
+      userId_name: {
+        userId: user.id,
+        name: 'default',
+      },
+    },
+    update: {
+      isDefault: true,
+      baseCurrency: 'JPY',
     },
     create: {
       userId: user.id,
+      name: 'default',
+      isDefault: true,
+      baseCurrency: 'JPY',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000021' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
       symbolId: sony.id,
+      side: 'buy',
       quantity: new Prisma.Decimal('100'),
-      averageCost: new Prisma.Decimal('12850'),
+      price: new Prisma.Decimal('12000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-01T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'initial buy',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000021',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('100'),
+      price: new Prisma.Decimal('12000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-01T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'initial buy',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000022' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('60'),
+      price: new Prisma.Decimal('13000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-05T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'add position',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000022',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'buy',
+      quantity: new Prisma.Decimal('60'),
+      price: new Prisma.Decimal('13000'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-05T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'add position',
+    },
+  });
+
+  await prisma.transaction.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000023' },
+    update: {
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'sell',
+      quantity: new Prisma.Decimal('40'),
+      price: new Prisma.Decimal('13200'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-08T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'partial sell',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000023',
+      userId: user.id,
+      portfolioId: defaultPortfolio.id,
+      symbolId: sony.id,
+      side: 'sell',
+      quantity: new Prisma.Decimal('40'),
+      price: new Prisma.Decimal('13200'),
+      feeAmount: new Prisma.Decimal('0'),
+      executedAt: new Date('2026-03-08T09:00:00+09:00'),
+      source: 'seed',
+      memo: 'partial sell',
     },
   });
 
@@ -227,6 +434,35 @@ async function main() {
     bodyMarkdown: '引けにかけて強含み。自動車と電機が指数を牽引。',
     generatedAt: new Date('2026-03-09T18:00:00+09:00'),
     generationContextJson: { summary_type: 'evening', date: '2026-03-09' },
+  });
+
+  await prisma.aiJob.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000081' },
+    update: {
+      jobType: 'generate_daily_summary',
+      targetEntityType: 'market_snapshot',
+      targetEntityId: 'home-seed-daily-2026-03-09-evening',
+      status: 'succeeded',
+      modelName: 'mock-v1',
+      promptVersion: 'v1.0.0-mock',
+      startedAt: new Date('2026-03-09T17:59:00+09:00'),
+      completedAt: new Date('2026-03-09T18:00:00+09:00'),
+      requestPayload: { summary_type: 'evening', date: '2026-03-09' } as Prisma.InputJsonValue,
+      responsePayload: { summary_scope: 'daily' } as Prisma.InputJsonValue,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000081',
+      jobType: 'generate_daily_summary',
+      targetEntityType: 'market_snapshot',
+      targetEntityId: 'home-seed-daily-2026-03-09-evening',
+      status: 'succeeded',
+      modelName: 'mock-v1',
+      promptVersion: 'v1.0.0-mock',
+      startedAt: new Date('2026-03-09T17:59:00+09:00'),
+      completedAt: new Date('2026-03-09T18:00:00+09:00'),
+      requestPayload: { summary_type: 'evening', date: '2026-03-09' } as Prisma.InputJsonValue,
+      responsePayload: { summary_scope: 'daily' } as Prisma.InputJsonValue,
+    },
   });
 
   await upsertAiSummaryByFingerprint({
@@ -498,6 +734,84 @@ async function main() {
     },
   });
 
+  const backtestImport2 = await prisma.backtestImport.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000403' },
+    update: {
+      backtestId: backtest.id,
+      fileName: 'seed-summary-variant.csv',
+      fileSize: 132,
+      contentType: 'text/csv',
+      rawCsvText: 'Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To\n98000,14,50.00,1.35,-5.10,2026-01-01,2026-03-09\n',
+      parseStatus: 'parsed',
+      parseError: null,
+      parsedSummaryJson: {
+        totalTrades: 14,
+        winRate: 50,
+        profitFactor: 1.35,
+        maxDrawdown: -5.1,
+        netProfit: 98000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-09',
+      } as Prisma.InputJsonValue,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000403',
+      backtestId: backtest.id,
+      fileName: 'seed-summary-variant.csv',
+      fileSize: 132,
+      contentType: 'text/csv',
+      rawCsvText: 'Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To\n98000,14,50.00,1.35,-5.10,2026-01-01,2026-03-09\n',
+      parseStatus: 'parsed',
+      parseError: null,
+      parsedSummaryJson: {
+        totalTrades: 14,
+        winRate: 50,
+        profitFactor: 1.35,
+        maxDrawdown: -5.1,
+        netProfit: 98000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-09',
+      } as Prisma.InputJsonValue,
+    },
+  });
+
+  await prisma.backtestComparison.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000404' },
+    update: {
+      baseBacktestId: backtest.id,
+      baseImportId: backtestImport.id,
+      targetBacktestId: backtest.id,
+      targetImportId: backtestImport2.id,
+      metricsDiffJson: {
+        schema_version: '1.0',
+        total_trades_diff: 2,
+        win_rate_diff_pt: -8.33,
+        profit_factor_diff: -0.37,
+        max_drawdown_diff: -0.9,
+        net_profit_diff: -22000,
+      } as Prisma.InputJsonValue,
+      tradeoffSummary: '- 総取引数差分: +2\n- 勝率差分(pt): -8.33\n- Profit Factor差分: -0.37\n- 最大ドローダウン差分: -0.90\n- 純利益差分: -22000.00',
+      aiSummary: '比較元に対して、比較先は取引回数が増える一方で勝率と純利益が低下しています。ドローダウンはやや改善しています。',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000404',
+      baseBacktestId: backtest.id,
+      baseImportId: backtestImport.id,
+      targetBacktestId: backtest.id,
+      targetImportId: backtestImport2.id,
+      metricsDiffJson: {
+        schema_version: '1.0',
+        total_trades_diff: 2,
+        win_rate_diff_pt: -8.33,
+        profit_factor_diff: -0.37,
+        max_drawdown_diff: -0.9,
+        net_profit_diff: -22000,
+      } as Prisma.InputJsonValue,
+      tradeoffSummary: '- 総取引数差分: +2\n- 勝率差分(pt): -8.33\n- Profit Factor差分: -0.37\n- 最大ドローダウン差分: -0.90\n- 純利益差分: -22000.00',
+      aiSummary: '比較元に対して、比較先は取引回数が増える一方で勝率と純利益が低下しています。ドローダウンはやや改善しています。',
+    },
+  });
+
   await upsertAiSummaryByFingerprint({
     summaryScope: 'backtest_review',
     targetEntityType: 'backtest',
@@ -628,6 +942,7 @@ async function main() {
   console.log(`Seeded note: ${note.id}`);
   console.log(`Seeded comparison: ${comparisonSession.id}`);
   console.log(`Seeded backtest/import: ${backtest.id} / ${backtestImport.id}`);
+  console.log(`Seeded backtest comparison: 00000000-0000-4000-8000-000000000404`);
   console.log('Seed completed for UI walkthrough dataset.');
 }
 

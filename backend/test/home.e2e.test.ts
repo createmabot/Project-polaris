@@ -33,6 +33,11 @@ type SummaryRow = {
 type Runtime = {
   alerts: AlertRow[];
   summaries: SummaryRow[];
+  externalReferences: Array<{
+    id: string;
+    publishedAt: Date | null;
+    createdAt: Date;
+  }>;
   positions: Array<{
     id: string;
     userId: string;
@@ -48,6 +53,39 @@ type Runtime = {
       tradingviewSymbol: string;
       displayName: string;
     };
+  }>;
+  watchlists: Array<{
+    id: string;
+    userId: string;
+    name: string;
+    description: string | null;
+    sortOrder: number;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  watchlistItems: Array<{
+    id: string;
+    watchlistId: string;
+    symbolId: string;
+    priority: number | null;
+    addedAt: Date;
+    symbol: {
+      id: string;
+      symbol: string;
+      symbolCode: string;
+      marketCode: string;
+      tradingviewSymbol: string;
+      displayName: string;
+    };
+  }>;
+  marketSnapshots: Array<{
+    id: string;
+    snapshotType: string;
+    targetCode: string;
+    price: { toNumber: () => number };
+    changeValue: { toNumber: () => number } | null;
+    changeRate: { toNumber: () => number } | null;
+    asOf: Date;
   }>;
 };
 
@@ -124,6 +162,13 @@ function createRuntime(): Runtime {
         generationContextJson: { summary_type: 'evening' },
       },
     ],
+    externalReferences: [
+      {
+        id: 'ref-1',
+        publishedAt: new Date('2026-04-12T10:00:00+09:00'),
+        createdAt: new Date('2026-04-12T10:00:00+09:00'),
+      },
+    ],
     positions: [
       {
         id: 'pos-1',
@@ -142,16 +187,108 @@ function createRuntime(): Runtime {
         },
       },
     ],
+    watchlists: [
+      {
+        id: 'wl-1',
+        userId: 'user-1',
+        name: 'default',
+        description: 'default watchlist',
+        sortOrder: 0,
+        createdAt: new Date('2026-04-12T00:00:00+09:00'),
+        updatedAt: new Date('2026-04-12T00:00:00+09:00'),
+      },
+    ],
+    watchlistItems: [
+      {
+        id: 'wli-1',
+        watchlistId: 'wl-1',
+        symbolId: 'sym-7203',
+        priority: 1,
+        addedAt: new Date('2026-04-12T00:00:00+09:00'),
+        symbol: {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+          displayName: 'Toyota',
+        },
+      },
+    ],
+    marketSnapshots: [
+      {
+        id: 'sector-transport-new',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_TRANSPORT',
+        price: { toNumber: () => 1520.12 },
+        changeValue: { toNumber: () => 12.34 },
+        changeRate: { toNumber: () => 0.82 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-transport-old',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_TRANSPORT',
+        price: { toNumber: () => 1500.1 },
+        changeValue: { toNumber: () => 10.0 },
+        changeRate: { toNumber: () => 0.67 },
+        asOf: new Date('2026-04-11T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-electric',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_ELECTRIC',
+        price: { toNumber: () => 2840.5 },
+        changeValue: { toNumber: () => -8.5 },
+        changeRate: { toNumber: () => -0.3 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'sector-banks',
+        snapshotType: 'sector',
+        targetCode: 'TOPIX_BANKS',
+        price: { toNumber: () => 920.2 },
+        changeValue: null,
+        changeRate: null,
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+    ],
   };
 }
 
 vi.mock('../src/db', () => {
   const prisma = {
     alertEvent: {
-      findMany: async () =>
-        runtime.alerts
-          .slice()
-          .sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime()),
+      findMany: async ({ where }: any = {}) => {
+        let rows = runtime.alerts.slice();
+        if (where?.symbolId?.in) {
+          const ids: string[] = where.symbolId.in;
+          rows = rows.filter((row) => !!row.symbolId && ids.includes(row.symbolId));
+        }
+        return rows.sort((a, b) => b.triggeredAt.getTime() - a.triggeredAt.getTime());
+      },
+      count: async ({ where }: any = {}) => {
+        if (!where?.OR) {
+          return runtime.alerts.length;
+        }
+        return runtime.alerts.filter((row) => {
+          const triggeredTs = row.triggeredAt.getTime();
+          return where.OR.some((condition: any) => {
+            if (condition.triggeredAt?.gte && condition.triggeredAt?.lt) {
+              const gte = (condition.triggeredAt.gte as Date).getTime();
+              const lt = (condition.triggeredAt.lt as Date).getTime();
+              return triggeredTs >= gte && triggeredTs < lt;
+            }
+            if (condition.receivedAt?.gte && condition.receivedAt?.lt) {
+              const receivedTs = row.triggeredAt.getTime();
+              const gte = (condition.receivedAt.gte as Date).getTime();
+              const lt = (condition.receivedAt.lt as Date).getTime();
+              return receivedTs >= gte && receivedTs < lt;
+            }
+            return false;
+          });
+        }).length;
+      },
     },
     aiSummary: {
       findMany: async ({ where }: any) => {
@@ -193,24 +330,70 @@ vi.mock('../src/db', () => {
         return [];
       },
     },
-    symbol: {
-      findMany: async () => [
-        {
-          id: 'sym-7203',
-          symbol: 'TYO:7203',
-          symbolCode: '7203',
-          marketCode: 'JP',
-          tradingviewSymbol: 'TYO:7203',
-          displayName: 'Toyota',
-          createdAt: new Date(),
-        },
-      ],
+    watchlist: {
+      findFirst: async () =>
+        runtime.watchlists
+          .slice()
+          .sort((a, b) => a.sortOrder - b.sortOrder || a.createdAt.getTime() - b.createdAt.getTime())[0] ?? null,
+    },
+    watchlistItem: {
+      findMany: async ({ where }: any) =>
+        runtime.watchlistItems
+          .filter((item) => item.watchlistId === where?.watchlistId)
+          .slice()
+          .sort((a, b) => a.addedAt.getTime() - b.addedAt.getTime()),
     },
     position: {
       findMany: async () =>
         runtime.positions
           .slice()
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+    },
+    marketSnapshot: {
+      findMany: async ({ where }: any) =>
+        runtime.marketSnapshots
+          .filter((row) => {
+            if (where?.snapshotType && row.snapshotType !== where.snapshotType) return false;
+            const targetCodes: string[] = where?.targetCode?.in ?? [];
+            if (targetCodes.length > 0 && !targetCodes.includes(row.targetCode)) return false;
+            return true;
+          })
+          .slice()
+          .sort((a, b) => b.asOf.getTime() - a.asOf.getTime()),
+      count: async ({ where }: any = {}) =>
+        runtime.marketSnapshots.filter((row) => {
+          if (!where?.asOf?.gte || !where?.asOf?.lt) return true;
+          const ts = row.asOf.getTime();
+          const gte = (where.asOf.gte as Date).getTime();
+          const lt = (where.asOf.lt as Date).getTime();
+          return ts >= gte && ts < lt;
+        }).length,
+    },
+    externalReference: {
+      count: async ({ where }: any = {}) => {
+        const rows = runtime.externalReferences;
+        if (!where?.OR) {
+          return rows.length;
+        }
+        return rows.filter((row) => {
+          return where.OR.some((condition: any) => {
+            if (condition.publishedAt?.gte && condition.publishedAt?.lt) {
+              const ts = row.publishedAt?.getTime();
+              if (typeof ts !== 'number') return false;
+              const gte = (condition.publishedAt.gte as Date).getTime();
+              const lt = (condition.publishedAt.lt as Date).getTime();
+              return ts >= gte && ts < lt;
+            }
+            if (condition.createdAt?.gte && condition.createdAt?.lt) {
+              const ts = row.createdAt.getTime();
+              const gte = (condition.createdAt.gte as Date).getTime();
+              const lt = (condition.createdAt.lt as Date).getTime();
+              return ts >= gte && ts < lt;
+            }
+            return false;
+          });
+        }).length;
+      },
     },
   };
 
@@ -238,6 +421,10 @@ vi.mock('../src/market/snapshot', () => ({
   }),
 }));
 
+vi.mock('../src/home/positions-read-model', () => ({
+  rebuildPositionsReadModel: vi.fn(async () => {}),
+}));
+
 async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);
@@ -258,7 +445,12 @@ describe('GET /api/home daily_summary query handling', () => {
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.data.daily_summary.id).toBe('daily-latest');
+    expect(body.data.daily_summary).toMatchObject({
+      id: 'daily-latest',
+      status: 'available',
+      insufficient_context: false,
+      summary_type: 'latest',
+    });
     expect(body.data.recent_alerts).toHaveLength(1);
     expect(body.data.recent_alerts[0].related_ai_summary.id).toBe('alert-summary-1');
     expect(body.data.recent_alerts[0].current_snapshot.last_price).toBe(3000);
@@ -270,7 +462,32 @@ describe('GET /api/home daily_summary query handling', () => {
       change_rate: 1.23,
     });
     expect(body.data.market_overview.fx).toEqual([]);
-    expect(body.data.market_overview.sectors).toEqual([]);
+    expect(body.data.market_overview.sectors).toEqual([
+      {
+        code: 'TOPIX_TRANSPORT',
+        display_name: '輸送用機器',
+        price: 1520.12,
+        change_value: 12.34,
+        change_rate: 0.82,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'TOPIX_ELECTRIC',
+        display_name: '電気機器',
+        price: 2840.5,
+        change_value: -8.5,
+        change_rate: -0.3,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'TOPIX_BANKS',
+        display_name: '銀行業',
+        price: 920.2,
+        change_value: null,
+        change_rate: null,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
 
     // Check watchlist_symbols
     expect(body.data.watchlist_symbols).toHaveLength(1);
@@ -281,7 +498,7 @@ describe('GET /api/home daily_summary query handling', () => {
       latest_price: 3000,
       change_rate: 1.23,
       latest_alert_status: 'summarized',
-      user_priority: null,
+      user_priority: 1,
     });
     expect(body.data.positions).toHaveLength(1);
     expect(body.data.positions[0]).toMatchObject({
@@ -311,14 +528,22 @@ describe('GET /api/home daily_summary query handling', () => {
       url: '/api/home?summary_type=morning',
     });
     expect(morning.statusCode).toBe(200);
-    expect(morning.json().data.daily_summary.id).toBe('daily-morning-0412');
+    expect(morning.json().data.daily_summary).toMatchObject({
+      id: 'daily-morning-0412',
+      status: 'available',
+      summary_type: 'morning',
+    });
 
     const evening = await app.inject({
       method: 'GET',
       url: '/api/home?summary_type=evening',
     });
     expect(evening.statusCode).toBe(200);
-    expect(evening.json().data.daily_summary.id).toBe('daily-latest');
+    expect(evening.json().data.daily_summary).toMatchObject({
+      id: 'daily-latest',
+      status: 'available',
+      summary_type: 'evening',
+    });
 
     await app.close();
   });
@@ -331,14 +556,25 @@ describe('GET /api/home daily_summary query handling', () => {
       url: '/api/home?summary_type=evening&date=2026-04-10',
     });
     expect(eveningOnDate.statusCode).toBe(200);
-    expect(eveningOnDate.json().data.daily_summary.id).toBe('daily-evening-0410');
+    expect(eveningOnDate.json().data.daily_summary).toMatchObject({
+      id: 'daily-evening-0410',
+      status: 'available',
+      summary_type: 'evening',
+      date: '2026-04-10',
+    });
 
     const morningMissing = await app.inject({
       method: 'GET',
       url: '/api/home?summary_type=morning&date=2026-04-11',
     });
     expect(morningMissing.statusCode).toBe(200);
-    expect(morningMissing.json().data.daily_summary).toBeNull();
+    expect(morningMissing.json().data.daily_summary).toMatchObject({
+      id: null,
+      status: 'unavailable',
+      summary_type: 'morning',
+      date: '2026-04-11',
+      insufficient_context: true,
+    });
 
     await app.close();
   });
@@ -409,12 +645,46 @@ describe('GET /api/home daily_summary query handling', () => {
   it('returns empty key_events when there are no recent alerts', async () => {
     runtime.alerts = [];
     runtime.positions = [];
+    runtime.watchlistItems = [];
     const app = await createApp();
 
     const res = await app.inject({ method: 'GET', url: '/api/home' });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.key_events).toEqual([]);
     expect(res.json().data.positions).toEqual([]);
+
+    await app.close();
+  });
+
+  it('keeps sectors as partial success when some sector snapshots are missing', async () => {
+    runtime.marketSnapshots = runtime.marketSnapshots.filter(
+      (row) => row.targetCode === 'TOPIX_TRANSPORT',
+    );
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.market_overview.sectors).toEqual([
+      {
+        code: 'TOPIX_TRANSPORT',
+        display_name: '輸送用機器',
+        price: 1520.12,
+        change_value: 12.34,
+        change_rate: 0.82,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
+
+    await app.close();
+  });
+
+  it('returns sectors as empty when all sector snapshots are missing', async () => {
+    runtime.marketSnapshots = [];
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.market_overview.sectors).toEqual([]);
 
     await app.close();
   });

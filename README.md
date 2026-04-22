@@ -71,6 +71,16 @@ pnpm run up
 pnpm run down
 ```
 
+## Home AI要約フロー（最小）
+- `GET /api/home` は `summary_type=latest|morning|evening` と `date=YYYY-MM-DD` を受け取り、`daily_summary` を切替返却する。
+- `daily_summary` は `status=available|unavailable` と `insufficient_context` を含む。
+- `latest` は再生成ではなく保存済み summary の選択モード。
+- alert 起点要約 API:
+  - `POST /api/alerts/:alertId/summary/generate`
+  - `GET /api/alerts/:alertId/summary`
+- 日次要約 API:
+  - `GET /api/summaries/daily?type=morning|evening|latest&date=YYYY-MM-DD`
+
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
 - 現在の対応範囲:
@@ -219,6 +229,10 @@ pnpm run down
   - 取込状態（parsed / failed / pending / 未取込）
   - parse failed 時の `parse_error`
   - 主要指標（総取引数 / 勝率 / Profit Factor / 最大ドローダウン / 純利益 / 対象期間）
+  - inline 比較（同一 backtest 内 import の read-only 差分確認）
+  - 保存比較（pairwise）:
+    - `この2件で比較を保存する`
+    - `保存済み比較を見る`（`/backtest-comparisons/:comparisonId`）
 
 ### backtest 履歴一覧
 - URL: `/backtests`
@@ -397,3 +411,11 @@ pnpm exec prisma db seed
 6. `/strategies/:strategyId/versions` → `/strategy-versions/:versionId`
 
 詳細チェック観点は `docs/walkthrough.md` の「UI確認用 seed walkthrough（最小）」を参照。
+
+補足:
+- `watchlist_symbols` は `watchlists / watchlist_items` 正本（`sort_order` 先頭の watchlist）を利用します。
+- seed では default watchlist と items（7203 / 6758）を投入するため、`/home` で監視銘柄が確認できます。
+- `market_overview.sectors` は `market_snapshots(snapshot_type=sector)` 正本を利用します。
+- seed では主要セクター（3〜5件）の snapshot を投入するため、`/home` で sectors を確認できます。
+- `positions` は `portfolios / transactions` から導出した read model を利用します。
+- seed では default portfolio + transactions（buy / buy / partial sell）を投入するため、`/home` で保有一覧を確認できます。

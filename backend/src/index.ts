@@ -7,11 +7,14 @@ import { homeRoutes } from './routes/home';
 import { alertRoutes } from './routes/alerts';
 import { symbolRoutes } from './routes/symbols';
 import { noteRoutes } from './routes/notes';
+import { watchlistRoutes } from './routes/watchlists';
 import { comparisonRoutes } from './routes/comparisons';
 import { strategyRoutes } from './routes/strategies';
 import { strategyVersionRoutes } from './routes/strategy-versions';
 import { backtestRoutes } from './routes/backtests';
+import { backtestComparisonRoutes } from './routes/backtest-comparisons';
 import { internalBacktestRoutes } from './routes/internal-backtests';
+import { summaryRoutes } from './routes/summaries';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
 import { setupInternalBacktestWorker } from './queue/internal-backtests';
@@ -37,13 +40,16 @@ fastify.register(webhookRoutes, { prefix: '/api/integrations' });
 fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 
 fastify.register(homeRoutes, { prefix: '/api/home' });
+fastify.register(summaryRoutes, { prefix: '/api/summaries' });
 fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
 fastify.register(noteRoutes, { prefix: '/api/notes' });
+fastify.register(watchlistRoutes, { prefix: '/api/watchlists' });
 fastify.register(comparisonRoutes, { prefix: '/api/comparisons' });
 fastify.register(strategyRoutes, { prefix: '/api/strategies' });
 fastify.register(strategyVersionRoutes, { prefix: '/api/strategy-versions' });
 fastify.register(backtestRoutes, { prefix: '/api/backtests' });
+fastify.register(backtestComparisonRoutes, { prefix: '/api/backtest-comparisons' });
 fastify.register(internalBacktestRoutes, { prefix: '/api/internal-backtests' });
 
 const start = async () => {

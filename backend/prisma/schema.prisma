@@ -17,7 +17,10 @@ model User {
   webhookTokens WebhookToken[]
   alertEvents   AlertEvent[]
   researchNotes ResearchNote[]
+  portfolios   Portfolio[]
+  transactions Transaction[]
   positions    Position[]
+  watchlists   Watchlist[]
   comparisonSessions ComparisonSession[]
   strategyRules StrategyRule[]
 
@@ -37,16 +40,99 @@ model Symbol {
   alertEvents        AlertEvent[]
   externalReferences ExternalReference[]
   researchNotes      ResearchNote[]
+  transactions       Transaction[]
   positions          Position[]
+  watchlistItems     WatchlistItem[]
   comparisonSymbols  ComparisonSymbol[]
 
   @@map("symbols")
+}
+
+model Portfolio {
+  id           String        @id @default(uuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  isDefault    Boolean       @default(false)
+  baseCurrency String        @default("JPY")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+  positions    Position[]
+
+  @@index([userId, createdAt])
+  @@unique([userId, name])
+  @@map("portfolios")
+}
+
+enum TransactionSide {
+  buy
+  sell
+}
+
+model Transaction {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio       @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  symbolId    String
+  symbol      Symbol          @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  side        TransactionSide
+  quantity    Decimal         @db.Decimal(18, 6)
+  price       Decimal         @db.Decimal(18, 6)
+  feeAmount   Decimal         @default(0) @db.Decimal(18, 6)
+  executedAt  DateTime
+  source      String          @default("manual")
+  memo        String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([portfolioId, symbolId, executedAt, id])
+  @@index([userId, executedAt])
+  @@index([symbolId, executedAt])
+  @@map("transactions")
+}
+
+model Watchlist {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       WatchlistItem[]
+
+  @@index([userId, sortOrder, createdAt])
+  @@map("watchlists")
+}
+
+model WatchlistItem {
+  id          String    @id @default(uuid())
+  watchlistId String
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  symbolId    String
+  symbol      Symbol    @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+  memo        String?
+  priority    Int?
+  addedAt     DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([watchlistId, symbolId])
+  @@index([symbolId])
+  @@index([watchlistId, priority, addedAt])
+  @@map("watchlist_items")
 }
 
 model Position {
   id          String   @id @default(uuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   symbolId    String
   symbol      Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
   quantity    Decimal  @db.Decimal(18, 6)
@@ -54,10 +140,31 @@ model Position {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  @@unique([userId, symbolId])
+  @@unique([portfolioId, symbolId])
   @@index([userId, createdAt])
+  @@index([portfolioId, createdAt])
   @@index([symbolId])
   @@map("positions")
+}
+
+model MarketSnapshot {
+  id                String   @id @default(uuid())
+  snapshotType      String   @map("snapshot_type")
+  targetCode        String   @map("target_code")
+  snapshotDate      DateTime? @map("snapshot_date")
+  snapshotTimeframe String?  @map("snapshot_timeframe")
+  price             Decimal  @db.Decimal(18, 6)
+  changeValue       Decimal? @map("change_value") @db.Decimal(18, 6)
+  changeRate        Decimal? @map("change_rate") @db.Decimal(18, 6)
+  volume            Decimal? @db.Decimal(20, 6)
+  extraJson         Json?    @map("extra_json")
+  asOf              DateTime @map("as_of")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([snapshotType, targetCode, asOf])
+  @@index([snapshotType, asOf])
+  @@map("market_snapshots")
 }
 
 model WebhookToken {
@@ -364,6 +471,8 @@ model Backtest {
   updatedAt             DateTime            @updatedAt
 
   imports BacktestImport[]
+  comparisonsAsBase   BacktestComparison[] @relation("BacktestComparisonBase")
+  comparisonsAsTarget BacktestComparison[] @relation("BacktestComparisonTarget")
 
   @@index([strategyRuleVersionId, createdAt])
   @@index([status])
@@ -387,6 +496,26 @@ model BacktestImport {
   @@index([backtestId, createdAt])
   @@index([parseStatus])
   @@map("backtest_imports")
+}
+
+model BacktestComparison {
+  id              String   @id @default(uuid())
+  baseBacktestId  String   @map("base_backtest_id")
+  baseBacktest    Backtest @relation("BacktestComparisonBase", fields: [baseBacktestId], references: [id], onDelete: Cascade)
+  baseImportId    String   @map("base_import_id")
+  targetBacktestId String   @map("target_backtest_id")
+  targetBacktest  Backtest @relation("BacktestComparisonTarget", fields: [targetBacktestId], references: [id], onDelete: Cascade)
+  targetImportId  String   @map("target_import_id")
+  metricsDiffJson Json     @map("metrics_diff_json")
+  tradeoffSummary String   @map("tradeoff_summary") @db.Text
+  aiSummary       String?  @map("ai_summary") @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([baseBacktestId, createdAt])
+  @@index([targetBacktestId, createdAt])
+  @@index([createdAt])
+  @@map("backtest_comparisons")
 }
 
 enum InternalBacktestExecutionStatus {

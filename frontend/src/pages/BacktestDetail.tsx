@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
-import { swrFetcher } from '../api/client';
-import { BacktestDetailData } from '../api/types';
+import { postApi, swrFetcher } from '../api/client';
+import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 
 type BacktestDetailProps = {
   params: { backtestId: string };
@@ -163,6 +163,14 @@ export function parseBacktestsReturnPath(locationPath: string): string | null {
   return normalizeBacktestsReturnPath(decodedReturn);
 }
 
+function parseBacktestComparisonId(locationPath: string): string | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  const comparisonId = (params.get('comparisonId') ?? '').trim();
+  if (!comparisonId) return null;
+  return comparisonId;
+}
+
 export function buildBacktestRuleLabVersionsPath(strategyId: string): string {
   const params = new URLSearchParams();
   params.set('sort', 'updated_at');
@@ -181,7 +189,19 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const [location] = useLocation();
   const { data, error, isLoading } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
   const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
+  const [isSavingComparison, setIsSavingComparison] = useState(false);
+  const [saveComparisonError, setSaveComparisonError] = useState<string | null>(null);
+  const [savedComparisonId, setSavedComparisonId] = useState<string | null>(null);
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
+  const comparisonIdFromQuery = parseBacktestComparisonId(location);
+  const effectiveComparisonId = savedComparisonId ?? comparisonIdFromQuery;
+  const comparisonApiPath = effectiveComparisonId ? `/api/backtest-comparisons/${effectiveComparisonId}` : null;
+  const {
+    data: savedComparisonData,
+    error: savedComparisonError,
+    mutate: mutateSavedComparison,
+    isLoading: isSavedComparisonLoading,
+  } = useSWR<BacktestComparisonData>(comparisonApiPath, swrFetcher);
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
@@ -208,6 +228,25 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     usedStrategy.strategy_id && usedStrategy.strategy_version_id
       ? buildBacktestRuleLabVersionDetailPath(usedStrategy.strategy_id, usedStrategy.strategy_version_id)
       : null;
+
+  const onSaveComparison = async () => {
+    if (!baseImport?.id || !targetImport?.id) return;
+    setIsSavingComparison(true);
+    setSaveComparisonError(null);
+    try {
+      const response = await postApi<BacktestComparisonData>('/api/backtest-comparisons', {
+        base_import_id: baseImport.id,
+        target_import_id: targetImport.id,
+        include_ai_summary: true,
+      });
+      setSavedComparisonId(response.comparison.comparison_id);
+      await mutateSavedComparison(response, { revalidate: false });
+    } catch (error: any) {
+      setSaveComparisonError(error?.message ?? '比較結果の保存に失敗しました。');
+    } finally {
+      setIsSavingComparison(false);
+    }
+  };
 
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -379,28 +418,95 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             {!targetImport ? (
               <p style={{ margin: 0, color: '#666' }}>比較対象 run を選択してください。</p>
             ) : (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
-                  <thead>
-                    <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
-                      <th style={{ padding: '0.5rem' }}>指標</th>
-                      <th style={{ padding: '0.5rem' }}>比較元</th>
-                      <th style={{ padding: '0.5rem' }}>比較対象</th>
-                      <th style={{ padding: '0.5rem' }}>差分（対象-元）</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comparisonRows.map((row) => (
-                      <tr key={row.label} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                        <td style={{ padding: '0.5rem' }}>{row.label}</td>
-                        <td style={{ padding: '0.5rem' }}>{row.base}</td>
-                        <td style={{ padding: '0.5rem' }}>{row.target}</td>
-                        <td style={{ padding: '0.5rem' }}>{row.diff}</td>
+              <>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    type='button'
+                    onClick={onSaveComparison}
+                    disabled={isSavingComparison}
+                    style={{
+                      padding: '0.45rem 0.85rem',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      background: isSavingComparison ? '#f3f3f3' : '#fff',
+                      cursor: isSavingComparison ? 'default' : 'pointer',
+                    }}
+                  >
+                    {isSavingComparison ? '比較保存中...' : 'この2件で比較を保存する'}
+                  </button>
+                  {effectiveComparisonId && (
+                    <Link href={`/backtest-comparisons/${effectiveComparisonId}`} style={{ color: '#0a5bb5', textDecoration: 'none' }}>
+                      保存済み比較を見る
+                    </Link>
+                  )}
+                </div>
+                {saveComparisonError && (
+                  <div style={{ marginBottom: '0.75rem', color: '#a10000' }}>{saveComparisonError}</div>
+                )}
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', borderBottom: '1px solid #ddd' }}>
+                        <th style={{ padding: '0.5rem' }}>指標</th>
+                        <th style={{ padding: '0.5rem' }}>比較元</th>
+                        <th style={{ padding: '0.5rem' }}>比較対象</th>
+                        <th style={{ padding: '0.5rem' }}>差分（対象-元）</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {comparisonRows.map((row) => (
+                        <tr key={row.label} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                          <td style={{ padding: '0.5rem' }}>{row.label}</td>
+                          <td style={{ padding: '0.5rem' }}>{row.base}</td>
+                          <td style={{ padding: '0.5rem' }}>{row.target}</td>
+                          <td style={{ padding: '0.5rem' }}>{row.diff}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {effectiveComparisonId && (
+                  <div
+                    style={{
+                      marginTop: '0.75rem',
+                      padding: '0.75rem',
+                      border: '1px solid #e6e6e6',
+                      borderRadius: '6px',
+                      background: '#fafafa',
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>保存済み比較（要約）</div>
+                    {isSavedComparisonLoading ? (
+                      <div style={{ color: '#666' }}>保存済み比較を読み込み中...</div>
+                    ) : savedComparisonError ? (
+                      <div style={{ color: '#a10000' }}>保存済み比較の取得に失敗しました: {savedComparisonError.message}</div>
+                    ) : savedComparisonData ? (
+                      <>
+                        <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}>
+                          比較ID: <code>{savedComparisonData.comparison.comparison_id}</code>
+                        </div>
+                        <pre
+                          style={{
+                            margin: 0,
+                            padding: '0.6rem',
+                            background: '#fff',
+                            border: '1px solid #e6e6e6',
+                            borderRadius: '4px',
+                            whiteSpace: 'pre-wrap',
+                          }}
+                        >
+                          {savedComparisonData.comparison.tradeoff_summary}
+                        </pre>
+                        <div style={{ marginTop: '0.5rem', color: '#555', whiteSpace: 'pre-wrap' }}>
+                          {savedComparisonData.comparison.ai_summary ?? 'AI比較総評は未保存です。'}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ color: '#666' }}>保存済み比較はまだありません。</div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
