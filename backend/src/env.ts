@@ -15,6 +15,7 @@ const envSchema = z.object({
   // ── AI: ローカルLLM (Primary) ── docs/24 §7, docs/28 §3-1
   LOCAL_LLM_ENDPOINT:    z.string().url().optional(),
   PRIMARY_LOCAL_MODEL:   z.string().default('qwen3-30b-a3b-2507'),
+  HOME_AI_PROVIDER:      z.enum(['stub', 'local_llm', 'openai_api']).default('local_llm'),
 
   // ── AI: Fallback API (GPT-5 mini) ── docs/28 §3-2, docs/24 §7
   FALLBACK_API_PROVIDER: z.string().default('openai'),

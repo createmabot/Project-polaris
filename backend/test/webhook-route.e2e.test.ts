@@ -384,8 +384,8 @@ vi.mock('../src/references/collector', () => {
   return { referenceCollector, buildDedupeKey };
 });
 
-vi.mock('../src/ai/router', () => {
-  class AiRouter {
+vi.mock('../src/ai/home-ai-service', () => {
+  class HomeAiService {
     async generateAlertSummary(context: any) {
       const hasRefs = context.referenceIds.length > 0;
       return {
@@ -424,12 +424,14 @@ vi.mock('../src/ai/router', () => {
           durationMs: 10,
           estimatedTokens: 100,
           estimatedCostUsd: 0,
+          provider: 'stub',
+          fallbackToStub: false,
         },
       };
     }
   }
 
-  return { AiRouter };
+  return { HomeAiService };
 });
 
 vi.mock('@prisma/client', () => {

@@ -139,6 +139,11 @@ pnpm run dev
 
 ### 5. Home AI要約フロー確認（最小）
 
+0. provider 切替と local_llm 疎通
+   - `.env` で `HOME_AI_PROVIDER=local_llm` を設定
+   - `npx tsx scripts/check-local-llm.ts`
+   - 確認: local endpoint/model が到達可能であること（接続不可時はアプリ側で stub fallback）
+
 1. 日次要約切替（Home BFF）
    - `GET /api/home?summary_type=latest`
    - `GET /api/home?summary_type=morning&date=2026-04-18`
@@ -151,5 +156,7 @@ pnpm run dev
    - 確認: summary が保存され、`ai_jobs` の `queued -> running -> succeeded|failed` が残ること
 
 3. 日次要約 API
+   - `POST /api/summaries/daily/generate` body: `{ "type": "morning", "date": "2026-04-18" }`
    - `GET /api/summaries/daily?type=latest|morning|evening&date=YYYY-MM-DD`
+   - 確認: 生成時に `ai_jobs(job_type=generate_daily_summary)` が記録されること
    - 確認: `latest` は再生成ではなく既存 summary 選択であること、未生成時は `status=unavailable` で部分成立すること

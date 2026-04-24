@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { buildAlertSummaryContext } from '../ai/context-builder';
-import { AiRouter } from '../ai/router';
+import { HomeAiService } from '../ai/home-ai-service';
 
 type AlertSummaryView = {
   id: string | null;
@@ -144,8 +144,8 @@ async function generateAlertSummaryWithJob(alertId: string) {
       return { jobId: summaryJob.id, summary: existing };
     }
 
-    const router = new AiRouter();
-    const { output, log } = await router.generateAlertSummary(context);
+    const homeAiService = new HomeAiService();
+    const { output, log } = await homeAiService.generateAlertSummary(context);
     const generatedAt = new Date();
 
     const created = await prisma.aiSummary.create({
@@ -164,6 +164,8 @@ async function generateAlertSummaryWithJob(alertId: string) {
         inputSnapshotHash,
         generationContextJson: {
           reference_count: context.referenceIds.length,
+          provider: log.provider,
+          fallback_to_stub: log.fallbackToStub,
         } as any,
       },
     });

@@ -278,7 +278,7 @@ function makeReference(params: {
   };
 }
 
-function createRouterFactory() {
+function createHomeAiServiceFactory() {
   return () => ({
     generateAlertSummary: async (context: any) => {
       const hasRefs = context.referenceIds.length > 0;
@@ -366,7 +366,7 @@ describe('queue handlers e2e-ish: collect_references_for_alert -> generate_alert
         ],
       },
       buildAlertSummaryContext: async (id) => state.buildContext(id),
-      createAiRouter: createRouterFactory(),
+      createHomeAiService: createHomeAiServiceFactory(),
       queue: {
         add: async (name, data) => {
           queuedJobs.push({ name, data });
@@ -415,7 +415,7 @@ describe('queue handlers e2e-ish: collect_references_for_alert -> generate_alert
         collectForAlert: async () => [makeReference({ sourceType: 'news', title: 'ƒjƒ…[ƒX‚Ì‚Ý', sourceUrl: 'https://example.com/news-only' })],
       },
       buildAlertSummaryContext: async (id) => state.buildContext(id),
-      createAiRouter: createRouterFactory(),
+      createHomeAiService: createHomeAiServiceFactory(),
       queue: {
         add: async (name, data) => {
           queuedJobs.push({ name, data });
@@ -457,7 +457,7 @@ describe('queue handlers e2e-ish: collect_references_for_alert -> generate_alert
         },
       },
       buildAlertSummaryContext: async (id) => state.buildContext(id),
-      createAiRouter: createRouterFactory(),
+      createHomeAiService: createHomeAiServiceFactory(),
       queue: {
         add: async (name, data) => {
           queuedJobs.push({ name, data });
@@ -505,7 +505,7 @@ describe('queue handlers e2e-ish: collect_references_for_alert -> generate_alert
         ],
       },
       buildAlertSummaryContext: async (id) => state.buildContext(id),
-      createAiRouter: createRouterFactory(),
+      createHomeAiService: createHomeAiServiceFactory(),
       queue: {
         add: async (name, data) => {
           queuedJobs.push({ name, data });
@@ -550,7 +550,7 @@ describe('queue handlers e2e-ish: collect_references_for_alert -> generate_alert
         ],
       },
       buildAlertSummaryContext: async (id) => state.buildContext(id),
-      createAiRouter: createRouterFactory(),
+      createHomeAiService: createHomeAiServiceFactory(),
       queue: {
         add: async (name, data) => {
           queuedJobs.push({ name, data });

@@ -1,4 +1,5 @@
 import { AppError } from '../utils/response';
+import { HomeAiService } from '../ai/home-ai-service';
 
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
 
@@ -124,6 +125,14 @@ async function detectInsufficientContext(
   prismaAny: any,
   dateRange: { gte: Date; lt: Date },
 ): Promise<boolean> {
+  const counts = await collectDailyMaterialCounts(prismaAny, dateRange);
+  return counts.snapshotCount === 0 || counts.alertCount === 0 || counts.referenceCount === 0;
+}
+
+async function collectDailyMaterialCounts(
+  prismaAny: any,
+  dateRange: { gte: Date; lt: Date },
+): Promise<{ snapshotCount: number; alertCount: number; referenceCount: number }> {
   const [snapshotCount, alertCount, referenceCount] = await Promise.all([
     prismaAny.marketSnapshot.count({
       where: {
@@ -151,7 +160,7 @@ async function detectInsufficientContext(
     }),
   ]);
 
-  return snapshotCount === 0 || alertCount === 0 || referenceCount === 0;
+  return { snapshotCount, alertCount, referenceCount };
 }
 
 export async function resolveDailySummary(
@@ -201,5 +210,134 @@ export async function resolveDailySummary(
     summary_type: params.summaryType,
     date: params.date,
   };
+}
+
+export async function generateDailySummaryWithJob(
+  prismaAny: any,
+  params: { summaryType: DailySummaryType; date: string | null },
+): Promise<{ jobId: string; summary: DailySummaryView }> {
+  if (params.summaryType === 'latest') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'type must be morning|evening for generation');
+  }
+
+  const effectiveDate =
+    params.date ?? new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Tokyo' });
+  const dateRange = buildJstDayRange(effectiveDate);
+  const counts = await collectDailyMaterialCounts(prismaAny, dateRange);
+
+  const aiJob = await prismaAny.aiJob.create({
+    data: {
+      jobType: 'generate_daily_summary',
+      targetEntityType: 'market_snapshot',
+      targetEntityId: 'market:jp',
+      requestPayload: {
+        summary_type: params.summaryType,
+        date: effectiveDate,
+      } as any,
+      status: 'queued',
+    },
+  });
+
+  await prismaAny.aiJob.update({
+    where: { id: aiJob.id },
+    data: { status: 'running', startedAt: new Date() },
+  });
+
+  try {
+    const homeAiService = new HomeAiService();
+    const { output, log } = await homeAiService.generateDailySummary({
+      summaryType: params.summaryType,
+      date: effectiveDate,
+      marketSnapshotCount: counts.snapshotCount,
+      alertCount: counts.alertCount,
+      referenceCount: counts.referenceCount,
+    });
+
+    const generatedAt = buildDailyGeneratedAt(effectiveDate, params.summaryType);
+    const created = await prismaAny.aiSummary.create({
+      data: {
+        aiJobId: aiJob.id,
+        userId: null,
+        summaryScope: 'daily',
+        targetEntityType: 'market_snapshot',
+        targetEntityId: 'market:jp',
+        title: output.title,
+        bodyMarkdown: output.bodyMarkdown,
+        structuredJson: output.structuredJson as any,
+        modelName: output.modelName,
+        promptVersion: output.promptVersion,
+        generatedAt,
+        generationContextJson: {
+          summary_type: params.summaryType,
+          date: effectiveDate,
+          provider: log.provider,
+          fallback_to_stub: log.fallbackToStub,
+          snapshot_count: counts.snapshotCount,
+          alert_count: counts.alertCount,
+          reference_count: counts.referenceCount,
+        } as any,
+      },
+    });
+
+    await prismaAny.aiJob.update({
+      where: { id: aiJob.id },
+      data: {
+        status: 'succeeded',
+        completedAt: generatedAt,
+        modelName: log.finalModel,
+        promptVersion: output.promptVersion,
+        initialModel: log.initialModel,
+        finalModel: log.finalModel,
+        escalated: log.escalated,
+        escalationReason: log.escalationReason,
+        retryCount: log.retryCount,
+        durationMs: log.durationMs,
+        estimatedTokens: log.estimatedTokens,
+        estimatedCostUsd: log.estimatedCostUsd,
+        responsePayload: { summary_id: created.id } as any,
+      },
+    });
+
+    const structured = isRecord(created.structuredJson) ? created.structuredJson : null;
+    const insufficient =
+      structured && typeof structured.insufficient_context === 'boolean'
+        ? structured.insufficient_context
+        : false;
+
+    return {
+      jobId: aiJob.id,
+      summary: {
+        id: created.id,
+        title: created.title ?? null,
+        body_markdown: created.bodyMarkdown ?? null,
+        structured_json: structured,
+        generated_at: created.generatedAt ? new Date(created.generatedAt).toISOString() : null,
+        status: 'available',
+        insufficient_context: insufficient,
+        summary_type: params.summaryType,
+        date: effectiveDate,
+      },
+    };
+  } catch (error) {
+    await prismaAny.aiJob.update({
+      where: { id: aiJob.id },
+      data: {
+        status: 'failed',
+        completedAt: new Date(),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+    });
+    throw error;
+  }
+}
+
+function buildDailyGeneratedAt(effectiveDate: string, summaryType: DailySummaryType): Date {
+  if (summaryType === 'morning') {
+    return new Date(`${effectiveDate}T08:00:00+09:00`);
+  }
+  if (summaryType === 'evening') {
+    return new Date(`${effectiveDate}T19:00:00+09:00`);
+  }
+  return new Date(`${effectiveDate}T12:00:00+09:00`);
 }
 
