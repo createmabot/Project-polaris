@@ -37,6 +37,7 @@ type Runtime = {
     referenceType: string;
     summaryText: string | null;
     publishedAt: Date | null;
+    updatedAt: Date;
   }>;
   latestNote: {
     id: string;
@@ -67,6 +68,7 @@ function createRuntime(): Runtime {
         referenceType: 'earnings',
         summaryText: 'Revenue grew 8% YoY',
         publishedAt: new Date('2026-04-20T09:00:00+09:00'),
+        updatedAt: new Date('2026-04-21T10:00:00+09:00'),
       },
     ],
     latestNote: {
@@ -399,6 +401,23 @@ describe('symbol ai-summary routes', () => {
     expect(runtime.aiSummaries).toHaveLength(1);
     expect(runtime.aiSummaries[0].generationContextJson?.fallback_to_stub).toBe(true);
     expect(runtime.aiJobs[0].status).toBe('succeeded');
+
+    await app.close();
+  });
+
+  it('rejects latest scope for generation endpoint', async () => {
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/ai-summary/generate',
+      payload: {
+        scope: 'latest',
+        reference_ids: ['ref-1'],
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });

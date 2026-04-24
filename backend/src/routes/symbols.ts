@@ -95,6 +95,14 @@ async function generateSymbolSummaryWithJob(
           id: { in: params.referenceIds },
           symbolId,
         },
+        select: {
+          id: true,
+          title: true,
+          referenceType: true,
+          summaryText: true,
+          publishedAt: true,
+          updatedAt: true,
+        },
         orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       })
     : [];
@@ -144,7 +152,16 @@ async function generateSymbolSummaryWithJob(
     const inputSnapshot = JSON.stringify({
       symbolId,
       scope: params.scope,
-      referenceIds: selectedReferences.map((reference) => reference.id).sort(),
+      references: selectedReferences
+        .map((reference) => ({
+          id: reference.id,
+          title: reference.title,
+          reference_type: reference.referenceType,
+          summary_text: reference.summaryText,
+          published_at: reference.publishedAt ? reference.publishedAt.toISOString() : null,
+          updated_at: reference.updatedAt.toISOString(),
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id)),
       snapshot: snapshot
         ? {
             last_price: snapshot.last_price,
@@ -383,6 +400,9 @@ export async function symbolRoutes(fastify: FastifyInstance) {
   ) => {
     const { symbolId } = request.params;
     const scope = normalizeSymbolSummaryScope(request.body?.scope);
+    if (scope === 'latest') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'scope must be thesis for generation');
+    }
     const referenceIdsRaw = request.body?.reference_ids;
     if (!Array.isArray(referenceIdsRaw)) {
       throw new AppError(400, 'VALIDATION_ERROR', 'reference_ids must be an array');
