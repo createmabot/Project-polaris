@@ -179,6 +179,21 @@ export type SymbolDetailData = {
   latest_processing_status: string;
 };
 
+export type SymbolAiSummaryData = {
+  symbol_id: string;
+  scope: 'thesis' | 'latest';
+  summary: {
+    summary_id: string | null;
+    title: string | null;
+    body_markdown: string | null;
+    structured_json: Record<string, unknown> | null;
+    generated_at: string | null;
+    status: 'available' | 'unavailable';
+    insufficient_context: boolean;
+    scope: 'thesis' | 'latest';
+  };
+};
+
 export type ComparisonCreateData = {
   comparison_session: {
     id: string;
