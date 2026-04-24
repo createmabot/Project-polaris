@@ -1,4 +1,5 @@
 import { AlertSummaryContext } from './adapter';
+import { env } from '../env';
 import {
   createHomeAiProvider,
   createStubHomeAiProvider,
@@ -28,12 +29,13 @@ export class HomeAiService {
 
   async generateAlertSummary(context: AlertSummaryContext): Promise<{ output: any; log: HomeAiExecutionLog }> {
     const startedAt = Date.now();
+    const attemptedModel = this.resolveAttemptedModel();
     try {
       const output = await this.provider.generateAlertSummary(context);
       return {
         output,
         log: {
-          initialModel: output.modelName,
+          initialModel: attemptedModel,
           finalModel: output.modelName,
           escalated: this.provider.providerType === 'openai_api',
           escalationReason: null,
@@ -53,7 +55,7 @@ export class HomeAiService {
       return {
         output,
         log: {
-          initialModel: output.modelName,
+          initialModel: attemptedModel,
           finalModel: output.modelName,
           escalated: false,
           escalationReason: 'provider_failed_fallback_to_stub',
@@ -70,12 +72,13 @@ export class HomeAiService {
 
   async generateDailySummary(context: DailySummaryContext): Promise<{ output: DailySummaryOutput; log: HomeAiExecutionLog }> {
     const startedAt = Date.now();
+    const attemptedModel = this.resolveAttemptedModel();
     try {
       const output = await this.provider.generateDailySummary(context);
       return {
         output,
         log: {
-          initialModel: output.modelName,
+          initialModel: attemptedModel,
           finalModel: output.modelName,
           escalated: this.provider.providerType === 'openai_api',
           escalationReason: null,
@@ -95,7 +98,7 @@ export class HomeAiService {
       return {
         output,
         log: {
-          initialModel: output.modelName,
+          initialModel: attemptedModel,
           finalModel: output.modelName,
           escalated: false,
           escalationReason: 'provider_failed_fallback_to_stub',
@@ -108,5 +111,15 @@ export class HomeAiService {
         },
       };
     }
+  }
+
+  private resolveAttemptedModel(): string {
+    if (this.provider.providerType === 'local_llm') {
+      return env.PRIMARY_LOCAL_MODEL;
+    }
+    if (this.provider.providerType === 'openai_api') {
+      return env.FALLBACK_API_MODEL;
+    }
+    return 'mock-v1';
   }
 }

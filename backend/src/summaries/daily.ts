@@ -253,7 +253,7 @@ export async function generateDailySummaryWithJob(
       referenceCount: counts.referenceCount,
     });
 
-    const generatedAt = new Date();
+    const generatedAt = buildDailyGeneratedAt(effectiveDate, params.summaryType);
     const created = await prismaAny.aiSummary.create({
       data: {
         aiJobId: aiJob.id,
@@ -329,5 +329,15 @@ export async function generateDailySummaryWithJob(
     });
     throw error;
   }
+}
+
+function buildDailyGeneratedAt(effectiveDate: string, summaryType: DailySummaryType): Date {
+  if (summaryType === 'morning') {
+    return new Date(`${effectiveDate}T08:00:00+09:00`);
+  }
+  if (summaryType === 'evening') {
+    return new Date(`${effectiveDate}T19:00:00+09:00`);
+  }
+  return new Date(`${effectiveDate}T12:00:00+09:00`);
 }
 
