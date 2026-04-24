@@ -43,10 +43,65 @@ export type DailySummaryOutput = {
   promptVersion: string;
 };
 
+export type SymbolThesisScope = 'thesis' | 'latest';
+
+export type SymbolThesisContext = {
+  scope: SymbolThesisScope;
+  symbol: {
+    id: string;
+    symbol: string;
+    symbolCode: string | null;
+    displayName: string | null;
+    marketCode: string | null;
+    tradingviewSymbol: string | null;
+  };
+  referenceIds: string[];
+  references: Array<{
+    id: string;
+    title: string;
+    referenceType: string;
+    summaryText: string | null;
+    publishedAt: string | null;
+  }>;
+  snapshot: {
+    lastPrice: number | null;
+    changePercent: number | null;
+    asOf: string | null;
+  } | null;
+  latestNoteSummary: {
+    noteId: string;
+    title: string;
+    thesisText: string | null;
+    updatedAt: string;
+  } | null;
+};
+
+export type SymbolThesisOutput = {
+  title: string;
+  bodyMarkdown: string;
+  structuredJson: {
+    schema_name: 'symbol_thesis_summary';
+    schema_version: '1.0';
+    confidence: 'high' | 'medium' | 'low';
+    insufficient_context: boolean;
+    payload: {
+      bullish_points: Array<string | { text: string; reference_ids: string[] }>;
+      bearish_points: Array<string | { text: string; reference_ids: string[] }>;
+      watch_kpis: string[];
+      next_events: Array<string | { label: string; date?: string | null; reference_ids?: string[] }>;
+      invalidation_conditions: string[];
+      overall_view: string;
+    };
+  };
+  modelName: string;
+  promptVersion: string;
+};
+
 export type HomeAiProvider = {
   providerType: HomeAiProviderType;
   generateAlertSummary: (context: AlertSummaryContext) => Promise<AlertSummaryOutput>;
   generateDailySummary: (context: DailySummaryContext) => Promise<DailySummaryOutput>;
+  generateSymbolThesisSummary: (context: SymbolThesisContext) => Promise<SymbolThesisOutput>;
 };
 
 function buildDeterministicDailyOutput(
@@ -111,6 +166,72 @@ function buildDeterministicDailyOutput(
   };
 }
 
+function buildDeterministicSymbolOutput(
+  context: SymbolThesisContext,
+  options: { modelName: string; promptVersion: string; titlePrefix: string },
+): SymbolThesisOutput {
+  const hasReferences = context.referenceIds.length > 0;
+  const hasSnapshot = !!context.snapshot;
+  const hasNote = !!context.latestNoteSummary?.thesisText;
+  const insufficientContext = !hasReferences && !hasSnapshot && !hasNote;
+  const confidence: 'high' | 'medium' | 'low' = insufficientContext ? 'low' : hasReferences ? 'medium' : 'low';
+  const symbolLabel = context.symbol.displayName ?? context.symbol.symbolCode ?? context.symbol.symbol;
+  const title = `${options.titlePrefix}${symbolLabel} Thesis Card`;
+  const snapshotText =
+    context.snapshot && context.snapshot.lastPrice !== null
+      ? `${context.snapshot.lastPrice} (${context.snapshot.changePercent ?? 0}%)`
+      : 'N/A';
+
+  return {
+    title,
+    bodyMarkdown: [
+      `## ${title}`,
+      '',
+      `- symbol: ${symbolLabel}`,
+      `- scope: ${context.scope}`,
+      `- references: ${context.referenceIds.length}`,
+      `- snapshot: ${snapshotText}`,
+      `- note: ${context.latestNoteSummary ? context.latestNoteSummary.title : 'N/A'}`,
+      insufficientContext ? '- context: insufficient' : '- context: minimal sufficient',
+    ].join('\n'),
+    structuredJson: {
+      schema_name: 'symbol_thesis_summary',
+      schema_version: '1.0',
+      confidence,
+      insufficient_context: insufficientContext,
+      payload: {
+        bullish_points: hasReferences
+          ? context.references.slice(0, 2).map((reference) => ({
+              text: `Reference supports thesis: ${reference.title}`,
+              reference_ids: [reference.id],
+            }))
+          : ['No high-confidence bullish reference yet'],
+        bearish_points:
+          hasSnapshot &&
+          context.snapshot !== null &&
+          context.snapshot.changePercent !== null &&
+          context.snapshot.changePercent < 0
+          ? ['Recent price weakness needs validation']
+          : ['Valuation or execution risk remains'],
+        watch_kpis: ['Revenue growth', 'Operating margin', 'Cash flow'],
+        next_events: hasReferences
+          ? context.references.slice(0, 2).map((reference) => ({
+              label: reference.title,
+              date: reference.publishedAt ?? null,
+              reference_ids: [reference.id],
+            }))
+          : ['Next earnings release'],
+        invalidation_conditions: ['Guidance cut', 'Material demand slowdown'],
+        overall_view: insufficientContext
+          ? 'Context is insufficient. Treat this as a provisional thesis.'
+          : 'Base thesis remains valid with monitored downside risks.',
+      },
+    },
+    modelName: options.modelName,
+    promptVersion: options.promptVersion,
+  };
+}
+
 class StubHomeAiProvider implements HomeAiProvider {
   readonly providerType: HomeAiProviderType = 'stub';
   private readonly adapter = new MockAiAdapter();
@@ -123,6 +244,14 @@ class StubHomeAiProvider implements HomeAiProvider {
     return buildDeterministicDailyOutput(context, {
       modelName: 'stub-daily-v1',
       promptVersion: 'v1.0.0-daily-stub',
+      titlePrefix: '[Stub] ',
+    });
+  }
+
+  async generateSymbolThesisSummary(context: SymbolThesisContext): Promise<SymbolThesisOutput> {
+    return buildDeterministicSymbolOutput(context, {
+      modelName: 'stub-symbol-v1',
+      promptVersion: 'v1.0.0-symbol-stub',
       titlePrefix: '[Stub] ',
     });
   }
@@ -261,6 +390,103 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       },
     };
   }
+
+  async generateSymbolThesisSummary(context: SymbolThesisContext): Promise<SymbolThesisOutput> {
+    const deterministic = buildDeterministicSymbolOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-symbol-local',
+      titlePrefix: '[LocalLLM] ',
+    });
+
+    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Generate a concise symbol thesis summary. Return strict JSON only.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              scope: context.scope,
+              symbol: context.symbol,
+              reference_ids: context.referenceIds,
+              references: context.references.slice(0, 5),
+              snapshot: context.snapshot,
+              latest_note_summary: context.latestNoteSummary,
+              output_schema: {
+                title: '<string>',
+                bullish_points: ['<string or {text,reference_ids}>'],
+                bearish_points: ['<string or {text,reference_ids}>'],
+                watch_kpis: ['<string>'],
+                next_events: ['<string or {label,date,reference_ids}>'],
+                invalidation_conditions: ['<string>'],
+                overall_view: '<string>',
+              },
+            }),
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 900,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`local_llm symbol thesis failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    if (!content) {
+      throw new Error('local_llm symbol thesis returned empty content');
+    }
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+    } catch {
+      return deterministic;
+    }
+
+    return {
+      ...deterministic,
+      title: typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title,
+      bodyMarkdown:
+        typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
+          ? parsed.body_markdown
+          : deterministic.bodyMarkdown,
+      structuredJson: {
+        ...deterministic.structuredJson,
+        payload: {
+          bullish_points: Array.isArray(parsed?.bullish_points)
+            ? parsed.bullish_points.slice(0, 5)
+            : deterministic.structuredJson.payload.bullish_points,
+          bearish_points: Array.isArray(parsed?.bearish_points)
+            ? parsed.bearish_points.slice(0, 5)
+            : deterministic.structuredJson.payload.bearish_points,
+          watch_kpis: Array.isArray(parsed?.watch_kpis)
+            ? parsed.watch_kpis.filter((item: unknown) => typeof item === 'string').slice(0, 6)
+            : deterministic.structuredJson.payload.watch_kpis,
+          next_events: Array.isArray(parsed?.next_events)
+            ? parsed.next_events.slice(0, 4)
+            : deterministic.structuredJson.payload.next_events,
+          invalidation_conditions: Array.isArray(parsed?.invalidation_conditions)
+            ? parsed.invalidation_conditions.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+            : deterministic.structuredJson.payload.invalidation_conditions,
+          overall_view:
+            typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
+              ? parsed.overall_view
+              : deterministic.structuredJson.payload.overall_view,
+        },
+      },
+    };
+  }
 }
 
 class OpenAiHomeAiProvider implements HomeAiProvider {
@@ -339,6 +565,72 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
       ...deterministic,
       title: typeof parsed?.title === 'string' && parsed.title.trim() !== '' ? parsed.title : deterministic.title,
     };
+  }
+
+  async generateSymbolThesisSummary(context: SymbolThesisContext): Promise<SymbolThesisOutput> {
+    if (!this.apiKey) {
+      throw new Error('openai_api provider requires FALLBACK_API_KEY');
+    }
+
+    const deterministic = buildDeterministicSymbolOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-symbol-openai',
+      titlePrefix: '[OpenAI] ',
+    });
+
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          { role: 'system', content: 'Generate a concise symbol thesis summary as strict JSON.' },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              scope: context.scope,
+              symbol: context.symbol,
+              reference_ids: context.referenceIds,
+              references: context.references.slice(0, 6),
+              snapshot: context.snapshot,
+              latest_note_summary: context.latestNoteSummary,
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 900,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`openai_api symbol thesis failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) {
+      return deterministic;
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed?.title === 'string' && parsed.title.trim()) {
+        return {
+          ...deterministic,
+          title: parsed.title,
+        };
+      }
+    } catch {
+      return deterministic;
+    }
+
+    return deterministic;
   }
 }
 

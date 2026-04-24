@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useRoute } from 'wouter';
-import { swrFetcher } from '../api/client';
-import { SymbolDetailData } from '../api/types';
+import { postApi, swrFetcher } from '../api/client';
+import { SymbolAiSummaryData, SymbolDetailData } from '../api/types';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -16,7 +16,7 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
 }
 
-const EMPTY_STATE_HINT = 'データ未生成の場合は、seed 実行後にページを再読み込みしてください。';
+const EMPTY_STATE_HINT = 'データ未投入の場合は、seed 実行後にページを再読み込みしてください。';
 
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
@@ -40,16 +40,26 @@ export default function SymbolDetail() {
   const [, params] = useRoute('/symbols/:symbolId');
   const symbolId = params?.symbolId;
   const tvContainerRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
+  const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
 
   const { data, error, isLoading } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
-    swrFetcher
+    swrFetcher,
+  );
+  const {
+    data: aiSummaryData,
+    error: aiSummaryError,
+    isLoading: isAiSummaryLoading,
+    mutate: mutateAiSummary,
+  } = useSWR<SymbolAiSummaryData>(
+    symbolId ? `/api/symbols/${symbolId}/ai-summary?scope=thesis` : null,
+    swrFetcher,
   );
 
   useEffect(() => {
     if (!data?.chart?.widget_symbol || !tvContainerRef.current) return;
 
-    // Remove existing iframe or script if re-rendering
     tvContainerRef.current.innerHTML = '';
 
     const script = document.createElement('script');
@@ -93,7 +103,39 @@ export default function SymbolDetail() {
 
   if (!data) return null;
 
-  const thesisPoints = getThesisPoints(data.latest_ai_thesis_summary?.structured_json);
+  const aiSummary = aiSummaryData?.summary;
+  const availableSummary =
+    aiSummary?.status === 'available'
+      ? {
+          title: aiSummary.title,
+          body_markdown: aiSummary.body_markdown ?? '',
+          generated_at: aiSummary.generated_at,
+          structured_json: aiSummary.structured_json,
+        }
+      : data.latest_ai_thesis_summary;
+  const thesisPoints = getThesisPoints(availableSummary?.structured_json);
+  const hasSummaryContent = Boolean(
+    availableSummary?.title?.trim() ||
+      availableSummary?.body_markdown?.trim() ||
+      thesisPoints.length > 0,
+  );
+
+  async function handleGenerateThesis() {
+    if (!symbolId || !data) return;
+    setIsGeneratingThesis(true);
+    setGenerateThesisError(null);
+    try {
+      await postApi(`/api/symbols/${symbolId}/ai-summary/generate`, {
+        scope: 'thesis',
+        reference_ids: data.related_references.slice(0, 5).map((item) => item.id),
+      });
+      await mutateAiSummary();
+    } catch (err: any) {
+      setGenerateThesisError(err?.message ?? 'AI論点カード生成に失敗しました。');
+    } finally {
+      setIsGeneratingThesis(false);
+    }
+  }
 
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -113,7 +155,7 @@ export default function SymbolDetail() {
           href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}
           style={{ color: '#0066cc', textDecoration: 'none' }}
         >
-          比較対象に追加
+          比較画面に進む
         </Link>
       </div>
 
@@ -136,7 +178,7 @@ export default function SymbolDetail() {
             </div>
             <div>出来高: {formatNumber(data.current_snapshot.volume, 0)}</div>
             <div style={{ fontSize: '0.85rem', color: '#666' }}>
-              取得元: {data.current_snapshot.source_name} | asOf: {formatDate(data.current_snapshot.as_of)} | 市場状態:{' '}
+              ソース: {data.current_snapshot.source_name} | asOf: {formatDate(data.current_snapshot.as_of)} | 市場状態:{' '}
               <code>{data.current_snapshot.market_status}</code>
             </div>
           </div>
@@ -146,7 +188,7 @@ export default function SymbolDetail() {
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>最近のアラート</h2>
+        <h2>最新アラート</h2>
         {data.recent_alerts.length === 0 ? (
           <p style={{ color: '#666' }}>この銘柄のアラートはまだありません。</p>
         ) : (
@@ -175,10 +217,14 @@ export default function SymbolDetail() {
       </section>
 
       <section style={{ marginTop: '2rem' }}>
-        <h2>最新AI論点</h2>
-        {data.latest_ai_thesis_summary ? (
+        <h2>最新AI論点カード</h2>
+        {isAiSummaryLoading ? (
+          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
+            AI論点カードを読み込み中...
+          </div>
+        ) : availableSummary && hasSummaryContent ? (
           <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-            {data.latest_ai_thesis_summary.title && <h3 style={{ marginTop: 0 }}>{data.latest_ai_thesis_summary.title}</h3>}
+            {availableSummary.title && <h3 style={{ marginTop: 0 }}>{availableSummary.title}</h3>}
             {thesisPoints.length > 0 ? (
               <ul style={{ margin: '0.5rem 0 0 1rem' }}>
                 {thesisPoints.map((point, index) => (
@@ -186,15 +232,39 @@ export default function SymbolDetail() {
                 ))}
               </ul>
             ) : (
-              <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{data.latest_ai_thesis_summary.body_markdown}</p>
+              <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{availableSummary.body_markdown}</p>
             )}
             <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#777' }}>
-              生成日時: {formatDate(data.latest_ai_thesis_summary.generated_at)}
+              生成日時: {formatDate(availableSummary.generated_at)}
             </div>
+          </div>
+        ) : aiSummary?.status === 'unavailable' || aiSummaryError ? (
+          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
+            <div>AI論点カードは未生成です。</div>
+            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <button
+                onClick={handleGenerateThesis}
+                disabled={isGeneratingThesis}
+                style={{
+                  background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '0.45rem 0.8rem',
+                  cursor: isGeneratingThesis ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isGeneratingThesis ? '生成中...' : 'AI論点カード生成'}
+              </button>
+            </div>
+            {generateThesisError && (
+              <div style={{ marginTop: '0.5rem', color: '#b02a37', fontSize: '0.85rem' }}>{generateThesisError}</div>
+            )}
           </div>
         ) : (
           <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
-            <div>AI要約はまだ生成されていません。</div>
+            <div>AI論点カードは空です。</div>
             <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
           </div>
         )}
@@ -208,7 +278,7 @@ export default function SymbolDetail() {
               href={`/notes/${data.latest_active_note.id}`}
               style={{ background: '#0066cc', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px' }}
             >
-              ノートを編集
+              ノートを開く
             </Link>
           ) : (
             <Link
@@ -228,7 +298,7 @@ export default function SymbolDetail() {
             </div>
             {data.latest_active_note.thesisText && <p style={{ whiteSpace: 'pre-wrap' }}>{data.latest_active_note.thesisText}</p>}
             {data.latest_active_note.nextReviewAt && (
-              <div style={{ color: '#d9534f', fontWeight: 600 }}>次回見直し: {formatDate(data.latest_active_note.nextReviewAt)}</div>
+              <div style={{ color: '#d9534f', fontWeight: 600 }}>次回確認日: {formatDate(data.latest_active_note.nextReviewAt)}</div>
             )}
           </div>
         ) : (
@@ -269,4 +339,3 @@ export default function SymbolDetail() {
     </div>
   );
 }
-

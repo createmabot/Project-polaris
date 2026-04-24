@@ -75,6 +75,26 @@ describe('HomeAiService', () => {
         modelName: 'local-model',
         promptVersion: 'v1',
       })),
+      generateSymbolThesisSummary: vi.fn(async () => ({
+        title: 'symbol',
+        bodyMarkdown: 'symbol',
+        structuredJson: {
+          schema_name: 'symbol_thesis_summary',
+          schema_version: '1.0',
+          confidence: 'medium',
+          insufficient_context: false,
+          payload: {
+            bullish_points: [],
+            bearish_points: [],
+            watch_kpis: [],
+            next_events: [],
+            invalidation_conditions: [],
+            overall_view: 'ok',
+          },
+        },
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      })),
     };
     const stubProvider: HomeAiProvider = {
       providerType: 'stub',
@@ -82,6 +102,9 @@ describe('HomeAiService', () => {
         throw new Error('must not call');
       }),
       generateDailySummary: vi.fn(async () => {
+        throw new Error('must not call');
+      }),
+      generateSymbolThesisSummary: vi.fn(async () => {
         throw new Error('must not call');
       }),
     };
@@ -102,6 +125,9 @@ describe('HomeAiService', () => {
         throw new Error('provider failed');
       }),
       generateDailySummary: vi.fn(async () => {
+        throw new Error('provider failed');
+      }),
+      generateSymbolThesisSummary: vi.fn(async () => {
         throw new Error('provider failed');
       }),
     };
@@ -145,6 +171,26 @@ describe('HomeAiService', () => {
         modelName: 'stub-model',
         promptVersion: 'v1',
       })),
+      generateSymbolThesisSummary: vi.fn(async () => ({
+        title: 'stub-symbol',
+        bodyMarkdown: 'stub-symbol',
+        structuredJson: {
+          schema_name: 'symbol_thesis_summary',
+          schema_version: '1.0',
+          confidence: 'low',
+          insufficient_context: true,
+          payload: {
+            bullish_points: [],
+            bearish_points: [],
+            watch_kpis: [],
+            next_events: [],
+            invalidation_conditions: [],
+            overall_view: 'stub',
+          },
+        },
+        modelName: 'stub-model',
+        promptVersion: 'v1',
+      })),
     };
 
     const service = new HomeAiService(provider, stubProvider);
@@ -155,5 +201,72 @@ describe('HomeAiService', () => {
     expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
     expect(provider.generateAlertSummary).toHaveBeenCalledTimes(1);
     expect(stubProvider.generateAlertSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to stub for symbol thesis when selected provider fails', async () => {
+    const provider: HomeAiProvider = {
+      providerType: 'local_llm',
+      generateAlertSummary: vi.fn(async () => {
+        throw new Error('unused');
+      }),
+      generateDailySummary: vi.fn(async () => {
+        throw new Error('unused');
+      }),
+      generateSymbolThesisSummary: vi.fn(async () => {
+        throw new Error('provider failed');
+      }),
+    };
+    const stubProvider: HomeAiProvider = {
+      providerType: 'stub',
+      generateAlertSummary: vi.fn(async () => {
+        throw new Error('unused');
+      }),
+      generateDailySummary: vi.fn(async () => {
+        throw new Error('unused');
+      }),
+      generateSymbolThesisSummary: vi.fn(async () => ({
+        title: 'stub-symbol',
+        bodyMarkdown: 'stub-symbol',
+        structuredJson: {
+          schema_name: 'symbol_thesis_summary',
+          schema_version: '1.0',
+          confidence: 'low',
+          insufficient_context: true,
+          payload: {
+            bullish_points: [],
+            bearish_points: [],
+            watch_kpis: [],
+            next_events: [],
+            invalidation_conditions: [],
+            overall_view: 'stub',
+          },
+        },
+        modelName: 'stub-model',
+        promptVersion: 'v1',
+      })),
+    };
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generateSymbolThesisSummary({
+      scope: 'thesis',
+      symbol: {
+        id: 'sym-1',
+        symbol: 'TYO:7203',
+        symbolCode: '7203',
+        displayName: 'Toyota',
+        marketCode: 'JP',
+        tradingviewSymbol: 'TYO:7203',
+      },
+      referenceIds: [],
+      references: [],
+      snapshot: null,
+      latestNoteSummary: null,
+    });
+
+    expect(result.output.title).toBe('stub-symbol');
+    expect(result.log.fallbackToStub).toBe(true);
+    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
+    expect(provider.generateSymbolThesisSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateSymbolThesisSummary).toHaveBeenCalledTimes(1);
   });
 });

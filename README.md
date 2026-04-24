@@ -84,6 +84,19 @@ pnpm run down
   - `POST /api/summaries/daily/generate` (`type=morning|evening`, `latest` は生成対象外)
   - `GET /api/summaries/daily?type=morning|evening|latest&date=YYYY-MM-DD`
 
+## Symbol AI論点カード（最小）
+- SymbolDetail の AI論点カードは専用 API で取得する。
+  - `GET /api/symbols/:symbolId/ai-summary?scope=thesis|latest`
+  - 未生成時は `summary.status=unavailable` を返す（UI は部分成立）。
+- 生成 API:
+  - `POST /api/symbols/:symbolId/ai-summary/generate`
+  - request: `{ "scope": "thesis", "reference_ids": [] }`
+- 保存方針:
+  - 状態: `ai_jobs`
+  - 生成物: `ai_summaries`（`summary_scope=thesis`）
+- provider は Home AI と共通境界を利用し、`HOME_AI_PROVIDER=stub|local_llm|openai_api` を流用する。
+- `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、レスポンス/保存 shape を維持する。
+
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
 - 現在の対応範囲:
