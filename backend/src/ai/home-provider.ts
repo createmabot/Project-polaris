@@ -97,11 +97,56 @@ export type SymbolThesisOutput = {
   promptVersion: string;
 };
 
+export type ComparisonSummaryContext = {
+  comparisonId: string;
+  symbols: Array<{
+    id: string;
+    symbol: string;
+    symbolCode: string | null;
+    displayName: string | null;
+    marketCode: string | null;
+    tradingviewSymbol: string | null;
+  }>;
+  metrics: string[];
+  comparedMetricJson: Record<string, unknown>;
+  references: Array<{
+    id: string;
+    title: string;
+    referenceType: string;
+    sourceName: string | null;
+    sourceUrl: string | null;
+    publishedAt: string | null;
+    summaryText: string | null;
+  }>;
+};
+
+export type ComparisonSummaryOutput = {
+  title: string;
+  bodyMarkdown: string;
+  structuredJson: {
+    schema_name: 'comparison_summary';
+    schema_version: '1.0';
+    confidence: 'high' | 'medium' | 'low';
+    insufficient_context: boolean;
+    payload: {
+      key_differences: string[];
+      risk_points: string[];
+      next_actions: string[];
+      compared_symbols: string[];
+      reference_ids: string[];
+      overall_view: string;
+    };
+  };
+  modelName: string;
+  promptVersion: string;
+};
+
 export type HomeAiProvider = {
   providerType: HomeAiProviderType;
   generateAlertSummary: (context: AlertSummaryContext) => Promise<AlertSummaryOutput>;
   generateDailySummary: (context: DailySummaryContext) => Promise<DailySummaryOutput>;
   generateSymbolThesisSummary: (context: SymbolThesisContext) => Promise<SymbolThesisOutput>;
+  generateComparisonSummary: (context: ComparisonSummaryContext) => Promise<ComparisonSummaryOutput>;
 };
 
 function buildDeterministicDailyOutput(
@@ -232,6 +277,56 @@ function buildDeterministicSymbolOutput(
   };
 }
 
+function buildDeterministicComparisonOutput(
+  context: ComparisonSummaryContext,
+  options: { modelName: string; promptVersion: string; titlePrefix: string },
+): ComparisonSummaryOutput {
+  const symbolLabels = context.symbols.map((symbol) => symbol.displayName ?? symbol.symbolCode ?? symbol.symbol);
+  const insufficientContext = symbolLabels.length < 2 || context.metrics.length === 0;
+  const confidence: 'high' | 'medium' | 'low' = insufficientContext
+    ? 'low'
+    : context.references.length >= 2
+      ? 'high'
+      : 'medium';
+  const title = `${options.titlePrefix}Comparison Summary: ${symbolLabels.join(' vs ')}`;
+
+  return {
+    title,
+    bodyMarkdown: [
+      `## ${title}`,
+      '',
+      `- symbols: ${symbolLabels.join(', ')}`,
+      `- metrics: ${context.metrics.join(', ')}`,
+      `- references: ${context.references.length}`,
+      insufficientContext ? '- context: insufficient' : '- context: minimal sufficient',
+    ].join('\n'),
+    structuredJson: {
+      schema_name: 'comparison_summary',
+      schema_version: '1.0',
+      confidence,
+      insufficient_context: insufficientContext,
+      payload: {
+        key_differences: [
+          context.metrics.length > 0
+            ? `Primary difference axis: ${context.metrics.slice(0, 2).join(', ')}`
+            : 'Insufficient metrics to identify differences',
+        ],
+        risk_points: insufficientContext
+          ? ['Input context is limited. Treat this as provisional.']
+          : ['Cross-check recent alerts and references for regime change risk.'],
+        next_actions: ['Review latest disclosures', 'Validate thesis consistency with current snapshots'],
+        compared_symbols: context.symbols.map((symbol) => symbol.id),
+        reference_ids: context.references.map((reference) => reference.id),
+        overall_view: insufficientContext
+          ? 'Comparison context is limited and should be used only as a starting point.'
+          : 'Current comparison suggests a measurable gap, but requires follow-up validation.',
+      },
+    },
+    modelName: options.modelName,
+    promptVersion: options.promptVersion,
+  };
+}
+
 class StubHomeAiProvider implements HomeAiProvider {
   readonly providerType: HomeAiProviderType = 'stub';
   private readonly adapter = new MockAiAdapter();
@@ -252,6 +347,14 @@ class StubHomeAiProvider implements HomeAiProvider {
     return buildDeterministicSymbolOutput(context, {
       modelName: 'stub-symbol-v1',
       promptVersion: 'v1.0.0-symbol-stub',
+      titlePrefix: '[Stub] ',
+    });
+  }
+
+  async generateComparisonSummary(context: ComparisonSummaryContext): Promise<ComparisonSummaryOutput> {
+    return buildDeterministicComparisonOutput(context, {
+      modelName: 'stub-compare-v1',
+      promptVersion: 'v1.0.0-compare-stub',
       titlePrefix: '[Stub] ',
     });
   }
@@ -487,6 +590,96 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       },
     };
   }
+
+  async generateComparisonSummary(context: ComparisonSummaryContext): Promise<ComparisonSummaryOutput> {
+    const deterministic = buildDeterministicComparisonOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-compare-local',
+      titlePrefix: '[LocalLLM] ',
+    });
+
+    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Generate a concise comparison summary for stock analysis. Return strict JSON only.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              comparison_id: context.comparisonId,
+              symbols: context.symbols,
+              metrics: context.metrics,
+              compared_metric_json: context.comparedMetricJson,
+              references: context.references.slice(0, 8),
+              output_schema: {
+                title: '<string>',
+                body_markdown: '<string>',
+                key_differences: ['<string>'],
+                risk_points: ['<string>'],
+                next_actions: ['<string>'],
+                overall_view: '<string>',
+              },
+            }),
+          },
+        ],
+        temperature: 0.2,
+        max_tokens: 900,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`local_llm comparison summary failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    if (!content) {
+      throw new Error('local_llm comparison summary returned empty content');
+    }
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+    } catch {
+      return deterministic;
+    }
+
+    return {
+      ...deterministic,
+      title: typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title,
+      bodyMarkdown:
+        typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
+          ? parsed.body_markdown
+          : deterministic.bodyMarkdown,
+      structuredJson: {
+        ...deterministic.structuredJson,
+        payload: {
+          ...deterministic.structuredJson.payload,
+          key_differences: Array.isArray(parsed?.key_differences)
+            ? parsed.key_differences.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+            : deterministic.structuredJson.payload.key_differences,
+          risk_points: Array.isArray(parsed?.risk_points)
+            ? parsed.risk_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+            : deterministic.structuredJson.payload.risk_points,
+          next_actions: Array.isArray(parsed?.next_actions)
+            ? parsed.next_actions.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+            : deterministic.structuredJson.payload.next_actions,
+          overall_view:
+            typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
+              ? parsed.overall_view
+              : deterministic.structuredJson.payload.overall_view,
+        },
+      },
+    };
+  }
 }
 
 class OpenAiHomeAiProvider implements HomeAiProvider {
@@ -610,6 +803,74 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
     if (!response.ok) {
       const body = await response.text().catch(() => '');
       throw new Error(`openai_api symbol thesis failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) {
+      return deterministic;
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      if (typeof parsed?.title === 'string' && parsed.title.trim()) {
+        return {
+          ...deterministic,
+          title: parsed.title,
+        };
+      }
+    } catch {
+      return deterministic;
+    }
+
+    return deterministic;
+  }
+
+  async generateComparisonSummary(context: ComparisonSummaryContext): Promise<ComparisonSummaryOutput> {
+    if (!this.apiKey) {
+      throw new Error('openai_api provider requires FALLBACK_API_KEY');
+    }
+
+    const deterministic = buildDeterministicComparisonOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-compare-openai',
+      titlePrefix: '[OpenAI] ',
+    });
+
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: 'Generate a concise comparison summary as strict JSON.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              comparison_id: context.comparisonId,
+              symbols: context.symbols,
+              metrics: context.metrics,
+              compared_metric_json: context.comparedMetricJson,
+              references: context.references.slice(0, 8),
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 900,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`openai_api comparison summary failed: HTTP ${response.status} ${body.slice(0, 200)}`);
     }
 
     const data: any = await response.json();

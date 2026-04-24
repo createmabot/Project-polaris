@@ -1,7 +1,8 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+﻿import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import crypto from 'crypto';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
-import { AiRouter } from '../ai/router';
+import { HomeAiService } from '../ai/home-ai-service';
 import { CurrentSnapshot, getCurrentSnapshotsForSymbols } from '../market/snapshot';
 
 type JsonObject = Record<string, unknown>;
@@ -434,66 +435,151 @@ async function runComparisonSummaryGeneration(params: {
   comparedMetricJson: ReturnType<typeof buildComparedMetricJson>;
 }) {
   const { comparisonId, symbolViews, comparedMetricJson } = params;
-  const router = new AiRouter();
+  const homeAiService = new HomeAiService();
 
   const referencePool = symbolViews
     .flatMap((item) => item.related_references.map((ref) => ({
       id: ref.id,
       referenceType: ref.reference_type,
-      sourceType: ref.reference_type,
       title: ref.title,
       sourceName: ref.source_name,
       sourceUrl: ref.source_url,
-      publishedAt: ref.published_at,
       publishedAtIso: ref.published_at ? ref.published_at.toISOString() : null,
       summaryText: ref.summary_text,
-      relevanceScore: null,
     })))
     .slice(0, 10);
+
+  const inputSnapshot = JSON.stringify({
+    comparison_id: comparisonId,
+    symbols: symbolViews
+      .map((item) => ({
+        id: item.symbol.id,
+        symbol: item.symbol.symbol,
+        symbol_code: item.symbol.symbol_code,
+        display_name: item.symbol.display_name,
+        market_code: item.symbol.market_code,
+        tradingview_symbol: item.symbol.tradingview_symbol,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+    compared_metric_json: comparedMetricJson,
+    references: referencePool
+      .map((ref) => ({
+        id: ref.id,
+        reference_type: ref.referenceType,
+        title: ref.title,
+        published_at: ref.publishedAtIso,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  });
+  const inputSnapshotHash = crypto.createHash('sha256').update(inputSnapshot).digest('hex');
+
+  const existingSummary = await prisma.aiSummary.findFirst({
+    where: {
+      targetEntityType: 'comparison_session',
+      targetEntityId: comparisonId,
+      summaryScope: 'comparison',
+      inputSnapshotHash,
+    },
+    orderBy: { generatedAt: 'desc' },
+  });
+
+  if (existingSummary) {
+    const existingJob = await prisma.aiJob.create({
+      data: {
+        jobType: 'generate_comparison_summary',
+        targetEntityType: 'comparison_session',
+        targetEntityId: comparisonId,
+        status: 'succeeded',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        requestPayload: { compared_metric_json: comparedMetricJson } as any,
+        responsePayload: {
+          summary_id: existingSummary.id,
+          skipped: 'duplicate',
+        } as any,
+        modelName: existingSummary.modelName,
+        promptVersion: existingSummary.promptVersion,
+      },
+    });
+
+    return {
+      ai_job_id: existingJob.id,
+      ai_summary_id: existingSummary.id,
+      generated_at: existingSummary.generatedAt ?? new Date(),
+    };
+  }
 
   const aiJob = await prisma.aiJob.create({
     data: {
       jobType: 'generate_comparison_summary',
       targetEntityType: 'comparison_session',
       targetEntityId: comparisonId,
-      status: 'running',
-      startedAt: new Date(),
+      status: 'queued',
       requestPayload: { compared_metric_json: comparedMetricJson } as any,
     },
   });
 
+  await prisma.aiJob.update({
+    where: { id: aiJob.id },
+    data: {
+      status: 'running',
+      startedAt: new Date(),
+    },
+  });
+
   try {
-    const routerContext = {
-      alertEventId: `comparison:${comparisonId}`,
-      alertName: `comparison_summary_${comparisonId}`,
-      alertType: 'comparison',
-      timeframe: null,
-      triggerPrice: null,
-      triggeredAt: new Date(),
-      symbol: null,
-      rawPayload: { compared_metric_json: comparedMetricJson } as Record<string, unknown>,
-      referenceIds: referencePool.map((ref) => ref.id),
-      references: referencePool,
-    };
+    const symbolsForAi = symbolViews.map((item) => ({
+      id: item.symbol.id,
+      symbol: item.symbol.symbol,
+      symbolCode: item.symbol.symbol_code,
+      displayName: item.symbol.display_name,
+      marketCode: item.symbol.market_code,
+      tradingviewSymbol: item.symbol.tradingview_symbol,
+    }));
+    const metrics = Array.isArray(comparedMetricJson.metrics)
+      ? comparedMetricJson.metrics.filter((metric): metric is string => typeof metric === 'string')
+      : [];
 
-    const { output, log } = await router.generateAlertSummary(routerContext);
+    const { output, log } = await homeAiService.generateComparisonSummary({
+      comparisonId,
+      symbols: symbolsForAi,
+      metrics,
+      comparedMetricJson: comparedMetricJson as Record<string, unknown>,
+      references: referencePool.map((reference) => ({
+        id: reference.id,
+        title: reference.title,
+        referenceType: reference.referenceType,
+        sourceName: reference.sourceName,
+        sourceUrl: reference.sourceUrl,
+        publishedAt: reference.publishedAtIso,
+        summaryText: reference.summaryText,
+      })),
+    });
+
     const generatedAt = new Date();
-    const symbolLabels = symbolViews.map((item) => item.symbol.display_name ?? item.symbol.symbol_code ?? item.symbol.symbol);
-
-    const structuredJson = {
-      schema_name: 'comparison_summary',
-      schema_version: '1.0',
-      confidence: output.structuredJson.confidence,
-      insufficient_context: output.structuredJson.insufficient_context,
-      payload: {
-        overall_view: output.structuredJson.payload.what_happened,
-        key_differences: output.structuredJson.payload.fact_points,
-        risk_points: output.structuredJson.payload.watch_points,
-        next_actions: output.structuredJson.payload.next_actions,
-        compared_symbols: symbolViews.map((item) => item.symbol.id),
-        reference_ids: referencePool.map((ref) => ref.id),
+    const aiSummary = await prisma.aiSummary.create({
+      data: {
+        aiJobId: aiJob.id,
+        userId: null,
+        summaryScope: 'comparison',
+        targetEntityType: 'comparison_session',
+        targetEntityId: comparisonId,
+        title: output.title,
+        bodyMarkdown: output.bodyMarkdown,
+        structuredJson: output.structuredJson as any,
+        modelName: output.modelName,
+        promptVersion: output.promptVersion,
+        generatedAt,
+        inputSnapshotHash,
+        generationContextJson: {
+          provider: log.provider,
+          fallback_to_stub: log.fallbackToStub,
+          symbol_count: symbolsForAi.length,
+          reference_count: referencePool.length,
+          metrics,
+        } as any,
       },
-    };
+    });
 
     await prisma.aiJob.update({
       where: { id: aiJob.id },
@@ -510,17 +596,14 @@ async function runComparisonSummaryGeneration(params: {
         durationMs: log.durationMs,
         estimatedTokens: log.estimatedTokens,
         estimatedCostUsd: log.estimatedCostUsd,
+        responsePayload: { summary_id: aiSummary.id } as any,
       },
     });
 
     return {
       ai_job_id: aiJob.id,
+      ai_summary_id: aiSummary.id,
       generated_at: generatedAt,
-      title: `比較総評: ${symbolLabels.join(' vs ')}`,
-      body_markdown: output.bodyMarkdown,
-      structured_json: structuredJson,
-      model_name: output.modelName,
-      prompt_version: output.promptVersion,
     };
   } catch (error: unknown) {
     await prisma.aiJob.update({
@@ -533,6 +616,16 @@ async function runComparisonSummaryGeneration(params: {
     });
     throw error;
   }
+}
+
+async function resolveComparisonAiSummaryByJob(aiJobId: string | null) {
+  if (!aiJobId) {
+    return null;
+  }
+  return prisma.aiSummary.findFirst({
+    where: { aiJobId },
+    orderBy: { generatedAt: 'desc' },
+  });
 }
 
 export async function comparisonRoutes(fastify: FastifyInstance) {
@@ -649,6 +742,7 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
       where: { comparisonSessionId: comparisonId },
       orderBy: { generatedAt: 'desc' },
     });
+    const aiSummary = await resolveComparisonAiSummaryByJob(latestResult?.aiJobId ?? null);
 
     const data = {
       comparison_header: {
@@ -666,13 +760,15 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
             id: latestResult.id,
             generated_at: latestResult.generatedAt,
             compared_metric_json: latestResult.comparedMetricJson,
-            ai_summary: latestResult.bodyMarkdown
+            ai_summary_id: aiSummary?.id ?? null,
+            ai_summary: aiSummary
               ? {
-                  title: latestResult.title,
-                  body_markdown: latestResult.bodyMarkdown,
-                  structured_json: latestResult.structuredJson,
-                  model_name: latestResult.modelName,
-                  prompt_version: latestResult.promptVersion,
+                  summary_id: aiSummary.id,
+                  title: aiSummary.title,
+                  body_markdown: aiSummary.bodyMarkdown,
+                  structured_json: aiSummary.structuredJson,
+                  model_name: aiSummary.modelName,
+                  prompt_version: aiSummary.promptVersion,
                 }
               : null,
           }
@@ -723,6 +819,9 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
       : null;
 
     const generatedAt = aiSummaryResult?.generated_at ?? new Date();
+    const generatedAiSummary = aiSummaryResult?.ai_summary_id
+      ? await prisma.aiSummary.findFirst({ where: { id: aiSummaryResult.ai_summary_id } })
+      : null;
 
     const latestResult = await prisma.comparisonResult.findFirst({
       where: { comparisonSessionId: comparisonId },
@@ -734,11 +833,11 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
           where: { id: latestResult.id },
           data: {
             aiJobId: aiSummaryResult?.ai_job_id ?? null,
-            title: aiSummaryResult?.title ?? null,
-            bodyMarkdown: aiSummaryResult?.body_markdown ?? null,
-            structuredJson: aiSummaryResult?.structured_json as any,
-            modelName: aiSummaryResult?.model_name ?? null,
-            promptVersion: aiSummaryResult?.prompt_version ?? null,
+            title: null,
+            bodyMarkdown: null,
+            structuredJson: undefined,
+            modelName: null,
+            promptVersion: null,
             comparedMetricJson: comparedMetricJson as any,
             generatedAt,
           },
@@ -747,11 +846,11 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
           data: {
             comparisonSessionId: comparisonId,
             aiJobId: aiSummaryResult?.ai_job_id ?? null,
-            title: aiSummaryResult?.title ?? null,
-            bodyMarkdown: aiSummaryResult?.body_markdown ?? null,
-            structuredJson: aiSummaryResult?.structured_json as any,
-            modelName: aiSummaryResult?.model_name ?? null,
-            promptVersion: aiSummaryResult?.prompt_version ?? null,
+            title: null,
+            bodyMarkdown: null,
+            structuredJson: undefined,
+            modelName: null,
+            promptVersion: null,
             comparedMetricJson: comparedMetricJson as any,
             generatedAt,
           },
@@ -760,15 +859,17 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
     const data = {
       comparison_result_id: saved.id,
       ai_job_id: aiSummaryResult?.ai_job_id ?? null,
+      ai_summary_id: generatedAiSummary?.id ?? null,
       generated_at: saved.generatedAt,
       compared_metric_json: saved.comparedMetricJson,
-      ai_summary: saved.bodyMarkdown
+      ai_summary: generatedAiSummary
         ? {
-            title: saved.title,
-            body_markdown: saved.bodyMarkdown,
-            structured_json: saved.structuredJson,
-            model_name: saved.modelName,
-            prompt_version: saved.promptVersion,
+            summary_id: generatedAiSummary.id,
+            title: generatedAiSummary.title,
+            body_markdown: generatedAiSummary.bodyMarkdown,
+            structured_json: generatedAiSummary.structuredJson,
+            model_name: generatedAiSummary.modelName,
+            prompt_version: generatedAiSummary.promptVersion,
           }
         : null,
     };

@@ -97,6 +97,17 @@ pnpm run down
 - provider は Home AI と共通境界を利用し、`HOME_AI_PROVIDER=stub|local_llm|openai_api` を流用する。
 - `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、レスポンス/保存 shape を維持する。
 
+## Comparison AI総評（最小）
+- 比較総評 API:
+  - `POST /api/comparisons/:comparisonId/generate`
+  - `GET /api/comparisons/:comparisonId`
+- 保存方針:
+  - 状態: `ai_jobs`（`queued -> running -> succeeded|failed`）
+  - 生成物: `ai_summaries`（`summary_scope=comparison`, `target_entity_type=comparison_session`）
+  - `comparison_results` は `compared_metric_json` と `ai_job_id` で結果参照を保持する。
+- `GET /api/comparisons/:comparisonId` は `latest_result.ai_summary_id` と `latest_result.ai_summary` を返し、未生成時は `ai_summary=null` で部分成立する。
+- provider は Home/Symbol AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
+
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
 - 現在の対応範囲:

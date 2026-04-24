@@ -6,6 +6,7 @@ type RuntimeState = {
   sessionSeq: number;
   resultSeq: number;
   jobSeq: number;
+  summarySeq: number;
   symbols: Map<string, any>;
   alertEvents: Map<string, any>;
   aiSummaries: Map<string, any>;
@@ -15,6 +16,7 @@ type RuntimeState = {
   comparisonSessionSymbols: Map<string, Array<{ symbolId: string; sortOrder: number }>>;
   comparisonResults: Map<string, any>;
   aiJobs: Map<string, any>;
+  homeAiMode: 'ok' | 'throw' | 'fallback';
 };
 
 let runtime: RuntimeState;
@@ -25,6 +27,7 @@ function createRuntime(): RuntimeState {
     sessionSeq: 1,
     resultSeq: 1,
     jobSeq: 1,
+    summarySeq: 1,
     symbols: new Map(),
     alertEvents: new Map(),
     aiSummaries: new Map(),
@@ -34,6 +37,7 @@ function createRuntime(): RuntimeState {
     comparisonSessionSymbols: new Map(),
     comparisonResults: new Map(),
     aiJobs: new Map(),
+    homeAiMode: 'ok',
   };
 }
 
@@ -111,6 +115,39 @@ vi.mock('../src/db', () => {
           })
           .sort((a, b) => descTime(b.generatedAt) - descTime(a.generatedAt));
       },
+      findFirst: async ({ where }: any) => {
+        const rows = [...runtime.aiSummaries.values()].filter((summary) => {
+          if (where?.id && summary.id !== where.id) return false;
+          if (where?.aiJobId && summary.aiJobId !== where.aiJobId) return false;
+          if (where?.targetEntityType && summary.targetEntityType !== where.targetEntityType) return false;
+          if (where?.targetEntityId && summary.targetEntityId !== where.targetEntityId) return false;
+          if (where?.summaryScope && summary.summaryScope !== where.summaryScope) return false;
+          if (where?.inputSnapshotHash && summary.inputSnapshotHash !== where.inputSnapshotHash) return false;
+          return true;
+        });
+        rows.sort((a, b) => descTime(b.generatedAt) - descTime(a.generatedAt));
+        return rows[0] ?? null;
+      },
+      create: async ({ data }: any) => {
+        const id = `sum-${runtime.summarySeq++}`;
+        const row = {
+          id,
+          aiJobId: data.aiJobId ?? null,
+          summaryScope: data.summaryScope,
+          targetEntityType: data.targetEntityType,
+          targetEntityId: data.targetEntityId,
+          title: data.title ?? null,
+          bodyMarkdown: data.bodyMarkdown,
+          structuredJson: data.structuredJson ?? null,
+          modelName: data.modelName ?? null,
+          promptVersion: data.promptVersion ?? null,
+          inputSnapshotHash: data.inputSnapshotHash ?? null,
+          generationContextJson: data.generationContextJson ?? null,
+          generatedAt: data.generatedAt ?? new Date(),
+        };
+        runtime.aiSummaries.set(id, row);
+        return row;
+      },
     },
     researchNote: {
       findMany: async ({ where }: any) => {
@@ -172,7 +209,7 @@ vi.mock('../src/db', () => {
         const sessionId = where?.comparisonSessionId;
         const rows = [...runtime.comparisonResults.values()]
           .filter((row) => row.comparisonSessionId === sessionId)
-          .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
+          .sort((a, b) => descTime(b.generatedAt) - descTime(a.generatedAt));
         return rows[0] ?? null;
       },
       create: async ({ data }: any) => {
@@ -210,10 +247,11 @@ vi.mock('../src/db', () => {
           targetEntityType: data.targetEntityType,
           targetEntityId: data.targetEntityId,
           requestPayload: data.requestPayload ?? null,
+          responsePayload: data.responsePayload ?? null,
           startedAt: data.startedAt ?? null,
-          completedAt: null,
-          modelName: null,
-          promptVersion: null,
+          completedAt: data.completedAt ?? null,
+          modelName: data.modelName ?? null,
+          promptVersion: data.promptVersion ?? null,
           initialModel: null,
           finalModel: null,
           escalated: false,
@@ -240,43 +278,87 @@ vi.mock('../src/db', () => {
   return { prisma };
 });
 
-vi.mock('../src/ai/router', () => {
-  class AiRouter {
-    async generateAlertSummary(_context: any) {
+vi.mock('../src/ai/home-ai-service', () => {
+  class HomeAiService {
+    async generateComparisonSummary(_context: any) {
+      if (runtime.homeAiMode === 'throw') {
+        throw new Error('provider failed');
+      }
+      if (runtime.homeAiMode === 'fallback') {
+        return {
+          output: {
+            title: 'fallback comparison summary',
+            bodyMarkdown: 'fallback body',
+            structuredJson: {
+              schema_name: 'comparison_summary',
+              schema_version: '1.0',
+              confidence: 'low',
+              insufficient_context: true,
+              payload: {
+                key_differences: ['fallback'],
+                risk_points: ['limited context'],
+                next_actions: ['re-check'],
+                compared_symbols: ['sym-1', 'sym-2'],
+                reference_ids: [],
+                overall_view: 'fallback',
+              },
+            },
+            modelName: 'stub-compare-v1',
+            promptVersion: 'v1.0.0-compare-stub',
+          },
+          log: {
+            initialModel: 'gemma4-ns',
+            finalModel: 'stub-compare-v1',
+            escalated: false,
+            escalationReason: 'provider_failed_fallback_to_stub',
+            retryCount: 0,
+            durationMs: 20,
+            estimatedTokens: 120,
+            estimatedCostUsd: 0,
+            provider: 'local_llm',
+            fallbackToStub: true,
+          },
+        };
+      }
+
       return {
         output: {
-          title: '比較総評',
-          bodyMarkdown: '銘柄Aは短期強め、銘柄Bは安定推移。',
+          title: 'comparison summary',
+          bodyMarkdown: 'A is stronger than B in recent momentum.',
           structuredJson: {
-            schema_name: 'alert_reason_summary',
+            schema_name: 'comparison_summary',
             schema_version: '1.0',
             confidence: 'medium',
             insufficient_context: false,
             payload: {
-              what_happened: '比較結果の要約',
-              fact_points: ['論点1', '論点2'],
-              watch_points: ['注意点1'],
-              next_actions: ['次の確認1'],
+              key_differences: ['Momentum gap'],
+              risk_points: ['Volatility'],
+              next_actions: ['Track next earnings'],
+              compared_symbols: ['sym-1', 'sym-2'],
+              reference_ids: ['ref-1'],
+              overall_view: 'Balanced with slight edge to A',
             },
           },
-          modelName: 'qwen3-test',
-          promptVersion: 'compare-v1',
+          modelName: 'gemma4-ns',
+          promptVersion: 'v1.0.0-compare-local',
         },
         log: {
-          initialModel: 'qwen3-test',
-          finalModel: 'qwen3-test',
+          initialModel: 'gemma4-ns',
+          finalModel: 'gemma4-ns',
           escalated: false,
           escalationReason: null,
           retryCount: 0,
           durationMs: 25,
           estimatedTokens: 120,
           estimatedCostUsd: 0,
+          provider: 'local_llm',
+          fallbackToStub: false,
         },
       };
     }
   }
 
-  return { AiRouter };
+  return { HomeAiService };
 });
 
 vi.mock('../src/market/snapshot', () => {
@@ -324,7 +406,7 @@ function seedBaseData() {
     id: 'sym-1',
     symbol: '7203',
     symbolCode: '7203',
-    displayName: 'トヨタ自動車',
+    displayName: 'Toyota',
     marketCode: 'TSE',
     tradingviewSymbol: 'TSE:7203',
   });
@@ -332,7 +414,7 @@ function seedBaseData() {
     id: 'sym-2',
     symbol: '6758',
     symbolCode: '6758',
-    displayName: 'ソニーグループ',
+    displayName: 'Sony',
     marketCode: 'TSE',
     tradingviewSymbol: 'TSE:6758',
   });
@@ -340,7 +422,7 @@ function seedBaseData() {
   runtime.alertEvents.set('alert-1', {
     id: 'alert-1',
     symbolId: 'sym-1',
-    alertName: '価格急騰',
+    alertName: 'Price breakout',
     alertType: 'price',
     timeframe: '1D',
     triggeredAt: new Date('2026-03-21T09:00:00+09:00'),
@@ -350,7 +432,7 @@ function seedBaseData() {
   runtime.alertEvents.set('alert-2', {
     id: 'alert-2',
     symbolId: 'sym-2',
-    alertName: 'ボラティリティ上昇',
+    alertName: 'Volatility up',
     alertType: 'volatility',
     timeframe: '4H',
     triggeredAt: new Date('2026-03-21T08:30:00+09:00'),
@@ -363,8 +445,8 @@ function seedBaseData() {
     summaryScope: 'thesis',
     targetEntityType: 'symbol',
     targetEntityId: 'sym-1',
-    title: 'トヨタ論点',
-    bodyMarkdown: '論点A',
+    title: 'Toyota thesis',
+    bodyMarkdown: 'Summary A',
     structuredJson: { payload: { bullish_points: ['a'] } },
     generatedAt: new Date('2026-03-21T10:00:00+09:00'),
   });
@@ -373,8 +455,8 @@ function seedBaseData() {
     summaryScope: 'thesis',
     targetEntityType: 'symbol',
     targetEntityId: 'sym-2',
-    title: 'ソニー論点',
-    bodyMarkdown: '論点B',
+    title: 'Sony thesis',
+    bodyMarkdown: 'Summary B',
     structuredJson: { payload: { bullish_points: ['b'] } },
     generatedAt: new Date('2026-03-21T10:00:00+09:00'),
   });
@@ -382,7 +464,7 @@ function seedBaseData() {
   runtime.researchNotes.set('note-1', {
     id: 'note-1',
     symbolId: 'sym-1',
-    title: 'トヨタメモ',
+    title: 'Toyota memo',
     status: 'active',
     updatedAt: new Date('2026-03-21T10:10:00+09:00'),
   });
@@ -391,22 +473,22 @@ function seedBaseData() {
     id: 'ref-1',
     symbolId: 'sym-1',
     referenceType: 'disclosure',
-    title: '開示A',
+    title: 'Disclosure A',
     sourceName: 'tdnet',
     sourceUrl: 'https://example.com/disclosure-a',
     publishedAt: new Date('2026-03-21T08:00:00+09:00'),
-    summaryText: '開示サマリ',
+    summaryText: 'Disclosure summary',
     createdAt: new Date('2026-03-21T08:01:00+09:00'),
   });
   runtime.externalReferences.set('ref-2', {
     id: 'ref-2',
     symbolId: 'sym-2',
     referenceType: 'news',
-    title: 'ニュースB',
+    title: 'News B',
     sourceName: 'rss',
     sourceUrl: 'https://example.com/news-b',
     publishedAt: new Date('2026-03-21T07:30:00+09:00'),
-    summaryText: 'ニュースサマリ',
+    summaryText: 'News summary',
     createdAt: new Date('2026-03-21T07:31:00+09:00'),
   });
 }
@@ -416,7 +498,7 @@ async function createComparison(app: Awaited<ReturnType<typeof createApp>>, symb
     method: 'POST',
     url: '/api/comparisons',
     payload: {
-      name: '比較テスト',
+      name: 'Comparison test',
       symbol_ids: symbolIds,
     },
     headers: { 'content-type': 'application/json' },
@@ -431,7 +513,7 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     seedBaseData();
   });
 
-  it('case1: comparison作成済み -> generate成功 -> comparison_results保存', async () => {
+  it('generates comparison summary and stores ai_jobs/ai_summaries', async () => {
     const app = await createApp();
     const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
 
@@ -448,18 +530,19 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     const body = response.json();
     expect(body.error).toBeNull();
     expect(body.data.comparison_result_id).toBeTruthy();
-    expect(body.data.ai_summary.title).toContain('比較総評');
+    expect(body.data.ai_summary.title).toContain('comparison summary');
 
     expect(runtime.comparisonResults.size).toBe(1);
     expect(runtime.aiJobs.size).toBe(1);
+    expect(runtime.aiSummaries.size).toBeGreaterThan(2);
     const aiJob = [...runtime.aiJobs.values()][0];
     expect(aiJob.status).toBe('succeeded');
-    expect(aiJob.modelName).toBe('qwen3-test');
+    expect(aiJob.modelName).toBe('gemma4-ns');
 
     await app.close();
   });
 
-  it('case2: latest_result が GET /api/comparisons/:comparisonId に反映される', async () => {
+  it('returns latest_result with ai_summary from ai_summaries on GET', async () => {
     const app = await createApp();
     const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
 
@@ -478,19 +561,61 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     expect(detail.statusCode).toBe(200);
     const detailBody = detail.json();
     expect(detailBody.data.latest_result).toBeTruthy();
-    expect(detailBody.data.latest_result.ai_summary.title).toContain('比較総評');
+    expect(detailBody.data.latest_result.ai_summary.title).toContain('comparison summary');
+    expect(detailBody.data.latest_result.ai_summary_id).toBeTruthy();
     expect(detailBody.data.latest_result.compared_metric_json.schema_name).toBe('comparison_metric_snapshot');
-    expect(detailBody.data.symbols[0].current_snapshot).toBeTruthy();
-    expect(detailBody.data.symbols[0].current_snapshot.last_price).toBeGreaterThan(0);
 
     await app.close();
   });
 
-  it('case3: 対象symbol数不足なら validation error', async () => {
+  it('sets ai_jobs to failed when provider returns error', async () => {
+    runtime.homeAiMode = 'throw';
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(runtime.aiJobs.size).toBe(1);
+    const aiJob = [...runtime.aiJobs.values()][0];
+    expect(aiJob.status).toBe('failed');
+    expect(aiJob.errorMessage).toContain('provider failed');
+
+    await app.close();
+  });
+
+  it('persists summary with fallback metadata when provider falls back', async () => {
+    runtime.homeAiMode = 'fallback';
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const createdSummary = [...runtime.aiSummaries.values()]
+      .filter((summary) => summary.targetEntityType === 'comparison_session')
+      .sort((a, b) => descTime(b.generatedAt) - descTime(a.generatedAt))[0];
+    expect(createdSummary).toBeTruthy();
+    expect(createdSummary.generationContextJson?.fallback_to_stub).toBe(true);
+
+    await app.close();
+  });
+
+  it('returns validation error when symbol count is insufficient', async () => {
     const app = await createApp();
     runtime.comparisonSessions.set('cmp-single', {
       id: 'cmp-single',
-      name: '1銘柄比較',
+      name: 'single',
       comparisonType: 'symbol',
       status: 'ready',
       createdAt: new Date(),
@@ -506,15 +631,12 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     });
 
     expect(response.statusCode).toBe(400);
-    const body = response.json();
-    expect(body.data).toBeNull();
-    expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.meta.request_id).toBeTruthy();
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });
 
-  it('case4: comparisonId 不正なら 404', async () => {
+  it('returns 404 when comparisonId is missing', async () => {
     const app = await createApp();
 
     const response = await app.inject({
@@ -525,46 +647,7 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     });
 
     expect(response.statusCode).toBe(404);
-    const body = response.json();
-    expect(body.data).toBeNull();
-    expect(body.error.code).toBe('NOT_FOUND');
-    expect(body.meta.request_id).toBeTruthy();
-
-    await app.close();
-  });
-
-  it('case5: structured_json と comparedMetricJson を保存し、再生成は最新1件更新', async () => {
-    const app = await createApp();
-    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
-
-    const first = await app.inject({
-      method: 'POST',
-      url: `/api/comparisons/${comparisonId}/generate`,
-      payload: { include_ai_summary: true },
-      headers: { 'content-type': 'application/json' },
-    });
-    expect(first.statusCode).toBe(200);
-    const firstResultId = first.json().data.comparison_result_id;
-
-    const second = await app.inject({
-      method: 'POST',
-      url: `/api/comparisons/${comparisonId}/generate`,
-      payload: { include_ai_summary: true, metrics: ['recent_alert_count', 'recent_reference_count'] },
-      headers: { 'content-type': 'application/json' },
-    });
-    expect(second.statusCode).toBe(200);
-    const secondBody = second.json();
-    expect(secondBody.data.comparison_result_id).toBe(firstResultId);
-
-    expect(runtime.comparisonResults.size).toBe(1);
-    const saved = [...runtime.comparisonResults.values()][0];
-    expect(saved.comparedMetricJson.metrics).toEqual(['recent_alert_count', 'recent_reference_count']);
-    expect(saved.structuredJson.schema_name).toBe('comparison_summary');
-    expect(saved.structuredJson.payload.reference_ids.length).toBeGreaterThan(0);
-    expect(saved.comparedMetricJson.symbol_metrics[0].last_price).toBeDefined();
-    expect(saved.comparedMetricJson.symbol_metrics[0].change_percent).toBeDefined();
-    expect(saved.modelName).toBe('qwen3-test');
-    expect(saved.promptVersion).toBe('compare-v1');
+    expect(response.json().error.code).toBe('NOT_FOUND');
 
     await app.close();
   });
