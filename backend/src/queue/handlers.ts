@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import type { Job } from 'bullmq';
 import { prisma as defaultPrisma } from '../db';
-import { AiRouter } from '../ai/router';
+import { HomeAiService } from '../ai/home-ai-service';
 import { buildAlertSummaryContext as defaultBuildAlertSummaryContext } from '../ai/context-builder';
 import {
   referenceCollector as defaultReferenceCollector,
@@ -47,7 +47,7 @@ export type ReferenceCollectorLike = {
 
 export type BuildAlertSummaryContextLike = (alertEventId: string) => Promise<any>;
 
-export type AiRouterLike = {
+export type HomeAiServiceLike = {
   generateAlertSummary: (context: any) => Promise<{ output: any; log: any }>;
 };
 
@@ -55,7 +55,7 @@ export type QueueHandlerDeps = {
   prisma: PrismaLike;
   referenceCollector: ReferenceCollectorLike;
   buildAlertSummaryContext: BuildAlertSummaryContextLike;
-  createAiRouter: () => AiRouterLike;
+  createHomeAiService: () => HomeAiServiceLike;
   queue: QueueLike;
 };
 
@@ -63,7 +63,7 @@ const defaultDeps: QueueHandlerDeps = {
   prisma: defaultPrisma as unknown as PrismaLike,
   referenceCollector: defaultReferenceCollector,
   buildAlertSummaryContext: defaultBuildAlertSummaryContext,
-  createAiRouter: () => new AiRouter(),
+  createHomeAiService: () => new HomeAiService(),
   queue: {
     add: async () => {
       throw new Error('queue_not_initialized');
@@ -279,8 +279,8 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
         return { status: 'skipped_duplicate' };
       }
 
-      const router = deps.createAiRouter();
-      const { output, log } = await router.generateAlertSummary(context);
+      const homeAiService = deps.createHomeAiService();
+      const { output, log } = await homeAiService.generateAlertSummary(context);
       const generatedAt = new Date();
 
       logger.info({
@@ -318,6 +318,8 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
             timeframe: context.timeframe,
             symbolLabel: context.symbol?.displayName ?? context.symbol?.tradingviewSymbol ?? null,
             referenceCount: context.referenceIds.length,
+            provider: log.provider,
+            fallbackToStub: log.fallbackToStub,
             escalated: log.escalated,
             escalationReason: log.escalationReason,
           } as any,

@@ -182,6 +182,7 @@ vi.mock('../src/db', () => {
         if (Array.isArray(ids)) return alerts.filter((alert) => ids.includes(alert.symbolId));
         return alerts;
       },
+      count: async () => alerts.length,
     },
     aiSummary: {
       findMany: async () => [],
@@ -192,6 +193,11 @@ vi.mock('../src/db', () => {
     },
     externalReference: {
       findMany: async () => [],
+      count: async () => 1,
+    },
+    marketSnapshot: {
+      findMany: async () => [],
+      count: async () => 1,
     },
     position: {
       findMany: async () => [],

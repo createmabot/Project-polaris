@@ -177,7 +177,20 @@ vi.mock('../src/db', () => {
           id: `sum-${runtime.summaries.length + 1}`,
           ...data,
         };
-        runtime.summaries.push(row);
+        if (data.summaryScope === 'daily') {
+          runtime.dailySummaries.push({
+            id: row.id,
+            targetEntityType: row.targetEntityType,
+            summaryScope: row.summaryScope,
+            title: row.title ?? null,
+            bodyMarkdown: row.bodyMarkdown,
+            generatedAt: row.generatedAt ?? null,
+            structuredJson: row.structuredJson ?? null,
+            generationContextJson: row.generationContextJson ?? null,
+          });
+        } else {
+          runtime.summaries.push(row);
+        }
         return row;
       },
     },
@@ -222,8 +235,8 @@ vi.mock('../src/ai/context-builder', () => ({
   })),
 }));
 
-vi.mock('../src/ai/router', () => ({
-  AiRouter: class {
+vi.mock('../src/ai/home-ai-service', () => ({
+  HomeAiService: class {
     async generateAlertSummary(context: any) {
       const insufficient = !Array.isArray(context.referenceIds) || context.referenceIds.length === 0;
       return {
@@ -249,6 +262,43 @@ vi.mock('../src/ai/router', () => ({
           durationMs: 5,
           estimatedTokens: 12,
           estimatedCostUsd: 0,
+        },
+      };
+    }
+
+    async generateDailySummary(context: any) {
+      const insufficient =
+        context.marketSnapshotCount === 0 || context.alertCount === 0 || context.referenceCount === 0;
+      return {
+        output: {
+          title: `daily ${context.summaryType}`,
+          bodyMarkdown: `daily body (${context.summaryType})`,
+          structuredJson: {
+            schema_name: 'daily_summary',
+            schema_version: '1.0',
+            confidence: insufficient ? 'low' : 'medium',
+            insufficient_context: insufficient,
+            payload: {
+              highlights: [],
+              watch_items: ['watch'],
+              focus_symbols: [],
+              market_context: { tone: 'neutral', summary: 'summary' },
+            },
+          },
+          modelName: 'mock-v1',
+          promptVersion: 'v1.0.0-mock',
+        },
+        log: {
+          initialModel: 'mock-v1',
+          finalModel: 'mock-v1',
+          escalated: false,
+          escalationReason: null,
+          retryCount: 0,
+          durationMs: 5,
+          estimatedTokens: 12,
+          estimatedCostUsd: 0,
+          provider: 'stub',
+          fallbackToStub: false,
         },
       };
     }
@@ -329,6 +379,26 @@ describe('AI summary minimal flow routes', () => {
       summary_type: 'evening',
       date: '2026-04-18',
     });
+
+    await app.close();
+  });
+
+  it('generates daily summary via provider and stores ai_job', async () => {
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/summaries/daily/generate',
+      payload: { type: 'morning', date: '2026-04-19' },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.data.summary).toMatchObject({
+      status: 'available',
+      summary_type: 'morning',
+      date: '2026-04-19',
+    });
+    expect(runtime.aiJobs.some((row) => row.jobType === 'generate_daily_summary')).toBe(true);
 
     await app.close();
   });

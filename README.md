@@ -75,10 +75,13 @@ pnpm run down
 - `GET /api/home` は `summary_type=latest|morning|evening` と `date=YYYY-MM-DD` を受け取り、`daily_summary` を切替返却する。
 - `daily_summary` は `status=available|unavailable` と `insufficient_context` を含む。
 - `latest` は再生成ではなく保存済み summary の選択モード。
+- Home AI provider は `HOME_AI_PROVIDER=stub|local_llm|openai_api` で切替可能（既定: `local_llm`）。
+- `local_llm` / `openai_api` が失敗した場合は自動で `stub` へ fallback し、API shape は維持する。
 - alert 起点要約 API:
   - `POST /api/alerts/:alertId/summary/generate`
   - `GET /api/alerts/:alertId/summary`
 - 日次要約 API:
+  - `POST /api/summaries/daily/generate` (`type=morning|evening`, `latest` は生成対象外)
   - `GET /api/summaries/daily?type=morning|evening|latest&date=YYYY-MM-DD`
 
 ## ルール検証ラボ（MVP）
