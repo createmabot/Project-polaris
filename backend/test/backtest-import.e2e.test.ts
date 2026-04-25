@@ -452,6 +452,9 @@ describe('backtest import vertical slice', () => {
       title: 'Review title',
       body_markdown: 'Review body markdown',
       generated_at: '2026-01-01T00:00:00.000Z',
+      structured_json: null,
+      status: 'available',
+      insufficient_context: false,
     });
 
     await app.close();
@@ -506,6 +509,9 @@ describe('backtest import vertical slice', () => {
       title: 'Run review title',
       body_markdown: 'Run review body markdown',
       generated_at: '2026-02-01T00:00:00.000Z',
+      structured_json: null,
+      status: 'available',
+      insufficient_context: false,
     });
 
     await app.close();

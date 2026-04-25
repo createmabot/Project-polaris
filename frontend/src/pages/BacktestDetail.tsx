@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -187,11 +187,13 @@ export function buildBacktestRuleLabVersionDetailPath(strategyId: string, strate
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location] = useLocation();
-  const { data, error, isLoading } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
+  const { data, error, isLoading, mutate } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
   const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
   const [isSavingComparison, setIsSavingComparison] = useState(false);
   const [saveComparisonError, setSaveComparisonError] = useState<string | null>(null);
   const [savedComparisonId, setSavedComparisonId] = useState<string | null>(null);
+  const [isGeneratingAiReview, setIsGeneratingAiReview] = useState(false);
+  const [generateAiReviewError, setGenerateAiReviewError] = useState<string | null>(null);
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
   const comparisonIdFromQuery = parseBacktestComparisonId(location);
   const effectiveComparisonId = savedComparisonId ?? comparisonIdFromQuery;
@@ -245,6 +247,19 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       setSaveComparisonError(error?.message ?? '比較結果の保存に失敗しました。');
     } finally {
       setIsSavingComparison(false);
+    }
+  };
+
+  const onGenerateAiReview = async () => {
+    setIsGeneratingAiReview(true);
+    setGenerateAiReviewError(null);
+    try {
+      await postApi(`/api/backtests/${backtestId}/summary/generate`, {});
+      await mutate();
+    } catch (error: any) {
+      setGenerateAiReviewError(error?.message ?? 'AI総評の生成に失敗しました。');
+    } finally {
+      setIsGeneratingAiReview(false);
     }
   };
 
@@ -514,7 +529,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>AI 総評</h2>
-        {data.ai_review ? (
+        {data.ai_review.status === 'available' ? (
           <>
             {data.ai_review.title && (
               <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{data.ai_review.title}</div>
@@ -538,7 +553,29 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             </div>
           </>
         ) : (
-          <p style={{ margin: 0, color: '#666' }}>AI総評はまだ生成されていません。</p>
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>AI総評は未生成です。</p>
+            <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+              loading / unavailable / empty の最小状態で表示しています。
+            </p>
+            <button
+              type='button'
+              onClick={onGenerateAiReview}
+              disabled={isGeneratingAiReview}
+              style={{
+                padding: '0.45rem 0.85rem',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                background: isGeneratingAiReview ? '#f3f3f3' : '#fff',
+                cursor: isGeneratingAiReview ? 'default' : 'pointer',
+              }}
+            >
+              {isGeneratingAiReview ? '生成中...' : 'AI総評を生成'}
+            </button>
+            {generateAiReviewError && (
+              <div style={{ marginTop: '0.5rem', color: '#a10000' }}>{generateAiReviewError}</div>
+            )}
+          </div>
         )}
       </section>
 

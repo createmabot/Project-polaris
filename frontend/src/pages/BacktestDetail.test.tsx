@@ -100,7 +100,10 @@ describe('BacktestDetail', () => {
           summary_id: 'sum-bt-1',
           title: 'AI総評タイトル',
           body_markdown: 'AI総評本文',
+          structured_json: null,
           generated_at: '2026-01-01T00:00:00.000Z',
+          status: 'available',
+          insufficient_context: false,
         },
         imports: [],
       },
@@ -165,7 +168,15 @@ describe('BacktestDetail', () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         },
-        ai_review: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
         imports: [],
       },
     });
@@ -174,7 +185,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析失敗');
     expect(html).toContain('解析エラー');
     expect(html).toContain('Missing required columns');
-    expect(html).toContain('AI総評はまだ生成されていません。');
+    expect(html).toContain('AI総評は未生成です。');
+    expect(html).toContain('AI総評を生成');
   });
 
   it('falls back to /backtests when return query is absent', () => {
@@ -201,7 +213,15 @@ describe('BacktestDetail', () => {
           snapshot: null,
         },
         latest_import: null,
-        ai_review: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
         imports: [],
       },
     });
@@ -234,7 +254,15 @@ describe('BacktestDetail', () => {
           snapshot: null,
         },
         latest_import: null,
-        ai_review: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
         imports: [
           {
             id: 'imp-compare-base',
@@ -343,7 +371,15 @@ describe('BacktestDetail', () => {
             snapshot: null,
           },
           latest_import: null,
-          ai_review: null,
+          ai_review: {
+            summary_id: null,
+            title: null,
+            body_markdown: null,
+            structured_json: null,
+            generated_at: null,
+            status: 'unavailable',
+            insufficient_context: true,
+          },
           imports: [
             {
               id: 'imp-base',

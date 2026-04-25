@@ -82,6 +82,14 @@ export default function ComparisonDetail() {
 
   const metricSnapshot = data.latest_result?.compared_metric_json;
   const symbolMetrics = Array.isArray(metricSnapshot?.symbol_metrics) ? metricSnapshot.symbol_metrics : [];
+  const aiSummaryState: 'loading' | 'empty' | 'unavailable' | 'available' =
+    isGenerating
+      ? 'loading'
+      : !data.latest_result
+        ? 'empty'
+        : data.latest_result.ai_summary
+          ? 'available'
+          : 'unavailable';
 
   return (
     <div style={{ padding: '2rem', maxWidth: '1400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -177,7 +185,11 @@ export default function ComparisonDetail() {
 
       <section style={{ marginBottom: '1.5rem', border: '1px solid #ddd', borderRadius: '6px', padding: '1rem', background: '#fff' }}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>AI 比較総評</h2>
-        {data.latest_result?.ai_summary ? (
+        {aiSummaryState === 'loading' ? (
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>AI総評を生成中です...</p>
+          </div>
+        ) : aiSummaryState === 'available' && data.latest_result?.ai_summary ? (
           <>
             <h3 style={{ marginBottom: '0.4rem' }}>{data.latest_result.ai_summary.title || '比較総評'}</h3>
             <p style={{ whiteSpace: 'pre-wrap', marginTop: 0 }}>{data.latest_result.ai_summary.body_markdown}</p>
@@ -204,6 +216,11 @@ export default function ComparisonDetail() {
               </button>
             </div>
           </>
+        ) : aiSummaryState === 'unavailable' ? (
+          <div style={{ color: '#666' }}>
+            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>比較結果はありますが、AI総評は未利用または利用不可です。</p>
+            <p style={{ margin: 0, fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</p>
+          </div>
         ) : (
           <div style={{ color: '#666' }}>
             <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>比較総評はまだ生成されていません。</p>
