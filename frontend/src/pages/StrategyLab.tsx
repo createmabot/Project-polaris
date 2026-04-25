@@ -7,6 +7,7 @@ import {
   BacktestImportData,
   StrategyCreateData,
   StrategyVersionData,
+  StrategyVersionPineGenerateData,
   StrategyVersionListData,
 } from '../api/types';
 
@@ -62,13 +63,13 @@ export default function StrategyLab() {
         timeframe,
       });
 
-      const generated = await postApi<StrategyVersionData>(
+      const generated = await postApi<StrategyVersionPineGenerateData>(
         `/api/strategy-versions/${version.strategy_version.id}/pine/generate`,
         {}
       );
       setResult(generated.strategy_version);
 
-      if (generated.strategy_version.status === 'generated') {
+      if (generated.pine.status === 'generated') {
         const createdBacktest = await postApi<BacktestCreateData>('/api/backtests', {
           strategy_version_id: generated.strategy_version.id,
           title: `${title.trim()} / ${market} / ${timeframe}`,
@@ -357,4 +358,3 @@ export default function StrategyLab() {
     </div>
   );
 }
-

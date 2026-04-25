@@ -154,6 +154,18 @@ function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
         promptVersion: 'v1',
       };
     }),
+    generatePineScript: vi.fn(async () => {
+      if (kind === 'fail') throw new Error('provider failed');
+      return {
+        normalizedRuleJson: {},
+        generatedScript: '//@version=6\nstrategy("ok", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    }),
   };
 }
 
@@ -260,6 +272,15 @@ function createStubProvider(): HomeAiProvider {
           overall_view: 'stub',
         },
       },
+      modelName: 'stub-model',
+      promptVersion: 'v1',
+    })),
+    generatePineScript: vi.fn(async () => ({
+      normalizedRuleJson: {},
+      generatedScript: '//@version=6\nstrategy("stub", overlay=true)',
+      warnings: ['stub'],
+      assumptions: [],
+      status: 'generated',
       modelName: 'stub-model',
       promptVersion: 'v1',
     })),
@@ -381,5 +402,24 @@ describe('HomeAiService', () => {
     expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
     expect(provider.generateBacktestSummary).toHaveBeenCalledTimes(1);
     expect(stubProvider.generateBacktestSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to stub for pine generation when selected provider fails', async () => {
+    const provider = createProvider('fail');
+    const stubProvider = createStubProvider();
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript({
+      naturalLanguageSpec: 'buy above MA25, close below MA25 exit',
+      normalizedRuleJson: null,
+      targetMarket: 'JP_STOCK',
+      targetTimeframe: 'D',
+    });
+
+    expect(result.output.generatedScript).toContain('strategy("stub"');
+    expect(result.log.fallbackToStub).toBe(true);
+    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(1);
   });
 });

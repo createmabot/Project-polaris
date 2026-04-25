@@ -10,6 +10,8 @@ import {
   DailySummaryContext,
   DailySummaryOutput,
   HomeAiProvider,
+  PineGenerationContext,
+  PineGenerationOutput,
   SymbolThesisContext,
   SymbolThesisOutput,
 } from './home-provider';
@@ -246,6 +248,51 @@ export class HomeAiService {
           retryCount: 0,
           durationMs: Date.now() - startedAt,
           estimatedTokens: Math.ceil((output.bodyMarkdown ?? '').length / 4),
+          estimatedCostUsd: 0,
+          provider: this.provider.providerType,
+          fallbackToStub: true,
+        },
+      };
+    }
+  }
+
+  async generatePineScript(
+    context: PineGenerationContext,
+  ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
+    const startedAt = Date.now();
+    const attemptedModel = this.resolveAttemptedModel();
+    try {
+      const output = await this.provider.generatePineScript(context);
+      return {
+        output,
+        log: {
+          initialModel: attemptedModel,
+          finalModel: output.modelName,
+          escalated: this.provider.providerType === 'openai_api',
+          escalationReason: null,
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          estimatedTokens: Math.ceil((output.generatedScript ?? '').length / 4),
+          estimatedCostUsd: this.provider.providerType === 'openai_api' ? 0.001 : 0,
+          provider: this.provider.providerType,
+          fallbackToStub: false,
+        },
+      };
+    } catch (error) {
+      if (this.provider.providerType === 'stub') {
+        throw error;
+      }
+      const output = await this.stubProvider.generatePineScript(context);
+      return {
+        output,
+        log: {
+          initialModel: attemptedModel,
+          finalModel: output.modelName,
+          escalated: false,
+          escalationReason: 'provider_failed_fallback_to_stub',
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          estimatedTokens: Math.ceil((output.generatedScript ?? '').length / 4),
           estimatedCostUsd: 0,
           provider: this.provider.providerType,
           fallbackToStub: true,

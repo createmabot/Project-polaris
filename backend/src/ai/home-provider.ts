@@ -2,6 +2,7 @@ import { env } from '../env';
 import { AlertSummaryContext, AlertSummaryOutput, MockAiAdapter } from './adapter';
 import { LocalLlmAdapter } from './local-llm-adapter';
 import { FallbackApiAdapter } from './fallback-api-adapter';
+import { generatePineDeterministic } from '../strategy/pine';
 
 export type HomeAiProviderType = 'stub' | 'local_llm' | 'openai_api';
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
@@ -198,6 +199,23 @@ export type BacktestSummaryOutput = {
   promptVersion: string;
 };
 
+export type PineGenerationContext = {
+  naturalLanguageSpec: string;
+  normalizedRuleJson: Record<string, unknown> | null;
+  targetMarket: string;
+  targetTimeframe: string;
+};
+
+export type PineGenerationOutput = {
+  normalizedRuleJson: Record<string, unknown>;
+  generatedScript: string | null;
+  warnings: string[];
+  assumptions: string[];
+  status: 'generated' | 'failed';
+  modelName: string;
+  promptVersion: string;
+};
+
 export type HomeAiProvider = {
   providerType: HomeAiProviderType;
   generateAlertSummary: (context: AlertSummaryContext) => Promise<AlertSummaryOutput>;
@@ -205,6 +223,7 @@ export type HomeAiProvider = {
   generateSymbolThesisSummary: (context: SymbolThesisContext) => Promise<SymbolThesisOutput>;
   generateComparisonSummary: (context: ComparisonSummaryContext) => Promise<ComparisonSummaryOutput>;
   generateBacktestSummary: (context: BacktestSummaryContext) => Promise<BacktestSummaryOutput>;
+  generatePineScript: (context: PineGenerationContext) => Promise<PineGenerationOutput>;
 };
 
 function buildDeterministicDailyOutput(
@@ -437,6 +456,24 @@ function buildDeterministicBacktestOutput(
   };
 }
 
+function buildDeterministicPineOutput(
+  context: PineGenerationContext,
+  options: { modelName: string; promptVersion: string },
+): PineGenerationOutput {
+  const generated = generatePineDeterministic({
+    naturalLanguageSpec: context.naturalLanguageSpec,
+    normalizedRuleJson: context.normalizedRuleJson,
+    targetMarket: context.targetMarket,
+    targetTimeframe: context.targetTimeframe,
+  });
+
+  return {
+    ...generated,
+    modelName: options.modelName,
+    promptVersion: options.promptVersion,
+  };
+}
+
 class StubHomeAiProvider implements HomeAiProvider {
   readonly providerType: HomeAiProviderType = 'stub';
   private readonly adapter = new MockAiAdapter();
@@ -474,6 +511,13 @@ class StubHomeAiProvider implements HomeAiProvider {
       modelName: 'stub-backtest-v1',
       promptVersion: 'v1.0.0-backtest-stub',
       titlePrefix: '[Stub] ',
+    });
+  }
+
+  async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
+    return buildDeterministicPineOutput(context, {
+      modelName: 'stub-pine-v1',
+      promptVersion: 'v1.0.0-pine-stub',
     });
   }
 }
@@ -891,6 +935,90 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       },
     };
   }
+
+  async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
+    const deterministic = buildDeterministicPineOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-pine-local',
+    });
+
+    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'Convert natural language trading rule into Pine v6 script. Return strict JSON only.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              natural_language_spec: context.naturalLanguageSpec,
+              normalized_rule_json: context.normalizedRuleJson,
+              target_market: context.targetMarket,
+              target_timeframe: context.targetTimeframe,
+              output_schema: {
+                generated_script: '<string>',
+                warnings: ['<string>'],
+                assumptions: ['<string>'],
+                normalized_rule_json: '<object>',
+              },
+            }),
+          },
+        ],
+        temperature: 0.1,
+        max_tokens: 1800,
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`local_llm pine generation failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    if (!content) {
+      throw new Error('local_llm pine generation returned empty content');
+    }
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+    } catch {
+      return deterministic;
+    }
+
+    const generatedScript =
+      typeof parsed?.generated_script === 'string' && parsed.generated_script.trim()
+        ? parsed.generated_script
+        : deterministic.generatedScript;
+    const warnings = Array.isArray(parsed?.warnings)
+      ? parsed.warnings.filter((item: unknown) => typeof item === 'string').slice(0, 16)
+      : deterministic.warnings;
+    const assumptions = Array.isArray(parsed?.assumptions)
+      ? parsed.assumptions.filter((item: unknown) => typeof item === 'string').slice(0, 16)
+      : deterministic.assumptions;
+    const normalizedRuleJson =
+      typeof parsed?.normalized_rule_json === 'object' &&
+      parsed.normalized_rule_json !== null &&
+      !Array.isArray(parsed.normalized_rule_json)
+        ? parsed.normalized_rule_json
+        : deterministic.normalizedRuleJson;
+
+    return {
+      ...deterministic,
+      generatedScript,
+      warnings,
+      assumptions,
+      normalizedRuleJson,
+      status: generatedScript ? 'generated' : 'failed',
+    };
+  }
 }
 
 class OpenAiHomeAiProvider implements HomeAiProvider {
@@ -1175,6 +1303,73 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
     }
 
     return deterministic;
+  }
+
+  async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
+    if (!this.apiKey) {
+      throw new Error('openai_api provider requires FALLBACK_API_KEY');
+    }
+
+    const deterministic = buildDeterministicPineOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-pine-openai',
+    });
+
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: 'Convert natural language rule to Pine script and return strict JSON.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              natural_language_spec: context.naturalLanguageSpec,
+              normalized_rule_json: context.normalizedRuleJson,
+              target_market: context.targetMarket,
+              target_timeframe: context.targetTimeframe,
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1800,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`openai_api pine generation failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) {
+      return deterministic;
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      const generatedScript =
+        typeof parsed?.generated_script === 'string' && parsed.generated_script.trim()
+          ? parsed.generated_script
+          : deterministic.generatedScript;
+      return {
+        ...deterministic,
+        generatedScript,
+        status: generatedScript ? 'generated' : 'failed',
+      };
+    } catch {
+      return deterministic;
+    }
   }
 }
 
