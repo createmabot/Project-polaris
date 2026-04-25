@@ -66,7 +66,7 @@ type Runtime = {
   aiSummaries: AiSummaryRow[];
   nextJobId: number;
   nextSummaryId: number;
-  homeAiMode: 'ok' | 'throw' | 'fallback';
+  homeAiMode: 'ok' | 'throw' | 'throw_ai_provider' | 'fallback';
   lastBacktestContext: any | null;
 };
 
@@ -234,6 +234,9 @@ vi.mock('../src/ai/home-ai-service', () => ({
       runtime.lastBacktestContext = _context;
       if (runtime.homeAiMode === 'throw') {
         throw new Error('provider failed');
+      }
+      if (runtime.homeAiMode === 'throw_ai_provider') {
+        throw new Error('ai_provider_failed(local_llm): local_llm backtest summary returned empty content');
       }
 
       if (runtime.homeAiMode === 'fallback') {
@@ -414,6 +417,25 @@ describe('backtest ai-summary routes', () => {
     expect(runtime.aiJobs).toHaveLength(1);
     expect(runtime.aiJobs[0].status).toBe('failed');
     expect(runtime.aiJobs[0].errorMessage).toContain('provider failed');
+
+    await app.close();
+  });
+
+  it('returns AI_PROVIDER_FAILED when provider failure is classified', async () => {
+    runtime.homeAiMode = 'throw_ai_provider';
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error.code).toBe('AI_PROVIDER_FAILED');
+    expect(runtime.aiJobs).toHaveLength(1);
+    expect(runtime.aiJobs[0].status).toBe('failed');
+    expect(runtime.aiJobs[0].errorMessage).toContain('ai_provider_failed(local_llm)');
 
     await app.close();
   });

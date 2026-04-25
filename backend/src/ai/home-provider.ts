@@ -450,6 +450,48 @@ function toSigned(value: number | null | undefined, digits = 2, unit = ''): stri
   return `${sign}${value.toFixed(digits)}${unit}`;
 }
 
+function extractTextParts(value: unknown): string[] {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractTextParts(item));
+  }
+  if (value && typeof value === 'object') {
+    const row = value as Record<string, unknown>;
+    if (typeof row.text === 'string') {
+      const trimmed = row.text.trim();
+      if (trimmed) return [trimmed];
+    }
+    if (typeof row.content === 'string') {
+      const trimmed = row.content.trim();
+      if (trimmed) return [trimmed];
+    }
+    if (Array.isArray(row.content)) {
+      return extractTextParts(row.content);
+    }
+  }
+  return [];
+}
+
+function extractLlmContent(data: any): string {
+  const candidates = [
+    data?.choices?.[0]?.message?.content,
+    data?.choices?.[0]?.text,
+    data?.message?.content,
+    data?.response,
+    data?.output_text,
+  ];
+  for (const candidate of candidates) {
+    const parts = extractTextParts(candidate);
+    if (parts.length > 0) {
+      return parts.join('\n').trim();
+    }
+  }
+  return '';
+}
+
 function average(values: Array<number | null | undefined>, digits = 2): number | null {
   const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   if (valid.length === 0) return null;
@@ -706,7 +748,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    const content = extractLlmContent(data);
     if (!content) {
       throw new Error('local_llm daily summary returned empty content');
     }
@@ -834,7 +876,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    const content = extractLlmContent(data);
     if (!content) {
       throw new Error('local_llm symbol thesis returned empty content');
     }
@@ -929,7 +971,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    const content = extractLlmContent(data);
     if (!content) {
       throw new Error('local_llm comparison summary returned empty content');
     }
@@ -1033,7 +1075,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    const content = extractLlmContent(data);
     if (!content) {
       throw new Error('local_llm backtest summary returned empty content');
     }
@@ -1131,7 +1173,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
+    const content = extractLlmContent(data);
     if (!content) {
       throw new Error('local_llm pine generation returned empty content');
     }

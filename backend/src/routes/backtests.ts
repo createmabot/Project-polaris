@@ -421,14 +421,18 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
 
     return { jobId: job.id, summary: toBacktestAiReviewView(created) };
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     await prisma.aiJob.update({
       where: { id: job.id },
       data: {
         status: 'failed',
         completedAt: new Date(),
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
       },
     });
+    if (errorMessage.startsWith('ai_provider_failed(')) {
+      throw new AppError(502, 'AI_PROVIDER_FAILED', errorMessage);
+    }
     throw error;
   }
 }
