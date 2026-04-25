@@ -9,6 +9,7 @@ import {
   InternalBacktestExecutionResultData,
   InternalBacktestExecutionStatusData,
   StrategyVersionData,
+  StrategyVersionPineGenerateData,
   StrategyVersionListData,
 } from '../api/types';
 import {
@@ -363,6 +364,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [pineRunMeta, setPineRunMeta] = useState<{
+    failureReason: string | null;
+    repairAttempts: number | null;
+    invalidReasonCodes: string[];
+  } | null>(null);
 
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
@@ -399,6 +405,25 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const compareBase = data?.compare_base ?? null;
   const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
   const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
+  const pineState: 'unavailable' | 'generating' | 'warning' | 'failed' | 'available' = regenerating
+    ? 'generating'
+    : !version?.generated_pine && version?.status !== 'failed'
+      ? 'unavailable'
+      : version?.status === 'failed'
+        ? 'failed'
+        : warnings.length > 0
+          ? 'warning'
+          : 'available';
+  const pineStateText =
+    pineState === 'generating'
+      ? '生成中'
+      : pineState === 'unavailable'
+        ? '未生成'
+        : pineState === 'warning'
+          ? 'warning あり'
+          : pineState === 'failed'
+            ? 'failed'
+            : '取得済み';
   const returnPath = version
     ? parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id)
     : null;
@@ -713,9 +738,21 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const onRegenerate = async () => {
     setRegenerating(true);
     setRegenerateError(null);
+    setPineRunMeta(null);
     try {
-      const response = await postApi<StrategyVersionData>(`/api/strategy-versions/${versionId}/pine/generate`, {});
-      await mutate(response, false);
+      const response = await postApi<StrategyVersionPineGenerateData>(`/api/strategy-versions/${versionId}/pine/generate`, {});
+      setPineRunMeta({
+        failureReason: response.pine.failure_reason ?? null,
+        repairAttempts: typeof response.pine.repair_attempts === 'number' ? response.pine.repair_attempts : null,
+        invalidReasonCodes: Array.isArray(response.pine.invalid_reason_codes) ? response.pine.invalid_reason_codes : [],
+      });
+      await mutate(
+        {
+          strategy_version: response.strategy_version,
+          compare_base: data?.compare_base ?? null,
+        },
+        false,
+      );
       setSaveRuleMessage(null);
     } catch (requestError: any) {
       setRegenerateError(requestError?.message ?? 'Pine の再生成に失敗しました。');
@@ -920,6 +957,35 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         />
 
         <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <span
+            data-testid='pine-generation-state'
+            style={{
+              display: 'inline-block',
+              padding: '0.3rem 0.55rem',
+              borderRadius: '999px',
+              fontSize: '0.82rem',
+              fontWeight: 600,
+              border: '1px solid #d6d6d6',
+              background:
+                pineState === 'failed'
+                  ? '#fff4f4'
+                  : pineState === 'warning'
+                    ? '#fff9e8'
+                    : pineState === 'generating'
+                      ? '#eef4ff'
+                      : '#eef8ee',
+              color:
+                pineState === 'failed'
+                  ? '#a10000'
+                  : pineState === 'warning'
+                    ? '#9a5a00'
+                    : pineState === 'generating'
+                      ? '#0a4a99'
+                      : '#1f6a1f',
+            }}
+          >
+            Pine 状態: {pineStateText}
+          </span>
           <button
             type='button'
             onClick={onSaveRule}
@@ -987,6 +1053,26 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       {regenerateError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
           {regenerateError}
+        </div>
+      )}
+      {pineRunMeta && (
+        <div
+          data-testid='pine-generation-meta'
+          style={{
+            marginTop: '0.8rem',
+            padding: '0.75rem',
+            background: '#f8f8f8',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            color: '#333',
+            fontSize: '0.9rem',
+          }}
+        >
+          <div>repair attempts: {pineRunMeta.repairAttempts ?? 0}</div>
+          {pineRunMeta.failureReason && <div>failure reason: {pineRunMeta.failureReason}</div>}
+          {pineRunMeta.invalidReasonCodes.length > 0 && (
+            <div>invalid reason codes: {pineRunMeta.invalidReasonCodes.join(', ')}</div>
+          )}
         </div>
       )}
       {cloneError && (

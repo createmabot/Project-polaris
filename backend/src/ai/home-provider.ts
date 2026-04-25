@@ -204,6 +204,12 @@ export type PineGenerationContext = {
   normalizedRuleJson: Record<string, unknown> | null;
   targetMarket: string;
   targetTimeframe: string;
+  repairRequest?: {
+    attempt: number;
+    invalidReasonCodes: string[];
+    failureReason: string;
+    previousScript: string | null;
+  } | null;
 };
 
 export type PineGenerationOutput = {
@@ -212,6 +218,9 @@ export type PineGenerationOutput = {
   warnings: string[];
   assumptions: string[];
   status: 'generated' | 'failed';
+  repairAttempts?: number;
+  failureReason?: string | null;
+  invalidReasonCodes?: string[];
   modelName: string;
   promptVersion: string;
 };
@@ -960,6 +969,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               normalized_rule_json: context.normalizedRuleJson,
               target_market: context.targetMarket,
               target_timeframe: context.targetTimeframe,
+              repair_request: context.repairRequest ?? null,
               output_schema: {
                 generated_script: '<string>',
                 warnings: ['<string>'],
@@ -1335,6 +1345,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               normalized_rule_json: context.normalizedRuleJson,
               target_market: context.targetMarket,
               target_timeframe: context.targetTimeframe,
+              repair_request: context.repairRequest ?? null,
             }),
           },
         ],

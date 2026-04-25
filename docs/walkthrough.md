@@ -209,6 +209,14 @@ pnpm run dev
 4. Confirm minimal states in UI
    - generating
    - unavailable (not generated yet)
+   - warning (generated with warnings)
    - available (script shown)
    - failed (warning / failure reason shown)
+5. Confirm self-repair behavior
+   - When invalid output is retryable, generation retries up to 2 times
+   - API response includes `repair_attempts` and `invalid_reason_codes`
+6. Confirm input constraints
+   - `natural_language_spec` / `target_market` / `target_timeframe` must be present
+   - `backtest_period_from` and `backtest_period_to` must be provided together
+   - `backtest_period_from <= backtest_period_to`
 

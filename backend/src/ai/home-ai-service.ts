@@ -29,6 +29,14 @@ export type HomeAiExecutionLog = {
   fallbackToStub: boolean;
 };
 
+type PineRepairValidation = {
+  normalizedScript: string | null;
+  warnings: string[];
+  failureReason: string | null;
+  retryable: boolean;
+  invalidReasonCodes: string[];
+};
+
 export class HomeAiService {
   constructor(
     private readonly provider: HomeAiProvider = createHomeAiProvider(),
@@ -258,9 +266,143 @@ export class HomeAiService {
 
   async generatePineScript(
     context: PineGenerationContext,
+    options?: {
+      maxRepairAttempts?: number;
+      validateOutput?: (script: string | null) => PineRepairValidation;
+    },
   ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
+    const maxRepairAttempts = Math.max(0, Math.min(options?.maxRepairAttempts ?? env.MAX_LOCAL_RETRY_COUNT, 2));
+    const validateOutput = options?.validateOutput;
+    const aggregateWarnings: string[] = [];
     const startedAt = Date.now();
     const attemptedModel = this.resolveAttemptedModel();
+    let attempt = 0;
+    let currentContext: PineGenerationContext = context;
+    let lastRun: { output: PineGenerationOutput; log: HomeAiExecutionLog } | null = null;
+    let lastFailureReason: string | null = null;
+    let lastInvalidReasonCodes: string[] = [];
+
+    while (attempt <= maxRepairAttempts) {
+      const run = await this.generatePineScriptSingleAttempt(currentContext, attemptedModel, startedAt);
+      lastRun = run;
+
+      const mergedOutputWarnings = [...run.output.warnings];
+      for (const warning of aggregateWarnings) {
+        mergedOutputWarnings.push(warning);
+      }
+
+      if (!validateOutput) {
+        return {
+          output: {
+            ...run.output,
+            warnings: Array.from(new Set(mergedOutputWarnings)),
+            repairAttempts: attempt,
+          },
+          log: {
+            ...run.log,
+            retryCount: attempt,
+            durationMs: Date.now() - startedAt,
+          },
+        };
+      }
+
+      const assessed = validateOutput(run.output.generatedScript);
+      for (const warning of assessed.warnings) {
+        aggregateWarnings.push(warning);
+      }
+      lastFailureReason = assessed.failureReason;
+      lastInvalidReasonCodes = assessed.invalidReasonCodes;
+
+      const normalizedGeneratedScript = assessed.normalizedScript;
+      if (!assessed.failureReason && normalizedGeneratedScript) {
+        return {
+          output: {
+            ...run.output,
+            generatedScript: normalizedGeneratedScript,
+            warnings: Array.from(new Set([...mergedOutputWarnings, ...assessed.warnings])),
+            status: 'generated',
+            repairAttempts: attempt,
+            failureReason: null,
+            invalidReasonCodes: assessed.invalidReasonCodes,
+          },
+          log: {
+            ...run.log,
+            retryCount: attempt,
+            durationMs: Date.now() - startedAt,
+          },
+        };
+      }
+
+      const canRepair = assessed.retryable && attempt < maxRepairAttempts;
+      if (!canRepair) {
+        return {
+          output: {
+            ...run.output,
+            generatedScript: null,
+            warnings: Array.from(new Set([...mergedOutputWarnings, ...assessed.warnings])),
+            status: 'failed',
+            repairAttempts: attempt,
+            failureReason: assessed.failureReason,
+            invalidReasonCodes: assessed.invalidReasonCodes,
+          },
+          log: {
+            ...run.log,
+            retryCount: attempt,
+            durationMs: Date.now() - startedAt,
+          },
+        };
+      }
+
+      attempt += 1;
+      currentContext = {
+        ...context,
+        repairRequest: {
+          attempt,
+          invalidReasonCodes: assessed.invalidReasonCodes,
+          failureReason: assessed.failureReason ?? 'invalid_output',
+          previousScript: run.output.generatedScript,
+        },
+      };
+      aggregateWarnings.push(`repair_retry_${attempt}: ${assessed.failureReason}`);
+    }
+
+    if (!lastRun) {
+      throw new Error('pine_generation_unexpected_state');
+    }
+
+    return {
+      output: {
+        ...lastRun.output,
+        generatedScript: null,
+        warnings: Array.from(new Set([...lastRun.output.warnings, ...aggregateWarnings])),
+        status: 'failed',
+        repairAttempts: maxRepairAttempts,
+        failureReason: lastFailureReason ?? 'Pine generation failed after retries.',
+        invalidReasonCodes: lastInvalidReasonCodes,
+      },
+      log: {
+        ...lastRun.log,
+        retryCount: maxRepairAttempts,
+        durationMs: Date.now() - startedAt,
+      },
+    };
+  }
+
+  private resolveAttemptedModel(): string {
+    if (this.provider.providerType === 'local_llm') {
+      return env.PRIMARY_LOCAL_MODEL;
+    }
+    if (this.provider.providerType === 'openai_api') {
+      return env.FALLBACK_API_MODEL;
+    }
+    return 'mock-v1';
+  }
+
+  private async generatePineScriptSingleAttempt(
+    context: PineGenerationContext,
+    attemptedModel: string,
+    startedAt: number,
+  ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
     try {
       const output = await this.provider.generatePineScript(context);
       return {
@@ -299,15 +441,5 @@ export class HomeAiService {
         },
       };
     }
-  }
-
-  private resolveAttemptedModel(): string {
-    if (this.provider.providerType === 'local_llm') {
-      return env.PRIMARY_LOCAL_MODEL;
-    }
-    if (this.provider.providerType === 'openai_api') {
-      return env.FALLBACK_API_MODEL;
-    }
-    return 'mock-v1';
   }
 }

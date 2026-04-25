@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
-import { validateGeneratedPineScript } from '../strategy/pine';
+import { assessGeneratedPineScript } from '../strategy/pine';
 import { AppError, formatSuccess } from '../utils/response';
 
 function toStrategyVersionResponse(version: {
@@ -113,6 +113,45 @@ async function resolveLatestPineScript(versionId: string) {
 }
 
 export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
+  const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+  const parseDateOnly = (value: string, fieldName: string): Date => {
+    if (!DATE_ONLY_PATTERN.test(value)) {
+      throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be YYYY-MM-DD.`);
+    }
+    const [yearText, monthText, dayText] = value.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid date.`);
+    }
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() + 1 !== month ||
+      parsed.getUTCDate() !== day
+    ) {
+      throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid calendar date.`);
+    }
+    return parsed;
+  };
+
+  const readOptionalBodyString = (
+    body: { backtest_period_from?: unknown; backtest_period_to?: unknown } | undefined,
+    key: 'backtest_period_from' | 'backtest_period_to',
+  ): string | null => {
+    const raw = body?.[key];
+    if (raw === undefined || raw === null) {
+      return null;
+    }
+    if (typeof raw !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', `${key} must be a string.`);
+    }
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
   const rethrowKnownSchemaMismatch = (error: unknown): never => {
     const code = (error as { code?: unknown })?.code;
     if (code === 'P2021' || code === 'P2022') {
@@ -253,15 +292,51 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     );
   });
 
-  fastify.post<{ Params: { versionId: string } }>('/:versionId/pine/generate', async (request, reply) => {
+  fastify.post<{
+    Params: { versionId: string };
+    Body: {
+      backtest_period_from?: unknown;
+      backtest_period_to?: unknown;
+    };
+  }>('/:versionId/pine/generate', async (request, reply) => {
     try {
       const { versionId } = request.params;
+      const backtestPeriodFrom = readOptionalBodyString(request.body, 'backtest_period_from');
+      const backtestPeriodTo = readOptionalBodyString(request.body, 'backtest_period_to');
+      if ((backtestPeriodFrom && !backtestPeriodTo) || (!backtestPeriodFrom && backtestPeriodTo)) {
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          'backtest_period_from and backtest_period_to must be provided together.',
+        );
+      }
+      if (backtestPeriodFrom && backtestPeriodTo) {
+        const from = parseDateOnly(backtestPeriodFrom, 'backtest_period_from');
+        const to = parseDateOnly(backtestPeriodTo, 'backtest_period_to');
+        if (from.getTime() > to.getTime()) {
+          throw new AppError(
+            400,
+            'VALIDATION_ERROR',
+            'backtest period is invalid: backtest_period_from must be <= backtest_period_to.',
+          );
+        }
+      }
+
       const version = await prisma.strategyRuleVersion.findUnique({
         where: { id: versionId },
       });
 
       if (!version) {
         throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      }
+      if (!version.naturalLanguageRule.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_spec is required.');
+      }
+      if (!version.market.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'target_market is required.');
+      }
+      if (!version.timeframe.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'target_timeframe is required.');
       }
 
       const homeAiService = new HomeAiService();
@@ -273,7 +348,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           normalizedRuleJson: normalizeRuleJson(version.normalizedRuleJson),
           targetMarket: version.market,
           targetTimeframe: version.timeframe,
-        });
+        }, { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript });
         output = generated.output;
         log = generated.log;
       } catch (providerError) {
@@ -285,6 +360,9 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           ],
           assumptions: [],
           status: 'failed' as const,
+          repairAttempts: 0,
+          failureReason: providerError instanceof Error ? providerError.message : String(providerError),
+          invalidReasonCodes: ['provider_error'],
           modelName: 'provider_error',
           promptVersion: 'v1.0.0-pine-provider-error',
         };
@@ -302,12 +380,14 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         };
       }
 
-      const validation = validateGeneratedPineScript(output.generatedScript);
+      const validation = assessGeneratedPineScript(output.generatedScript);
       const warnings = [...new Set([...output.warnings, ...validation.warnings])];
-      const shouldFail =
-        output.status === 'failed' || !output.generatedScript || validation.failureReason !== null;
+      const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
       const finalStatus: 'generated' | 'failed' = shouldFail ? 'failed' : 'generated';
-      const finalScript = finalStatus === 'generated' ? output.generatedScript : null;
+      const finalScript = finalStatus === 'generated' ? validation.normalizedScript : null;
+      const failureReason = output.failureReason ?? validation.failureReason;
+      const repairAttempts = output.repairAttempts ?? 0;
+      const invalidReasonCodes = output.invalidReasonCodes ?? validation.invalidReasonCodes ?? [];
 
       const generationNote = {
         schema_name: 'pine_generation_notes',
@@ -317,7 +397,9 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         payload: {
           assumptions: output.assumptions,
           warnings,
-          failure_reason: validation.failureReason,
+          failure_reason: failureReason,
+          repair_attempts: repairAttempts,
+          invalid_reason_codes: invalidReasonCodes,
           provider: log.provider,
           fallback_to_stub: log.fallbackToStub,
         },
@@ -357,7 +439,9 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
             generated_script: finalScript,
             warnings,
             status: finalStatus,
-            failure_reason: validation.failureReason,
+            failure_reason: failureReason,
+            repair_attempts: repairAttempts,
+            invalid_reason_codes: invalidReasonCodes,
           },
         }),
       );

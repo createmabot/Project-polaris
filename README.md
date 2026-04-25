@@ -131,6 +131,14 @@ pnpm run down
   - 空文字は failure
   - `//@version` と `strategy(...)|indicator(...)` の最小構文チェック
   - provider error / invalid output は `status=failed` と warning/failure_reason で返す
+- 失敗時最小修復（self-repair）:
+  - invalid output を `warning / retry / failure` に分類
+  - retry は最大 2 回（無限ループしない）
+  - `POST /pine/generate` は `repair_attempts` と `invalid_reason_codes` を返却
+- 入力制約（最小）:
+  - `natural_language_spec` / `target_market` / `target_timeframe` 必須
+  - `backtest_period_from` / `backtest_period_to` は同時指定のみ許可
+  - backtest period は `from <= to` の整合必須
 
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
