@@ -5,6 +5,22 @@ import path from 'path';
 // Point to root .env relative to backend/src/env.ts
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+const envBoolean = z.preprocess((value) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'off' || normalized === '') {
+      return false;
+    }
+  }
+  return value;
+}, z.boolean());
+
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
@@ -25,7 +41,7 @@ const envSchema = z.object({
 
   // ── AI: Execution policy ── docs/28 §14
   MAX_LOCAL_RETRY_COUNT: z.coerce.number().default(2),
-  AI_ENABLE_STUB_FALLBACK: z.coerce.boolean().default(false),
+  AI_ENABLE_STUB_FALLBACK: envBoolean.default(false),
 
   // ── Logging ──
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
