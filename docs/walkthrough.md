@@ -139,7 +139,7 @@ pnpm run dev
 
 ### 5. Home AI隕∫ｴ・ヵ繝ｭ繝ｼ遒ｺ隱搾ｼ域怙蟆擾ｼ・
 0. provider 蛻・崛縺ｨ local_llm 逍朱・   - `.env` 縺ｧ `HOME_AI_PROVIDER=local_llm` 繧定ｨｭ螳・   - `npx tsx scripts/check-local-llm.ts`
-   - 遒ｺ隱・ local endpoint/model 縺悟芦驕泌庄閭ｽ縺ｧ縺ゅｋ縺薙→・域磁邯壻ｸ榊庄譎ゅ・繧｢繝励Μ蛛ｴ縺ｧ stub fallback・・
+   - 遒ｺ隱・ local endpoint/model 縺悟芦驕泌庄閭ｽ縺ｧ縺ゅｋ縺薙→・域磁邯壻ｸ榊庄譎ゅ・繧ｨ繝ｩ繝ｼ譎ゅ・ ai_jobs=failed 縺ｫ縺ｪ繧九％縺ｨ・亥袖蜩√□縺代・ `AI_ENABLE_STUB_FALLBACK=true`・峨・
 1. 譌･谺｡隕∫ｴ・・譖ｿ・・ome BFF・・   - `GET /api/home?summary_type=latest`
    - `GET /api/home?summary_type=morning&date=2026-04-18`
    - `GET /api/home?summary_type=evening&date=2026-04-18`
@@ -174,7 +174,8 @@ pnpm run dev
    - `ai_summaries`: `summary_scope=thesis`, `target_entity_type=symbol` で保存されること
 6. provider/fallback の確認  
    - `HOME_AI_PROVIDER=local_llm` で疎通確認
-   - 失敗時に `stub` fallback で処理継続し、レスポンス shape が維持されること
+   - 失敗時は既定で `ai_jobs=failed` となること（`AI_ENABLE_STUB_FALLBACK=false`）
+   - 必要時のみ `AI_ENABLE_STUB_FALLBACK=true` で `stub` fallback が有効になること
 
 ### 7. Comparison AI総評確認（最小）
 1. 比較詳細を開く
@@ -190,7 +191,8 @@ pnpm run dev
    - ai_summaries: summary_scope=comparison, target_entity_type=comparison_session
 5. provider/fallback の確認
    - HOME_AI_PROVIDER=local_llm を優先
-   - 失敗時に stub fallback で保存 shape が維持されること
+   - 失敗時は既定で `ai_jobs=failed` となること（`AI_ENABLE_STUB_FALLBACK=false`）
+   - 必要時のみ `AI_ENABLE_STUB_FALLBACK=true` で stub fallback を許可すること
 
 ### 8. Backtest AI Summary Check (Minimal)
 - POST /api/backtests/:backtestId/summary/generate

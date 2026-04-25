@@ -41,6 +41,7 @@ export class HomeAiService {
   constructor(
     private readonly provider: HomeAiProvider = createHomeAiProvider(),
     private readonly stubProvider: HomeAiProvider = createStubHomeAiProvider(),
+    private readonly enableStubFallback: boolean = env.AI_ENABLE_STUB_FALLBACK,
   ) {}
 
   async generateAlertSummary(context: AlertSummaryContext): Promise<{ output: any; log: HomeAiExecutionLog }> {
@@ -64,8 +65,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generateAlertSummary(context);
       return {
@@ -107,8 +108,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generateDailySummary(context);
       return {
@@ -152,8 +153,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generateSymbolThesisSummary(context);
       return {
@@ -197,8 +198,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generateComparisonSummary(context);
       return {
@@ -242,8 +243,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generateBacktestSummary(context);
       return {
@@ -398,6 +399,15 @@ export class HomeAiService {
     return 'mock-v1';
   }
 
+  private shouldFallbackToStub(): boolean {
+    return this.enableStubFallback && this.provider.providerType !== 'stub';
+  }
+
+  private toProviderFailureError(error: unknown): Error {
+    const message = error instanceof Error ? error.message : String(error);
+    return new Error(`ai_provider_failed(${this.provider.providerType}): ${message}`);
+  }
+
   private async generatePineScriptSingleAttempt(
     context: PineGenerationContext,
     attemptedModel: string,
@@ -421,8 +431,8 @@ export class HomeAiService {
         },
       };
     } catch (error) {
-      if (this.provider.providerType === 'stub') {
-        throw error;
+      if (!this.shouldFallbackToStub()) {
+        throw this.toProviderFailureError(error);
       }
       const output = await this.stubProvider.generatePineScript(context);
       return {

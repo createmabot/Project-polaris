@@ -76,7 +76,8 @@ pnpm run down
 - `daily_summary` は `status=available|unavailable` と `insufficient_context` を含む。
 - `latest` は再生成ではなく保存済み summary の選択モード。
 - Home AI provider は `HOME_AI_PROVIDER=stub|local_llm|openai_api` で切替可能（既定: `local_llm`）。
-- `local_llm` / `openai_api` が失敗した場合は自動で `stub` へ fallback し、API shape は維持する。
+- `local_llm` / `openai_api` が失敗した場合、既定では `ai_jobs=failed` として失敗を返す（`AI_ENABLE_STUB_FALLBACK=false`）。
+- `AI_ENABLE_STUB_FALLBACK=true` のときのみ `stub` fallback を有効化できる。
 - alert 起点要約 API:
   - `POST /api/alerts/:alertId/summary/generate`
   - `GET /api/alerts/:alertId/summary`
@@ -95,7 +96,7 @@ pnpm run down
   - 状態: `ai_jobs`
   - 生成物: `ai_summaries`（`summary_scope=thesis`）
 - provider は Home AI と共通境界を利用し、`HOME_AI_PROVIDER=stub|local_llm|openai_api` を流用する。
-- `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、レスポンス/保存 shape を維持する。
+- `local_llm` / `openai_api` 失敗時は既定で `ai_jobs=failed` を返す（必要時のみ `AI_ENABLE_STUB_FALLBACK=true`）。
 
 ## Comparison AI総評（最小）
 - 比較総評 API:
@@ -117,7 +118,7 @@ pnpm run down
   - 生成物: `ai_summaries`（`summary_scope=backtest_review`, `target_entity_type=backtest`）
   - `GET /api/backtests/:backtestId` の `ai_review` は `status=available|unavailable` を返す。
 - provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
-- `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、保存/レスポンス shape を維持する。
+- `local_llm` / `openai_api` 失敗時は既定で `ai_jobs=failed` を返す（必要時のみ `AI_ENABLE_STUB_FALLBACK=true`）。
 
 ## 自然言語→Pine 生成（最小）
 - API:

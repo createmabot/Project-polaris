@@ -304,90 +304,126 @@ describe('HomeAiService', () => {
     expect(stubProvider.generateAlertSummary).toHaveBeenCalledTimes(0);
   });
 
-  it('falls back to stub when selected provider fails', async () => {
+  it('throws provider error when selected provider fails (default: no stub fallback)', async () => {
     const provider = createProvider('fail');
     const stubProvider = createStubProvider();
 
     const service = new HomeAiService(provider, stubProvider);
-    const result = await service.generateAlertSummary(alertContext as any);
-
-    expect(result.output.title).toBe('stub');
-    expect(result.log.fallbackToStub).toBe(true);
-    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
+    await expect(service.generateAlertSummary(alertContext as any)).rejects.toThrow(
+      'ai_provider_failed(local_llm): provider failed',
+    );
     expect(provider.generateAlertSummary).toHaveBeenCalledTimes(1);
-    expect(stubProvider.generateAlertSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateAlertSummary).toHaveBeenCalledTimes(0);
   });
 
-  it('falls back to stub for symbol thesis when selected provider fails', async () => {
+  it('throws provider error for symbol thesis when provider fails', async () => {
     const provider = createProvider('fail');
     const stubProvider = createStubProvider();
 
     const service = new HomeAiService(provider, stubProvider);
-    const result = await service.generateSymbolThesisSummary({
-      scope: 'thesis',
-      symbol: {
-        id: 'sym-1',
-        symbol: 'TYO:7203',
-        symbolCode: '7203',
-        displayName: 'Toyota',
-        marketCode: 'JP',
-        tradingviewSymbol: 'TYO:7203',
-      },
-      referenceIds: [],
-      references: [],
-      snapshot: null,
-      latestNoteSummary: null,
-    });
-
-    expect(result.output.title).toBe('stub-symbol');
-    expect(result.log.fallbackToStub).toBe(true);
-    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
-    expect(provider.generateSymbolThesisSummary).toHaveBeenCalledTimes(1);
-    expect(stubProvider.generateSymbolThesisSummary).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to stub for comparison summary when selected provider fails', async () => {
-    const provider = createProvider('fail');
-    const stubProvider = createStubProvider();
-
-    const service = new HomeAiService(provider, stubProvider);
-    const result = await service.generateComparisonSummary({
-      comparisonId: 'cmp-1',
-      symbols: [
-        {
+    await expect(
+      service.generateSymbolThesisSummary({
+        scope: 'thesis',
+        symbol: {
           id: 'sym-1',
-          symbol: '7203',
+          symbol: 'TYO:7203',
           symbolCode: '7203',
           displayName: 'Toyota',
-          marketCode: 'TSE',
-          tradingviewSymbol: 'TSE:7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
         },
-        {
-          id: 'sym-2',
-          symbol: '6758',
-          symbolCode: '6758',
-          displayName: 'Sony',
-          marketCode: 'TSE',
-          tradingviewSymbol: 'TSE:6758',
-        },
-      ],
-      metrics: ['change_percent'],
-      comparedMetricJson: { metrics: ['change_percent'] },
-      references: [],
-    });
-
-    expect(result.output.title).toBe('stub-comparison');
-    expect(result.log.fallbackToStub).toBe(true);
-    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
-    expect(provider.generateComparisonSummary).toHaveBeenCalledTimes(1);
-    expect(stubProvider.generateComparisonSummary).toHaveBeenCalledTimes(1);
+        referenceIds: [],
+        references: [],
+        snapshot: null,
+        latestNoteSummary: null,
+      }),
+    ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
+    expect(provider.generateSymbolThesisSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateSymbolThesisSummary).toHaveBeenCalledTimes(0);
   });
 
-  it('falls back to stub for backtest summary when selected provider fails', async () => {
+  it('throws provider error for comparison summary when provider fails', async () => {
     const provider = createProvider('fail');
     const stubProvider = createStubProvider();
 
     const service = new HomeAiService(provider, stubProvider);
+    await expect(
+      service.generateComparisonSummary({
+        comparisonId: 'cmp-1',
+        symbols: [
+          {
+            id: 'sym-1',
+            symbol: '7203',
+            symbolCode: '7203',
+            displayName: 'Toyota',
+            marketCode: 'TSE',
+            tradingviewSymbol: 'TSE:7203',
+          },
+          {
+            id: 'sym-2',
+            symbol: '6758',
+            symbolCode: '6758',
+            displayName: 'Sony',
+            marketCode: 'TSE',
+            tradingviewSymbol: 'TSE:6758',
+          },
+        ],
+        metrics: ['change_percent'],
+        comparedMetricJson: { metrics: ['change_percent'] },
+        references: [],
+      }),
+    ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
+    expect(provider.generateComparisonSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateComparisonSummary).toHaveBeenCalledTimes(0);
+  });
+
+  it('throws provider error for backtest summary when provider fails', async () => {
+    const provider = createProvider('fail');
+    const stubProvider = createStubProvider();
+
+    const service = new HomeAiService(provider, stubProvider);
+    await expect(
+      service.generateBacktestSummary({
+        backtestId: 'bt-1',
+        title: 'backtest',
+        executionSource: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'imported',
+        metrics: null,
+        tradeSummary: null,
+        importFiles: [],
+        importParsedSummaries: [],
+        comparisonDiff: null,
+        strategy: null,
+      }),
+    ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
+    expect(provider.generateBacktestSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateBacktestSummary).toHaveBeenCalledTimes(0);
+  });
+
+  it('throws provider error for pine generation when provider fails', async () => {
+    const provider = createProvider('fail');
+    const stubProvider = createStubProvider();
+
+    const service = new HomeAiService(provider, stubProvider);
+    await expect(
+      service.generatePineScript({
+        naturalLanguageSpec: 'buy above MA25, close below MA25 exit',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      }),
+    ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(0);
+  });
+
+  it('can fallback to stub when explicitly enabled', async () => {
+    const provider = createProvider('fail');
+    const stubProvider = createStubProvider();
+
+    const service = new HomeAiService(provider, stubProvider, true);
     const result = await service.generateBacktestSummary({
       backtestId: 'bt-1',
       title: 'backtest',
@@ -408,25 +444,6 @@ describe('HomeAiService', () => {
     expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
     expect(provider.generateBacktestSummary).toHaveBeenCalledTimes(1);
     expect(stubProvider.generateBacktestSummary).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back to stub for pine generation when selected provider fails', async () => {
-    const provider = createProvider('fail');
-    const stubProvider = createStubProvider();
-
-    const service = new HomeAiService(provider, stubProvider);
-    const result = await service.generatePineScript({
-      naturalLanguageSpec: 'buy above MA25, close below MA25 exit',
-      normalizedRuleJson: null,
-      targetMarket: 'JP_STOCK',
-      targetTimeframe: 'D',
-    });
-
-    expect(result.output.generatedScript).toContain('strategy("stub"');
-    expect(result.log.fallbackToStub).toBe(true);
-    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
-    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
-    expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(1);
   });
 
   it('retries pine generation once and recovers with repair request context', async () => {

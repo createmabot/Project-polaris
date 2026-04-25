@@ -25,6 +25,7 @@ const envSchema = z.object({
 
   // ── AI: Execution policy ── docs/28 §14
   MAX_LOCAL_RETRY_COUNT: z.coerce.number().default(2),
+  AI_ENABLE_STUB_FALLBACK: z.coerce.boolean().default(false),
 
   // ── Logging ──
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
