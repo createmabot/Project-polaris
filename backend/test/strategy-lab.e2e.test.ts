@@ -4,6 +4,44 @@ import { errorHandler } from '../src/utils/response';
 import { strategyRoutes } from '../src/routes/strategies';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
 
+vi.mock('../src/ai/home-ai-service', () => {
+  class HomeAiService {
+    async generatePineScript(context: {
+      naturalLanguageSpec: string;
+      targetMarket: string;
+      targetTimeframe: string;
+    }) {
+      const text = context.naturalLanguageSpec ?? '';
+      const hasSupportedPattern = /25|ma|sma|rsi|出来高|volume|終値|close/i.test(text);
+      const shouldFail = !hasSupportedPattern;
+      return {
+        output: {
+          normalizedRuleJson: {
+            strategy_type: 'long_only',
+          },
+          generatedScript: shouldFail
+            ? null
+            : '//@version=6\nstrategy("Hokkyokusei Generated Strategy", overlay=true)\nplot(close)',
+          warnings: shouldFail
+            ? ['entry conditions were not detected']
+            : /short|ショート/.test(text)
+              ? ['空売り/ショートはMVP対象外']
+              : [],
+          assumptions: ['long_only'],
+          status: shouldFail ? 'failed' : 'generated',
+          modelName: 'stub-model',
+          promptVersion: 'v1-test',
+        },
+        log: {
+          provider: 'stub',
+          fallbackToStub: false,
+        },
+      };
+    }
+  }
+  return { HomeAiService };
+});
+
 type StrategyRuleRow = {
   id: string;
   title: string;
@@ -30,11 +68,25 @@ type StrategyRuleVersionRow = {
   updatedAt: Date;
 };
 
+type PineScriptRow = {
+  id: string;
+  strategyRuleVersionId: string;
+  scriptName: string;
+  pineVersion: string;
+  scriptBody: string;
+  generationNoteJson: unknown;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type Runtime = {
   strategySeq: number;
   versionSeq: number;
+  pineSeq: number;
   strategies: Map<string, StrategyRuleRow>;
   versions: Map<string, StrategyRuleVersionRow>;
+  pineScripts: Map<string, PineScriptRow>;
 };
 
 let runtime: Runtime;
@@ -43,8 +95,10 @@ function createRuntime(): Runtime {
   return {
     strategySeq: 1,
     versionSeq: 1,
+    pineSeq: 1,
     strategies: new Map(),
     versions: new Map(),
+    pineScripts: new Map(),
   };
 }
 
@@ -180,6 +234,32 @@ vi.mock('../src/db', () => {
         return next;
       },
     },
+    pineScript: {
+      create: async ({ data }: any) => {
+        const id = `pine-${runtime.pineSeq++}`;
+        const now = new Date();
+        const row: PineScriptRow = {
+          id,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          scriptName: data.scriptName,
+          pineVersion: data.pineVersion,
+          scriptBody: data.scriptBody,
+          generationNoteJson: data.generationNoteJson ?? null,
+          status: data.status ?? 'ready',
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.pineScripts.set(id, row);
+        return row;
+      },
+      findFirst: async ({ where }: any) => {
+        const rows = Array.from(runtime.pineScripts.values()).filter(
+          (row) => row.strategyRuleVersionId === where.strategyRuleVersionId,
+        );
+        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return rows[0] ?? null;
+      },
+    },
   };
 
   return { prisma };
@@ -237,6 +317,17 @@ describe('strategy lab vertical slice', () => {
     expect(generatedBody.data.strategy_version.status).toBe('generated');
     expect(generatedBody.data.strategy_version.generated_pine).toContain('strategy("Hokkyokusei Generated Strategy"');
     expect(Array.isArray(generatedBody.data.strategy_version.warnings)).toBe(true);
+    expect(generatedBody.data.pine.pine_script_id).toBeTruthy();
+
+    const getPine = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${versionId}/pine`,
+    });
+    expect(getPine.statusCode).toBe(200);
+    const getPineBody = getPine.json();
+    expect(getPineBody.data.status).toBe('available');
+    expect(getPineBody.data.pine_script_id).toBeTruthy();
+    expect(typeof getPineBody.data.generated_script).toBe('string');
 
     await app.close();
   });
@@ -543,6 +634,13 @@ describe('strategy lab vertical slice', () => {
     const storedVersion = runtime.versions.get(versionId);
     expect(storedVersion).toBeTruthy();
     expect(storedVersion?.status).toBe('failed');
+
+    const getPine = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/${versionId}/pine`,
+    });
+    expect(getPine.statusCode).toBe(200);
+    expect(getPine.json().data.status).toBe('unavailable');
 
     await app.close();
   });

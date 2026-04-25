@@ -275,10 +275,19 @@ function setupSWR(
   internalArtifactError: { message: string; code?: string } | null = null,
   compareSourceStatusData: ReturnType<typeof createInternalExecutionStatusData> | null = null,
   compareSourceResultData: ReturnType<typeof createInternalExecutionResultData> | null = null,
+  pinePayload: any = null,
 ) {
   const compareSourceExecutionId = compareSourceStatusData?.execution?.id ?? null;
   const currentExecutionId = internalStatusData?.execution?.id ?? null;
   mockUseSWR.mockImplementation((key: string) => {
+    if (typeof key === 'string' && key.endsWith('/pine')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: pinePayload,
+      };
+    }
     if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
       return {
         isLoading: false,

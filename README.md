@@ -119,6 +119,19 @@ pnpm run down
 - provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
 - `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、保存/レスポンス shape を維持する。
 
+## 自然言語→Pine 生成（最小）
+- API:
+  - `POST /api/strategy-versions/:versionId/pine/generate`
+  - `GET /api/strategy-versions/:versionId/pine`
+- 保存方針:
+  - 生成物: `pine_scripts`（最新は `GET /pine` で返却）
+  - 互換反映: `strategy_rule_versions.generated_pine` / `warnings_json` / `assumptions_json` / `status`
+- provider は Home/Symbol/Comparison/Backtest と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
+- validation（最小）:
+  - 空文字は failure
+  - `//@version` と `strategy(...)|indicator(...)` の最小構文チェック
+  - provider error / invalid output は `status=failed` と warning/failure_reason で返す
+
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
 - 現在の対応範囲:

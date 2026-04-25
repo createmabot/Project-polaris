@@ -197,3 +197,18 @@ pnpm run dev
 - GET /api/backtests/:backtestId
 - ai_review.status=available|unavailable
 
+### 9. Rule Lab Pine Generation Check (Minimal)
+1. Open Strategy Version Detail
+   - `http://localhost:5173/strategy-versions/:versionId`
+2. Generate Pine
+   - click `Pine を生成`
+   - API: `POST /api/strategy-versions/:versionId/pine/generate`
+3. Confirm fetch endpoint
+   - API: `GET /api/strategy-versions/:versionId/pine`
+   - expected `status=available|unavailable`
+4. Confirm minimal states in UI
+   - generating
+   - unavailable (not generated yet)
+   - available (script shown)
+   - failed (warning / failure reason shown)
+

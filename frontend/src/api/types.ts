@@ -341,6 +341,30 @@ export type StrategyVersionData = {
   } | null;
 };
 
+export type StrategyVersionPineData = {
+  strategy_rule_version_id: string;
+  status: 'available' | 'unavailable';
+  pine_script_id: string | null;
+  generated_script: string | null;
+  script_body?: string | null;
+  script_name?: string | null;
+  pine_version?: string | null;
+  warnings: string[];
+  generation_note?: Record<string, unknown> | null;
+  generated_at?: string | null;
+};
+
+export type StrategyVersionPineGenerateData = {
+  strategy_version: StrategyVersionData['strategy_version'];
+  pine: {
+    pine_script_id: string | null;
+    generated_script: string | null;
+    warnings: string[];
+    status: 'generated' | 'failed';
+    failure_reason?: string | null;
+  };
+};
+
 export type StrategyVersionListData = {
   strategy: {
     id: string;

@@ -454,7 +454,25 @@ model StrategyRuleVersion {
   @@map("strategy_rule_versions")
 
   backtests Backtest[]
+  pineScripts PineScript[]
   internalBacktestExecutions InternalBacktestExecution[]
+}
+
+model PineScript {
+  id                    String              @id @default(uuid())
+  strategyRuleVersionId String
+  strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id], onDelete: Cascade)
+  scriptName            String
+  pineVersion           String
+  scriptBody            String              @db.Text
+  generationNoteJson    Json?
+  status                String              @default("ready")
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([strategyRuleVersionId, createdAt])
+  @@index([status])
+  @@map("pine_scripts")
 }
 
 model Backtest {

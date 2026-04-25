@@ -1,15 +1,21 @@
-export type PineGenerationResult = {
+export type PineGenerationInput = {
+  naturalLanguageSpec: string;
+  normalizedRuleJson: Record<string, unknown> | null;
+  targetMarket: string;
+  targetTimeframe: string;
+};
+
+export type PineGenerationOutput = {
   normalizedRuleJson: Record<string, unknown>;
-  generatedPine: string | null;
+  generatedScript: string | null;
   warnings: string[];
   assumptions: string[];
   status: 'generated' | 'failed';
 };
 
-type RuleInput = {
-  naturalLanguageRule: string;
-  market: string;
-  timeframe: string;
+export type PineValidationResult = {
+  warnings: string[];
+  failureReason: string | null;
 };
 
 const SUPPORTED_MARKETS = new Set(['JP_STOCK']);
@@ -21,10 +27,47 @@ function toConditionText(lines: string[]): string {
   return lines.map((line) => `(${line})`).join(' and ');
 }
 
-export function generatePineFromNaturalLanguage(input: RuleInput): PineGenerationResult {
+export function validateGeneratedPineScript(script: string | null): PineValidationResult {
+  if (!script || !script.trim()) {
+    return {
+      warnings: [],
+      failureReason: 'Generated script is empty.',
+    };
+  }
+
+  const trimmed = script.trim();
+  const warnings: string[] = [];
+
+  const hasVersion = /@version=\d+/i.test(trimmed);
+  if (!hasVersion) {
+    warnings.push('Missing //@version declaration.');
+  }
+
+  const hasEntryPoint = /\b(strategy|indicator)\s*\(/i.test(trimmed);
+  if (!hasEntryPoint) {
+    return {
+      warnings,
+      failureReason: 'Script must contain strategy(...) or indicator(...).',
+    };
+  }
+
+  if (!hasVersion) {
+    return {
+      warnings,
+      failureReason: 'Script is not valid Pine format because version declaration is missing.',
+    };
+  }
+
+  return {
+    warnings,
+    failureReason: null,
+  };
+}
+
+export function generatePineDeterministic(input: PineGenerationInput): PineGenerationOutput {
   const warnings: string[] = [];
   const assumptions: string[] = [];
-  const nl = input.naturalLanguageRule.trim();
+  const nl = input.naturalLanguageSpec.trim();
 
   if (nl.length === 0) {
     return {
@@ -34,26 +77,29 @@ export function generatePineFromNaturalLanguage(input: RuleInput): PineGeneratio
         exit_conditions: [],
         unsupported_clauses: ['empty_rule'],
       },
-      generatedPine: null,
-      warnings: ['ルール本文が空です。自然言語ルールを入力してください。'],
+      generatedScript: null,
+      warnings: ['natural_language_spec must not be empty'],
       assumptions,
       status: 'failed',
     };
   }
 
-  if (!SUPPORTED_MARKETS.has(input.market)) {
-    warnings.push(`market=${input.market} はMVP対象外です。JP_STOCKとして扱います。`);
-    assumptions.push('market は JP_STOCK として解釈した。');
+  if (!SUPPORTED_MARKETS.has(input.targetMarket)) {
+    warnings.push(`market=${input.targetMarket} is outside MVP scope. Fallback assumes JP_STOCK.`);
+    assumptions.push('target_market is interpreted as JP_STOCK');
   }
 
-  if (!SUPPORTED_TIMEFRAMES.has(input.timeframe)) {
-    warnings.push(`timeframe=${input.timeframe} はMVP対象外です。日足(D)前提で生成します。`);
-    assumptions.push('timeframe は D(日足)として解釈した。');
+  if (!SUPPORTED_TIMEFRAMES.has(input.targetTimeframe)) {
+    warnings.push(`timeframe=${input.targetTimeframe} is outside MVP scope. Fallback assumes D.`);
+    assumptions.push('target_timeframe is interpreted as D');
   }
 
   const unsupportedPatterns = [
-    { regex: /空売り|ショート|short/i, warning: '空売り/ショート条件はMVP対象外です。long_onlyで解釈します。' },
-    { regex: /分割利確|トレーリング|ナンピン|ピラミッディング/, warning: '高度なポジション管理はMVP対象外です。' },
+    { regex: /short/i, warning: 'short conditions are not supported in MVP (long_only).' },
+    {
+      regex: /trailing|nanpin|pyramiding/i,
+      warning: 'position sizing and advanced execution controls are outside MVP scope.',
+    },
   ];
 
   const unsupportedClauses: string[] = [];
@@ -67,31 +113,31 @@ export function generatePineFromNaturalLanguage(input: RuleInput): PineGeneratio
   const entryConditions: string[] = [];
   const exitConditions: string[] = [];
 
-  if (/25日.*移動平均|25日線|sma\(25\)/i.test(nl)) {
+  if (/25日|移動平均|ma25|sma\(25\)/i.test(nl)) {
     entryConditions.push('close > ma25');
-    assumptions.push('移動平均期間は25を採用した。');
+    assumptions.push('moving average period defaults to 25');
   }
 
   if (/rsi/i.test(nl)) {
     entryConditions.push('rsi14 >= 50');
-    assumptions.push('RSI lengthは14、閾値は50を採用した。');
+    assumptions.push('RSI length defaults to 14 and threshold defaults to 50');
   }
 
   if (/出来高|volume/i.test(nl)) {
     entryConditions.push('volume >= volMa20 * 1.5');
-    assumptions.push('出来高条件は20日平均の1.5倍を採用した。');
+    assumptions.push('volume condition defaults to 20-day average * 1.5');
   }
 
-  if (/下回|割れ|close\s*</i.test(nl) && /25日|移動平均|ma25|sma\(25\)/i.test(nl)) {
+  if (/終値|close\s*</i.test(nl) && /25日|移動平均|ma25|sma\(25\)/i.test(nl)) {
     exitConditions.push('close < ma25');
   }
 
   if (entryConditions.length === 0) {
-    warnings.push('entry 条件を特定できませんでした。MVP対応条件（移動平均/RSI/出来高）で記述してください。');
+    warnings.push('entry conditions were not detected from supported MVP pattern set.');
   }
 
   if (exitConditions.length === 0) {
-    warnings.push('exit 条件を特定できませんでした。終値が移動平均を下回る等の基本条件を追記してください。');
+    warnings.push('exit conditions were not detected from supported MVP pattern set.');
   }
 
   const normalizedRuleJson: Record<string, unknown> = {
@@ -104,7 +150,7 @@ export function generatePineFromNaturalLanguage(input: RuleInput): PineGeneratio
   if (entryConditions.length === 0 || exitConditions.length === 0) {
     return {
       normalizedRuleJson,
-      generatedPine: null,
+      generatedScript: null,
       warnings,
       assumptions: [...new Set(assumptions)],
       status: 'failed',
@@ -114,7 +160,7 @@ export function generatePineFromNaturalLanguage(input: RuleInput): PineGeneratio
   const entryConditionText = toConditionText(entryConditions);
   const exitConditionText = toConditionText(exitConditions);
 
-  const generatedPine = `//@version=6
+  const generatedScript = `//@version=6
 strategy("Hokkyokusei Generated Strategy", overlay=true)
 
 ma25 = ta.sma(close, 25)
@@ -135,7 +181,7 @@ plot(ma25)
 
   return {
     normalizedRuleJson,
-    generatedPine,
+    generatedScript,
     warnings,
     assumptions: [...new Set(assumptions)],
     status: 'generated',
