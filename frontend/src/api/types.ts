@@ -362,6 +362,8 @@ export type StrategyVersionPineGenerateData = {
     warnings: string[];
     status: 'generated' | 'failed';
     failure_reason?: string | null;
+    repair_attempts?: number;
+    invalid_reason_codes?: string[];
   };
 };
 

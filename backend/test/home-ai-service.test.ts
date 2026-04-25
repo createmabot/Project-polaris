@@ -1,6 +1,7 @@
 ﻿import { describe, expect, it, vi } from 'vitest';
 import { HomeAiService } from '../src/ai/home-ai-service';
 import type { HomeAiProvider } from '../src/ai/home-provider';
+import { assessGeneratedPineScript } from '../src/strategy/pine';
 
 const alertContext = {
   alertEventId: 'alert-1',
@@ -421,5 +422,84 @@ describe('HomeAiService', () => {
     expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
     expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
     expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries pine generation once and recovers with repair request context', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => {
+      if (!context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript: 'strategy("missing-version", overlay=true)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript: '//@version=6\nstrategy("repaired", overlay=true)',
+        warnings: ['repaired_once'],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA25, close below MA25 exit',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.generatedScript).toContain('//@version=6');
+    expect(result.log.retryCount).toBe(1);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+  });
+
+  it('fails when pine repair reaches retry limit', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockResolvedValue({
+      normalizedRuleJson: {},
+      generatedScript: 'strategy("still-missing-version", overlay=true)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA25, close below MA25 exit',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 1, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('failed');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.failureReason).toContain('version');
+    expect(result.log.retryCount).toBe(1);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
   });
 });

@@ -281,4 +281,81 @@ describe('strategy version pine endpoints', () => {
 
     await app.close();
   });
+
+  it('returns repair attempts metadata when service repaired output', async () => {
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: '//@version=6\nstrategy("repaired", overlay=true)',
+        warnings: ['repaired_once'],
+        assumptions: [],
+        status: 'generated',
+        repairAttempts: 1,
+        failureReason: null,
+        invalidReasonCodes: ['missing_version_declaration'],
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json().data.pine.repair_attempts).toBe(1);
+    expect(generated.json().data.pine.invalid_reason_codes).toContain('missing_version_declaration');
+
+    await app.close();
+  });
+
+  it('returns validation error when backtest period is inconsistent', async () => {
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {
+        backtest_period_from: '2026-04-20',
+        backtest_period_to: '2026-04-10',
+      },
+    });
+
+    expect(generated.statusCode).toBe(400);
+    expect(generated.json().error.code).toBe('VALIDATION_ERROR');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+
+    await app.close();
+  });
+
+  it('returns validation error when natural language rule is empty', async () => {
+    const row = runtime.versions.get('ver-1');
+    if (!row) throw new Error('seed row missing');
+    runtime.versions.set('ver-1', {
+      ...row,
+      naturalLanguageRule: '   ',
+    });
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+
+    expect(generated.statusCode).toBe(400);
+    expect(generated.json().error.code).toBe('VALIDATION_ERROR');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+
+    await app.close();
+  });
 });

@@ -18,6 +18,21 @@ export type PineValidationResult = {
   failureReason: string | null;
 };
 
+export type PineInvalidReasonCode =
+  | 'empty_output'
+  | 'missing_version_declaration'
+  | 'missing_strategy_or_indicator_declaration'
+  | 'markdown_code_fence_pollution'
+  | 'explanatory_text_pollution';
+
+export type PineAssessmentResult = {
+  normalizedScript: string | null;
+  warnings: string[];
+  failureReason: string | null;
+  retryable: boolean;
+  invalidReasonCodes: PineInvalidReasonCode[];
+};
+
 const SUPPORTED_MARKETS = new Set(['JP_STOCK']);
 const SUPPORTED_TIMEFRAMES = new Set(['D']);
 
@@ -28,39 +43,141 @@ function toConditionText(lines: string[]): string {
 }
 
 export function validateGeneratedPineScript(script: string | null): PineValidationResult {
+  const assessed = assessGeneratedPineScript(script);
+  return {
+    warnings: assessed.warnings,
+    failureReason: assessed.failureReason,
+  };
+}
+
+function stripMarkdownCodeFence(script: string): { script: string; hadFence: boolean } {
+  if (!/```/i.test(script)) {
+    return { script, hadFence: false };
+  }
+  const withoutFence = script.replace(/```[a-zA-Z]*\s*/g, '').replace(/```/g, '').trim();
+  return { script: withoutFence, hadFence: true };
+}
+
+function stripExplanatoryNoise(script: string): { script: string; removed: boolean } {
+  const lines = script.split(/\r?\n/);
+  if (lines.length === 0) {
+    return { script, removed: false };
+  }
+
+  let startIndex = 0;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+    if (line.length === 0) continue;
+    if (line.startsWith('//@version=')) {
+      startIndex = i;
+      break;
+    }
+    if (/^(strategy|indicator)\s*\(/i.test(line)) {
+      startIndex = i;
+      break;
+    }
+    startIndex = i + 1;
+  }
+
+  if (startIndex === 0) {
+    return { script, removed: false };
+  }
+
+  return {
+    script: lines.slice(startIndex).join('\n').trim(),
+    removed: true,
+  };
+}
+
+function detectExplanatoryNoise(script: string): boolean {
+  const lines = script.split(/\r?\n/);
+  return lines.some((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (trimmed.startsWith('//')) return false;
+    return /(here(?:'s| is)|below is|pine script|explanation|説明|解説|以下|注意|note:)/i.test(trimmed);
+  });
+}
+
+export function assessGeneratedPineScript(script: string | null): PineAssessmentResult {
   if (!script || !script.trim()) {
     return {
+      normalizedScript: null,
       warnings: [],
       failureReason: 'Generated script is empty.',
+      retryable: false,
+      invalidReasonCodes: ['empty_output'],
     };
   }
 
-  const trimmed = script.trim();
+  let normalizedScript = script.trim();
   const warnings: string[] = [];
+  const invalidReasonCodes: PineInvalidReasonCode[] = [];
 
-  const hasVersion = /@version=\d+/i.test(trimmed);
+  const strippedFence = stripMarkdownCodeFence(normalizedScript);
+  if (strippedFence.hadFence) {
+    normalizedScript = strippedFence.script;
+    warnings.push('Markdown code fences were removed from generated script.');
+    invalidReasonCodes.push('markdown_code_fence_pollution');
+  }
+
+  const strippedNoise = stripExplanatoryNoise(normalizedScript);
+  if (strippedNoise.removed) {
+    normalizedScript = strippedNoise.script;
+    warnings.push('Leading explanatory text was removed from generated script.');
+    invalidReasonCodes.push('explanatory_text_pollution');
+  }
+
+  if (detectExplanatoryNoise(normalizedScript)) {
+    warnings.push('Generated script contains explanatory text mixed with code.');
+    invalidReasonCodes.push('explanatory_text_pollution');
+  }
+
+  if (!normalizedScript) {
+    return {
+      normalizedScript: null,
+      warnings,
+      failureReason: 'Generated script is empty after normalization.',
+      retryable: false,
+      invalidReasonCodes: Array.from(new Set([...invalidReasonCodes, 'empty_output'])),
+    };
+  }
+
+  const hasVersion = /@version=\d+/i.test(normalizedScript);
   if (!hasVersion) {
     warnings.push('Missing //@version declaration.');
+    invalidReasonCodes.push('missing_version_declaration');
   }
 
-  const hasEntryPoint = /\b(strategy|indicator)\s*\(/i.test(trimmed);
+  const hasEntryPoint = /\b(strategy|indicator)\s*\(/i.test(normalizedScript);
   if (!hasEntryPoint) {
     return {
+      normalizedScript,
       warnings,
       failureReason: 'Script must contain strategy(...) or indicator(...).',
+      retryable: false,
+      invalidReasonCodes: Array.from(
+        new Set([...invalidReasonCodes, 'missing_strategy_or_indicator_declaration']),
+      ),
     };
   }
 
   if (!hasVersion) {
     return {
+      normalizedScript,
       warnings,
       failureReason: 'Script is not valid Pine format because version declaration is missing.',
+      retryable: true,
+      invalidReasonCodes: Array.from(new Set(invalidReasonCodes)),
     };
   }
 
   return {
+    normalizedScript,
     warnings,
     failureReason: null,
+    retryable: false,
+    invalidReasonCodes: Array.from(new Set(invalidReasonCodes)),
   };
 }
 
