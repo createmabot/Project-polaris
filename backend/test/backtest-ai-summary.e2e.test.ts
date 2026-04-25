@@ -67,6 +67,7 @@ type Runtime = {
   nextJobId: number;
   nextSummaryId: number;
   homeAiMode: 'ok' | 'throw' | 'fallback';
+  lastBacktestContext: any | null;
 };
 
 let runtime: Runtime;
@@ -128,6 +129,7 @@ function createRuntime(): Runtime {
     nextJobId: 1,
     nextSummaryId: 1,
     homeAiMode: 'ok',
+    lastBacktestContext: null,
   };
 }
 
@@ -229,6 +231,7 @@ vi.mock('../src/db', () => {
 vi.mock('../src/ai/home-ai-service', () => ({
   HomeAiService: class {
     async generateBacktestSummary(_context: any) {
+      runtime.lastBacktestContext = _context;
       if (runtime.homeAiMode === 'throw') {
         throw new Error('provider failed');
       }
@@ -237,13 +240,14 @@ vi.mock('../src/ai/home-ai-service', () => ({
         return {
           output: {
             title: 'fallback backtest summary',
-            bodyMarkdown: 'fallback body',
+            bodyMarkdown: '## fallback backtest summary\n\n### 結論\nfallback\n\n### 良い点\n- fallback\n\n### 懸念点\n- limited context\n\n### 次に確認すべき点\n- re-check',
             structuredJson: {
               schema_name: 'backtest_review_summary',
               schema_version: '1.0',
               confidence: 'low',
               insufficient_context: true,
               payload: {
+                conclusion: 'fallback',
                 strengths: [],
                 risks: ['limited context'],
                 next_actions: ['re-check'],
@@ -278,13 +282,14 @@ vi.mock('../src/ai/home-ai-service', () => ({
       return {
         output: {
           title: 'backtest summary',
-          bodyMarkdown: 'Backtest review body.',
+          bodyMarkdown: '## backtest summary\n\n### 結論\n総評\n\n### 良い点\n- Stable profitability\n\n### 懸念点\n- Regime shift risk\n\n### 次に確認すべき点\n- Run out-of-sample check',
           structuredJson: {
             schema_name: 'backtest_review_summary',
             schema_version: '1.0',
             confidence: 'medium',
             insufficient_context: false,
             payload: {
+              conclusion: '総評',
               strengths: ['Stable profitability'],
               risks: ['Regime shift risk'],
               next_actions: ['Run out-of-sample check'],
@@ -349,6 +354,14 @@ describe('backtest ai-summary routes', () => {
     expect(runtime.aiJobs[0].status).toBe('succeeded');
     expect(runtime.aiSummaries).toHaveLength(1);
     expect(runtime.aiSummaries[0].summaryScope).toBe('backtest_review');
+    expect(runtime.lastBacktestContext?.tradeSummary).not.toBeNull();
+    expect(runtime.lastBacktestContext?.tradeSummary?.parsedImportCount).toBe(1);
+    expect(runtime.lastBacktestContext?.importParsedSummaries?.length).toBeGreaterThan(0);
+    expect(runtime.lastBacktestContext?.comparisonDiff).toBeNull();
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 結論');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 良い点');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 懸念点');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 次に確認すべき点');
 
     await app.close();
   });

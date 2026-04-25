@@ -42,6 +42,32 @@ type ParsedImportSummary = {
   periodTo: string | null;
 };
 
+type BacktestTradeSummaryInput = {
+  parsedImportCount: number;
+  averageTotalTrades: number | null;
+  averageWinRate: number | null;
+  averageProfitFactor: number | null;
+  averageNetProfit: number | null;
+  bestNetProfit: number | null;
+  worstNetProfit: number | null;
+};
+
+type BacktestComparisonDiffInput = {
+  baseImportId: string;
+  targetImportId: string;
+  totalTradesDiff: number | null;
+  winRateDiffPt: number | null;
+  profitFactorDiff: number | null;
+  maxDrawdownDiff: number | null;
+  netProfitDiff: number | null;
+};
+
+type ParsedImportForAi = ParsedImportSummary & {
+  importId: string;
+  fileName: string;
+  createdAt: string;
+};
+
 type BacktestAiReviewView = {
   summary_id: string | null;
   title: string | null;
@@ -69,6 +95,73 @@ function parseParsedImportSummary(value: unknown): ParsedImportSummary | null {
     netProfit: typeof value.netProfit === 'number' ? value.netProfit : null,
     periodFrom: typeof value.periodFrom === 'string' ? value.periodFrom : null,
     periodTo: typeof value.periodTo === 'string' ? value.periodTo : null,
+  };
+}
+
+function round(value: number, digits = 2): number {
+  return Number(value.toFixed(digits));
+}
+
+function average(values: Array<number | null>, digits = 2): number | null {
+  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (valid.length === 0) return null;
+  return round(valid.reduce((acc, value) => acc + value, 0) / valid.length, digits);
+}
+
+function buildParsedImportsForAi(imports: Array<{
+  id: string;
+  fileName: string;
+  createdAt: Date;
+  parsedSummaryJson: unknown;
+}>): ParsedImportForAi[] {
+  return imports
+    .map((item) => {
+      const parsed = parseParsedImportSummary(item.parsedSummaryJson);
+      if (!parsed) return null;
+      return {
+        importId: item.id,
+        fileName: item.fileName,
+        createdAt: item.createdAt.toISOString(),
+        ...parsed,
+      };
+    })
+    .filter((item): item is ParsedImportForAi => item !== null);
+}
+
+function buildTradeSummaryForAi(parsedImports: ParsedImportForAi[]): BacktestTradeSummaryInput | null {
+  if (parsedImports.length === 0) return null;
+  const netProfits = parsedImports
+    .map((item) => item.netProfit)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+  return {
+    parsedImportCount: parsedImports.length,
+    averageTotalTrades: average(parsedImports.map((item) => item.totalTrades), 1),
+    averageWinRate: average(parsedImports.map((item) => item.winRate), 2),
+    averageProfitFactor: average(parsedImports.map((item) => item.profitFactor), 2),
+    averageNetProfit: average(parsedImports.map((item) => item.netProfit), 0),
+    bestNetProfit: netProfits.length > 0 ? Math.max(...netProfits) : null,
+    worstNetProfit: netProfits.length > 0 ? Math.min(...netProfits) : null,
+  };
+}
+
+function diffValue(target: number | null, base: number | null, digits = 2): number | null {
+  if (typeof target !== 'number' || typeof base !== 'number') return null;
+  return round(target - base, digits);
+}
+
+function buildComparisonDiffForAi(parsedImports: ParsedImportForAi[]): BacktestComparisonDiffInput | null {
+  if (parsedImports.length < 2) return null;
+  const target = parsedImports[0];
+  const base = parsedImports[1];
+  return {
+    baseImportId: base.importId,
+    targetImportId: target.importId,
+    totalTradesDiff: diffValue(target.totalTrades, base.totalTrades, 0),
+    winRateDiffPt: diffValue(target.winRate, base.winRate, 2),
+    profitFactorDiff: diffValue(target.profitFactor, base.profitFactor, 2),
+    maxDrawdownDiff: diffValue(target.maxDrawdown, base.maxDrawdown, 2),
+    netProfitDiff: diffValue(target.netProfit, base.netProfit, 0),
   };
 }
 
@@ -175,6 +268,9 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
 
   const latestImport = backtest.imports[0] ?? null;
   const metrics = parseParsedImportSummary(latestImport?.parsedSummaryJson ?? null);
+  const parsedImportsForAi = buildParsedImportsForAi(backtest.imports).slice(0, 3);
+  const tradeSummary = buildTradeSummaryForAi(parsedImportsForAi);
+  const comparisonDiff = buildComparisonDiffForAi(parsedImportsForAi);
   const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
   const strategyVersion = backtest.strategyRuleVersion;
   const importFiles = backtest.imports.map((item) => ({
@@ -215,11 +311,14 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
       execution_source: backtest.executionSource,
       status: backtest.status,
       metrics,
+      trade_summary: tradeSummary,
       import_files: importFiles.map((item) => ({
         id: item.id,
         file_name: item.fileName,
         parse_status: item.parseStatus,
       })),
+      import_parsed_summaries: parsedImportsForAi,
+      comparison_diff: comparisonDiff,
       strategy: {
         strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
         strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
@@ -261,7 +360,10 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
       timeframe: backtest.timeframe,
       status: backtest.status,
       metrics,
+      tradeSummary,
       importFiles,
+      importParsedSummaries: parsedImportsForAi,
+      comparisonDiff,
       strategy: {
         strategyId: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
         strategyVersionId: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
@@ -289,6 +391,8 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
           provider: log.provider,
           fallback_to_stub: log.fallbackToStub,
           has_metrics: !!metrics,
+          has_trade_summary: !!tradeSummary,
+          has_comparison_diff: !!comparisonDiff,
           import_count: importFiles.length,
           market: backtest.market,
           timeframe: backtest.timeframe,

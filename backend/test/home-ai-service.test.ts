@@ -138,6 +138,7 @@ function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
           confidence: 'medium',
           insufficient_context: false,
           payload: {
+            conclusion: 'ok',
             strengths: [],
             risks: [],
             next_actions: [],
@@ -260,6 +261,7 @@ function createStubProvider(): HomeAiProvider {
         confidence: 'low',
         insufficient_context: true,
         payload: {
+          conclusion: 'stub',
           strengths: [],
           risks: [],
           next_actions: [],
@@ -394,7 +396,10 @@ describe('HomeAiService', () => {
       timeframe: 'D',
       status: 'imported',
       metrics: null,
+      tradeSummary: null,
       importFiles: [],
+      importParsedSummaries: [],
+      comparisonDiff: null,
       strategy: null,
     });
 

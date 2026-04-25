@@ -277,6 +277,20 @@ pnpm run down
   - `parsed`: 解析成功
   - `failed`: 解析失敗（`parseError` に理由）
 
+### TradingView Strategy Report の表記差分（運用メモ）
+- TradingView の CSV は利用タブにより列構成が異なる。
+  - `Performance Summary` エクスポート: 指標列中心（`Net Profit` など）
+  - `List of Trades` エクスポート: 約定行中心（`Trade #`, `Type`, `Date/Time`, `Profit`, `Cumulative Profit` など）
+- 北極星はまず `Performance Summary` 形式を優先受理し、必須ヘッダ不足時のみ `List of Trades` 形式として再解釈する。
+- そのため「Unsupported CSV header」が出る場合は、最初に TradingView 側でどのタブからエクスポートしたかを確認する。
+
+### CSV受け入れ形式の差分（MVP）
+- 主経路（指標CSV）:
+  - 必須ヘッダ: `Net Profit`, `Total Closed Trades`, `Percent Profitable`, `Profit Factor`, `Max Drawdown`, `From`, `To`
+- 代替経路（約定CSV）:
+  - `Trade #|トレード番号`, `Type|タイプ`, `Date/Time|日時`, `Net Profit|純損益 JPY|Profit`, `Cumulative Profit|累積損益 JPY`
+- 代替経路で受理された場合も、保存 shape は `parsed_summary`（`totalTrades/winRate/profitFactor/maxDrawdown/netProfit/periodFrom/periodTo`）に正規化される。
+
 ### backtest 詳細（最小レポート表示）
 - URL: `/backtests/:backtestId`
 - 表示項目:

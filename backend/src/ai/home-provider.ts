@@ -158,6 +158,15 @@ export type BacktestSummaryContext = {
     periodFrom: string | null;
     periodTo: string | null;
   } | null;
+  tradeSummary: {
+    parsedImportCount: number;
+    averageTotalTrades: number | null;
+    averageWinRate: number | null;
+    averageProfitFactor: number | null;
+    averageNetProfit: number | null;
+    bestNetProfit: number | null;
+    worstNetProfit: number | null;
+  } | null;
   importFiles: Array<{
     id: string;
     fileName: string;
@@ -165,6 +174,27 @@ export type BacktestSummaryContext = {
     parseError: string | null;
     createdAt: string;
   }>;
+  importParsedSummaries: Array<{
+    importId: string;
+    fileName: string;
+    createdAt: string;
+    totalTrades: number | null;
+    winRate: number | null;
+    profitFactor: number | null;
+    maxDrawdown: number | null;
+    netProfit: number | null;
+    periodFrom: string | null;
+    periodTo: string | null;
+  }>;
+  comparisonDiff: {
+    baseImportId: string;
+    targetImportId: string;
+    totalTradesDiff: number | null;
+    winRateDiffPt: number | null;
+    profitFactorDiff: number | null;
+    maxDrawdownDiff: number | null;
+    netProfitDiff: number | null;
+  } | null;
   strategy: {
     strategyId: string | null;
     strategyVersionId: string | null;
@@ -182,6 +212,7 @@ export type BacktestSummaryOutput = {
     confidence: 'high' | 'medium' | 'low';
     insufficient_context: boolean;
     payload: {
+      conclusion: string;
       strengths: string[];
       risks: string[];
       next_actions: string[];
@@ -413,13 +444,50 @@ function buildDeterministicComparisonOutput(
   };
 }
 
+function toSigned(value: number | null | undefined, digits = 2, unit = ''): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(digits)}${unit}`;
+}
+
+function average(values: Array<number | null | undefined>, digits = 2): number | null {
+  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (valid.length === 0) return null;
+  const sum = valid.reduce((acc, value) => acc + value, 0);
+  return Number((sum / valid.length).toFixed(digits));
+}
+
+function renderBacktestBodyMarkdown(
+  title: string,
+  conclusion: string,
+  strengths: string[],
+  risks: string[],
+  nextActions: string[],
+): string {
+  return [
+    `## ${title}`,
+    '',
+    '### 結論',
+    conclusion,
+    '',
+    '### 良い点',
+    ...strengths.map((item) => `- ${item}`),
+    '',
+    '### 懸念点',
+    ...risks.map((item) => `- ${item}`),
+    '',
+    '### 次に確認すべき点',
+    ...nextActions.map((item) => `- ${item}`),
+  ].join('\n');
+}
+
 function buildDeterministicBacktestOutput(
   context: BacktestSummaryContext,
   options: { modelName: string; promptVersion: string; titlePrefix: string },
 ): BacktestSummaryOutput {
   const hasMetrics = !!context.metrics;
-  const hasImports = context.importFiles.length > 0;
-  const insufficientContext = !hasMetrics && !hasImports;
+  const hasParsedImports = context.importParsedSummaries.length > 0;
+  const insufficientContext = !hasMetrics && !hasParsedImports;
   const confidence: 'high' | 'medium' | 'low' = insufficientContext ? 'low' : hasMetrics ? 'high' : 'medium';
   const title = `${options.titlePrefix}Backtest Review: ${context.title}`;
   const keyMetrics = {
@@ -429,35 +497,85 @@ function buildDeterministicBacktestOutput(
     max_drawdown: context.metrics?.maxDrawdown ?? null,
     net_profit: context.metrics?.netProfit ?? null,
   };
+  const netProfitText = toSigned(context.metrics?.netProfit, 0);
+  const profitFactorText = toSigned(context.metrics?.profitFactor, 2);
+  const winRateText = toSigned(context.metrics?.winRate, 2, 'pt');
+  const maxDrawdownText = toSigned(context.metrics?.maxDrawdown, 2, '%');
+
+  const tradeSummary = context.tradeSummary ?? {
+    parsedImportCount: context.importParsedSummaries.length,
+    averageTotalTrades: average(context.importParsedSummaries.map((item) => item.totalTrades), 1),
+    averageWinRate: average(context.importParsedSummaries.map((item) => item.winRate), 2),
+    averageProfitFactor: average(context.importParsedSummaries.map((item) => item.profitFactor), 2),
+    averageNetProfit: average(context.importParsedSummaries.map((item) => item.netProfit), 0),
+    bestNetProfit: (() => {
+      const values = context.importParsedSummaries
+        .map((item) => item.netProfit)
+        .filter((value): value is number => typeof value === 'number');
+      return values.length > 0 ? Math.max(...values) : null;
+    })(),
+    worstNetProfit: (() => {
+      const values = context.importParsedSummaries
+        .map((item) => item.netProfit)
+        .filter((value): value is number => typeof value === 'number');
+      return values.length > 0 ? Math.min(...values) : null;
+    })(),
+  };
+
+  const conclusion = insufficientContext
+    ? '入力素材が不足しているため、総評は暫定です。最低1件の解析済みCSVを追加して再評価してください。'
+    : context.metrics && context.metrics.netProfit !== null && context.metrics.profitFactor !== null
+      ? context.metrics.netProfit > 0 && context.metrics.profitFactor > 1
+        ? `純利益${netProfitText ?? '-'}、Profit Factor${profitFactorText ?? '-'}で、現時点の成績は前向きです。`
+        : `純利益${netProfitText ?? '-'}、Profit Factor${profitFactorText ?? '-'}で、成績の安定性には追加検証が必要です。`
+      : '主要指標は一部取得済みですが、追加の検証素材を加えて判断精度を上げる段階です。';
+
+  const strengths = [
+    hasMetrics && netProfitText ? `純利益は${netProfitText}で、定量的な優位を確認できます。` : '',
+    hasMetrics && profitFactorText ? `Profit Factorは${profitFactorText}で、損益比の把握が可能です。` : '',
+    hasMetrics && winRateText ? `勝率は${winRateText}で、再現性の初期判断材料があります。` : '',
+    context.comparisonDiff?.netProfitDiff !== null && context.comparisonDiff?.netProfitDiff !== undefined
+      ? `最新取込は前回比で純利益${toSigned(context.comparisonDiff.netProfitDiff, 0) ?? '-'}です。`
+      : '',
+    tradeSummary.parsedImportCount > 1
+      ? `解析済み${tradeSummary.parsedImportCount}件から傾向比較が可能です。`
+      : '',
+  ].filter(Boolean);
+
+  const risks = [
+    hasMetrics && (context.metrics?.profitFactor ?? 0) <= 1 ? 'Profit Factor が1以下で、損益比が弱い可能性があります。' : '',
+    hasMetrics && (context.metrics?.maxDrawdown ?? 0) <= -15
+      ? `最大ドローダウンは${maxDrawdownText ?? '-'}で、下振れ耐性に懸念があります。`
+      : '',
+    hasMetrics && (context.metrics?.winRate ?? 100) < 45 ? `勝率は${winRateText ?? '-'}で、勝ち筋の安定性が不足しています。` : '',
+    tradeSummary.worstNetProfit !== null
+      ? `取込間の最悪純利益は${toSigned(tradeSummary.worstNetProfit, 0) ?? '-'}で、期間依存の振れ幅があります。`
+      : '',
+    insufficientContext ? '解析済み素材が不足しており、結論の信頼度は低いです。' : '',
+  ].filter(Boolean);
+
+  const nextActions = [
+    `同条件で期間を分割し、PF・DD・勝率の再現性を確認してください。`,
+    context.strategy?.naturalLanguageRule ? '自然言語ルールの exit 条件が現行ボラティリティに合うか見直してください。' : '',
+    context.comparisonDiff ? '最新取込と前回取込の差分要因（期間/銘柄条件）を切り分けてください。' : '',
+    tradeSummary.parsedImportCount < 2 ? 'もう1件以上CSVを追加して比較可能な状態にしてください。' : '',
+  ].filter(Boolean);
 
   return {
     title,
-    bodyMarkdown: [
-      `## ${title}`,
-      '',
-      `- backtest_id: ${context.backtestId}`,
-      `- market/timeframe: ${context.market}/${context.timeframe}`,
-      `- imports: ${context.importFiles.length}`,
-      `- metrics: ${hasMetrics ? 'available' : 'unavailable'}`,
-      insufficientContext ? '- context: insufficient' : '- context: minimal sufficient',
-    ].join('\n'),
+    bodyMarkdown: renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
     structuredJson: {
       schema_name: 'backtest_review_summary',
       schema_version: '1.0',
       confidence,
       insufficient_context: insufficientContext,
       payload: {
-        strengths: hasMetrics
-          ? ['Parsed metrics are available for quantitative review.']
-          : ['Import history is available for operational traceability.'],
-        risks: insufficientContext
-          ? ['Insufficient parsed summary context. Treat this as provisional.']
-          : ['Validate robustness with additional periods and stress cases.'],
-        next_actions: ['Re-check assumptions in strategy snapshot', 'Compare with another import window'],
+        conclusion,
+        strengths: strengths.length > 0 ? strengths : ['定量評価に使える入力が限定的です。'],
+        risks: risks.length > 0 ? risks : ['主要リスクを断定するには材料が不足しています。'],
+        next_actions: nextActions.length > 0 ? nextActions : ['追加CSVの取込後に再評価してください。'],
         key_metrics: keyMetrics,
-        overall_view: insufficientContext
-          ? 'Backtest context is limited. Additional parsed inputs are required.'
-          : 'Backtest result is usable as a baseline and should be validated against broader scenarios.',
+        overall_view: conclusion,
       },
     },
     modelName: options.modelName,
@@ -867,7 +985,13 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: 'Generate a concise backtest review summary for trading analysis. Return strict JSON only.',
+            content: [
+              'あなたは北極星のバックテスト総評アシスタントです。',
+              '出力は必ずJSONのみ。',
+              'メタ情報の箇条書きは禁止し、数値を自然文で解釈してください。',
+              'body_markdown は必ず次の4セクション構成にすること: 結論 / 良い点 / 懸念点 / 次に確認すべき点。',
+              '推測は禁止。入力にない事実は書かないこと。',
+            ].join(' '),
           },
           {
             role: 'user',
@@ -879,14 +1003,18 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               execution_source: context.executionSource,
               status: context.status,
               metrics: context.metrics,
+              trade_summary: context.tradeSummary,
               import_files: context.importFiles.slice(0, 10),
+              import_parsed_summaries: context.importParsedSummaries.slice(0, 3),
+              comparison_diff: context.comparisonDiff,
               strategy: context.strategy,
               output_schema: {
                 title: '<string>',
+                conclusion: '<string>',
+                good_points: ['<string>'],
+                concern_points: ['<string>'],
+                next_checks: ['<string>'],
                 body_markdown: '<string>',
-                strengths: ['<string>'],
-                risks: ['<string>'],
-                next_actions: ['<string>'],
                 overall_view: '<string>',
               },
             }),
@@ -894,6 +1022,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         ],
         temperature: 0.2,
         max_tokens: 900,
+        think: false,
       }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -916,30 +1045,41 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       return deterministic;
     }
 
+    const conclusion =
+      typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()
+        ? parsed.conclusion
+        : deterministic.structuredJson.payload.conclusion;
+    const strengths = Array.isArray(parsed?.good_points)
+      ? parsed.good_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+      : deterministic.structuredJson.payload.strengths;
+    const risks = Array.isArray(parsed?.concern_points)
+      ? parsed.concern_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+      : deterministic.structuredJson.payload.risks;
+    const nextActions = Array.isArray(parsed?.next_checks)
+      ? parsed.next_checks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+      : deterministic.structuredJson.payload.next_actions;
+    const title =
+      typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title;
+
     return {
       ...deterministic,
-      title: typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title,
+      title,
       bodyMarkdown:
         typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
           ? parsed.body_markdown
-          : deterministic.bodyMarkdown,
+          : renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
       structuredJson: {
         ...deterministic.structuredJson,
         payload: {
           ...deterministic.structuredJson.payload,
-          strengths: Array.isArray(parsed?.strengths)
-            ? parsed.strengths.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-            : deterministic.structuredJson.payload.strengths,
-          risks: Array.isArray(parsed?.risks)
-            ? parsed.risks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-            : deterministic.structuredJson.payload.risks,
-          next_actions: Array.isArray(parsed?.next_actions)
-            ? parsed.next_actions.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-            : deterministic.structuredJson.payload.next_actions,
+          conclusion,
+          strengths,
+          risks,
+          next_actions: nextActions,
           overall_view:
             typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
               ? parsed.overall_view
-              : deterministic.structuredJson.payload.overall_view,
+              : conclusion,
         },
       },
     };
@@ -1265,7 +1405,8 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: 'Generate a concise backtest review summary as strict JSON.',
+            content:
+              'Generate a concise backtest review summary as strict JSON. Interpret numeric inputs in natural language and avoid metadata enumeration.',
           },
           {
             role: 'user',
@@ -1277,8 +1418,20 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               execution_source: context.executionSource,
               status: context.status,
               metrics: context.metrics,
+              trade_summary: context.tradeSummary,
               import_files: context.importFiles.slice(0, 10),
+              import_parsed_summaries: context.importParsedSummaries.slice(0, 3),
+              comparison_diff: context.comparisonDiff,
               strategy: context.strategy,
+              output_schema: {
+                title: '<string>',
+                conclusion: '<string>',
+                good_points: ['<string>'],
+                concern_points: ['<string>'],
+                next_checks: ['<string>'],
+                body_markdown: '<string>',
+                overall_view: '<string>',
+              },
             }),
           },
         ],
@@ -1302,17 +1455,47 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
 
     try {
       const parsed = JSON.parse(content);
-      if (typeof parsed?.title === 'string' && parsed.title.trim()) {
-        return {
-          ...deterministic,
-          title: parsed.title,
-        };
-      }
+      const title =
+        typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title;
+      const conclusion =
+        typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()
+          ? parsed.conclusion
+          : deterministic.structuredJson.payload.conclusion;
+      const strengths = Array.isArray(parsed?.good_points)
+        ? parsed.good_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+        : deterministic.structuredJson.payload.strengths;
+      const risks = Array.isArray(parsed?.concern_points)
+        ? parsed.concern_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+        : deterministic.structuredJson.payload.risks;
+      const nextActions = Array.isArray(parsed?.next_checks)
+        ? parsed.next_checks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
+        : deterministic.structuredJson.payload.next_actions;
+
+      return {
+        ...deterministic,
+        title,
+        bodyMarkdown:
+          typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
+            ? parsed.body_markdown
+            : renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
+        structuredJson: {
+          ...deterministic.structuredJson,
+          payload: {
+            ...deterministic.structuredJson.payload,
+            conclusion,
+            strengths,
+            risks,
+            next_actions: nextActions,
+            overall_view:
+              typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
+                ? parsed.overall_view
+                : conclusion,
+          },
+        },
+      };
     } catch {
       return deterministic;
     }
-
-    return deterministic;
   }
 
   async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
