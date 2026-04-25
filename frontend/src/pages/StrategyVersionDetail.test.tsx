@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -1061,4 +1061,48 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('data-testid="engine-actual-rerun-compare"');
     expect(html).toContain('比較元 execution: <code>exec-source-persisted</code> / 今回の実行: <code>exec-rerun-persisted</code>');
   });
+
+  it('renders pine regenerate controls with lineage summary', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      {
+        strategy_rule_version_id: 'ver-1',
+        status: 'available',
+        pine_script_id: 'pine-2',
+        parent_pine_script_id: 'pine-1',
+        source_pine_script_id: 'pine-1',
+        revision_input_id: 'rev-1',
+        generated_script: 'strategy("X")',
+        warnings: [],
+        latest_revision_input: {
+          id: 'rev-1',
+          source_pine_script_id: 'pine-1',
+          generated_pine_script_id: 'pine-2',
+          compile_error_text: 'Undeclared identifier "sma"',
+          validation_note: 'entry is late',
+          revision_request: 'sma -> ta.sma',
+          created_at: new Date().toISOString(),
+        },
+      },
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="pine-regenerate-button"');
+    expect(html).toContain('data-testid="pine-lineage-summary"');
+    expect(html).toContain('source_pine_script_id: <code>pine-2</code>');
+    expect(html).toContain('parent_pine_script_id: <code>pine-1</code>');
+    expect(html).toContain('latest_revision_input_id: <code>rev-1</code>');
+    expect(html).toContain('latest_revision_request: sma -&gt; ta.sma');
+  });
 });
+

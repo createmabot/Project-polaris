@@ -455,6 +455,7 @@ model StrategyRuleVersion {
 
   backtests Backtest[]
   pineScripts PineScript[]
+  pineRevisionInputs PineRevisionInput[]
   internalBacktestExecutions InternalBacktestExecution[]
 }
 
@@ -462,6 +463,9 @@ model PineScript {
   id                    String              @id @default(uuid())
   strategyRuleVersionId String
   strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id], onDelete: Cascade)
+  parentPineScriptId    String?
+  parentPineScript      PineScript?         @relation("PineScriptLineage", fields: [parentPineScriptId], references: [id], onDelete: SetNull)
+  childPineScripts      PineScript[]        @relation("PineScriptLineage")
   scriptName            String
   pineVersion           String
   scriptBody            String              @db.Text
@@ -469,10 +473,32 @@ model PineScript {
   status                String              @default("ready")
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
+  sourceRevisionInputs  PineRevisionInput[] @relation("PineRevisionInputSource")
+  generatedFromRevision PineRevisionInput?  @relation("PineRevisionInputGenerated")
 
   @@index([strategyRuleVersionId, createdAt])
+  @@index([parentPineScriptId])
   @@index([status])
   @@map("pine_scripts")
+}
+
+model PineRevisionInput {
+  id                    String              @id @default(uuid())
+  strategyRuleVersionId String
+  strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id], onDelete: Cascade)
+  sourcePineScriptId    String
+  sourcePineScript      PineScript          @relation("PineRevisionInputSource", fields: [sourcePineScriptId], references: [id], onDelete: Restrict)
+  generatedPineScriptId String?             @unique
+  generatedPineScript   PineScript?         @relation("PineRevisionInputGenerated", fields: [generatedPineScriptId], references: [id], onDelete: SetNull)
+  compileErrorText      String?             @db.Text
+  validationNote        String?             @db.Text
+  revisionRequest       String              @db.Text
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  @@index([strategyRuleVersionId, createdAt])
+  @@index([sourcePineScriptId, createdAt])
+  @@map("pine_revision_inputs")
 }
 
 model Backtest {

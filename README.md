@@ -123,6 +123,7 @@ pnpm run down
 ## 自然言語→Pine 生成（最小）
 - API:
   - `POST /api/strategy-versions/:versionId/pine/generate`
+  - `POST /api/strategy-versions/:versionId/pine/regenerate`
   - `GET /api/strategy-versions/:versionId/pine`
 - 保存方針:
   - 生成物: `pine_scripts`（最新は `GET /pine` で返却）
@@ -140,6 +141,20 @@ pnpm run down
   - `natural_language_spec` / `target_market` / `target_timeframe` 必須
   - `backtest_period_from` / `backtest_period_to` は同時指定のみ許可
   - backtest period は `from <= to` の整合必須
+
+### Pine 修正再生成（TradingView 一次検証の往復）
+- 目的:
+  - TradingView で一次検証した結果（コンパイルエラー/検証メモ/修正要求）を北極星へ戻す
+  - Pine の試行錯誤履歴を version 単位で保存する
+- `POST /api/strategy-versions/:versionId/pine/regenerate` 入力:
+  - `source_pine_script_id`（必須）
+  - `revision_request`（必須）
+  - `compile_error_text`（任意）
+  - `validation_note`（任意）
+- 履歴:
+  - `pine_scripts.parent_pine_script_id` で親子関係を保持
+  - `pine_revision_inputs` で修正理由を保存
+  - `GET /api/strategy-versions/:versionId/pine` は `latest_revision_input` を返す
 
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`

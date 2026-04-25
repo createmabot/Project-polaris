@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -9,6 +9,7 @@ import {
   InternalBacktestExecutionResultData,
   InternalBacktestExecutionStatusData,
   StrategyVersionData,
+  StrategyVersionPineData,
   StrategyVersionPineGenerateData,
   StrategyVersionListData,
 } from '../api/types';
@@ -361,9 +362,16 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const { versionId } = params;
   const [location, setLocation] = useLocation();
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(`/api/strategy-versions/${versionId}`, swrFetcher);
+  const { data: pineData, mutate: mutatePine } = useSWR<StrategyVersionPineData>(
+    `/api/strategy-versions/${versionId}/pine`,
+    swrFetcher,
+  );
 
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [compileErrorText, setCompileErrorText] = useState('');
+  const [validationNote, setValidationNote] = useState('');
+  const [revisionRequest, setRevisionRequest] = useState('');
   const [pineRunMeta, setPineRunMeta] = useState<{
     failureReason: string | null;
     repairAttempts: number | null;
@@ -663,6 +671,22 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   }, [version?.id, version?.natural_language_rule, version?.forward_validation_note]);
 
+  useEffect(() => {
+    const latestRevisionInput = pineData?.latest_revision_input;
+    if (!latestRevisionInput) {
+      return;
+    }
+    if (!compileErrorText) {
+      setCompileErrorText(latestRevisionInput.compile_error_text ?? '');
+    }
+    if (!validationNote) {
+      setValidationNote(latestRevisionInput.validation_note ?? '');
+    }
+    if (!revisionRequest) {
+      setRevisionRequest(latestRevisionInput.revision_request ?? '');
+    }
+  }, [pineData?.latest_revision_input?.id]);
+
   const ruleDiff = useMemo(() => {
     if (!version || !compareBase) {
       return [];
@@ -735,7 +759,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const firstChangedSummaryItem = compareSummaryItems.find((item) => item.changed) ?? null;
 
-  const onRegenerate = async () => {
+  const onGeneratePine = async () => {
     setRegenerating(true);
     setRegenerateError(null);
     setPineRunMeta(null);
@@ -753,9 +777,55 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         },
         false,
       );
+      await mutatePine();
       setSaveRuleMessage(null);
+      setRevisionRequest('');
     } catch (requestError: any) {
       setRegenerateError(requestError?.message ?? 'Pine の再生成に失敗しました。');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const onRegenerateWithRevision = async () => {
+    setRegenerating(true);
+    setRegenerateError(null);
+    setPineRunMeta(null);
+    try {
+      const sourcePineScriptId = pineData?.pine_script_id;
+      if (!sourcePineScriptId) {
+        throw new Error('source_pine_script_id が未取得です。先に Pine を生成してください。');
+      }
+      const revisionRequestValue = revisionRequest.trim();
+      if (!revisionRequestValue) {
+        throw new Error('revision_request は必須です。');
+      }
+
+      const response = await postApi<StrategyVersionPineGenerateData>(
+        `/api/strategy-versions/${versionId}/pine/regenerate`,
+        {
+          source_pine_script_id: sourcePineScriptId,
+          compile_error_text: compileErrorText.trim() || undefined,
+          validation_note: validationNote.trim() || undefined,
+          revision_request: revisionRequestValue,
+        },
+      );
+      setPineRunMeta({
+        failureReason: response.pine.failure_reason ?? null,
+        repairAttempts: typeof response.pine.repair_attempts === 'number' ? response.pine.repair_attempts : null,
+        invalidReasonCodes: Array.isArray(response.pine.invalid_reason_codes) ? response.pine.invalid_reason_codes : [],
+      });
+      await mutate(
+        {
+          strategy_version: response.strategy_version,
+          compare_base: data?.compare_base ?? null,
+        },
+        false,
+      );
+      await mutatePine();
+      setSaveRuleMessage(null);
+    } catch (requestError: any) {
+      setRegenerateError(requestError?.message ?? 'Pine の修正再生成に失敗しました。');
     } finally {
       setRegenerating(false);
     }
@@ -1004,7 +1074,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
           <button
             type='button'
-            onClick={onRegenerate}
+            onClick={onGeneratePine}
             disabled={regenerating}
             style={{
               padding: '0.55rem 0.95rem',
@@ -1037,6 +1107,73 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
         <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
           保存はルール本文のみ更新します。再生成ボタンで更新済みルールから Pine を作り直します。
+        </div>
+        <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
+          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
+          <div style={{ display: 'grid', gap: '0.55rem' }}>
+            <label style={{ display: 'grid', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.88rem', color: '#444' }}>compile_error_text（任意）</span>
+              <textarea
+                value={compileErrorText}
+                onChange={(event) => setCompileErrorText(event.target.value)}
+                rows={2}
+                placeholder='例: Undeclared identifier "sma"'
+                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.88rem', color: '#444' }}>validation_note（任意）</span>
+              <textarea
+                value={validationNote}
+                onChange={(event) => setValidationNote(event.target.value)}
+                rows={2}
+                placeholder='例: シグナルが遅い'
+                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.25rem' }}>
+              <span style={{ fontSize: '0.88rem', color: '#444' }}>revision_request（必須）</span>
+              <textarea
+                value={revisionRequest}
+                onChange={(event) => setRevisionRequest(event.target.value)}
+                rows={3}
+                placeholder='修正したい内容を入力してください'
+                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
+              />
+            </label>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type='button'
+                data-testid='pine-regenerate-button'
+                onClick={onRegenerateWithRevision}
+                disabled={regenerating || !pineData?.pine_script_id}
+                style={{
+                  padding: '0.55rem 0.95rem',
+                  border: 'none',
+                  borderRadius: '4px',
+                  background: regenerating || !pineData?.pine_script_id ? '#9cbbe0' : '#0a5bb5',
+                  color: '#fff',
+                  cursor: regenerating || !pineData?.pine_script_id ? 'default' : 'pointer',
+                }}
+              >
+                {regenerating ? '再生成中...' : 'Pine 修正再生成'}
+              </button>
+              <span style={{ fontSize: '0.85rem', color: '#555' }}>
+                source_pine_script_id: <code>{pineData?.pine_script_id ?? '-'}</code>
+              </span>
+            </div>
+          </div>
+          {(pineData?.parent_pine_script_id || pineData?.latest_revision_input) && (
+            <div data-testid='pine-lineage-summary' style={{ marginTop: '0.65rem', fontSize: '0.86rem', color: '#333' }}>
+              <div>parent_pine_script_id: <code>{pineData?.parent_pine_script_id ?? '-'}</code></div>
+              {pineData?.latest_revision_input && (
+                <>
+                  <div>latest_revision_input_id: <code>{pineData.latest_revision_input.id}</code></div>
+                  <div>latest_revision_request: {pineData.latest_revision_input.revision_request}</div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
@@ -2104,3 +2241,4 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     </div>
   );
 }
+
