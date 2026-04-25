@@ -622,10 +622,71 @@ async function resolveComparisonAiSummaryByJob(aiJobId: string | null) {
   if (!aiJobId) {
     return null;
   }
-  return prisma.aiSummary.findFirst({
+  const linkedSummary = await prisma.aiSummary.findFirst({
     where: { aiJobId },
     orderBy: { generatedAt: 'desc' },
   });
+  if (linkedSummary) {
+    return linkedSummary;
+  }
+
+  const aiJob = await prisma.aiJob.findUnique({
+    where: { id: aiJobId },
+    select: { responsePayload: true },
+  });
+  const payload = aiJob?.responsePayload;
+  const summaryId =
+    payload && typeof payload === 'object' && !Array.isArray(payload) && typeof (payload as any).summary_id === 'string'
+      ? (payload as any).summary_id
+      : null;
+  if (!summaryId) {
+    return null;
+  }
+  return prisma.aiSummary.findFirst({ where: { id: summaryId } });
+}
+
+function buildComparisonAiSummaryView(params: {
+  aiSummary: any | null;
+  legacyResult: {
+    title: string | null;
+    bodyMarkdown: string | null;
+    structuredJson: unknown;
+    modelName: string | null;
+    promptVersion: string | null;
+  } | null;
+}) {
+  if (params.aiSummary) {
+    return {
+      ai_summary_id: params.aiSummary.id,
+      ai_summary: {
+        summary_id: params.aiSummary.id,
+        title: params.aiSummary.title,
+        body_markdown: params.aiSummary.bodyMarkdown,
+        structured_json: params.aiSummary.structuredJson,
+        model_name: params.aiSummary.modelName,
+        prompt_version: params.aiSummary.promptVersion,
+      },
+    };
+  }
+
+  if (params.legacyResult?.bodyMarkdown) {
+    return {
+      ai_summary_id: null,
+      ai_summary: {
+        summary_id: null,
+        title: params.legacyResult.title,
+        body_markdown: params.legacyResult.bodyMarkdown,
+        structured_json: params.legacyResult.structuredJson,
+        model_name: params.legacyResult.modelName,
+        prompt_version: params.legacyResult.promptVersion,
+      },
+    };
+  }
+
+  return {
+    ai_summary_id: null,
+    ai_summary: null,
+  };
 }
 
 export async function comparisonRoutes(fastify: FastifyInstance) {
@@ -743,6 +804,18 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
       orderBy: { generatedAt: 'desc' },
     });
     const aiSummary = await resolveComparisonAiSummaryByJob(latestResult?.aiJobId ?? null);
+    const aiSummaryView = buildComparisonAiSummaryView({
+      aiSummary,
+      legacyResult: latestResult
+        ? {
+            title: latestResult.title,
+            bodyMarkdown: latestResult.bodyMarkdown,
+            structuredJson: latestResult.structuredJson,
+            modelName: latestResult.modelName,
+            promptVersion: latestResult.promptVersion,
+          }
+        : null,
+    });
 
     const data = {
       comparison_header: {
@@ -760,17 +833,8 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
             id: latestResult.id,
             generated_at: latestResult.generatedAt,
             compared_metric_json: latestResult.comparedMetricJson,
-            ai_summary_id: aiSummary?.id ?? null,
-            ai_summary: aiSummary
-              ? {
-                  summary_id: aiSummary.id,
-                  title: aiSummary.title,
-                  body_markdown: aiSummary.bodyMarkdown,
-                  structured_json: aiSummary.structuredJson,
-                  model_name: aiSummary.modelName,
-                  prompt_version: aiSummary.promptVersion,
-                }
-              : null,
+            ai_summary_id: aiSummaryView.ai_summary_id,
+            ai_summary: aiSummaryView.ai_summary,
           }
         : null,
     };

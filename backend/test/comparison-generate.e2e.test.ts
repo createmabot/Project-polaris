@@ -238,6 +238,11 @@ vi.mock('../src/db', () => {
       },
     },
     aiJob: {
+      findUnique: async ({ where }: any) => {
+        const row = runtime.aiJobs.get(where.id) ?? null;
+        if (!row) return null;
+        return { responsePayload: row.responsePayload ?? null };
+      },
       create: async ({ data }: any) => {
         const id = `ai-job-${runtime.jobSeq++}`;
         const row = {
@@ -564,6 +569,69 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     expect(detailBody.data.latest_result.ai_summary.title).toContain('comparison summary');
     expect(detailBody.data.latest_result.ai_summary_id).toBeTruthy();
     expect(detailBody.data.latest_result.compared_metric_json.schema_name).toBe('comparison_metric_snapshot');
+
+    await app.close();
+  });
+
+  it('keeps ai_summary retrievable after deduplicated regenerate', async () => {
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().data.ai_summary_id).toBeTruthy();
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/comparisons/${comparisonId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.latest_result.ai_summary).toBeTruthy();
+    expect(detail.json().data.latest_result.ai_summary.summary_id).toBe(second.json().data.ai_summary_id);
+
+    await app.close();
+  });
+
+  it('falls back to legacy comparison_result summary fields on GET', async () => {
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+    runtime.comparisonResults.set('cmp-legacy-1', {
+      id: 'cmp-legacy-1',
+      comparisonSessionId: comparisonId,
+      aiJobId: null,
+      title: 'legacy summary title',
+      bodyMarkdown: 'legacy summary body',
+      structuredJson: { schema_name: 'comparison_summary' },
+      modelName: 'legacy-model',
+      promptVersion: 'legacy-prompt',
+      comparedMetricJson: { schema_name: 'comparison_metric_snapshot', symbol_metrics: [] },
+      generatedAt: new Date('2026-04-25T05:00:00.000Z'),
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/comparisons/${comparisonId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.latest_result.ai_summary).toMatchObject({
+      title: 'legacy summary title',
+      body_markdown: 'legacy summary body',
+      model_name: 'legacy-model',
+      prompt_version: 'legacy-prompt',
+    });
 
     await app.close();
   });
