@@ -99,7 +99,8 @@ describe('BacktestDetail', () => {
         ai_review: {
           summary_id: 'sum-bt-1',
           title: 'AI総評タイトル',
-          body_markdown: 'AI総評本文',
+          body_markdown:
+            '## AI総評タイトル\n\n### 結論\n総評\n\n### 良い点\n- 収益性\n\n### 懸念点\n- ドローダウン\n\n### 次に確認すべき点\n- 期間分割検証',
           structured_json: null,
           generated_at: '2026-01-01T00:00:00.000Z',
           status: 'available',
@@ -116,7 +117,10 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('AI 総評');
-    expect(html).toContain('AI総評本文');
+    expect(html).toContain('### 結論');
+    expect(html).toContain('### 良い点');
+    expect(html).toContain('### 懸念点');
+    expect(html).toContain('### 次に確認すべき点');
     expect(html).toContain('使用した Strategy');
     expect(html).toContain('href="/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fsort%3Dupdated_at%26order%3Ddesc%26page%3D1"');
     expect(html).toContain('href="/strategies/str-1/versions?sort=updated_at&amp;order=desc&amp;page=1"');

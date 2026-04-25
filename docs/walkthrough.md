@@ -196,6 +196,12 @@ pnpm run dev
 - POST /api/backtests/:backtestId/summary/generate
 - GET /api/backtests/:backtestId
 - ai_review.status=available|unavailable
+- ai_review.body_markdown が以下4セクションで返ること
+  - `### 結論`
+  - `### 良い点`
+  - `### 懸念点`
+  - `### 次に確認すべき点`
+- メタ情報の箇条書き（`backtest_id`, `market/timeframe`, `imports` だけの列挙）に寄っていないこと
 
 ### 9. Rule Lab Pine Generation Check (Minimal)
 1. Open Strategy Version Detail
@@ -219,4 +225,23 @@ pnpm run dev
    - `natural_language_spec` / `target_market` / `target_timeframe` must be present
    - `backtest_period_from` and `backtest_period_to` must be provided together
    - `backtest_period_from <= backtest_period_to`
+
+### 10. TradingView Strategy Report CSV Difference Check (Minimal)
+1. TradingView export source check
+   - `Performance Summary` export: metric headers (`Net Profit`, `Total Closed Trades` ...)
+   - `List of Trades` export: trade-row headers (`Trade #`, `Type`, `Date/Time`, `Profit`, `Cumulative Profit` ...)
+2. Polaris import behavior check
+   - Primary path: accepts `Performance Summary` required headers
+   - Fallback path: if primary headers are missing, re-parse as trades CSV
+3. Error triage check
+   - If `parse_error: Unsupported CSV header...` appears, first confirm the source tab in TradingView
+4. API shape check after accepted import
+   - `parsed_summary` keeps normalized shape:
+     - `totalTrades`
+     - `winRate`
+     - `profitFactor`
+     - `maxDrawdown`
+     - `netProfit`
+     - `periodFrom`
+     - `periodTo`
 
