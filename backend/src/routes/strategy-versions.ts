@@ -370,7 +370,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           initialModel: 'unknown',
           finalModel: 'unknown',
           escalated: false,
-          escalationReason: 'provider_failed_fallback_to_stub',
+          escalationReason: 'provider_failed_no_fallback',
           retryCount: 0,
           durationMs: 0,
           estimatedTokens: 0,
