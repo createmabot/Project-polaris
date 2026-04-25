@@ -22,6 +22,14 @@ const SUPPORTED_HEADERS = [
   'To',
 ];
 
+const TRADE_HEADER_ALIASES = {
+  tradeNo: ['トレード番号', 'Trade #', 'Trade'],
+  type: ['タイプ', 'Type'],
+  dateTime: ['日時', 'Date/Time', 'Date'],
+  netProfit: ['純損益 JPY', 'Net Profit', 'Profit'],
+  cumulativeProfit: ['累積損益 JPY', 'Cumulative Profit'],
+} as const;
+
 function parseNumber(raw: string | undefined): number | null {
   if (!raw) return null;
   const cleaned = raw.replace(/[,%\s]/g, '');
@@ -65,6 +73,124 @@ function splitCsvLine(line: string): string[] {
   return result;
 }
 
+function resolveHeaderIndex(headers: string[], candidates: readonly string[]): number {
+  for (const candidate of candidates) {
+    const index = headers.indexOf(candidate);
+    if (index >= 0) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function toIsoDate(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const dateHead = trimmed.match(/^\d{4}-\d{2}-\d{2}/)?.[0] ?? null;
+  if (dateHead) return dateHead;
+
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  const year = parsed.getUTCFullYear();
+  const month = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseFromTradesCsv(headers: string[], lines: string[], missingSummaryHeaders: string[]): ParseCsvResult {
+  const tradeNoIndex = resolveHeaderIndex(headers, TRADE_HEADER_ALIASES.tradeNo);
+  const typeIndex = resolveHeaderIndex(headers, TRADE_HEADER_ALIASES.type);
+  const dateTimeIndex = resolveHeaderIndex(headers, TRADE_HEADER_ALIASES.dateTime);
+  const netProfitIndex = resolveHeaderIndex(headers, TRADE_HEADER_ALIASES.netProfit);
+  const cumulativeProfitIndex = resolveHeaderIndex(headers, TRADE_HEADER_ALIASES.cumulativeProfit);
+
+  if (tradeNoIndex < 0 || typeIndex < 0 || dateTimeIndex < 0 || netProfitIndex < 0 || cumulativeProfitIndex < 0) {
+    return {
+      ok: false,
+      error: `Unsupported CSV header. Missing required columns: ${missingSummaryHeaders.join(', ')}`,
+    };
+  }
+
+  const closedTradeIds = new Set<string>();
+  const allTradeIds = new Set<string>();
+  const closedTradePnlValues: number[] = [];
+  const cumulativeSeries: number[] = [];
+  const isoDates: string[] = [];
+
+  for (const line of lines.slice(1)) {
+    const row = splitCsvLine(line);
+    const tradeNo = row[tradeNoIndex] ?? '';
+    const type = (row[typeIndex] ?? '').toLowerCase();
+    const isoDate = toIsoDate(row[dateTimeIndex]);
+    const netProfit = parseNumber(row[netProfitIndex]);
+    const cumulativeProfit = parseNumber(row[cumulativeProfitIndex]);
+
+    if (tradeNo) {
+      allTradeIds.add(tradeNo);
+    }
+
+    const isClosedRow =
+      type.includes('決済') ||
+      type.includes('close');
+    if (isClosedRow && tradeNo) {
+      closedTradeIds.add(tradeNo);
+      if (netProfit !== null) {
+        closedTradePnlValues.push(netProfit);
+      }
+    }
+
+    if (cumulativeProfit !== null) {
+      cumulativeSeries.push(cumulativeProfit);
+    }
+    if (isoDate) {
+      isoDates.push(isoDate);
+    }
+  }
+
+  const totalTrades = closedTradeIds.size > 0 ? closedTradeIds.size : allTradeIds.size || null;
+  const wins = closedTradePnlValues.filter((value) => value > 0).length;
+  const winRate =
+    totalTrades && totalTrades > 0 && closedTradePnlValues.length > 0
+      ? Number(((wins / totalTrades) * 100).toFixed(2))
+      : null;
+
+  const grossProfit = closedTradePnlValues.filter((value) => value > 0).reduce((sum, value) => sum + value, 0);
+  const grossLossAbs = Math.abs(closedTradePnlValues.filter((value) => value < 0).reduce((sum, value) => sum + value, 0));
+  const profitFactor = grossLossAbs > 0 ? Number((grossProfit / grossLossAbs).toFixed(4)) : null;
+
+  let maxDrawdown: number | null = null;
+  if (cumulativeSeries.length > 0) {
+    let peak = cumulativeSeries[0];
+    let worst = 0;
+    for (const value of cumulativeSeries) {
+      if (value > peak) peak = value;
+      const drawdown = value - peak;
+      if (drawdown < worst) worst = drawdown;
+    }
+    maxDrawdown = worst;
+  }
+
+  const periodFrom = isoDates.length > 0 ? [...isoDates].sort()[0] : null;
+  const periodTo = isoDates.length > 0 ? [...isoDates].sort().slice(-1)[0] : null;
+  const netProfit = cumulativeSeries.length > 0 ? cumulativeSeries[cumulativeSeries.length - 1] : null;
+
+  return {
+    ok: true,
+    summary: {
+      totalTrades,
+      winRate,
+      profitFactor,
+      maxDrawdown,
+      netProfit,
+      periodFrom,
+      periodTo,
+    },
+  };
+}
+
 export function parseTradingViewSummaryCsv(rawCsv: string): ParseCsvResult {
   const text = normalizeLineEndings(rawCsv).trim();
   if (!text) {
@@ -81,10 +207,7 @@ export function parseTradingViewSummaryCsv(rawCsv: string): ParseCsvResult {
 
   const missingHeaders = SUPPORTED_HEADERS.filter((header) => !headers.includes(header));
   if (missingHeaders.length > 0) {
-    return {
-      ok: false,
-      error: `Unsupported CSV header. Missing required columns: ${missingHeaders.join(', ')}`,
-    };
+    return parseFromTradesCsv(headers, lines, missingHeaders);
   }
 
   const indexOf = (header: string) => headers.indexOf(header);

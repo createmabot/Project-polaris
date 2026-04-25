@@ -268,6 +268,13 @@ const UNSUPPORTED_CSV = `foo,bar
 1,2
 `;
 
+const TRADES_CSV_JP = `トレード番号,タイプ,日時,シグナル,価格 JPY,サイズ (数量),サイズ (金額),純損益 JPY,純損益 %,最大順行幅 JPY,最大順行幅 %,最大逆行幅 JPY,最大逆行幅 %,累積損益 JPY,累積損益 %
+1,ロング決済,2026-04-01,Close entry(s) order Long,1100,1,1000,100,10,120,12,-20,-2,100,0.1
+1,ロングエントリー,2026-03-25,Long,1000,1,1000,100,10,120,12,-20,-2,100,0.1
+2,ロング決済,2026-04-10,Close entry(s) order Long,1050,1,1100,-50,-4.55,30,2.72,-90,-8.18,50,0.05
+2,ロングエントリー,2026-04-05,Long,1100,1,1100,-50,-4.55,30,2.72,-90,-8.18,50,0.05
+`;
+
 describe('backtest import vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -326,6 +333,45 @@ describe('backtest import vertical slice', () => {
     expect(detailBody.data.used_strategy.strategy_version_id).toBe('ver-1');
     expect(detailBody.data.used_strategy.snapshot.natural_language_rule).toContain('25日移動平均');
     expect(detailBody.data.used_strategy.snapshot.generated_pine).toBe('strategy("base")');
+
+    await app.close();
+  });
+
+  it('parses Japanese list-of-trades csv and derives summary metrics', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'trade-list-import',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'trade_list_jp.csv',
+        content_type: 'text/csv',
+        csv_text: TRADES_CSV_JP,
+      },
+    });
+
+    expect(imported.statusCode).toBe(201);
+    const body = imported.json();
+    expect(body.data.import.parse_status).toBe('parsed');
+    expect(body.data.import.parsed_summary.totalTrades).toBe(2);
+    expect(body.data.import.parsed_summary.netProfit).toBe(50);
+    expect(body.data.import.parsed_summary.winRate).toBe(50);
+    expect(body.data.import.parsed_summary.periodFrom).toBe('2026-03-25');
+    expect(body.data.import.parsed_summary.periodTo).toBe('2026-04-10');
 
     await app.close();
   });
