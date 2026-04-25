@@ -126,6 +126,34 @@ function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
         promptVersion: 'v1',
       };
     }),
+    generateBacktestSummary: vi.fn(async () => {
+      if (kind === 'fail') throw new Error('provider failed');
+      return {
+        title: 'backtest',
+        bodyMarkdown: 'backtest',
+        structuredJson: {
+          schema_name: 'backtest_review_summary',
+          schema_version: '1.0',
+          confidence: 'medium',
+          insufficient_context: false,
+          payload: {
+            strengths: [],
+            risks: [],
+            next_actions: [],
+            key_metrics: {
+              total_trades: null,
+              win_rate: null,
+              profit_factor: null,
+              max_drawdown: null,
+              net_profit: null,
+            },
+            overall_view: 'ok',
+          },
+        },
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    }),
   };
 }
 
@@ -204,6 +232,31 @@ function createStubProvider(): HomeAiProvider {
           next_actions: [],
           compared_symbols: [],
           reference_ids: [],
+          overall_view: 'stub',
+        },
+      },
+      modelName: 'stub-model',
+      promptVersion: 'v1',
+    })),
+    generateBacktestSummary: vi.fn(async () => ({
+      title: 'stub-backtest',
+      bodyMarkdown: 'stub-backtest',
+      structuredJson: {
+        schema_name: 'backtest_review_summary',
+        schema_version: '1.0',
+        confidence: 'low',
+        insufficient_context: true,
+        payload: {
+          strengths: [],
+          risks: [],
+          next_actions: [],
+          key_metrics: {
+            total_trades: null,
+            win_rate: null,
+            profit_factor: null,
+            max_drawdown: null,
+            net_profit: null,
+          },
           overall_view: 'stub',
         },
       },
@@ -304,5 +357,29 @@ describe('HomeAiService', () => {
     expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
     expect(provider.generateComparisonSummary).toHaveBeenCalledTimes(1);
     expect(stubProvider.generateComparisonSummary).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to stub for backtest summary when selected provider fails', async () => {
+    const provider = createProvider('fail');
+    const stubProvider = createStubProvider();
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generateBacktestSummary({
+      backtestId: 'bt-1',
+      title: 'backtest',
+      executionSource: 'tradingview',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'imported',
+      metrics: null,
+      importFiles: [],
+      strategy: null,
+    });
+
+    expect(result.output.title).toBe('stub-backtest');
+    expect(result.log.fallbackToStub).toBe(true);
+    expect(result.log.escalationReason).toBe('provider_failed_fallback_to_stub');
+    expect(provider.generateBacktestSummary).toHaveBeenCalledTimes(1);
+    expect(stubProvider.generateBacktestSummary).toHaveBeenCalledTimes(1);
   });
 });

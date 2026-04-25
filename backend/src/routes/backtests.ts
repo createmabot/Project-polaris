@@ -1,8 +1,10 @@
 import { FastifyPluginAsync } from 'fastify';
+import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { parseTradingViewSummaryCsv } from '../backtests/csv';
+import { HomeAiService } from '../ai/home-ai-service';
 
 type CreateBacktestBody = {
   strategy_version_id?: string;
@@ -29,6 +31,74 @@ type BacktestStrategySnapshot = {
   assumptions: string[];
   captured_at: string;
 };
+
+type ParsedImportSummary = {
+  totalTrades: number | null;
+  winRate: number | null;
+  profitFactor: number | null;
+  maxDrawdown: number | null;
+  netProfit: number | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+};
+
+type BacktestAiReviewView = {
+  summary_id: string | null;
+  title: string | null;
+  body_markdown: string | null;
+  structured_json: Record<string, unknown> | null;
+  generated_at: string | null;
+  status: 'available' | 'unavailable';
+  insufficient_context: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseParsedImportSummary(value: unknown): ParsedImportSummary | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    totalTrades: typeof value.totalTrades === 'number' ? value.totalTrades : null,
+    winRate: typeof value.winRate === 'number' ? value.winRate : null,
+    profitFactor: typeof value.profitFactor === 'number' ? value.profitFactor : null,
+    maxDrawdown: typeof value.maxDrawdown === 'number' ? value.maxDrawdown : null,
+    netProfit: typeof value.netProfit === 'number' ? value.netProfit : null,
+    periodFrom: typeof value.periodFrom === 'string' ? value.periodFrom : null,
+    periodTo: typeof value.periodTo === 'string' ? value.periodTo : null,
+  };
+}
+
+function toBacktestAiReviewView(summary: any | null): BacktestAiReviewView {
+  if (!summary) {
+    return {
+      summary_id: null,
+      title: null,
+      body_markdown: null,
+      structured_json: null,
+      generated_at: null,
+      status: 'unavailable',
+      insufficient_context: true,
+    };
+  }
+  const structured = isRecord(summary.structuredJson) ? summary.structuredJson : null;
+  const insufficient =
+    structured && typeof structured.insufficient_context === 'boolean'
+      ? structured.insufficient_context
+      : false;
+  return {
+    summary_id: summary.id,
+    title: summary.title ?? null,
+    body_markdown: summary.bodyMarkdown ?? null,
+    structured_json: structured,
+    generated_at: summary.generatedAt ? new Date(summary.generatedAt).toISOString() : null,
+    status: 'available',
+    insufficient_context: insufficient,
+  };
+}
 
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -61,6 +131,202 @@ function normalizeBacktestStrategySnapshot(value: unknown): BacktestStrategySnap
     assumptions: toStringArray(row.assumptions),
     captured_at: typeof row.captured_at === 'string' ? row.captured_at : '',
   };
+}
+
+async function resolveLatestBacktestAiReview(backtestId: string, importIds: string[]) {
+  const summary = await prisma.aiSummary.findFirst({
+    where: {
+      summaryScope: 'backtest_review',
+      OR: [
+        {
+          targetEntityType: 'backtest',
+          targetEntityId: backtestId,
+        },
+        ...(importIds.length > 0
+          ? [
+              {
+                targetEntityType: 'backtest_run',
+                targetEntityId: {
+                  in: importIds,
+                },
+              },
+            ]
+          : []),
+      ],
+    },
+    orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
+  });
+  return toBacktestAiReviewView(summary);
+}
+
+async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
+  const backtest = await prisma.backtest.findUnique({
+    where: { id: backtestId },
+    include: {
+      strategyRuleVersion: true,
+      imports: {
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  if (!backtest) {
+    throw new AppError(404, 'NOT_FOUND', 'backtest was not found.');
+  }
+
+  const latestImport = backtest.imports[0] ?? null;
+  const metrics = parseParsedImportSummary(latestImport?.parsedSummaryJson ?? null);
+  const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
+  const strategyVersion = backtest.strategyRuleVersion;
+  const importFiles = backtest.imports.map((item) => ({
+    id: item.id,
+    fileName: item.fileName,
+    parseStatus: item.parseStatus,
+    parseError: item.parseError,
+    createdAt: item.createdAt.toISOString(),
+  }));
+
+  const job = await prisma.aiJob.create({
+    data: {
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: backtestId,
+      requestPayload: {
+        backtest_id: backtestId,
+        latest_import_id: latestImport?.id ?? null,
+      } as any,
+      status: 'queued',
+    },
+  });
+
+  await prisma.aiJob.update({
+    where: { id: job.id },
+    data: {
+      status: 'running',
+      startedAt: new Date(),
+    },
+  });
+
+  try {
+    const inputSnapshot = JSON.stringify({
+      backtest_id: backtest.id,
+      title: backtest.title,
+      market: backtest.market,
+      timeframe: backtest.timeframe,
+      execution_source: backtest.executionSource,
+      status: backtest.status,
+      metrics,
+      import_files: importFiles.map((item) => ({
+        id: item.id,
+        file_name: item.fileName,
+        parse_status: item.parseStatus,
+      })),
+      strategy: {
+        strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
+        strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
+        natural_language_rule: strategyVersion?.naturalLanguageRule ?? snapshot?.natural_language_rule ?? null,
+        generated_pine: strategyVersion?.generatedPine ?? snapshot?.generated_pine ?? null,
+      },
+    });
+    const inputSnapshotHash = crypto.createHash('sha256').update(inputSnapshot).digest('hex');
+
+    const existing = await prisma.aiSummary.findFirst({
+      where: {
+        targetEntityType: 'backtest',
+        targetEntityId: backtestId,
+        summaryScope: 'backtest_review',
+        inputSnapshotHash,
+      },
+      orderBy: { generatedAt: 'desc' },
+    });
+    if (existing) {
+      await prisma.aiJob.update({
+        where: { id: job.id },
+        data: {
+          status: 'succeeded',
+          completedAt: new Date(),
+          responsePayload: { summary_id: existing.id, skipped: 'duplicate' } as any,
+          modelName: existing.modelName,
+          promptVersion: existing.promptVersion,
+        },
+      });
+      return { jobId: job.id, summary: toBacktestAiReviewView(existing) };
+    }
+
+    const homeAiService = new HomeAiService();
+    const { output, log } = await homeAiService.generateBacktestSummary({
+      backtestId: backtest.id,
+      title: backtest.title,
+      executionSource: backtest.executionSource,
+      market: backtest.market,
+      timeframe: backtest.timeframe,
+      status: backtest.status,
+      metrics,
+      importFiles,
+      strategy: {
+        strategyId: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
+        strategyVersionId: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
+        naturalLanguageRule: strategyVersion?.naturalLanguageRule ?? snapshot?.natural_language_rule ?? null,
+        generatedPine: strategyVersion?.generatedPine ?? snapshot?.generated_pine ?? null,
+      },
+    });
+
+    const generatedAt = new Date();
+    const created = await prisma.aiSummary.create({
+      data: {
+        aiJobId: job.id,
+        userId: null,
+        summaryScope: 'backtest_review',
+        targetEntityType: 'backtest',
+        targetEntityId: backtestId,
+        title: output.title,
+        bodyMarkdown: output.bodyMarkdown,
+        structuredJson: output.structuredJson as any,
+        modelName: output.modelName,
+        promptVersion: output.promptVersion,
+        generatedAt,
+        inputSnapshotHash,
+        generationContextJson: {
+          provider: log.provider,
+          fallback_to_stub: log.fallbackToStub,
+          has_metrics: !!metrics,
+          import_count: importFiles.length,
+          market: backtest.market,
+          timeframe: backtest.timeframe,
+        } as any,
+      },
+    });
+
+    await prisma.aiJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'succeeded',
+        completedAt: generatedAt,
+        modelName: log.finalModel,
+        promptVersion: output.promptVersion,
+        initialModel: log.initialModel,
+        finalModel: log.finalModel,
+        escalated: log.escalated,
+        escalationReason: log.escalationReason,
+        retryCount: log.retryCount,
+        durationMs: log.durationMs,
+        estimatedTokens: log.estimatedTokens,
+        estimatedCostUsd: log.estimatedCostUsd,
+        responsePayload: { summary_id: created.id } as any,
+      },
+    });
+
+    return { jobId: job.id, summary: toBacktestAiReviewView(created) };
+  } catch (error) {
+    await prisma.aiJob.update({
+      where: { id: job.id },
+      data: {
+        status: 'failed',
+        completedAt: new Date(),
+        errorMessage: error instanceof Error ? error.message : String(error),
+      },
+    });
+    throw error;
+  }
 }
 
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
@@ -299,6 +565,17 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
     }));
   });
 
+  fastify.post<{ Params: { backtestId: string } }>('/:backtestId/summary/generate', async (request, reply) => {
+    const { backtestId } = request.params;
+    const result = await generateBacktestSummaryWithJob(backtestId);
+    return reply.status(200).send(formatSuccess(request, {
+      backtest_id: backtestId,
+      job_id: result.jobId,
+      status: 'queued',
+      summary: result.summary,
+    }));
+  });
+
   fastify.get<{ Params: { backtestId: string } }>('/:backtestId', async (request, reply) => {
     const { backtestId } = request.params;
     const backtest = await prisma.backtest.findUnique({
@@ -316,28 +593,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const backtestRunIds = backtest.imports.map((item) => item.id);
-    const aiReview = await prisma.aiSummary.findFirst({
-      where: {
-        summaryScope: 'backtest_review',
-        OR: [
-          {
-            targetEntityType: 'backtest',
-            targetEntityId: backtest.id,
-          },
-          ...(backtestRunIds.length > 0
-            ? [
-                {
-                  targetEntityType: 'backtest_run',
-                  targetEntityId: {
-                    in: backtestRunIds,
-                  },
-                },
-              ]
-            : []),
-        ],
-      },
-      orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
-    });
+    const aiReview = await resolveLatestBacktestAiReview(backtest.id, backtestRunIds);
 
     const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
     const strategyVersion = backtest.strategyRuleVersion;
@@ -395,14 +651,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         created_at: item.createdAt,
         updated_at: item.updatedAt,
       })),
-      ai_review: aiReview
-        ? {
-            summary_id: aiReview.id,
-            title: aiReview.title,
-            body_markdown: aiReview.bodyMarkdown,
-            generated_at: aiReview.generatedAt,
-          }
-        : null,
+      ai_review: aiReview,
     }));
   });
 

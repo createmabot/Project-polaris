@@ -108,6 +108,17 @@ pnpm run down
 - `GET /api/comparisons/:comparisonId` は `latest_result.ai_summary_id` と `latest_result.ai_summary` を返し、未生成時は `ai_summary=null` で部分成立する。
 - provider は Home/Symbol AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
 
+## Backtest AI総評（最小）
+- Backtest総評 API:
+  - `POST /api/backtests/:backtestId/summary/generate`
+  - `GET /api/backtests/:backtestId`
+- 保存方針:
+  - 状態: `ai_jobs`（`queued -> running -> succeeded|failed`）
+  - 生成物: `ai_summaries`（`summary_scope=backtest_review`, `target_entity_type=backtest`）
+  - `GET /api/backtests/:backtestId` の `ai_review` は `status=available|unavailable` を返す。
+- provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
+- `local_llm` / `openai_api` 失敗時は既存方針で `stub` fallback し、保存/レスポンス shape を維持する。
+
 ## ルール検証ラボ（MVP）
 - 画面: `/strategy-lab`
 - 現在の対応範囲:

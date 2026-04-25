@@ -440,11 +440,14 @@ export type BacktestDetailData = {
   latest_import: BacktestImportData['import'] | null;
   imports: Array<BacktestImportData['import']>;
   ai_review: {
-    summary_id: string;
+    summary_id: string | null;
     title: string | null;
-    body_markdown: string;
+    body_markdown: string | null;
+    structured_json: Record<string, unknown> | null;
     generated_at: string | null;
-  } | null;
+    status: 'available' | 'unavailable';
+    insufficient_context: boolean;
+  };
 };
 
 export type BacktestComparisonData = {
