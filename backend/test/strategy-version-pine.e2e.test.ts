@@ -336,6 +336,46 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
+  it('returns validation error when backtest period field is non-string', async () => {
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {
+        backtest_period_from: 20260420,
+        backtest_period_to: '2026-04-21',
+      },
+    });
+
+    expect(generated.statusCode).toBe(400);
+    expect(generated.json().error.code).toBe('VALIDATION_ERROR');
+    expect(generated.json().error.message).toContain('backtest_period_from must be a string');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+
+    await app.close();
+  });
+
+  it('returns validation error for impossible calendar dates', async () => {
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {
+        backtest_period_from: '2026-02-31',
+        backtest_period_to: '2026-03-10',
+      },
+    });
+
+    expect(generated.statusCode).toBe(400);
+    expect(generated.json().error.code).toBe('VALIDATION_ERROR');
+    expect(generated.json().error.message).toContain('valid calendar date');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+
+    await app.close();
+  });
+
   it('returns validation error when natural language rule is empty', async () => {
     const row = runtime.versions.get('ver-1');
     if (!row) throw new Error('seed row missing');

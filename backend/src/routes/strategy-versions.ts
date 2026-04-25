@@ -119,11 +119,37 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     if (!DATE_ONLY_PATTERN.test(value)) {
       throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be YYYY-MM-DD.`);
     }
+    const [yearText, monthText, dayText] = value.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
     const parsed = new Date(`${value}T00:00:00.000Z`);
     if (Number.isNaN(parsed.getTime())) {
       throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid date.`);
     }
+    if (
+      parsed.getUTCFullYear() !== year ||
+      parsed.getUTCMonth() + 1 !== month ||
+      parsed.getUTCDate() !== day
+    ) {
+      throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid calendar date.`);
+    }
     return parsed;
+  };
+
+  const readOptionalBodyString = (
+    body: { backtest_period_from?: unknown; backtest_period_to?: unknown } | undefined,
+    key: 'backtest_period_from' | 'backtest_period_to',
+  ): string | null => {
+    const raw = body?.[key];
+    if (raw === undefined || raw === null) {
+      return null;
+    }
+    if (typeof raw !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', `${key} must be a string.`);
+    }
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
   };
 
   const rethrowKnownSchemaMismatch = (error: unknown): never => {
@@ -269,14 +295,14 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { versionId: string };
     Body: {
-      backtest_period_from?: string;
-      backtest_period_to?: string;
+      backtest_period_from?: unknown;
+      backtest_period_to?: unknown;
     };
   }>('/:versionId/pine/generate', async (request, reply) => {
     try {
       const { versionId } = request.params;
-      const backtestPeriodFrom = request.body?.backtest_period_from?.trim() ?? null;
-      const backtestPeriodTo = request.body?.backtest_period_to?.trim() ?? null;
+      const backtestPeriodFrom = readOptionalBodyString(request.body, 'backtest_period_from');
+      const backtestPeriodTo = readOptionalBodyString(request.body, 'backtest_period_to');
       if ((backtestPeriodFrom && !backtestPeriodTo) || (!backtestPeriodFrom && backtestPeriodTo)) {
         throw new AppError(
           400,
