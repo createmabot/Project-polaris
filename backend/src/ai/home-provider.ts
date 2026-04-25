@@ -266,6 +266,25 @@ export type HomeAiProvider = {
   generatePineScript: (context: PineGenerationContext) => Promise<PineGenerationOutput>;
 };
 
+type LocalLlmTaskType =
+  | 'daily_summary'
+  | 'symbol_thesis_summary'
+  | 'comparison_summary'
+  | 'backtest_summary'
+  | 'pine_generation';
+
+type LocalLlmSummaryChatOptions = {
+  taskType: Exclude<LocalLlmTaskType, 'pine_generation'>;
+  systemPrompt: string;
+  userPrompt: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+  think?: boolean;
+};
+
+const LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS = 1200;
+const LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS = 1800;
+
 function buildDeterministicDailyOutput(
   context: DailySummaryContext,
   options: { modelName: string; promptVersion: string; titlePrefix: string },
@@ -701,6 +720,144 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     return this.alertAdapter.generateAlertSummary(context);
   }
 
+  private sanitizeJsonContent(content: string): string {
+    return content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+  }
+
+  private normalizeFinishReason(payload: any): string | null {
+    const raw = payload?.done_reason ?? payload?.finish_reason ?? payload?.doneReason ?? null;
+    if (typeof raw !== 'string') {
+      return null;
+    }
+    const normalized = raw.trim().toLowerCase();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private logSummaryChatResult(params: {
+    level: 'warn' | 'error';
+    taskType: Exclude<LocalLlmTaskType, 'pine_generation'>;
+    endpoint: string;
+    think: boolean;
+    finishReason: string | null;
+    hasContent: boolean;
+    hasThinking: boolean;
+  }): void {
+    const payload = {
+      event: 'local_llm_summary_call',
+      task_type: params.taskType,
+      model: this.modelName,
+      endpoint: params.endpoint,
+      think: params.think,
+      finish_reason: params.finishReason,
+      has_content: params.hasContent,
+      has_thinking: params.hasThinking,
+    };
+    const line = JSON.stringify(payload);
+    if (params.level === 'error') {
+      console.error(line);
+      return;
+    }
+    console.warn(line);
+  }
+
+  private buildSummaryOutputError(params: {
+    taskType: Exclude<LocalLlmTaskType, 'pine_generation'>;
+    endpoint: string;
+    think: boolean;
+    finishReason: string | null;
+    hasContent: boolean;
+    hasThinking: boolean;
+    detail: string;
+  }): Error {
+    return new Error(
+      [
+        `local_llm ${params.taskType} returned invalid output: ${params.detail}`,
+        `task_type=${params.taskType}`,
+        `model=${this.modelName}`,
+        `endpoint=${params.endpoint}`,
+        `think=${params.think}`,
+        `finish_reason=${params.finishReason ?? 'null'}`,
+        `content_present=${params.hasContent}`,
+        `thinking_present=${params.hasThinking}`,
+      ].join(' | '),
+    );
+  }
+
+  private async callOllamaSummaryChat(options: LocalLlmSummaryChatOptions): Promise<string> {
+    const endpointPath = '/api/chat';
+    const endpoint = `${this.endpoint}${endpointPath}`;
+    const think = options.think ?? false;
+    const maxOutputTokens = options.maxOutputTokens ?? LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          { role: 'system', content: options.systemPrompt },
+          { role: 'user', content: options.userPrompt },
+        ],
+        stream: false,
+        think,
+        options: {
+          temperature: options.temperature ?? 0.2,
+          num_predict: maxOutputTokens,
+        },
+      }),
+      signal: AbortSignal.timeout(60_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(
+        `local_llm ${options.taskType} failed: HTTP ${response.status} ${body.slice(0, 200)} | task_type=${options.taskType} | model=${this.modelName} | endpoint=${endpointPath} | think=${think}`,
+      );
+    }
+
+    const data: any = await response.json();
+    const finishReason = this.normalizeFinishReason(data);
+    const messageContent = typeof data?.message?.content === 'string' ? data.message.content.trim() : '';
+    const thinkingContent = typeof data?.message?.thinking === 'string' ? data.message.thinking.trim() : '';
+    const hasContent = messageContent.length > 0;
+    const hasThinking = thinkingContent.length > 0;
+
+    if (!hasContent) {
+      this.logSummaryChatResult({
+        level: 'error',
+        taskType: options.taskType,
+        endpoint: endpointPath,
+        think,
+        finishReason,
+        hasContent,
+        hasThinking,
+      });
+      throw this.buildSummaryOutputError({
+        taskType: options.taskType,
+        endpoint: endpointPath,
+        think,
+        finishReason,
+        hasContent,
+        hasThinking,
+        detail: finishReason === 'length' ? 'empty content with finish_reason=length' : 'empty content',
+      });
+    }
+
+    if (finishReason === 'length') {
+      this.logSummaryChatResult({
+        level: 'warn',
+        taskType: options.taskType,
+        endpoint: endpointPath,
+        think,
+        finishReason,
+        hasContent,
+        hasThinking,
+      });
+    }
+
+    return messageContent;
+  }
+
   async generateDailySummary(context: DailySummaryContext): Promise<DailySummaryOutput> {
     const systemPrompt = [
       'あなたは日本株のホーム画面向け日次要約アシスタントです。',
@@ -727,35 +884,18 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       ),
     ].join('\n');
 
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-        max_tokens: 700,
-      }),
-      signal: AbortSignal.timeout(60_000),
+    const content = await this.callOllamaSummaryChat({
+      taskType: 'daily_summary',
+      systemPrompt,
+      userPrompt,
+      temperature: 0.2,
+      maxOutputTokens: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
+      think: false,
     });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`local_llm daily summary failed: HTTP ${response.status} ${body.slice(0, 200)}`);
-    }
-
-    const data: any = await response.json();
-    const content = extractLlmContent(data);
-    if (!content) {
-      throw new Error('local_llm daily summary returned empty content');
-    }
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+      parsed = JSON.parse(this.sanitizeJsonContent(content));
     } catch {
       return buildDeterministicDailyOutput(context, {
         modelName: this.modelName,
@@ -832,58 +972,34 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       titlePrefix: '[LocalLLM] ',
     });
 
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.modelName,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Generate a concise symbol thesis summary. Return strict JSON only.',
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              scope: context.scope,
-              symbol: context.symbol,
-              reference_ids: context.referenceIds,
-              references: context.references.slice(0, 5),
-              snapshot: context.snapshot,
-              latest_note_summary: context.latestNoteSummary,
-              output_schema: {
-                title: '<string>',
-                bullish_points: ['<string or {text,reference_ids}>'],
-                bearish_points: ['<string or {text,reference_ids}>'],
-                watch_kpis: ['<string>'],
-                next_events: ['<string or {label,date,reference_ids}>'],
-                invalidation_conditions: ['<string>'],
-                overall_view: '<string>',
-              },
-            }),
-          },
-        ],
-        temperature: 0.2,
-        max_tokens: 900,
+    const content = await this.callOllamaSummaryChat({
+      taskType: 'symbol_thesis_summary',
+      systemPrompt: 'Generate a concise symbol thesis summary. Return strict JSON only.',
+      userPrompt: JSON.stringify({
+        scope: context.scope,
+        symbol: context.symbol,
+        reference_ids: context.referenceIds,
+        references: context.references.slice(0, 5),
+        snapshot: context.snapshot,
+        latest_note_summary: context.latestNoteSummary,
+        output_schema: {
+          title: '<string>',
+          bullish_points: ['<string or {text,reference_ids}>'],
+          bearish_points: ['<string or {text,reference_ids}>'],
+          watch_kpis: ['<string>'],
+          next_events: ['<string or {label,date,reference_ids}>'],
+          invalidation_conditions: ['<string>'],
+          overall_view: '<string>',
+        },
       }),
-      signal: AbortSignal.timeout(60_000),
+      temperature: 0.2,
+      maxOutputTokens: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
+      think: false,
     });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`local_llm symbol thesis failed: HTTP ${response.status} ${body.slice(0, 200)}`);
-    }
-
-    const data: any = await response.json();
-    const content = extractLlmContent(data);
-    if (!content) {
-      throw new Error('local_llm symbol thesis returned empty content');
-    }
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+      parsed = JSON.parse(this.sanitizeJsonContent(content));
     } catch {
       return deterministic;
     }
@@ -929,56 +1045,32 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       titlePrefix: '[LocalLLM] ',
     });
 
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.modelName,
-        messages: [
-          {
-            role: 'system',
-            content:
-              'Generate a concise comparison summary for stock analysis. Return strict JSON only.',
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              comparison_id: context.comparisonId,
-              symbols: context.symbols,
-              metrics: context.metrics,
-              compared_metric_json: context.comparedMetricJson,
-              references: context.references.slice(0, 8),
-              output_schema: {
-                title: '<string>',
-                body_markdown: '<string>',
-                key_differences: ['<string>'],
-                risk_points: ['<string>'],
-                next_actions: ['<string>'],
-                overall_view: '<string>',
-              },
-            }),
-          },
-        ],
-        temperature: 0.2,
-        max_tokens: 900,
+    const content = await this.callOllamaSummaryChat({
+      taskType: 'comparison_summary',
+      systemPrompt: 'Generate a concise comparison summary for stock analysis. Return strict JSON only.',
+      userPrompt: JSON.stringify({
+        comparison_id: context.comparisonId,
+        symbols: context.symbols,
+        metrics: context.metrics,
+        compared_metric_json: context.comparedMetricJson,
+        references: context.references.slice(0, 8),
+        output_schema: {
+          title: '<string>',
+          body_markdown: '<string>',
+          key_differences: ['<string>'],
+          risk_points: ['<string>'],
+          next_actions: ['<string>'],
+          overall_view: '<string>',
+        },
       }),
-      signal: AbortSignal.timeout(60_000),
+      temperature: 0.2,
+      maxOutputTokens: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
+      think: false,
     });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`local_llm comparison summary failed: HTTP ${response.status} ${body.slice(0, 200)}`);
-    }
-
-    const data: any = await response.json();
-    const content = extractLlmContent(data);
-    if (!content) {
-      throw new Error('local_llm comparison summary returned empty content');
-    }
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+      parsed = JSON.parse(this.sanitizeJsonContent(content));
     } catch {
       return deterministic;
     }
@@ -1019,7 +1111,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       titlePrefix: '[LocalLLM] ',
     });
 
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+    const response = await fetch(`${this.endpoint}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1062,9 +1154,12 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
             }),
           },
         ],
-        temperature: 0.2,
-        max_tokens: 900,
+        stream: false,
         think: false,
+        options: {
+          temperature: 0.2,
+          num_predict: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
+        },
       }),
       signal: AbortSignal.timeout(60_000),
     });
@@ -1075,14 +1170,45 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
 
     const data: any = await response.json();
-    const content = extractLlmContent(data);
+    const finishReason = this.normalizeFinishReason(data);
+    const thinkingContent = typeof data?.message?.thinking === 'string' ? data.message.thinking.trim() : '';
+    const content = typeof data?.message?.content === 'string' ? data.message.content.trim() : '';
     if (!content) {
-      throw new Error('local_llm backtest summary returned empty content');
+      const hasThinking = thinkingContent.length > 0;
+      this.logSummaryChatResult({
+        level: 'error',
+        taskType: 'backtest_summary',
+        endpoint: '/api/chat',
+        think: false,
+        finishReason,
+        hasContent: false,
+        hasThinking,
+      });
+      throw this.buildSummaryOutputError({
+        taskType: 'backtest_summary',
+        endpoint: '/api/chat',
+        think: false,
+        finishReason,
+        hasContent: false,
+        hasThinking,
+        detail: finishReason === 'length' ? 'empty content with finish_reason=length' : 'empty content',
+      });
+    }
+    if (finishReason === 'length') {
+      this.logSummaryChatResult({
+        level: 'warn',
+        taskType: 'backtest_summary',
+        endpoint: '/api/chat',
+        think: false,
+        finishReason,
+        hasContent: true,
+        hasThinking: thinkingContent.length > 0,
+      });
     }
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+      parsed = JSON.parse(this.sanitizeJsonContent(content));
     } catch {
       return deterministic;
     }
@@ -1162,7 +1288,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           },
         ],
         temperature: 0.1,
-        max_tokens: 1800,
+        max_tokens: LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS,
       }),
       signal: AbortSignal.timeout(60_000),
     });
