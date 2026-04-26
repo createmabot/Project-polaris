@@ -41,6 +41,12 @@ export default function Home() {
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
   if (!data) return null;
+  const watchlistDisplayNameById = new Map<string, string>();
+  for (const symbol of data.watchlist_symbols) {
+    if (symbol?.symbol_id && symbol?.display_name) {
+      watchlistDisplayNameById.set(symbol.symbol_id, symbol.display_name);
+    }
+  }
 
   return (
     <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
@@ -118,13 +124,20 @@ export default function Home() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {data.positions.map((position: any, index: number) => (
               <li key={position.position_id ?? `position-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
-                {position.symbol_id ? (
-                  <Link href={`/symbols/${position.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
-                    {position.display_name ?? position.symbol_id}
-                  </Link>
-                ) : (
-                  <span>{position.display_name ?? position.symbol_id ?? '不明'}</span>
-                )}
+                {(() => {
+                  const resolvedDisplayName =
+                    (position.symbol_id ? watchlistDisplayNameById.get(position.symbol_id) : null) ??
+                    position.display_name ??
+                    position.symbol_id ??
+                    '不明';
+                  return position.symbol_id ? (
+                    <Link href={`/symbols/${position.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                      {resolvedDisplayName}
+                    </Link>
+                  ) : (
+                    <span>{resolvedDisplayName}</span>
+                  );
+                })()}
                 <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
                   数量: {position.quantity ?? '-'} / 平均取得: {position.avg_cost ?? '-'} / 現在値: {position.latest_price ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
                 </span>
