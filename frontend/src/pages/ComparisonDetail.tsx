@@ -44,6 +44,7 @@ export default function ComparisonDetail() {
       const result = await postApi<ComparisonGenerateData>(`/api/comparisons/${comparisonId}/generate`, {
         metrics: ['thesis_presence', 'active_note_presence', 'recent_alert_count', 'recent_reference_count', 'latest_processing_status'],
         include_ai_summary: true,
+        force_regenerate: true,
       });
       setGenerateInfo(`比較結果を更新しました（result: ${result.comparison_result_id}）`);
       await mutate();

@@ -364,23 +364,23 @@ function buildDeterministicSymbolOutput(
   const insufficientContext = !hasReferences && !hasSnapshot && !hasNote;
   const confidence: 'high' | 'medium' | 'low' = insufficientContext ? 'low' : hasReferences ? 'medium' : 'low';
   const symbolLabel = context.symbol.displayName ?? context.symbol.symbolCode ?? context.symbol.symbol;
-  const title = `${options.titlePrefix}${symbolLabel} Thesis Card`;
+  const title = `${options.titlePrefix}${symbolLabel} 論点カード`;
   const snapshotText =
     context.snapshot && context.snapshot.lastPrice !== null
       ? `${context.snapshot.lastPrice} (${context.snapshot.changePercent ?? 0}%)`
-      : 'N/A';
+      : '取得なし';
 
   return {
     title,
     bodyMarkdown: [
       `## ${title}`,
       '',
-      `- symbol: ${symbolLabel}`,
-      `- scope: ${context.scope}`,
-      `- references: ${context.referenceIds.length}`,
-      `- snapshot: ${snapshotText}`,
-      `- note: ${context.latestNoteSummary ? context.latestNoteSummary.title : 'N/A'}`,
-      insufficientContext ? '- context: insufficient' : '- context: minimal sufficient',
+      `- 銘柄: ${symbolLabel}`,
+      `- スコープ: ${context.scope}`,
+      `- 参照件数: ${context.referenceIds.length}`,
+      `- スナップショット: ${snapshotText}`,
+      `- ノート: ${context.latestNoteSummary ? context.latestNoteSummary.title : 'なし'}`,
+      insufficientContext ? '- コンテキスト: 不足' : '- コンテキスト: 最低限あり',
     ].join('\n'),
     structuredJson: {
       schema_name: 'symbol_thesis_summary',
@@ -390,29 +390,29 @@ function buildDeterministicSymbolOutput(
       payload: {
         bullish_points: hasReferences
           ? context.references.slice(0, 2).map((reference) => ({
-              text: `Reference supports thesis: ${reference.title}`,
+              text: `論点を補強する参照情報: ${reference.title}`,
               reference_ids: [reference.id],
             }))
-          : ['No high-confidence bullish reference yet'],
+          : ['強気材料の根拠が不足しています'],
         bearish_points:
           hasSnapshot &&
           context.snapshot !== null &&
           context.snapshot.changePercent !== null &&
           context.snapshot.changePercent < 0
-          ? ['Recent price weakness needs validation']
-          : ['Valuation or execution risk remains'],
-        watch_kpis: ['Revenue growth', 'Operating margin', 'Cash flow'],
+          ? ['直近の価格軟化について追加確認が必要です']
+          : ['バリュエーションまたは実行面のリスクが残ります'],
+        watch_kpis: ['売上成長率', '営業利益率', 'キャッシュフロー'],
         next_events: hasReferences
           ? context.references.slice(0, 2).map((reference) => ({
               label: reference.title,
               date: reference.publishedAt ?? null,
               reference_ids: [reference.id],
             }))
-          : ['Next earnings release'],
-        invalidation_conditions: ['Guidance cut', 'Material demand slowdown'],
+          : ['次回決算'],
+        invalidation_conditions: ['会社計画の下方修正', '需要の大幅鈍化'],
         overall_view: insufficientContext
-          ? 'Context is insufficient. Treat this as a provisional thesis.'
-          : 'Base thesis remains valid with monitored downside risks.',
+          ? '入力コンテキストが不足しているため、暫定的な論点カードです。'
+          : '下振れリスクを監視しつつ、現時点の基本シナリオは維持可能です。',
       },
     },
     modelName: options.modelName,
@@ -431,17 +431,17 @@ function buildDeterministicComparisonOutput(
     : context.references.length >= 2
       ? 'high'
       : 'medium';
-  const title = `${options.titlePrefix}Comparison Summary: ${symbolLabels.join(' vs ')}`;
+  const title = `${options.titlePrefix}比較総評: ${symbolLabels.join(' vs ')}`;
 
   return {
     title,
     bodyMarkdown: [
       `## ${title}`,
       '',
-      `- symbols: ${symbolLabels.join(', ')}`,
-      `- metrics: ${context.metrics.join(', ')}`,
-      `- references: ${context.references.length}`,
-      insufficientContext ? '- context: insufficient' : '- context: minimal sufficient',
+      `- 銘柄: ${symbolLabels.join(', ')}`,
+      `- 指標: ${context.metrics.join(', ')}`,
+      `- 参照件数: ${context.references.length}`,
+      insufficientContext ? '- コンテキスト: 不足' : '- コンテキスト: 最低限あり',
     ].join('\n'),
     structuredJson: {
       schema_name: 'comparison_summary',
@@ -451,18 +451,18 @@ function buildDeterministicComparisonOutput(
       payload: {
         key_differences: [
           context.metrics.length > 0
-            ? `Primary difference axis: ${context.metrics.slice(0, 2).join(', ')}`
-            : 'Insufficient metrics to identify differences',
+            ? `主な差分軸: ${context.metrics.slice(0, 2).join(', ')}`
+            : '差分を特定するための指標が不足しています',
         ],
         risk_points: insufficientContext
-          ? ['Input context is limited. Treat this as provisional.']
-          : ['Cross-check recent alerts and references for regime change risk.'],
-        next_actions: ['Review latest disclosures', 'Validate thesis consistency with current snapshots'],
+          ? ['入力コンテキストが限定的なため、暫定評価として扱ってください。']
+          : ['相場環境の変化リスクに備え、直近アラートと参照情報を再確認してください。'],
+        next_actions: ['最新開示を確認する', '現行スナップショットと論点の整合性を再検証する'],
         compared_symbols: context.symbols.map((symbol) => symbol.id),
         reference_ids: context.references.map((reference) => reference.id),
         overall_view: insufficientContext
-          ? 'Comparison context is limited and should be used only as a starting point.'
-          : 'Current comparison suggests a measurable gap, but requires follow-up validation.',
+          ? '比較コンテキストが不足しているため、初期判断としてのみ利用してください。'
+          : '現状は定量差が確認できますが、追加検証を前提に判断してください。',
       },
     },
     modelName: options.modelName,
@@ -989,7 +989,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
     const content = await this.callOllamaSummaryChat({
       taskType: 'symbol_thesis_summary',
-      systemPrompt: 'Generate a concise symbol thesis summary. Return strict JSON only.',
+      systemPrompt: 'あなたは日本株分析アシスタントです。必ず日本語で、厳密なJSONのみを返してください。',
       userPrompt: JSON.stringify({
         scope: context.scope,
         symbol: context.symbol,
@@ -1006,6 +1006,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           invalidation_conditions: ['<string>'],
           overall_view: '<string>',
         },
+        output_language: 'ja',
       }),
       temperature: 0.2,
       maxOutputTokens: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -1062,7 +1063,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
     const content = await this.callOllamaSummaryChat({
       taskType: 'comparison_summary',
-      systemPrompt: 'Generate a concise comparison summary for stock analysis. Return strict JSON only.',
+      systemPrompt: 'あなたは日本株比較アシスタントです。必ず日本語で、厳密なJSONのみを返してください。',
       userPrompt: JSON.stringify({
         comparison_id: context.comparisonId,
         symbols: context.symbols,
@@ -1077,6 +1078,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           next_actions: ['<string>'],
           overall_view: '<string>',
         },
+        output_language: 'ja',
       }),
       temperature: 0.2,
       maxOutputTokens: LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS,
@@ -1505,7 +1507,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
       body: JSON.stringify({
         model: this.modelName,
         messages: [
-          { role: 'system', content: 'Generate a concise symbol thesis summary as strict JSON.' },
+          { role: 'system', content: 'あなたは日本株分析アシスタントです。必ず日本語で、厳密なJSONのみを返してください。' },
           {
             role: 'user',
             content: JSON.stringify({
@@ -1515,6 +1517,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               references: context.references.slice(0, 6),
               snapshot: context.snapshot,
               latest_note_summary: context.latestNoteSummary,
+              output_language: 'ja',
             }),
           },
         ],
@@ -1573,7 +1576,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: 'Generate a concise comparison summary as strict JSON.',
+            content: 'あなたは日本株比較アシスタントです。必ず日本語で、厳密なJSONのみを返してください。',
           },
           {
             role: 'user',
@@ -1583,6 +1586,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               metrics: context.metrics,
               compared_metric_json: context.comparedMetricJson,
               references: context.references.slice(0, 8),
+              output_language: 'ja',
             }),
           },
         ],
