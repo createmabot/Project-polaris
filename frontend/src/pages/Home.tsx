@@ -118,7 +118,13 @@ export default function Home() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {data.positions.map((position: any, index: number) => (
               <li key={position.position_id ?? `position-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
-                <span>{position.display_name ?? position.symbol_id ?? '不明'}</span>
+                {position.symbol_id ? (
+                  <Link href={`/symbols/${position.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                    {position.display_name ?? position.symbol_id}
+                  </Link>
+                ) : (
+                  <span>{position.display_name ?? position.symbol_id ?? '不明'}</span>
+                )}
                 <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
                   数量: {position.quantity ?? '-'} / 平均取得: {position.avg_cost ?? '-'} / 現在値: {position.latest_price ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
                 </span>
@@ -129,7 +135,10 @@ export default function Home() {
       </section>
 
       <section style={{ marginTop: '1.5rem' }}>
-        <h2>デイリーサマリー</h2>
+        <h2>AIデイリーサマリー</h2>
+        <p style={{ marginTop: '-0.2rem', marginBottom: '0.6rem', color: '#666', fontSize: '0.88rem' }}>
+          AIがマーケット・アラート・参照情報をもとに生成した要約です。
+        </p>
         <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
           {SUMMARY_OPTIONS.map((option) => {
             const selected = summaryType === option.value;
