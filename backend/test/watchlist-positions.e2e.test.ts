@@ -504,6 +504,13 @@ describe('watchlist/positions management routes', () => {
     });
     expect(updateResponse.statusCode).toBe(200);
     expect(updateResponse.json().data.action).toBe('updated');
+    expect(runtime.transactions).toHaveLength(3);
+    const resetTx = runtime.transactions[1];
+    const replacementTx = runtime.transactions[2];
+    expect(resetTx.side).toBe('sell');
+    expect(replacementTx.side).toBe('buy');
+    expect(resetTx.executedAt.getTime()).toBeLessThan(replacementTx.executedAt.getTime());
+    expect(replacementTx.executedAt.getTime()).toBe(resetTx.executedAt.getTime() + 1);
 
     const homeAfterUpdate = await app.inject({
       method: 'GET',
@@ -512,6 +519,7 @@ describe('watchlist/positions management routes', () => {
     expect(homeAfterUpdate.statusCode).toBe(200);
     expect(homeAfterUpdate.json().data.positions).toHaveLength(1);
     expect(homeAfterUpdate.json().data.positions[0].quantity).toBe(150);
+    expect(homeAfterUpdate.json().data.positions[0].avg_cost).toBe(12500);
     const updatedPositionId = homeAfterUpdate.json().data.positions[0].position_id as string;
 
     const deleteResponse = await app.inject({

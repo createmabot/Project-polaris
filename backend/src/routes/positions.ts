@@ -64,6 +64,7 @@ async function setPositionWithManualTransactions(params: {
   averageCost: number;
 }) {
   const { prismaAny, userId, portfolioId, symbolId, quantity, averageCost } = params;
+  let replacementExecutedAt = new Date();
   const existing = await prismaAny.position.findUnique({
     where: {
       portfolioId_symbolId: {
@@ -91,6 +92,8 @@ async function setPositionWithManualTransactions(params: {
     }
 
     if (Number.isFinite(existingQty) && existingQty > 0) {
+      const resetExecutedAt = new Date();
+      replacementExecutedAt = new Date(resetExecutedAt.getTime() + 1);
       await prismaAny.transaction.create({
         data: {
           userId,
@@ -100,7 +103,7 @@ async function setPositionWithManualTransactions(params: {
           quantity: toDecimal(existingQty),
           price: toDecimal(Number.isFinite(existingAvg) && existingAvg >= 0 ? existingAvg : averageCost),
           feeAmount: new Prisma.Decimal('0'),
-          executedAt: new Date(),
+          executedAt: resetExecutedAt,
           source: 'manual',
           memo: 'position reset before manual update',
         },
@@ -117,7 +120,7 @@ async function setPositionWithManualTransactions(params: {
       quantity: toDecimal(quantity),
       price: toDecimal(averageCost),
       feeAmount: new Prisma.Decimal('0'),
-      executedAt: new Date(),
+      executedAt: replacementExecutedAt,
       source: 'manual',
       memo: 'position set by manual management',
     },
