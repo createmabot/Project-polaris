@@ -202,7 +202,7 @@ export function parseTradingViewSummaryCsv(rawCsv: string): ParseCsvResult {
     return { ok: false, error: 'CSV must include header and one data row.' };
   }
 
-  const headers = splitCsvLine(lines[0]);
+  const headers = splitCsvLine(lines[0]).map((header) => header.replace(/^\uFEFF/, ''));
   const values = splitCsvLine(lines[1]);
 
   const missingHeaders = SUPPORTED_HEADERS.filter((header) => !headers.includes(header));
