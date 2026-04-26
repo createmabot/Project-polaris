@@ -56,6 +56,8 @@ echo [DONE] DB restart and update completed.
 exit /b 0
 
 :failed
+popd >nul 2>&1
+popd >nul 2>&1
 echo.
 echo [FAILED] DB refresh process failed.
 exit /b 1
