@@ -433,8 +433,9 @@ async function runComparisonSummaryGeneration(params: {
   comparisonId: string;
   symbolViews: ComparisonSymbolView[];
   comparedMetricJson: ReturnType<typeof buildComparedMetricJson>;
+  forceRegenerate: boolean;
 }) {
-  const { comparisonId, symbolViews, comparedMetricJson } = params;
+  const { comparisonId, symbolViews, comparedMetricJson, forceRegenerate } = params;
   const homeAiService = new HomeAiService();
 
   const referencePool = symbolViews
@@ -483,7 +484,7 @@ async function runComparisonSummaryGeneration(params: {
     orderBy: { generatedAt: 'desc' },
   });
 
-  if (existingSummary) {
+  if (existingSummary && !forceRegenerate) {
     const existingJob = await prisma.aiJob.create({
       data: {
         jobType: 'generate_comparison_summary',
@@ -492,7 +493,7 @@ async function runComparisonSummaryGeneration(params: {
         status: 'succeeded',
         startedAt: new Date(),
         completedAt: new Date(),
-        requestPayload: { compared_metric_json: comparedMetricJson } as any,
+        requestPayload: { compared_metric_json: comparedMetricJson, force_regenerate: false } as any,
         responsePayload: {
           summary_id: existingSummary.id,
           skipped: 'duplicate',
@@ -515,7 +516,7 @@ async function runComparisonSummaryGeneration(params: {
       targetEntityType: 'comparison_session',
       targetEntityId: comparisonId,
       status: 'queued',
-      requestPayload: { compared_metric_json: comparedMetricJson } as any,
+      requestPayload: { compared_metric_json: comparedMetricJson, force_regenerate: forceRegenerate } as any,
     },
   });
 
@@ -845,12 +846,13 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
   fastify.post('/:comparisonId/generate', async (
     request: FastifyRequest<{
       Params: { comparisonId: string };
-      Body?: { metrics?: string[]; include_ai_summary?: boolean };
+      Body?: { metrics?: string[]; include_ai_summary?: boolean; force_regenerate?: unknown };
     }>,
     reply: FastifyReply
   ) => {
     const { comparisonId } = request.params;
     const includeAiSummary = request.body?.include_ai_summary ?? true;
+    const forceRegenerate = request.body?.force_regenerate === true;
 
     const session = await prisma.comparisonSession.findUnique({
       where: { id: comparisonId },
@@ -879,6 +881,7 @@ export async function comparisonRoutes(fastify: FastifyInstance) {
           comparisonId,
           symbolViews,
           comparedMetricJson,
+          forceRegenerate,
         })
       : null;
 

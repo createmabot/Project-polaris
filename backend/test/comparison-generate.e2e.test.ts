@@ -605,6 +605,34 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     await app.close();
   });
 
+  it('creates a new ai_summary when force_regenerate is true', async () => {
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(first.statusCode).toBe(200);
+    const firstSummaryId = first.json().data.ai_summary_id as string;
+    expect(firstSummaryId).toBeTruthy();
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true, force_regenerate: true },
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(second.statusCode).toBe(200);
+    const secondSummaryId = second.json().data.ai_summary_id as string;
+    expect(secondSummaryId).toBeTruthy();
+    expect(secondSummaryId).not.toBe(firstSummaryId);
+
+    await app.close();
+  });
+
   it('falls back to legacy comparison_result summary fields on GET', async () => {
     const app = await createApp();
     const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
