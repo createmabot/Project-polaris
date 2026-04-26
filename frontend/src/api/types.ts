@@ -345,6 +345,9 @@ export type StrategyVersionPineData = {
   strategy_rule_version_id: string;
   status: 'available' | 'unavailable';
   pine_script_id: string | null;
+  parent_pine_script_id?: string | null;
+  source_pine_script_id?: string | null;
+  revision_input_id?: string | null;
   generated_script: string | null;
   script_body?: string | null;
   script_name?: string | null;
@@ -352,12 +355,24 @@ export type StrategyVersionPineData = {
   warnings: string[];
   generation_note?: Record<string, unknown> | null;
   generated_at?: string | null;
+  latest_revision_input?: {
+    id: string;
+    source_pine_script_id: string;
+    generated_pine_script_id: string | null;
+    compile_error_text: string | null;
+    validation_note: string | null;
+    revision_request: string;
+    created_at: string;
+  } | null;
 };
 
 export type StrategyVersionPineGenerateData = {
   strategy_version: StrategyVersionData['strategy_version'];
   pine: {
     pine_script_id: string | null;
+    parent_pine_script_id?: string | null;
+    source_pine_script_id?: string | null;
+    revision_input_id?: string | null;
     generated_script: string | null;
     warnings: string[];
     status: 'generated' | 'failed';

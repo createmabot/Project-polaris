@@ -71,6 +71,7 @@ type StrategyRuleVersionRow = {
 type PineScriptRow = {
   id: string;
   strategyRuleVersionId: string;
+  parentPineScriptId: string | null;
   scriptName: string;
   pineVersion: string;
   scriptBody: string;
@@ -84,9 +85,21 @@ type Runtime = {
   strategySeq: number;
   versionSeq: number;
   pineSeq: number;
+  revisionSeq: number;
   strategies: Map<string, StrategyRuleRow>;
   versions: Map<string, StrategyRuleVersionRow>;
   pineScripts: Map<string, PineScriptRow>;
+  pineRevisionInputs: Map<string, {
+    id: string;
+    strategyRuleVersionId: string;
+    sourcePineScriptId: string;
+    generatedPineScriptId: string | null;
+    compileErrorText: string | null;
+    validationNote: string | null;
+    revisionRequest: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
 };
 
 let runtime: Runtime;
@@ -96,9 +109,11 @@ function createRuntime(): Runtime {
     strategySeq: 1,
     versionSeq: 1,
     pineSeq: 1,
+    revisionSeq: 1,
     strategies: new Map(),
     versions: new Map(),
     pineScripts: new Map(),
+    pineRevisionInputs: new Map(),
   };
 }
 
@@ -241,6 +256,7 @@ vi.mock('../src/db', () => {
         const row: PineScriptRow = {
           id,
           strategyRuleVersionId: data.strategyRuleVersionId,
+          parentPineScriptId: data.parentPineScriptId ?? null,
           scriptName: data.scriptName,
           pineVersion: data.pineVersion,
           scriptBody: data.scriptBody,
@@ -253,9 +269,56 @@ vi.mock('../src/db', () => {
         return row;
       },
       findFirst: async ({ where }: any) => {
-        const rows = Array.from(runtime.pineScripts.values()).filter(
-          (row) => row.strategyRuleVersionId === where.strategyRuleVersionId,
-        );
+        let rows = Array.from(runtime.pineScripts.values());
+        if (where?.strategyRuleVersionId) {
+          rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
+        }
+        if (where?.id) {
+          rows = rows.filter((row) => row.id === where.id);
+        }
+        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const selected = rows[0] ?? null;
+        if (!selected) return null;
+        const generatedFromRevision = Array.from(runtime.pineRevisionInputs.values()).find(
+          (item) => item.generatedPineScriptId === selected.id,
+        ) ?? null;
+        return { ...selected, generatedFromRevision };
+      },
+    },
+    pineRevisionInput: {
+      create: async ({ data }: any) => {
+        const id = `rev-${runtime.revisionSeq++}`;
+        const now = new Date();
+        const row = {
+          id,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          sourcePineScriptId: data.sourcePineScriptId,
+          generatedPineScriptId: data.generatedPineScriptId ?? null,
+          compileErrorText: data.compileErrorText ?? null,
+          validationNote: data.validationNote ?? null,
+          revisionRequest: data.revisionRequest,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.pineRevisionInputs.set(id, row);
+        return row;
+      },
+      update: async ({ where, data }: any) => {
+        const row = runtime.pineRevisionInputs.get(where.id);
+        if (!row) throw new Error(`revision_input_not_found:${where.id}`);
+        const next = {
+          ...row,
+          ...data,
+          updatedAt: new Date(),
+        };
+        runtime.pineRevisionInputs.set(where.id, next);
+        return next;
+      },
+      findFirst: async ({ where }: any) => {
+        let rows = Array.from(runtime.pineRevisionInputs.values());
+        if (where?.strategyRuleVersionId) {
+          rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
+        }
         rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return rows[0] ?? null;
       },

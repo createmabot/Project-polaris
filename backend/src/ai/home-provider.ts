@@ -235,6 +235,13 @@ export type PineGenerationContext = {
   normalizedRuleJson: Record<string, unknown> | null;
   targetMarket: string;
   targetTimeframe: string;
+  regenerationInput?: {
+    sourcePineScriptId: string;
+    sourcePineScript: string;
+    compileErrorText: string | null;
+    validationNote: string | null;
+    revisionRequest: string;
+  } | null;
   repairRequest?: {
     attempt: number;
     invalidReasonCodes: string[];
@@ -655,8 +662,16 @@ function buildDeterministicPineOutput(
     targetTimeframe: context.targetTimeframe,
   });
 
+  const warnings = [...generated.warnings];
+  if (context.regenerationInput) {
+    warnings.push(
+      `regeneration_context_applied: source=${context.regenerationInput.sourcePineScriptId}`,
+    );
+  }
+
   return {
     ...generated,
+    warnings,
     modelName: options.modelName,
     promptVersion: options.promptVersion,
   };
@@ -1268,7 +1283,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content:
-              'Convert natural language trading rule into Pine v6 script. Return strict JSON only.',
+              'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script. Return strict JSON only.',
           },
           {
             role: 'user',
@@ -1277,6 +1292,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               normalized_rule_json: context.normalizedRuleJson,
               target_market: context.targetMarket,
               target_timeframe: context.targetTimeframe,
+              regeneration_input: context.regenerationInput ?? null,
               repair_request: context.repairRequest ?? null,
               output_schema: {
                 generated_script: '<string>',
@@ -1687,7 +1703,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: 'Convert natural language rule to Pine script and return strict JSON.',
+            content: 'Convert natural language rule to Pine script. Use regeneration_input when provided to revise existing script. Return strict JSON.',
           },
           {
             role: 'user',
@@ -1696,6 +1712,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               normalized_rule_json: context.normalizedRuleJson,
               target_market: context.targetMarket,
               target_timeframe: context.targetTimeframe,
+              regeneration_input: context.regenerationInput ?? null,
               repair_request: context.repairRequest ?? null,
             }),
           },

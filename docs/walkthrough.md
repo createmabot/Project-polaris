@@ -228,6 +228,26 @@ pnpm run dev
    - `backtest_period_from` and `backtest_period_to` must be provided together
    - `backtest_period_from <= backtest_period_to`
 
+### 9.1 Rule Lab Pine Regenerate Roundtrip (Minimal)
+1. Validate first in TradingView
+   - paste generated Pine into TradingView and run first-pass validation
+   - collect compile error text and validation note
+2. Regenerate with feedback in Strategy Version Detail
+   - fill `compile_error_text` (optional)
+   - fill `validation_note` (optional)
+   - fill `revision_request` (required)
+   - click `Pine 修正再生成`
+   - API: `POST /api/strategy-versions/:versionId/pine/regenerate`
+3. Confirm lineage and revision context
+   - API: `GET /api/strategy-versions/:versionId/pine`
+   - check `parent_pine_script_id`
+   - check `source_pine_script_id`
+   - check `revision_input_id`
+   - check `latest_revision_input`
+4. Confirm repair metadata consistency
+   - response includes `repair_attempts` and `invalid_reason_codes`
+   - failure returns provider/validation reason without masking
+
 ### 10. TradingView Strategy Report CSV Difference Check (Minimal)
 1. TradingView export source check
    - `Performance Summary` export: metric headers (`Net Profit`, `Total Closed Trades` ...)

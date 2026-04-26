@@ -5,7 +5,7 @@ import { HomeAiService } from '../ai/home-ai-service';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { AppError, formatSuccess } from '../utils/response';
 
-function toStrategyVersionResponse(version: {
+type StrategyVersionRecord = {
   id: string;
   strategyRuleId: string;
   clonedFromVersionId: string | null;
@@ -21,7 +21,9 @@ function toStrategyVersionResponse(version: {
   timeframe: string;
   createdAt: Date;
   updatedAt: Date;
-}) {
+};
+
+function toStrategyVersionResponse(version: StrategyVersionRecord) {
   return {
     id: version.id,
     strategy_id: version.strategyRuleId,
@@ -76,8 +78,25 @@ function toPineResponse(record: {
   scriptBody: string;
   generationNoteJson: unknown;
   status: string;
+  parentPineScriptId: string | null;
+  generatedFromRevision?: {
+    id: string;
+    sourcePineScriptId: string;
+    compileErrorText: string | null;
+    validationNote: string | null;
+    revisionRequest: string;
+    createdAt: Date;
+  } | null;
   createdAt: Date;
-}) {
+}, latestRevisionInput: {
+  id: string;
+  sourcePineScriptId: string;
+  generatedPineScriptId: string | null;
+  compileErrorText: string | null;
+  validationNote: string | null;
+  revisionRequest: string;
+  createdAt: Date;
+} | null) {
   const generationNote =
     typeof record.generationNoteJson === 'object' && record.generationNoteJson !== null
       ? (record.generationNoteJson as Record<string, unknown>)
@@ -91,6 +110,7 @@ function toPineResponse(record: {
   const warnings = Array.isArray(warningsRaw)
     ? warningsRaw.filter((item) => typeof item === 'string')
     : [];
+  const generatedFromRevision = record.generatedFromRevision ?? null;
 
   return {
     pine_script_id: record.id,
@@ -101,12 +121,36 @@ function toPineResponse(record: {
     warnings,
     generation_note: generationNote,
     script_status: record.status,
+    parent_pine_script_id: record.parentPineScriptId,
+    source_pine_script_id: generatedFromRevision?.sourcePineScriptId ?? record.parentPineScriptId ?? null,
+    revision_input_id: generatedFromRevision?.id ?? null,
+    latest_revision_input: latestRevisionInput
+      ? {
+          id: latestRevisionInput.id,
+          source_pine_script_id: latestRevisionInput.sourcePineScriptId,
+          generated_pine_script_id: latestRevisionInput.generatedPineScriptId,
+          compile_error_text: latestRevisionInput.compileErrorText,
+          validation_note: latestRevisionInput.validationNote,
+          revision_request: latestRevisionInput.revisionRequest,
+          created_at: latestRevisionInput.createdAt.toISOString(),
+        }
+      : null,
     generated_at: record.createdAt.toISOString(),
   };
 }
 
 async function resolveLatestPineScript(versionId: string) {
   return prisma.pineScript.findFirst({
+    where: { strategyRuleVersionId: versionId },
+    orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
+    include: {
+      generatedFromRevision: true,
+    },
+  });
+}
+
+async function resolveLatestPineRevisionInput(versionId: string) {
+  return prisma.pineRevisionInput.findFirst({
     where: { strategyRuleVersionId: versionId },
     orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
   });
@@ -152,6 +196,25 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     return trimmed.length > 0 ? trimmed : null;
   };
 
+  const readOptionalText = (raw: unknown, key: string): string | null => {
+    if (raw === undefined || raw === null) {
+      return null;
+    }
+    if (typeof raw !== 'string') {
+      throw new AppError(400, 'VALIDATION_ERROR', `${key} must be a string.`);
+    }
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
+  const readRequiredText = (raw: unknown, key: string): string => {
+    const value = readOptionalText(raw, key);
+    if (!value) {
+      throw new AppError(400, 'VALIDATION_ERROR', `${key} is required.`);
+    }
+    return value;
+  };
+
   const rethrowKnownSchemaMismatch = (error: unknown): never => {
     const code = (error as { code?: unknown })?.code;
     if (code === 'P2021' || code === 'P2022') {
@@ -162,6 +225,156 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
     throw error;
+  };
+
+  const generateAndPersistPine = async (params: {
+    version: StrategyVersionRecord;
+    parentPineScriptId?: string | null;
+    revisionInput?: {
+      id: string;
+      sourcePineScriptId: string;
+      sourceScriptBody: string;
+      compileErrorText: string | null;
+      validationNote: string | null;
+      revisionRequest: string;
+    } | null;
+  }) => {
+    const homeAiService = new HomeAiService();
+    let output;
+    let log;
+    try {
+      const generated = await homeAiService.generatePineScript(
+        {
+          naturalLanguageSpec: params.version.naturalLanguageRule,
+          normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson),
+          targetMarket: params.version.market,
+          targetTimeframe: params.version.timeframe,
+          regenerationInput: params.revisionInput
+            ? {
+                sourcePineScriptId: params.revisionInput.sourcePineScriptId,
+                sourcePineScript: params.revisionInput.sourceScriptBody,
+                compileErrorText: params.revisionInput.compileErrorText,
+                validationNote: params.revisionInput.validationNote,
+                revisionRequest: params.revisionInput.revisionRequest,
+              }
+            : null,
+        },
+        { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+      );
+      output = generated.output;
+      log = generated.log;
+    } catch (providerError) {
+      output = {
+        normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson) ?? {},
+        generatedScript: null,
+        warnings: [
+          `provider_error: ${providerError instanceof Error ? providerError.message : String(providerError)}`,
+        ],
+        assumptions: [],
+        status: 'failed' as const,
+        repairAttempts: 0,
+        failureReason: providerError instanceof Error ? providerError.message : String(providerError),
+        invalidReasonCodes: ['provider_error'],
+        modelName: 'provider_error',
+        promptVersion: 'v1.0.0-pine-provider-error',
+      };
+      log = {
+        initialModel: 'unknown',
+        finalModel: 'unknown',
+        escalated: false,
+        escalationReason: 'provider_failed_no_fallback',
+        retryCount: 0,
+        durationMs: 0,
+        estimatedTokens: 0,
+        estimatedCostUsd: 0,
+        provider: 'provider_error',
+        fallbackToStub: false,
+      };
+    }
+
+    const validation = assessGeneratedPineScript(output.generatedScript);
+    const warnings = [...new Set([...output.warnings, ...validation.warnings])];
+    const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
+    const finalStatus: 'generated' | 'failed' = shouldFail ? 'failed' : 'generated';
+    const finalScript = finalStatus === 'generated' ? validation.normalizedScript : null;
+    const failureReason = output.failureReason ?? validation.failureReason;
+    const repairAttempts = output.repairAttempts ?? 0;
+    const invalidReasonCodes = output.invalidReasonCodes ?? validation.invalidReasonCodes ?? [];
+
+    const generationNote = {
+      schema_name: 'pine_generation_notes',
+      schema_version: '1.0',
+      confidence: finalStatus === 'generated' ? 'medium' : 'low',
+      insufficient_context: finalStatus === 'failed',
+      payload: {
+        assumptions: output.assumptions,
+        warnings,
+        failure_reason: failureReason,
+        repair_attempts: repairAttempts,
+        invalid_reason_codes: invalidReasonCodes,
+        provider: log.provider,
+        fallback_to_stub: log.fallbackToStub,
+        regeneration: params.revisionInput
+          ? {
+              revision_input_id: params.revisionInput.id,
+              source_pine_script_id: params.revisionInput.sourcePineScriptId,
+              compile_error_text: params.revisionInput.compileErrorText,
+              validation_note: params.revisionInput.validationNote,
+              revision_request: params.revisionInput.revisionRequest,
+            }
+          : null,
+      },
+    };
+
+    let pineScriptId: string | null = null;
+    if (finalScript) {
+      const created = await prisma.pineScript.create({
+        data: {
+          strategyRuleVersionId: params.version.id,
+          parentPineScriptId: params.parentPineScriptId ?? null,
+          scriptName: 'Hokkyokusei Generated Strategy',
+          pineVersion: normalizeVersionNumber(finalScript),
+          scriptBody: finalScript,
+          generationNoteJson: generationNote as Prisma.InputJsonValue,
+          status: 'ready',
+        },
+      });
+      pineScriptId = created.id;
+    }
+
+    if (params.revisionInput) {
+      await prisma.pineRevisionInput.update({
+        where: { id: params.revisionInput.id },
+        data: { generatedPineScriptId: pineScriptId },
+      });
+    }
+
+    const updated = await prisma.strategyRuleVersion.update({
+      where: { id: params.version.id },
+      data: {
+        normalizedRuleJson: output.normalizedRuleJson as Prisma.InputJsonValue,
+        generatedPine: finalScript,
+        warningsJson: warnings as Prisma.InputJsonValue,
+        assumptionsJson: output.assumptions as Prisma.InputJsonValue,
+        status: finalStatus,
+      },
+    });
+
+    return {
+      strategy_version: toStrategyVersionResponse(updated),
+      pine: {
+        pine_script_id: pineScriptId,
+        parent_pine_script_id: params.parentPineScriptId ?? null,
+        source_pine_script_id: params.revisionInput?.sourcePineScriptId ?? params.parentPineScriptId ?? null,
+        revision_input_id: params.revisionInput?.id ?? null,
+        generated_script: finalScript,
+        warnings,
+        status: finalStatus,
+        failure_reason: failureReason,
+        repair_attempts: repairAttempts,
+        invalid_reason_codes: invalidReasonCodes,
+      },
+    };
   };
 
   fastify.patch<{
@@ -270,6 +483,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
     }
 
+    const latestRevisionInput = await resolveLatestPineRevisionInput(versionId);
     const latest = await resolveLatestPineScript(versionId);
     if (!latest) {
       return reply.status(200).send(
@@ -279,6 +493,20 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           pine_script_id: null,
           generated_script: null,
           warnings: [],
+          parent_pine_script_id: null,
+          source_pine_script_id: latestRevisionInput?.sourcePineScriptId ?? null,
+          revision_input_id: null,
+          latest_revision_input: latestRevisionInput
+            ? {
+                id: latestRevisionInput.id,
+                source_pine_script_id: latestRevisionInput.sourcePineScriptId,
+                generated_pine_script_id: latestRevisionInput.generatedPineScriptId,
+                compile_error_text: latestRevisionInput.compileErrorText,
+                validation_note: latestRevisionInput.validationNote,
+                revision_request: latestRevisionInput.revisionRequest,
+                created_at: latestRevisionInput.createdAt.toISOString(),
+              }
+            : null,
         }),
       );
     }
@@ -287,7 +515,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       formatSuccess(request, {
         strategy_rule_version_id: versionId,
         status: 'available',
-        ...toPineResponse(latest),
+        ...toPineResponse(latest, latestRevisionInput),
       }),
     );
   });
@@ -339,112 +567,82 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         throw new AppError(400, 'VALIDATION_ERROR', 'target_timeframe is required.');
       }
 
-      const homeAiService = new HomeAiService();
-      let output;
-      let log;
-      try {
-        const generated = await homeAiService.generatePineScript({
-          naturalLanguageSpec: version.naturalLanguageRule,
-          normalizedRuleJson: normalizeRuleJson(version.normalizedRuleJson),
-          targetMarket: version.market,
-          targetTimeframe: version.timeframe,
-        }, { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript });
-        output = generated.output;
-        log = generated.log;
-      } catch (providerError) {
-        output = {
-          normalizedRuleJson: normalizeRuleJson(version.normalizedRuleJson) ?? {},
-          generatedScript: null,
-          warnings: [
-            `provider_error: ${providerError instanceof Error ? providerError.message : String(providerError)}`,
-          ],
-          assumptions: [],
-          status: 'failed' as const,
-          repairAttempts: 0,
-          failureReason: providerError instanceof Error ? providerError.message : String(providerError),
-          invalidReasonCodes: ['provider_error'],
-          modelName: 'provider_error',
-          promptVersion: 'v1.0.0-pine-provider-error',
-        };
-        log = {
-          initialModel: 'unknown',
-          finalModel: 'unknown',
-          escalated: false,
-          escalationReason: 'provider_failed_no_fallback',
-          retryCount: 0,
-          durationMs: 0,
-          estimatedTokens: 0,
-          estimatedCostUsd: 0,
-          provider: 'provider_error',
-          fallbackToStub: false,
-        };
+      const generated = await generateAndPersistPine({
+        version,
+      });
+
+      return reply.status(200).send(formatSuccess(request, generated));
+    } catch (error) {
+      rethrowKnownSchemaMismatch(error);
+    }
+  });
+
+  fastify.post<{
+    Params: { versionId: string };
+    Body: {
+      source_pine_script_id?: unknown;
+      compile_error_text?: unknown;
+      validation_note?: unknown;
+      revision_request?: unknown;
+    };
+  }>('/:versionId/pine/regenerate', async (request, reply) => {
+    try {
+      const { versionId } = request.params;
+      const sourcePineScriptId = readRequiredText(request.body?.source_pine_script_id, 'source_pine_script_id');
+      const compileErrorText = readOptionalText(request.body?.compile_error_text, 'compile_error_text');
+      const validationNote = readOptionalText(request.body?.validation_note, 'validation_note');
+      const revisionRequest = readRequiredText(request.body?.revision_request, 'revision_request');
+
+      const version = await prisma.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
+      if (!version) {
+        throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      }
+      if (!version.naturalLanguageRule.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_spec is required.');
+      }
+      if (!version.market.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'target_market is required.');
+      }
+      if (!version.timeframe.trim()) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'target_timeframe is required.');
       }
 
-      const validation = assessGeneratedPineScript(output.generatedScript);
-      const warnings = [...new Set([...output.warnings, ...validation.warnings])];
-      const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
-      const finalStatus: 'generated' | 'failed' = shouldFail ? 'failed' : 'generated';
-      const finalScript = finalStatus === 'generated' ? validation.normalizedScript : null;
-      const failureReason = output.failureReason ?? validation.failureReason;
-      const repairAttempts = output.repairAttempts ?? 0;
-      const invalidReasonCodes = output.invalidReasonCodes ?? validation.invalidReasonCodes ?? [];
-
-      const generationNote = {
-        schema_name: 'pine_generation_notes',
-        schema_version: '1.0',
-        confidence: finalStatus === 'generated' ? 'medium' : 'low',
-        insufficient_context: finalStatus === 'failed',
-        payload: {
-          assumptions: output.assumptions,
-          warnings,
-          failure_reason: failureReason,
-          repair_attempts: repairAttempts,
-          invalid_reason_codes: invalidReasonCodes,
-          provider: log.provider,
-          fallback_to_stub: log.fallbackToStub,
+      const sourcePineScript = await prisma.pineScript.findFirst({
+        where: {
+          id: sourcePineScriptId,
+          strategyRuleVersionId: version.id,
         },
-      };
-
-      let pineScriptId: string | null = null;
-      if (finalScript) {
-        const created = await prisma.pineScript.create({
-          data: {
-            strategyRuleVersionId: version.id,
-            scriptName: 'Hokkyokusei Generated Strategy',
-            pineVersion: normalizeVersionNumber(finalScript),
-            scriptBody: finalScript,
-            generationNoteJson: generationNote as Prisma.InputJsonValue,
-            status: 'ready',
-          },
-        });
-        pineScriptId = created.id;
+      });
+      if (!sourcePineScript) {
+        throw new AppError(404, 'NOT_FOUND', 'source pine script was not found for this strategy version.');
       }
 
-      const updated = await prisma.strategyRuleVersion.update({
-        where: { id: version.id },
+      const revisionInput = await prisma.pineRevisionInput.create({
         data: {
-          normalizedRuleJson: output.normalizedRuleJson as Prisma.InputJsonValue,
-          generatedPine: finalScript,
-          warningsJson: warnings as Prisma.InputJsonValue,
-          assumptionsJson: output.assumptions as Prisma.InputJsonValue,
-          status: finalStatus,
+          strategyRuleVersionId: version.id,
+          sourcePineScriptId: sourcePineScript.id,
+          compileErrorText,
+          validationNote,
+          revisionRequest,
         },
       });
 
-      return reply.status(200).send(
-        formatSuccess(request, {
-          strategy_version: toStrategyVersionResponse(updated),
-          pine: {
-            pine_script_id: pineScriptId,
-            generated_script: finalScript,
-            warnings,
-            status: finalStatus,
-            failure_reason: failureReason,
-            repair_attempts: repairAttempts,
-            invalid_reason_codes: invalidReasonCodes,
-          },
-        }),
-      );
+      const generated = await generateAndPersistPine({
+        version,
+        parentPineScriptId: sourcePineScript.id,
+        revisionInput: {
+          id: revisionInput.id,
+          sourcePineScriptId: sourcePineScript.id,
+          sourceScriptBody: sourcePineScript.scriptBody,
+          compileErrorText,
+          validationNote,
+          revisionRequest,
+        },
+      });
+
+      return reply.status(200).send(formatSuccess(request, generated));
     } catch (error) {
       rethrowKnownSchemaMismatch(error);
     }

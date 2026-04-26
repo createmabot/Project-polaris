@@ -24,6 +24,7 @@ type StrategyRuleVersionRow = {
 type PineScriptRow = {
   id: string;
   strategyRuleVersionId: string;
+  parentPineScriptId: string | null;
   scriptName: string;
   pineVersion: string;
   scriptBody: string;
@@ -35,8 +36,20 @@ type PineScriptRow = {
 
 type Runtime = {
   pineSeq: number;
+  revisionSeq: number;
   versions: Map<string, StrategyRuleVersionRow>;
   pineScripts: Map<string, PineScriptRow>;
+  pineRevisionInputs: Map<string, {
+    id: string;
+    strategyRuleVersionId: string;
+    sourcePineScriptId: string;
+    generatedPineScriptId: string | null;
+    compileErrorText: string | null;
+    validationNote: string | null;
+    revisionRequest: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
 };
 
 let runtime: Runtime;
@@ -47,6 +60,7 @@ function createRuntime(): Runtime {
   const now = new Date('2026-04-25T10:00:00.000Z');
   return {
     pineSeq: 1,
+    revisionSeq: 1,
     versions: new Map([
       [
         'ver-1',
@@ -70,6 +84,7 @@ function createRuntime(): Runtime {
       ],
     ]),
     pineScripts: new Map(),
+    pineRevisionInputs: new Map(),
   };
 }
 
@@ -115,6 +130,7 @@ vi.mock('../src/db', () => {
         const row: PineScriptRow = {
           id,
           strategyRuleVersionId: data.strategyRuleVersionId,
+          parentPineScriptId: data.parentPineScriptId ?? null,
           scriptName: data.scriptName,
           pineVersion: data.pineVersion,
           scriptBody: data.scriptBody,
@@ -127,9 +143,56 @@ vi.mock('../src/db', () => {
         return row;
       },
       findFirst: async ({ where }: any) => {
-        const rows = Array.from(runtime.pineScripts.values()).filter(
-          (row) => row.strategyRuleVersionId === where.strategyRuleVersionId,
-        );
+        let rows = Array.from(runtime.pineScripts.values());
+        if (where?.strategyRuleVersionId) {
+          rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
+        }
+        if (where?.id) {
+          rows = rows.filter((row) => row.id === where.id);
+        }
+        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const selected = rows[0] ?? null;
+        if (!selected) return null;
+        const generatedFromRevision = Array.from(runtime.pineRevisionInputs.values()).find(
+          (item) => item.generatedPineScriptId === selected.id,
+        ) ?? null;
+        return { ...selected, generatedFromRevision };
+      },
+    },
+    pineRevisionInput: {
+      create: async ({ data }: any) => {
+        const id = `rev-${runtime.revisionSeq++}`;
+        const now = new Date();
+        const row = {
+          id,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          sourcePineScriptId: data.sourcePineScriptId,
+          generatedPineScriptId: data.generatedPineScriptId ?? null,
+          compileErrorText: data.compileErrorText ?? null,
+          validationNote: data.validationNote ?? null,
+          revisionRequest: data.revisionRequest,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.pineRevisionInputs.set(id, row);
+        return row;
+      },
+      update: async ({ where, data }: any) => {
+        const row = runtime.pineRevisionInputs.get(where.id);
+        if (!row) throw new Error('revision_input_not_found');
+        const next = {
+          ...row,
+          ...data,
+          updatedAt: new Date(),
+        };
+        runtime.pineRevisionInputs.set(where.id, next);
+        return next;
+      },
+      findFirst: async ({ where }: any) => {
+        let rows = Array.from(runtime.pineRevisionInputs.values());
+        if (where?.strategyRuleVersionId) {
+          rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
+        }
         rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         return rows[0] ?? null;
       },
@@ -188,6 +251,125 @@ describe('strategy version pine endpoints', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.json().data.status).toBe('available');
     expect(typeof fetched.json().data.generated_script).toBe('string');
+
+    await app.close();
+  });
+
+  it('regenerates pine with compile_error_text and stores revision context', async () => {
+    generatePineScriptMock
+      .mockResolvedValueOnce({
+        output: {
+          normalizedRuleJson: { strategy_type: 'long_only' },
+          generatedScript: '//@version=6\nstrategy("base", overlay=true)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        },
+        log: { provider: 'local_llm', fallbackToStub: false },
+      })
+      .mockResolvedValueOnce({
+        output: {
+          normalizedRuleJson: { strategy_type: 'long_only' },
+          generatedScript: '//@version=6\nstrategy("revised", overlay=true)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        },
+        log: { provider: 'local_llm', fallbackToStub: false },
+      });
+
+    const app = await createApp();
+
+    const initial = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    expect(initial.statusCode).toBe(200);
+    const sourcePineScriptId = initial.json().data.pine.pine_script_id as string;
+    expect(sourcePineScriptId).toBeTruthy();
+
+    const regenerated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/regenerate',
+      payload: {
+        source_pine_script_id: sourcePineScriptId,
+        compile_error_text: "Undeclared identifier 'foo'",
+        validation_note: 'TradingView compile failed on line 7',
+        revision_request: 'entry条件を単純化して再生成してください',
+      },
+    });
+    expect(regenerated.statusCode).toBe(200);
+    expect(regenerated.json().data.pine.parent_pine_script_id).toBe(sourcePineScriptId);
+    expect(regenerated.json().data.pine.source_pine_script_id).toBe(sourcePineScriptId);
+    expect(regenerated.json().data.pine.revision_input_id).toBeTruthy();
+
+    const secondCallContext = generatePineScriptMock.mock.calls[1][0];
+    expect(secondCallContext.regenerationInput.sourcePineScriptId).toBe(sourcePineScriptId);
+    expect(secondCallContext.regenerationInput.compileErrorText).toContain('Undeclared identifier');
+
+    const fetched = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-versions/ver-1/pine',
+    });
+    expect(fetched.statusCode).toBe(200);
+    expect(fetched.json().data.latest_revision_input.revision_request).toContain('entry条件');
+    expect(fetched.json().data.parent_pine_script_id).toBe(sourcePineScriptId);
+
+    await app.close();
+  });
+
+  it('regenerates with revision_request only', async () => {
+    generatePineScriptMock
+      .mockResolvedValueOnce({
+        output: {
+          normalizedRuleJson: { strategy_type: 'long_only' },
+          generatedScript: '//@version=6\nstrategy("base", overlay=true)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        },
+        log: { provider: 'local_llm', fallbackToStub: false },
+      })
+      .mockResolvedValueOnce({
+        output: {
+          normalizedRuleJson: { strategy_type: 'long_only' },
+          generatedScript: '//@version=6\nstrategy("rev2", overlay=true)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        },
+        log: { provider: 'local_llm', fallbackToStub: false },
+      });
+
+    const app = await createApp();
+    const initial = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    const sourcePineScriptId = initial.json().data.pine.pine_script_id as string;
+
+    const regenerated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/regenerate',
+      payload: {
+        source_pine_script_id: sourcePineScriptId,
+        revision_request: 'exit条件を厳しくしてください',
+      },
+    });
+
+    expect(regenerated.statusCode).toBe(200);
+    expect(regenerated.json().data.pine.revision_input_id).toBeTruthy();
+    expect(regenerated.json().data.pine.status).toBe('generated');
 
     await app.close();
   });
