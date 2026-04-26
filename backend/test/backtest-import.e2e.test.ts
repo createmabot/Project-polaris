@@ -275,6 +275,13 @@ const TRADES_CSV_JP = `トレード番号,タイプ,日時,シグナル,価格 J
 2,ロングエントリー,2026-04-05,Long,1100,1,1100,-50,-4.55,30,2.72,-90,-8.18,50,0.05
 `;
 
+const TRADES_CSV_EN = `Trade #,Type,Date/Time,Signal,Price,Contracts,Profit,Cumulative Profit
+1,Long,2026-03-25,Long,1000,1,0,0
+1,Close entry(s) order Long,2026-04-01,Close,1100,1,100,100
+2,Long,2026-04-05,Long,1100,1,0,100
+2,Close entry(s) order Long,2026-04-10,Close,1050,1,-50,50
+`;
+
 describe('backtest import vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -361,6 +368,45 @@ describe('backtest import vertical slice', () => {
         file_name: 'trade_list_jp.csv',
         content_type: 'text/csv',
         csv_text: TRADES_CSV_JP,
+      },
+    });
+
+    expect(imported.statusCode).toBe(201);
+    const body = imported.json();
+    expect(body.data.import.parse_status).toBe('parsed');
+    expect(body.data.import.parsed_summary.totalTrades).toBe(2);
+    expect(body.data.import.parsed_summary.netProfit).toBe(50);
+    expect(body.data.import.parsed_summary.winRate).toBe(50);
+    expect(body.data.import.parsed_summary.periodFrom).toBe('2026-03-25');
+    expect(body.data.import.parsed_summary.periodTo).toBe('2026-04-10');
+
+    await app.close();
+  });
+
+  it('parses English list-of-trades csv and derives summary metrics', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'trade-list-import-en',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'trade_list_en.csv',
+        content_type: 'text/csv',
+        csv_text: TRADES_CSV_EN,
       },
     });
 
