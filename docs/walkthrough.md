@@ -161,3 +161,18 @@ AI論点カード表示中でも `AI論点カードを再生成` ボタンが表
 
 8. Comparison の AI比較総評生成  
 Comparison 画面で AI比較総評の生成操作を実行し、結果表示が更新されることを確認する。
+
+## 15. Home / SymbolDetail / Comparison のE2E固定（最小）
+
+以下の導線は backend の最小E2Eで回帰固定しています。
+
+- seed相当データで `GET /api/home` を開き、主要ブロック供給データ（market_overview / watchlist_symbols / positions / daily_summary / recent_alerts / key_events）を確認
+- Home の watchlist_symbols / positions で取得した `symbol_id` を使って `GET /api/symbols/:symbolId` を確認
+- `POST /api/symbols/:symbolId/ai-summary/generate` で AI論点カード再生成導線のAPIが破綻していないことを確認
+- `POST /api/comparisons`（`symbol_ids: ['7203', '6758']`）-> `POST /api/comparisons/:comparisonId/generate` -> `GET /api/comparisons/:comparisonId` で比較導線を確認
+
+実行コマンド:
+
+```bash
+pnpm --filter backend test:e2e:home-symbol-comparison
+```
