@@ -23,6 +23,8 @@ import crypto from 'crypto';
 const fastify = Fastify({
   logger: true,
   genReqId: () => crypto.randomUUID(),
+  // CSV import sends raw csv_text as JSON; allow comfortably above typical TradingView exports.
+  bodyLimit: 2 * 1024 * 1024,
 });
 
 fastify.setErrorHandler(errorHandler);
