@@ -15,6 +15,25 @@ type AlertSummaryView = {
   insufficient_context: boolean;
 };
 
+/**
+ * AIジョブの運用追跡用ビュー。
+ *
+ * 注意: requestPayload（プロンプト全文）/ responsePayload（LLM出力詳細）は
+ * 意図的に含めない。運用者が job_id と失敗理由を追えることが目的。
+ */
+type AlertJobView = {
+  job_id: string;
+  job_type: string;
+  status: string;
+  /** 失敗時のエラーメッセージ（短文）。secret・API key 等は含まれない。 */
+  error_message: string | null;
+  /** 最終採用モデル名。プロバイダー情報を追えるようにする。 */
+  model_name: string | null;
+  retry_count: number;
+  created_at: string;
+  completed_at: string | null;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -44,6 +63,28 @@ function toAlertSummaryView(summary: any | null): AlertSummaryView {
     generated_at: summary.generatedAt ? new Date(summary.generatedAt).toISOString() : null,
     status: 'available',
     insufficient_context: insufficient,
+  };
+}
+
+/**
+ * ai_jobs レコードから運用追跡用の最小ビューを構築する。
+ *
+ * 意図的に除外するフィールド:
+ * - requestPayload: プロンプト全文が含まれる可能性がある
+ * - responsePayload: LLM の生成物の詳細が含まれる
+ * これらは DB または内部ログから確認すること。
+ */
+function buildLatestJobView(job: any | null): AlertJobView | null {
+  if (!job) return null;
+  return {
+    job_id: job.id,
+    job_type: job.jobType,
+    status: job.status,
+    error_message: job.errorMessage ?? null,
+    model_name: job.modelName ?? job.finalModel ?? null,
+    retry_count: job.retryCount ?? 0,
+    created_at: new Date(job.createdAt).toISOString(),
+    completed_at: job.completedAt ? new Date(job.completedAt).toISOString() : null,
   };
 }
 
@@ -288,9 +329,35 @@ export async function alertRoutes(fastify: FastifyInstance) {
       orderBy: { generatedAt: 'desc' },
     });
 
+    // generate_alert_summary の最新ジョブ情報を返す（運用追跡用）
+    // requestPayload / responsePayload は含めない（prompt全文・LLM出力詳細の漏洩防止）
+    const latestJob = await prisma.aiJob.findFirst({
+      where: {
+        targetEntityType: 'alert_event',
+        targetEntityId: alertId,
+        jobType: 'generate_alert_summary',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        jobType: true,
+        status: true,
+        errorMessage: true,
+        modelName: true,
+        finalModel: true,
+        retryCount: true,
+        createdAt: true,
+        completedAt: true,
+        // requestPayload / responsePayload は意図的に除外
+      },
+    });
+
     return reply.status(200).send(formatSuccess(request, {
       alert_id: alertId,
       summary: toAlertSummaryView(summary),
+      // failed 時に運用者が job_id と失敗理由を追えるようにする
+      // summary が available の場合も含めることで一貫性を保つ
+      latest_job: buildLatestJobView(latestJob),
     }));
   });
 }

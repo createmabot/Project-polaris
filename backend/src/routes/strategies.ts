@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
+import { detectMojibake } from '../utils/encoding';
 
 type CreateStrategyBody = {
   title?: string;
@@ -174,6 +175,14 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, 'VALIDATION_ERROR', 'timeframe is required.');
     }
 
+    // mojibake 検知: 文字化けが疑われる場合はエラーにせず warning として返す
+    // 小分類文字など false positive が少ないパターンのみ対象
+    const mojibakeCheck = detectMojibake(naturalLanguageRule);
+    const creationWarnings: string[] = [];
+    if (mojibakeCheck.isSuspect) {
+      creationWarnings.push(`natural_language_rule に文字化けの疑いがあります。UTF-8 で送信しているか確認してください。(hint: ${mojibakeCheck.hint})`);
+    }
+
     const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
     if (!strategy) {
       throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
@@ -205,6 +214,9 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         created_at: version.createdAt,
         updated_at: version.updatedAt,
       },
+      // mojibake 検知があった場合のサーバーサイド warning。
+      // 値はそのまま保存される（自動修復はしない）。
+      creation_warnings: creationWarnings,
     }));
   });
 };
