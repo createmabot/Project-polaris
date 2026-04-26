@@ -258,3 +258,20 @@ $result.data.latest_job | Format-List
 3. backend 側は `REPLACEMENT CHARACTER (U+FFFD)` や Windows-1252 制御文字を含む
    `natural_language_rule` を受け取った場合、`creation_warnings` に警告を返す。
    これが出た場合は上記の UTF-8 明示手順を確認すること。
+## 17. watchlist / positions 実データ管理手順（2026-04 追加）
+
+seed 以外の運用データを Home 起点で扱う最小手順。
+
+1. Home で `監視銘柄を管理` を押し `/watchlist` へ遷移する。
+2. 監視銘柄を追加する（`symbol_code` 必須、priority/memo は任意）。
+3. 一覧の銘柄リンクから SymbolDetail へ遷移できることを確認する。
+4. Home に戻り、監視銘柄ブロックへ反映されることを確認する。
+5. Home で `保有銘柄を管理` を押し `/positions` へ遷移する。
+6. 保有銘柄を追加または更新する（`symbol_code` `quantity` `average_cost`）。
+7. 一覧の銘柄リンクから SymbolDetail へ遷移できることを確認する。
+8. Home に戻り、保有銘柄ブロックへ反映されることを確認する。
+
+補足:
+- watchlist/positions API は default watchlist/default portfolio が無い場合に自動作成する。
+- symbol_code が未登録なら Symbol を最小作成して処理する。
+- positions は transactions 正本のため、更新・削除は manual transaction 経由で read model を再構築する。

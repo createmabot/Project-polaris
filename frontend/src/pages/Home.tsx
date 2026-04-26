@@ -1,4 +1,4 @@
-import useSWR from 'swr';
+﻿import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
@@ -94,6 +94,11 @@ export default function Home() {
 
       <section style={{ marginTop: '1.5rem' }}>
         <h2>監視銘柄</h2>
+        <div style={{ marginBottom: '0.6rem' }}>
+          <Link href="/watchlist" style={{ color: '#0066cc', textDecoration: 'none' }}>
+            監視銘柄を管理
+          </Link>
+        </div>
         {data.watchlist_symbols.length === 0 ? (
           <p style={{ color: '#777' }}>監視銘柄はまだありません。</p>
         ) : (
@@ -118,6 +123,11 @@ export default function Home() {
 
       <section style={{ marginTop: '1.5rem' }}>
         <h2>保有銘柄</h2>
+        <div style={{ marginBottom: '0.6rem' }}>
+          <Link href="/positions" style={{ color: '#0066cc', textDecoration: 'none' }}>
+            保有銘柄を管理
+          </Link>
+        </div>
         {data.positions.length === 0 ? (
           <p style={{ color: '#777' }}>保有銘柄はまだありません。</p>
         ) : (

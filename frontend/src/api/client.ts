@@ -81,6 +81,12 @@ export async function patchApi<T>(url: string, body: unknown): Promise<T> {
   });
 }
 
+export async function deleteApi<T>(url: string): Promise<T> {
+  return fetchApi<T>(url, {
+    method: 'DELETE',
+  });
+}
+
 /**
  * SWR fetcher wrapper to easily use `fetchApi` with `useSWR`
  */
