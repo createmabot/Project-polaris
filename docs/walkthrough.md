@@ -128,3 +128,36 @@ seed 後は以下で最小動作確認が可能です。
 1. TradingView は表示・監視・一次検証を担う。
 2. 北極星は保存・比較・履歴管理・AI要約を担う。
 3. 一巡導線で破綻があれば、まず docs 契約との差分を確認してから実装を修正する。
+
+## 14. Home / SymbolDetail / Comparison 確認（最小）
+
+1. Home 表示ブロック確認  
+`http://localhost:5173/` を開き、以下を確認する。
+   - マーケット概況
+   - 監視銘柄
+   - 保有銘柄
+   - AIデイリーサマリー
+   - 最新アラート
+   - 注目イベント
+
+2. watchlist_symbols から SymbolDetail へ遷移  
+監視銘柄の銘柄名リンクを押し、`/symbols/:symbolId` へ遷移できることを確認する。
+
+3. positions から SymbolDetail へ遷移  
+保有銘柄の銘柄名リンク（`symbol_id` がある行）を押し、`/symbols/:symbolId` へ遷移できることを確認する。
+
+4. daily_summary の latest / morning / evening 切替  
+Home の `最新 / 朝 / 夜` を切り替え、表示が更新されることを確認する。
+
+5. SymbolDetail の AI論点カード表示  
+`/symbols/:symbolId` で AI論点カードが `available` の場合、タイトル・本文（または論点リスト）・生成日時が表示されることを確認する。
+
+6. SymbolDetail の AI論点カード再生成  
+AI論点カード表示中でも `AI論点カードを再生成` ボタンが表示され、押下時に `生成中...` へ変化することを確認する。  
+未生成状態（`unavailable`）では既存の `AI論点カード生成` が表示されることを確認する。
+
+7. SymbolDetail から Comparison へ遷移  
+`比較画面に進む` を押し、Comparison 画面へ遷移できることを確認する。
+
+8. Comparison の AI比較総評生成  
+Comparison 画面で AI比較総評の生成操作を実行し、結果表示が更新されることを確認する。

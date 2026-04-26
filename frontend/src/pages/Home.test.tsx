@@ -48,7 +48,8 @@ describe('Home', () => {
 
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
-    expect(html).toContain('デイリーサマリー');
+    expect(html).toContain('AIデイリーサマリー');
+    expect(html).toContain('AIがマーケット・アラート・参照情報をもとに生成した要約です。');
     expect(html).toContain('最新');
     expect(html).toContain('朝');
     expect(html).toContain('夜');
@@ -83,6 +84,7 @@ describe('Home', () => {
         positions: [
           {
             position_id: 'pos_1',
+            symbol_id: 'sym_6758',
             display_name: 'ソニーグループ',
             quantity: 100,
             avg_cost: 12850,
@@ -122,6 +124,7 @@ describe('Home', () => {
     expect(html).toContain('セクター: 半導体 / 変化率: 2.1');
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
+    expect(html).toContain('href="/symbols/sym_6758"');
     expect(html).toContain('数量: 100 / 平均取得: 12850 / 現在値: 13120 / 評価損益: 27000');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');

@@ -237,6 +237,22 @@ export default function SymbolDetail() {
             <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#777' }}>
               生成日時: {formatDate(availableSummary.generated_at)}
             </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <button
+                onClick={handleGenerateThesis}
+                disabled={isGeneratingThesis}
+                style={{
+                  background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '0.45rem 0.8rem',
+                  cursor: isGeneratingThesis ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {isGeneratingThesis ? '生成中...' : 'AI論点カードを再生成'}
+              </button>
+            </div>
           </div>
         ) : aiSummary?.status === 'unavailable' || aiSummaryError ? (
           <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
@@ -258,15 +274,15 @@ export default function SymbolDetail() {
                 {isGeneratingThesis ? '生成中...' : 'AI論点カード生成'}
               </button>
             </div>
-            {generateThesisError && (
-              <div style={{ marginTop: '0.5rem', color: '#b02a37', fontSize: '0.85rem' }}>{generateThesisError}</div>
-            )}
           </div>
         ) : (
           <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
             <div>AI論点カードは空です。</div>
             <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
           </div>
+        )}
+        {generateThesisError && (
+          <div style={{ marginTop: '0.5rem', color: '#b02a37', fontSize: '0.85rem' }}>{generateThesisError}</div>
         )}
       </section>
 

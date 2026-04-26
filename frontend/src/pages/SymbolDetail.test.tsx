@@ -136,5 +136,6 @@ describe('SymbolDetail', () => {
     expect(html).toContain('Toyota thesis');
     expect(html).toContain('Margin improvement');
     expect(html).toContain('FX risk');
+    expect(html).toContain('AI論点カードを再生成');
   });
 });
