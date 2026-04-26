@@ -41,6 +41,7 @@ pnpm run dev
 1. `StrategyVersionDetail` で `Pine を生成` を実行する。
 2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
 3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
+4. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
 
 ## 4. TradingView 一次検証
 
@@ -55,6 +56,7 @@ pnpm run dev
    - `validation_note`（任意）
 2. `POST /api/strategy-versions/:versionId/pine/regenerate` が成功することを確認する。
 3. 失敗時は `failure_reason` / `invalid_reason_codes` / `repair_attempts` を確認する。
+4. 再生成後も `generated pine` の `コピー` ボタンが有効であることを確認する。
 
 ## 6. Pine lineage / revision input 確認
 
@@ -75,6 +77,11 @@ pnpm run dev
    - List of Trades（日本語ヘッダー）
    - List of Trades（英語ヘッダー）
 4. 失敗時は `parse_error` に不足列が表示されることを確認する。
+5. 失敗時の補助文言で、次に修正すべき内容（想定形式 / 必須列 / 空CSV など）が分かることを確認する。
+6. HTTP エラー時は、以下のユーザー向け文言になることを確認する。
+   - 400: 入力内容・CSV形式・必須項目不足の確認を促す
+   - 413: サイズ超過（ファイル/入力が大きすぎる）を案内
+   - 415: 送信形式（Content-Type）不一致の可能性を案内
 
 ## 8. Backtest Detail 表示
 

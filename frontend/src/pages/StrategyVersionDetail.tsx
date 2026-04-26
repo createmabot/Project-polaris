@@ -377,6 +377,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     repairAttempts: number | null;
     invalidReasonCodes: string[];
   } | null>(null);
+  const [pineCopyFeedback, setPineCopyFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
@@ -432,6 +433,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           : pineState === 'failed'
             ? 'failed'
             : '取得済み';
+  const displayedPineScriptRaw = pineData?.generated_script ?? version?.generated_pine ?? '';
+  const canCopyPine = pineState !== 'failed' && pineState !== 'generating' && displayedPineScriptRaw.trim().length > 0;
   const returnPath = version
     ? parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id)
     : null;
@@ -828,6 +831,30 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setRegenerateError(requestError?.message ?? 'Pine の修正再生成に失敗しました。');
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const showPineCopyFeedback = (type: 'success' | 'error', text: string) => {
+    setPineCopyFeedback({ type, text });
+    window.setTimeout(() => {
+      setPineCopyFeedback((current) => (current?.text === text ? null : current));
+    }, 2400);
+  };
+
+  const onCopyPine = async () => {
+    if (!canCopyPine) {
+      showPineCopyFeedback('error', 'コピー対象のPineがありません。');
+      return;
+    }
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard API is unavailable');
+      }
+      await navigator.clipboard.writeText(displayedPineScriptRaw);
+      showPineCopyFeedback('success', 'コピーしました');
+    } catch (error) {
+      console.error('Failed to copy pine script', error);
+      showPineCopyFeedback('error', 'コピーに失敗しました。手動で選択してコピーしてください');
     }
   };
 
@@ -2229,10 +2256,40 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       </section>
 
       <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>generated pine</h2>
-        {version.generated_pine ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+          <h2 style={{ margin: 0 }}>generated pine</h2>
+          <button
+            type='button'
+            data-testid='strategy-version-copy-pine-button'
+            onClick={onCopyPine}
+            disabled={!canCopyPine}
+            style={{
+              padding: '0.35rem 0.75rem',
+              borderRadius: '4px',
+              border: '1px solid #0a5bb5',
+              background: canCopyPine ? '#fff' : '#f2f2f2',
+              color: canCopyPine ? '#0a5bb5' : '#888',
+              cursor: canCopyPine ? 'pointer' : 'default',
+            }}
+          >
+            コピー
+          </button>
+        </div>
+        {pineCopyFeedback && (
+          <div
+            data-testid='strategy-version-copy-pine-feedback'
+            style={{
+              marginBottom: '0.5rem',
+              color: pineCopyFeedback.type === 'success' ? '#1f6a1f' : '#a10000',
+              fontSize: '0.9rem',
+            }}
+          >
+            {pineCopyFeedback.text}
+          </div>
+        )}
+        {displayedPineScriptRaw.trim() ? (
           <pre style={{ margin: 0, padding: '1rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', overflowX: 'auto' }}>
-            <code>{version.generated_pine}</code>
+            <code>{displayedPineScriptRaw}</code>
           </pre>
         ) : (
           <p style={{ color: '#666' }}>まだ生成されていません。ルールを確認後に再生成してください。</p>

@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
-import { postApi, swrFetcher } from '../api/client';
+import { ApiError, postApi, swrFetcher } from '../api/client';
 import {
   BacktestCreateData,
   BacktestImportData,
@@ -13,6 +13,64 @@ import {
 
 const MARKET_OPTIONS = ['JP_STOCK'];
 const TIMEFRAME_OPTIONS = ['D'];
+
+function buildCsvImportErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return 'CSV取込に失敗しました。入力内容を確認して再試行してください。';
+  }
+  if (error.status === 413) {
+    return 'CSVファイルサイズが上限を超えています。不要な行を削除して再試行してください。';
+  }
+  if (error.status === 415) {
+    return 'CSVの送信形式が不正です。`.csv` ファイルを選択して再試行してください。';
+  }
+  if (error.status === 400) {
+    return 'CSV形式または入力内容に不備があります。必須列・空データ・ファイル形式を確認してください。';
+  }
+  if (error.status >= 500) {
+    return 'サーバー側でCSV取込に失敗しました。時間をおいて再試行してください。';
+  }
+  return error.message || 'CSV取込に失敗しました。';
+}
+
+function buildRuleSubmitErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return 'ルール生成に失敗しました。入力内容を確認して再試行してください。';
+  }
+  if (error.status === 413) {
+    return '入力サイズが上限を超えています。ルール文を短くして再試行してください。';
+  }
+  if (error.status === 415) {
+    return '送信形式が不正です。ページを再読み込みして再試行してください。';
+  }
+  if (error.status === 400) {
+    return '入力内容に不備があります。タイトル・自然言語ルール・市場・時間足を確認してください。';
+  }
+  if (error.status >= 500) {
+    return 'サーバー側でルール生成に失敗しました。時間をおいて再試行してください。';
+  }
+  return error.message || 'ルール生成に失敗しました。';
+}
+
+function buildCsvParseGuidance(parseError: string | null): string[] {
+  if (!parseError) {
+    return [];
+  }
+  const message = parseError.toLowerCase();
+  const guidance = [
+    '対応形式: Performance Summary または List of Trades（英語ヘッダー / 日本語ヘッダー対応）。',
+  ];
+  if (message.includes('csv is empty')) {
+    guidance.push('CSVが空です。TradingView のエクスポート内容が1行以上あることを確認してください。');
+  }
+  if (message.includes('header and one data row')) {
+    guidance.push('ヘッダー行とデータ行が不足しています。エクスポート直後のCSVをそのまま使用してください。');
+  }
+  if (message.includes('missing required columns') || message.includes('unsupported csv header')) {
+    guidance.push('必要列が不足しています。Performance Summary なら主要指標列、List of Trades なら約定列を含むCSVを使用してください。');
+  }
+  return guidance;
+}
 
 export default function StrategyLab() {
   const [, setLocation] = useLocation();
@@ -33,6 +91,14 @@ export default function StrategyLab() {
   const [importState, setImportState] = useState<BacktestImportData['import'] | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [pineCopyFeedback, setPineCopyFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const showPineCopyFeedback = (type: 'success' | 'error', text: string) => {
+    setPineCopyFeedback({ type, text });
+    window.setTimeout(() => {
+      setPineCopyFeedback((current) => (current?.text === text ? null : current));
+    }, 2400);
+  };
 
   const { data: versionsData } = useSWR<StrategyVersionListData>(
     strategyId ? `/api/strategies/${strategyId}/versions` : null,
@@ -80,7 +146,8 @@ export default function StrategyLab() {
         setBacktest(createdBacktest.backtest);
       }
     } catch (submitError: any) {
-      setError(submitError?.message ?? 'ルール生成に失敗しました。');
+      console.error('Rule submit failed', submitError);
+      setError(buildRuleSubmitErrorMessage(submitError));
     } finally {
       setSubmitting(false);
     }
@@ -109,9 +176,28 @@ export default function StrategyLab() {
       });
       setImportState(imported.import);
     } catch (requestError: any) {
-      setImportError(requestError?.message ?? 'CSV取込に失敗しました。');
+      console.error('CSV import failed', requestError);
+      setImportError(buildCsvImportErrorMessage(requestError));
     } finally {
       setImporting(false);
+    }
+  };
+
+  const onCopyGeneratedPine = async () => {
+    const pine = result?.generated_pine ?? '';
+    if (!pine.trim()) {
+      showPineCopyFeedback('error', 'コピー対象のPineがありません。');
+      return;
+    }
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard API is unavailable');
+      }
+      await navigator.clipboard.writeText(pine);
+      showPineCopyFeedback('success', 'コピーしました');
+    } catch (error) {
+      console.error('Failed to copy pine script', error);
+      showPineCopyFeedback('error', 'コピーに失敗しました。手動で選択してコピーしてください');
     }
   };
 
@@ -254,7 +340,36 @@ export default function StrategyLab() {
           </div>
 
           <div>
-            <h3 style={{ marginBottom: '0.5rem' }}>generated pine</h3>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>generated pine</h3>
+              <button
+                type='button'
+                data-testid='strategy-lab-copy-pine-button'
+                onClick={onCopyGeneratedPine}
+                disabled={!result.generated_pine}
+                style={{
+                  padding: '0.35rem 0.7rem',
+                  borderRadius: '4px',
+                  border: '1px solid #0a5bb5',
+                  background: result.generated_pine ? '#fff' : '#f2f2f2',
+                  color: result.generated_pine ? '#0a5bb5' : '#888',
+                  cursor: result.generated_pine ? 'pointer' : 'default',
+                }}
+              >
+                コピー
+              </button>
+            </div>
+            {pineCopyFeedback && (
+              <div
+                style={{
+                  marginBottom: '0.5rem',
+                  color: pineCopyFeedback.type === 'success' ? '#1f6a1f' : '#a10000',
+                  fontSize: '0.9rem',
+                }}
+              >
+                {pineCopyFeedback.text}
+              </div>
+            )}
             {result.generated_pine ? (
               <pre style={{ margin: 0, padding: '1rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', overflowX: 'auto' }}>
                 <code>{result.generated_pine}</code>
@@ -339,6 +454,23 @@ export default function StrategyLab() {
               <div><strong>parse_status:</strong> <code>{importState.parse_status}</code></div>
               {importState.parse_error && (
                 <div style={{ color: '#a10000' }}><strong>parse_error:</strong> {importState.parse_error}</div>
+              )}
+              {importState.parse_status === 'failed' && (
+                <div
+                  style={{
+                    marginTop: '0.6rem',
+                    padding: '0.65rem',
+                    borderRadius: '4px',
+                    border: '1px solid #f1b4b4',
+                    background: '#fff3f3',
+                    color: '#7a1f1f',
+                    fontSize: '0.9rem',
+                  }}
+                >
+                  {buildCsvParseGuidance(importState.parse_error).map((item) => (
+                    <div key={item} style={{ marginBottom: '0.25rem' }}>{item}</div>
+                  ))}
+                </div>
               )}
               {importState.parsed_summary && (
                 <div style={{ marginTop: '0.6rem' }}>
