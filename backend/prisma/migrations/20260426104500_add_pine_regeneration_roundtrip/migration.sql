@@ -1,4 +1,4 @@
-﻿-- AlterTable
+-- AlterTable
 ALTER TABLE "pine_scripts"
 ADD COLUMN "parentPineScriptId" TEXT;
 
