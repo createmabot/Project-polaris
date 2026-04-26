@@ -1274,7 +1274,8 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       promptVersion: 'v1.0.0-pine-local',
     });
 
-    const response = await fetch(`${this.endpoint}/v1/chat/completions`, {
+    const endpointPath = '/api/chat';
+    const response = await fetch(`${this.endpoint}${endpointPath}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1303,22 +1304,73 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
             }),
           },
         ],
-        temperature: 0.1,
-        max_tokens: LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS,
+        stream: false,
+        think: false,
+        options: {
+          temperature: 0.1,
+          num_predict: LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS,
+        },
       }),
       signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      throw new Error(`local_llm pine generation failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+      throw new Error(
+        `local_llm pine generation failed: HTTP ${response.status} ${body.slice(0, 200)} | task_type=pine_generation | model=${this.modelName} | endpoint=${endpointPath} | think=false`,
+      );
     }
 
     const data: any = await response.json();
-    const content = extractLlmContent(data);
-    if (!content) {
-      throw new Error('local_llm pine generation returned empty content');
+    const finishReason = this.normalizeFinishReason(data);
+    const messageContent = typeof data?.message?.content === 'string' ? data.message.content.trim() : '';
+    const thinkingContent = typeof data?.message?.thinking === 'string' ? data.message.thinking.trim() : '';
+    const hasContent = messageContent.length > 0;
+    const hasThinking = thinkingContent.length > 0;
+    if (!hasContent) {
+      console.error(
+        JSON.stringify({
+          event: 'local_llm_pine_call',
+          task_type: 'pine_generation',
+          model: this.modelName,
+          endpoint: endpointPath,
+          think: false,
+          finish_reason: finishReason,
+          has_content: hasContent,
+          has_thinking: hasThinking,
+        }),
+      );
+      throw new Error(
+        [
+          `local_llm pine generation returned invalid output: ${
+            finishReason === 'length' ? 'empty content with finish_reason=length' : 'empty content'
+          }`,
+          'task_type=pine_generation',
+          `model=${this.modelName}`,
+          `endpoint=${endpointPath}`,
+          'think=false',
+          `finish_reason=${finishReason ?? 'null'}`,
+          `content_present=${hasContent}`,
+          `thinking_present=${hasThinking}`,
+        ].join(' | '),
+      );
     }
+    if (finishReason === 'length') {
+      console.warn(
+        JSON.stringify({
+          event: 'local_llm_pine_call',
+          task_type: 'pine_generation',
+          model: this.modelName,
+          endpoint: endpointPath,
+          think: false,
+          finish_reason: finishReason,
+          has_content: true,
+          has_thinking: hasThinking,
+        }),
+      );
+    }
+
+    const content = messageContent;
 
     let parsed: any = null;
     try {
