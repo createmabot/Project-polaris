@@ -45,6 +45,12 @@ pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
 
+Windows で DB の再起動 + migrate deploy + seed をワンクリック実行する場合:
+
+```bat
+.\db-refresh.bat
+```
+
 補足:
 - `prisma generate` で Windows の `EPERM ... query_engine-windows.dll.node` が出る場合は、`backend/frontend` の dev プロセスを停止してから再実行する。
 
