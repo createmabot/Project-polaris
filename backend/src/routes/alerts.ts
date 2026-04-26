@@ -67,6 +67,36 @@ function toAlertSummaryView(summary: any | null): AlertSummaryView {
 }
 
 /**
+ * API レスポンスにエラーメッセージを返す前にサニタイズを行う。
+ * DB (ai_jobs.errorMessage) の内容はそのまま維持する。
+ */
+export function sanitizeErrorMessage(msg: string | null): string | null {
+  if (!msg) return null;
+  let sanitized = msg;
+
+  // 1. sk- 形式のAPIキー（OpenAI / Stripeなど）
+  sanitized = sanitized.replace(/sk-[a-zA-Z0-9_-]{10,}/g, '[REDACTED]');
+  
+  // 2. Bearer トークン
+  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9_\-\.]+/ig, 'Bearer [REDACTED]');
+  
+  // 3. 一般的な秘匿情報のキーバリューパターン
+  const secretKeys = ['api_key', 'token', 'shared_secret', 'password'];
+  for (const key of secretKeys) {
+    // Matches: key=value, key: value, "key":"value", 'key': 'value'
+    const regex = new RegExp(`(["']?${key}["']?\\s*[:=]\\s*["']?)([^\\s"']+)`, 'ig');
+    sanitized = sanitized.replace(regex, '$1[REDACTED]');
+  }
+
+  // 4. 文字数制限（長すぎるエラーメッセージによる情報漏洩やレイアウト崩れを防ぐ）
+  if (sanitized.length > 500) {
+    sanitized = sanitized.slice(0, 500) + '...';
+  }
+
+  return sanitized;
+}
+
+/**
  * ai_jobs レコードから運用追跡用の最小ビューを構築する。
  *
  * 意図的に除外するフィールド:
@@ -80,7 +110,7 @@ function buildLatestJobView(job: any | null): AlertJobView | null {
     job_id: job.id,
     job_type: job.jobType,
     status: job.status,
-    error_message: job.errorMessage ?? null,
+    error_message: sanitizeErrorMessage(job.errorMessage ?? null),
     model_name: job.modelName ?? job.finalModel ?? null,
     retry_count: job.retryCount ?? 0,
     created_at: new Date(job.createdAt).toISOString(),
