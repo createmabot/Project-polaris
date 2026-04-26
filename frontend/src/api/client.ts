@@ -1,14 +1,16 @@
 ﻿import { ApiResponse } from './types';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   public code: string;
   public details?: any;
+  public status: number;
 
-  constructor(message: string, code: string, details?: any) {
+  constructor(message: string, code: string, details?: any, status = 0) {
     super(message);
     this.name = 'ApiError';
     this.code = code;
     this.details = details;
+    this.status = status;
   }
 }
 
@@ -26,23 +28,36 @@ export async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!res.ok) {
-    let errBody: ApiResponse<T> | null = null;
+    let errBody: any = null;
     try {
       errBody = await res.json();
     } catch {
-      throw new Error(`HTTP error ${res.status}`);
+      throw new ApiError(`HTTP error ${res.status}`, `HTTP_${res.status}`, null, res.status);
     }
 
     if (errBody?.error) {
-      throw new ApiError(errBody.error.message, errBody.error.code, errBody.error.details);
+      throw new ApiError(
+        errBody.error.message ?? `HTTP error ${res.status}`,
+        errBody.error.code ?? `HTTP_${res.status}`,
+        errBody.error.details ?? errBody,
+        res.status,
+      );
     }
-    throw new Error(`HTTP error ${res.status}`);
+    if (typeof errBody?.message === 'string') {
+      throw new ApiError(
+        errBody.message,
+        typeof errBody?.code === 'string' ? errBody.code : `HTTP_${res.status}`,
+        errBody,
+        res.status,
+      );
+    }
+    throw new ApiError(`HTTP error ${res.status}`, `HTTP_${res.status}`, errBody, res.status);
   }
 
   const json: ApiResponse<T> = await res.json();
   
   if (json.error) {
-    throw new ApiError(json.error.message, json.error.code, json.error.details);
+    throw new ApiError(json.error.message, json.error.code, json.error.details, res.status);
   }
 
   if (json.data === null) {

@@ -1097,6 +1097,8 @@ describe('StrategyVersionDetail', () => {
     );
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="strategy-version-copy-pine-button"');
+    expect(html).toContain('>コピー<');
     expect(html).toContain('data-testid="pine-regenerate-button"');
     expect(html).toContain('data-testid="pine-lineage-summary"');
     expect(html).toContain('source_pine_script_id: <code>pine-2</code>');
