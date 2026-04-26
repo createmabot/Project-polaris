@@ -78,6 +78,59 @@ export type HomeData = {
   key_events: any[];
 };
 
+export type WatchlistItemData = {
+  watchlist: {
+    id: string;
+    name: string;
+    description: string | null;
+  };
+  items: Array<{
+    item_id: string;
+    watchlist_id: string;
+    symbol_id: string | null;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+    priority: number | null;
+    memo: string | null;
+    added_at: string;
+    created_at: string;
+    updated_at: string;
+  }>;
+};
+
+export type WatchlistItemMutateData = {
+  created?: boolean;
+  status?: 'created' | 'already_exists';
+  item: WatchlistItemData['items'][number];
+};
+
+export type PositionManagementData = {
+  portfolio: {
+    id: string;
+    name: string;
+    is_default: boolean;
+  };
+  positions: Array<{
+    position_id: string;
+    symbol_id: string | null;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+    quantity: number | null;
+    average_cost: number | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+};
+
+export type PositionMutateData = {
+  action: 'created' | 'updated' | 'unchanged';
+  position: PositionManagementData['positions'][number] | null;
+};
+
 export type AlertDetailData = {
   alert_event: {
     id: string;

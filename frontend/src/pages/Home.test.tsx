@@ -56,7 +56,11 @@ describe('Home', () => {
     expect(html).toContain('マーケット概況');
     expect(html).toContain('マーケット概況データはまだありません。');
     expect(html).toContain('監視銘柄はまだありません。');
+    expect(html).toContain('href="/watchlist"');
+    expect(html).toContain('監視銘柄を管理');
     expect(html).toContain('保有銘柄はまだありません。');
+    expect(html).toContain('href="/positions"');
+    expect(html).toContain('保有銘柄を管理');
     expect(html).toContain('サマリーはまだありません。');
     expect(html).toContain('アラートはありません。');
     expect(html).toContain('注目イベントはまだありません。');
@@ -131,6 +135,8 @@ describe('Home', () => {
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
+    expect(html).toContain('href="/watchlist"');
+    expect(html).toContain('href="/positions"');
     expect(html).toContain('ソニーグループ');
     expect(html).not.toContain('Sony Group');
     expect(html).toContain('数量: 100 / 平均取得: 12850 / 現在値: 13120 / 評価損益: 27000');

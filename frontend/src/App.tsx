@@ -11,6 +11,8 @@ import BacktestComparisonDetail from "./pages/BacktestComparisonDetail";
 import BacktestList from "./pages/BacktestList";
 import StrategyVersionList from "./pages/StrategyVersionList";
 import StrategyVersionDetail from "./pages/StrategyVersionDetail";
+import WatchlistManage from "./pages/WatchlistManage";
+import PositionsManage from "./pages/PositionsManage";
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
       <Route path="/strategy-lab" component={StrategyLab} />
       <Route path="/strategies/:strategyId/versions" component={StrategyVersionList} />
       <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
+      <Route path="/watchlist" component={WatchlistManage} />
+      <Route path="/positions" component={PositionsManage} />
       <Route path="/backtests" component={BacktestList} />
       <Route path="/backtests/:backtestId" component={BacktestDetail} />
       <Route path="/backtest-comparisons/:comparisonId" component={BacktestComparisonDetail} />
