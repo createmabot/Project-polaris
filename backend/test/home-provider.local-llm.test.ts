@@ -48,6 +48,20 @@ function createDailyContext() {
   };
 }
 
+function createPineContext() {
+  return {
+    naturalLanguageSpec: 'Buy when close > sma(25), exit when close < sma(25)',
+    normalizedRuleJson: {
+      entry: ['close > sma(25)'],
+      exit: ['close < sma(25)'],
+    },
+    targetMarket: 'JP_STOCK',
+    targetTimeframe: 'D',
+    regenerationInput: null,
+    repairRequest: null,
+  };
+}
+
 async function loadLocalProvider(fetchImpl: ReturnType<typeof vi.fn>) {
   vi.resetModules();
 
@@ -187,5 +201,63 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.stream).toBe(false);
     expect(body.options.num_predict).toBe(1200);
     expect(result.title).toBe('Daily AI Summary');
+  });
+
+  it('uses /api/chat + think:false for pine generation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: '//@version=6\nstrategy("X", overlay=true)',
+            warnings: [],
+            assumptions: [],
+            normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:11434/api/chat');
+    const body = JSON.parse(String(init.body));
+    expect(body.stream).toBe(false);
+    expect(body.think).toBe(false);
+    expect(body.options.num_predict).toBe(1800);
+    expect(result.generatedScript).toContain('strategy("X"');
+  });
+
+  it('fails pine generation when content is empty and finish reason is length', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'length',
+        message: {
+          role: 'assistant',
+          content: '',
+          thinking: 'only reasoning text',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const provider = await loadLocalProvider(fetchMock);
+
+    await expect(provider.generatePineScript(createPineContext())).rejects.toThrow(
+      /task_type=pine_generation|finish_reason=length|empty content with finish_reason=length/,
+    );
+
+    expect(errorSpy).toHaveBeenCalled();
+    expect(String(errorSpy.mock.calls[0][0])).toContain('"task_type":"pine_generation"');
   });
 });
