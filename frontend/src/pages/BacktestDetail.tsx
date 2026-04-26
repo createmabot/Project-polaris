@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -214,6 +214,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const latestStatusStyle = parseStatusStyle(latestImport?.parse_status);
   const summary = latestImport?.parsed_summary;
   const parsedImports = data.imports.filter((item) => item.parsed_summary);
+  const parsedImportCount = data.imports.filter((item) => item.parse_status === 'parsed').length;
+  const failedImportCount = data.imports.filter((item) => item.parse_status === 'failed').length;
   const baseImport = parsedImports[0] ?? null;
   const comparisonCandidates = parsedImports.filter((item) => item.id !== baseImport?.id);
   const effectiveComparisonImportId = selectedComparisonImportId || comparisonCandidates[0]?.id || null;
@@ -362,6 +364,30 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
                 {latestStatus}
               </div>
             </div>
+
+            <div style={{ marginTop: '0.8rem', fontSize: '0.95rem', color: '#444' }}>
+              <div><strong>解析成功済みの取込:</strong> {parsedImportCount} 件</div>
+              {failedImportCount > 0 && (
+                <div style={{ marginTop: '0.2rem' }}><strong>失敗した取込:</strong> {failedImportCount} 件</div>
+              )}
+            </div>
+
+            {latestImport.parse_status === 'failed' && parsedImportCount > 0 && (
+              <div
+                style={{
+                  marginTop: '0.8rem',
+                  padding: '0.75rem',
+                  background: '#fff8e6',
+                  border: '1px solid #f2db94',
+                  borderRadius: '6px',
+                  color: '#8a6d3b',
+                  fontSize: '0.9rem',
+                }}
+              >
+                <strong>💡 補足:</strong> 最新のCSV取込は失敗しましたが、過去に解析成功した取込結果があります。主要指標や比較・AI総評では解析済みデータを確認できます。
+              </div>
+            )}
+
             {latestImport.parse_error && (
               <div
                 style={{

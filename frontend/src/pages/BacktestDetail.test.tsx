@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
@@ -191,6 +191,93 @@ describe('BacktestDetail', () => {
     expect(html).toContain('Missing required columns');
     expect(html).toContain('AI総評は未生成です。');
     expect(html).toContain('AI総評を生成');
+  });
+
+  it('shows helper text when latest import is failed but parsed imports exist', () => {
+    mockLocation = '/backtests/bt-failed-with-history';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-failed-with-history',
+          strategy_version_id: 'ver-2',
+          title: 'テスト',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'ready',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-2',
+          snapshot: null,
+        },
+        latest_import: {
+          id: 'imp-failed',
+          file_name: 'bad.csv',
+          file_size: 80,
+          content_type: 'text/csv',
+          parse_status: 'failed',
+          parse_error: 'Missing required columns',
+          parsed_summary: null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [
+          {
+            id: 'imp-failed',
+            backtest_id: 'bt-failed-with-history',
+            file_name: 'bad.csv',
+            file_size: 80,
+            content_type: 'text/csv',
+            parse_status: 'failed',
+            parse_error: 'Missing required columns',
+            parsed_summary: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          {
+            id: 'imp-parsed-1',
+            backtest_id: 'bt-failed-with-history',
+            file_name: 'good.csv',
+            file_size: 100,
+            content_type: 'text/csv',
+            parse_status: 'parsed',
+            parse_error: null,
+            parsed_summary: {
+              totalTrades: 100,
+              winRate: 50,
+              profitFactor: 1.2,
+              maxDrawdown: -10,
+              netProfit: 100000,
+              periodFrom: '2025-01-01',
+              periodTo: '2025-12-31',
+            },
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ],
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-failed-with-history' }} />);
+    expect(html).toContain('解析失敗');
+    expect(html).toContain('解析成功済みの取込:</strong> 1 件');
+    expect(html).toContain('失敗した取込:</strong> 1 件');
+    expect(html).toContain('最新のCSV取込は失敗しましたが、過去に解析成功した取込結果があります。');
   });
 
   it('falls back to /backtests when return query is absent', () => {
