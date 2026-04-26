@@ -118,6 +118,36 @@ vi.mock('../src/db', () => {
       count: async () => runtime.alertCount,
     },
     aiJob: {
+      findFirst: async ({ where, orderBy, select }: any) => {
+        let rows = [...runtime.aiJobs];
+        if (where?.targetEntityType) {
+          rows = rows.filter((r) => r.targetEntityType === where.targetEntityType);
+        }
+        if (where?.targetEntityId) {
+          rows = rows.filter((r) => r.targetEntityId === where.targetEntityId);
+        }
+        if (where?.jobType) {
+          rows = rows.filter((r) => r.jobType === where.jobType);
+        }
+        if (rows.length === 0) return null;
+        // In this simple mock, assuming the latest is the last one added
+        const job = rows[rows.length - 1];
+        if (select) {
+          const result: Record<string, unknown> = {};
+          for (const key of Object.keys(select)) {
+            if (key in job) {
+              result[key] = (job as any)[key];
+            } else if (key === 'createdAt' || key === 'completedAt') {
+              // mock might not have all dates, provide fallback
+              result[key] = new Date();
+            } else if (key === 'retryCount') {
+              result[key] = 0;
+            }
+          }
+          return result;
+        }
+        return job;
+      },
       create: async ({ data }: any) => {
         const row: AiJobRow = {
           id: nextJobId(),

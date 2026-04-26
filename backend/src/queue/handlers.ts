@@ -353,7 +353,15 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
       return { status: 'success', summary_id: aiSummary.id };
     } catch (err: unknown) {
       const errorMessage = getErrorMessage(err);
-      logger.error({ event: 'ai_summary_generation_failed', ai_job_id, alert_event_id, error: errorMessage });
+      // 失敗理由を構造化ログで記録（job_id / job_type / target / error）
+      // provider や secret は含めない
+      logger.error({
+        event: 'ai_summary_generation_failed',
+        job_type: 'generate_alert_summary',
+        ai_job_id,
+        alert_event_id,
+        error: errorMessage,
+      });
 
       await deps.prisma.aiJob.update({
         where: { id: ai_job_id },

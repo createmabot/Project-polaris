@@ -1,4 +1,4 @@
-﻿# 北極星 walkthrough（Rule Lab / Backtest 一巡）
+# 北極星 walkthrough（Rule Lab / Backtest 一巡）
 
 更新日: 2026-04-26
 
@@ -176,3 +176,85 @@ Comparison 画面で AI比較総評の生成操作を実行し、結果表示が
 ```bash
 pnpm --filter backend test:e2e:home-symbol-comparison
 ```
+
+## 16. PowerShell から日本語 JSON を送る際の UTF-8 指定手順
+
+### 背景
+
+PowerShell（Windows デフォルト）は `Invoke-RestMethod` / `Invoke-WebRequest` において、
+ペイロードを System.DefaultEncoding（通常 CP932 / Shift_JIS）でエンコードする場合がある。
+日本語 `natural_language_rule` を含む JSON をそのまま送ると文字化けし、Pine 生成に失敗するケースがある。
+
+### 対策: UTF-8 バイト列に変換して送信する
+
+```powershell
+# 日本語を含む JSON ペイロードを UTF-8 バイト列に変換して送信する例
+
+$payload = @{
+  natural_language_rule = "終値が25日移動平均を上抜けたら買い、下抜けたら売る"
+  market = "JP_STOCK"
+  timeframe = "D"
+} | ConvertTo-Json -Depth 10
+
+# UTF-8 バイト列に変換（この手順が文字化け防止の核心）
+$utf8Body = [System.Text.Encoding]::UTF8.GetBytes($payload)
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:3000/api/strategies/<strategyId>/versions" `
+  -ContentType "application/json; charset=utf-8" `
+  -Body $utf8Body
+```
+
+### Pine 生成（strategy-versions）の例
+
+```powershell
+# Pine 生成を起動する例
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:3000/api/strategy-versions/<versionId>/pine/generate" `
+  -ContentType "application/json; charset=utf-8" `
+  -Body ([System.Text.Encoding]::UTF8.GetBytes('{}'))
+```
+
+### alert summary 生成の例
+
+```powershell
+# alert summary 生成を起動する例
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://localhost:3000/api/alerts/<alertId>/summary/generate" `
+  -ContentType "application/json; charset=utf-8" `
+  -Body ([System.Text.Encoding]::UTF8.GetBytes('{}'))
+```
+
+### generate_alert_summary が failed の場合の確認手順
+
+```powershell
+# failed 時の原因追跡: latest_job フィールドを確認する
+$result = Invoke-RestMethod `
+  -Method Get `
+  -Uri "http://localhost:3000/api/alerts/<alertId>/summary"
+
+# latest_job が null でなければ、job の状態を確認できる
+$result.data.latest_job | Format-List
+# 出力例:
+# job_id       : xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# job_type     : generate_alert_summary
+# status       : failed
+# error_message: local_llm: connection refused - provider not available
+# model_name   :
+# retry_count  : 0
+# created_at   : 2026-04-27T00:00:00.000Z
+# completed_at : 2026-04-27T00:00:10.000Z
+```
+
+### 注意事項
+
+1. `Invoke-RestMethod` の `-Body` に文字列を渡すと、PowerShell が自動的にエンコードする。
+   日本語を含む場合は必ず `-Body $utf8Body`（バイト列）形式を使用すること。
+2. `-ContentType "application/json; charset=utf-8"` の `charset=utf-8` を省略しても動くが、
+   明示することで意図を明確にする。
+3. backend 側は `REPLACEMENT CHARACTER (U+FFFD)` や Windows-1252 制御文字を含む
+   `natural_language_rule` を受け取った場合、`creation_warnings` に警告を返す。
+   これが出た場合は上記の UTF-8 明示手順を確認すること。
