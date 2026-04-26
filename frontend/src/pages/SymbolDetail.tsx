@@ -120,7 +120,7 @@ export default function SymbolDetail() {
       thesisPoints.length > 0,
   );
 
-  async function handleGenerateThesis() {
+  async function handleGenerateThesis(forceRegenerate = false) {
     if (!symbolId || !data) return;
     setIsGeneratingThesis(true);
     setGenerateThesisError(null);
@@ -128,6 +128,7 @@ export default function SymbolDetail() {
       await postApi(`/api/symbols/${symbolId}/ai-summary/generate`, {
         scope: 'thesis',
         reference_ids: data.related_references.slice(0, 5).map((item) => item.id),
+        force_regenerate: forceRegenerate,
       });
       await mutateAiSummary();
     } catch (err: any) {
@@ -239,7 +240,7 @@ export default function SymbolDetail() {
             </div>
             <div style={{ marginTop: '0.75rem' }}>
               <button
-                onClick={handleGenerateThesis}
+                onClick={() => handleGenerateThesis(true)}
                 disabled={isGeneratingThesis}
                 style={{
                   background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
@@ -260,7 +261,7 @@ export default function SymbolDetail() {
             <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
             <div style={{ marginTop: '0.75rem' }}>
               <button
-                onClick={handleGenerateThesis}
+                onClick={() => handleGenerateThesis(false)}
                 disabled={isGeneratingThesis}
                 style={{
                   background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
