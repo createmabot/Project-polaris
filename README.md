@@ -179,6 +179,20 @@ pnpm run down
   - 高度な比較機能
   - 北極星内バックテストエンジン本体（未実装）
 
+### Rule Lab / Backtest 一巡再検証
+- 手順の正本は `docs/walkthrough.md` を参照する。
+- 最小導線:
+  - strategy 作成
+  - strategy version 作成
+  - `POST /api/strategy-versions/:versionId/pine/generate`
+  - TradingView 一次検証
+  - `POST /api/strategy-versions/:versionId/pine/regenerate`
+  - `POST /api/backtests`
+  - `POST /api/backtests/:backtestId/imports`
+  - `POST /api/backtests/:backtestId/summary/generate`
+  - inline comparison
+  - saved pairwise comparison
+
 ### 北極星内バックテストエンジン（最小実装 + 段階固定）
 - 次フェーズ着手前の最小責務のみ固定済み:
   - execution job（状態遷移の正本）

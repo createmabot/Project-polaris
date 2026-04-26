@@ -1,162 +1,123 @@
-﻿# Home MVP watchlist_symbols 実データ実装
+﻿# 北極星 walkthrough（Rule Lab / Backtest 一巡）
 
-本タスクでは、`GET /api/home` における `watchlist_symbols` を placeholder から最小構成で実データ化しました。
+更新日: 2026-04-26
 
-## 読んだ docs 一覧
+本資料は、Rule Lab から Pine 生成・TradingView 一次検証・CSV 取込・Backtest AI 総評・比較までの一巡導線を、現行MVP実装に合わせて確認するための手順です。  
+正本 docs は `docs/0` から参照し、本資料は実施手順のクイックチェック用途として扱います。
 
-- [docs/0.目次.md](file:///g:/Projects/hokkyokusei/docs/0.%E7%9B%AE%E6%AC%A1.md)
-- [docs/2.北極星 データモデル設計（MVP）.md](file:///g:/Projects/hokkyokusei/docs/2.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E3%83%87%E3%83%BC%E3%82%BF%E3%83%A2%E3%83%87%E3%83%AB%E8%A8%AD%E8%A8%88%EF%BC%88MVP%EF%BC%89.md)
-- [docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md](file:///g:/Projects/hokkyokusei/docs/3.%E5%8C%97%E6%A5%B5%E6%98%9F%20API%20%E3%83%A6%E3%83%BC%E3%82%B9%E3%82%B1%E3%83%BC%E3%82%B9%E5%8D%98%E4%BD%8D%E3%81%AE%E5%85%A5%E5%87%BA%E5%8A%9B%E8%A8%AD%E8%A8%88%EF%BC%88MVP%EF%BC%89.md)
-- [docs/16.北極星 APIごとの JSON サンプル集（MVP）.md](file:///g:/Projects/hokkyokusei/docs/16.%E5%8C%97%E6%A5%B5%E6%98%9F%20API%E3%81%94%E3%81%A8%E3%81%AE%20JSON%20%E3%82%B5%E3%83%B3%E3%83%97%E3%83%AB%E9%9B%86%EF%BC%88MVP%EF%BC%89.md)
-- [docs/17.北極星 画面別の入力 出力サンプル（MVP）.md](file:///g:/Projects/hokkyokusei/docs/17.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E7%94%BB%E9%9D%A2%E5%88%A5%E3%81%AE%E5%85%A5%E5%8A%9B%20%E5%87%BA%E5%8A%9B%E3%82%B5%E3%83%B3%E3%83%97%E3%83%AB%EF%BC%88MVP%EF%BC%89.md)
+## 0. 事前準備
 
-## watchlist_symbols の docs 想定 shape
-
-docs で想定されていた shape は以下の通りです。
-
-```json
-{
-  "symbol_id": "sym_x",
-  "display_name": "名称",
-  "tradingview_symbol": "TSE:xxx",
-  "latest_price": 1000,
-  "change_rate": 1.5,
-  "latest_alert_status": "received",
-  "user_priority": 1
-}
+1. 依存起動
+```bash
+pnpm run up
 ```
-
-## 採用した実データ方針
-
-現在は `watchlists / watchlist_items` を正本として `watchlist_symbols` を構成します（暫定の Symbol 全件返却は廃止）。
-
-- **取得元**:
-  - `watchlists` から `sort_order` 最小（同率は `created_at` 最小）の1件を Home 既定リストとして採用
-  - `watchlist_items` を `priority` 昇順（同率は `added_at`）で取得
-  - [getCurrentSnapshotsForSymbols()](file:///g:/Projects/hokkyokusei/backend/src/market/snapshot.ts#734-747) で価格情報を付与
-  - `AlertEvent` から symbol ごとに最新ステータスを取得（N+1回避）
-- **返却の要点**:
-  - `watchlist_symbols.user_priority` は `watchlist_items.priority`
-  - snapshot 未取得時は `latest_price: null`, `change_rate: null`
-
-## 変更したファイル一覧
-
-- [backend/src/routes/home.ts](file:///g:/Projects/hokkyokusei/backend/src/routes/home.ts) (API 実装)
-- [backend/test/home.e2e.test.ts](file:///g:/Projects/hokkyokusei/backend/test/home.e2e.test.ts) (テスト)
-- [docs/17.北極星 画面別の入力 出力サンプル（MVP）.md](file:///g:/Projects/hokkyokusei/docs/17.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E7%94%BB%E9%9D%A2%E5%88%A5%E3%81%AE%E5%85%A5%E5%8A%9B%20%E5%87%BA%E5%8A%9B%E3%82%B5%E3%83%B3%E3%83%97%E3%83%AB%EF%BC%88MVP%EF%BC%89.md) (docs 更新)
-
-## 追加/更新したテスト
-
-- [home.e2e.test.ts](file:///g:/Projects/hokkyokusei/backend/test/home.e2e.test.ts) 内の [prisma](file:///g:/Projects/hokkyokusei/backend/prisma/schema.prisma) モックに `symbol.findMany` を追加。
-- [AlertRow](file:///g:/Projects/hokkyokusei/backend/test/home.e2e.test.ts#6-21) に `processingStatus` を追加し、モックデータも更新。
-- `GET /api/home` リクエスト時の `watchlist_symbols` が配列1件で、価格や変化率、想定された shape（`display_name`, `user_priority` 等）が正しく返却されることをアサートする処理を追加。
-
-## ローカル確認結果
-
-- `npm run dev` 起動後、`curl http://localhost:3000/api/home` を実行。
-- DB 内が空のため、結果として `watchlist_symbols: []` となり、かつ他の項目に影響を与えずに API が正常に稼働することを確認（データなし時の空配列維持）。
-- `vitest` による e2e テストは完全に PASS しており、データあり・なし両方のケースがカバーされています。
-
-## docs 更新内容
-
-[docs/17.北極星 画面別の入力 出力サンプル（MVP）.md](file:///g:/Projects/hokkyokusei/docs/17.%E5%8C%97%E6%A5%B5%E6%98%9F%20%E7%94%BB%E9%9D%A2%E5%88%A5%E3%81%AE%E5%85%A5%E5%8A%9B%20%E5%87%BA%E5%8A%9B%E3%82%B5%E3%83%B3%E3%83%97%E3%83%AB%EF%BC%88MVP%EF%BC%89.md) の注記に以下を追記しました。
-
-> `watchlist_symbols` は [watchlists](file:///g:/Projects/hokkyokusei/backend/prisma/schema.prisma) / [watchlist_items](file:///g:/Projects/hokkyokusei/backend/prisma/schema.prisma) を正本として返す。  
-> `user_priority` は `watchlist_items.priority` を返し、未設定時のみ `null`。  
-> `latest_alert_status` は symbol に紐づく最新 alert の `processingStatus` を返す。
-
-## 今回あえてやらなかったこと
-
-- `positions` / `key_events` の実データ化
-- 監視銘柄管理用テーブル群（watchlists, watchlist_items など）の schema 拡張
-- ホーム UI (React 側) の改修
-
-## コミット情報
-
-- Hash: `86aec30b9088acec2dc4be42418a41b5ad4a284f`
-- URL: (Local Commit)
-
----
-
-## UI確認用 seed walkthrough（最小）
-
-### 1. seed 実行
-
+2. DB 反映と seed
 ```bash
 cd backend
+pnpm exec prisma migrate deploy
+pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
-
-### 2. 起動
-
+3. アプリ起動
 ```bash
-# repo root
-pnpm run up
+cd ..
 pnpm run dev
 ```
 
-### 3. 画面確認 URL（最小）
+## 1. Strategy 作成
 
-1. Home  
-   - `http://localhost:5173/home`  
-   - 確認: daily summary（latest/morning/evening切替）、recent alerts、watchlist symbols、market overview indices
+1. `http://localhost:5173/strategy-lab` を開く。
+2. 自然言語ルールを入力し strategy を作成する。
+3. `POST /api/strategies` が成功し、strategy id が発行されることを確認する。
 
-2. Symbol Detail  
-   - `http://localhost:5173/home` の監視銘柄リンクから遷移  
-   - 確認: snapshot、recent alerts、latest AI thesis summary、latest active note、related references
+## 2. Strategy Version 作成
 
-3. Note Detail  
-   - seed note 直URL: `http://localhost:5173/notes/00000000-0000-4000-8000-000000000101`  
-   - 確認: note本文、revision（2件）
+1. 同画面または version 作成導線で strategy version を作成する。
+2. `POST /api/strategies/:strategyId/versions` が成功することを確認する。
+3. `market` と `timeframe` が version に保存されていることを確認する。
 
-4. Comparison  
-   - 直URL: `http://localhost:5173/comparisons/00000000-0000-4000-8000-000000000301`  
-   - 確認: symbols 2銘柄、latest_result（AI総評 + compared metrics）
+## 3. 自然言語 -> Pine 生成
 
-5. Backtest Detail  
-   - 直URL: `http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401`  
-   - 確認: run header、latest import(parsed)、parsed summary、ai_review
+1. `StrategyVersionDetail` で `Pine を生成` を実行する。
+2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
+3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
 
-6. Rule Lab / Strategy Version  
-   - version一覧: `http://localhost:5173/strategies/00000000-0000-4000-8000-000000000201/versions`  
-   - version詳細: `http://localhost:5173/strategy-versions/00000000-0000-4000-8000-000000000202`  
-   - 確認: strategy/version 表示、既存導線（internal-backtests は既存契約を維持）
+## 4. TradingView 一次検証
 
-7. Backtest 保存比較（pairwise）  
-   - `http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401` を開く  
-   - inline 比較ブロックで比較対象 run を選択  
-   - `この2件で比較を保存する` を押下  
-   - `保存済み比較を見る` から保存比較詳細（`/backtest-comparisons/:comparisonId`）へ遷移  
-   - 確認: `metrics_diff` / `tradeoff_summary` / `ai_summary` が再訪で維持される
+1. 生成した Pine を TradingView へ貼り付けて一次検証する。
+2. compile error や改善点がある場合はメモを残す。
 
-### 4. 補足
+## 5. Pine 修正再生成（regenerate）
 
-- `market_overview.indices` は runtime snapshot 取得結果を使うため、ネットワーク条件によっては空になる場合があります。
-- `market_overview.sectors` は `market_snapshots(snapshot_type=sector)` seed を参照します。seed 未投入時は `[]` になります（部分成立）。
-- それ以外の seed データ（note/comparison/backtest/strategy）は id 固定で再利用可能です。
-- `positions` は `portfolios / transactions` から導出した read model を `/api/home` で返します。
-  - seed は default portfolio + transactions（buy / buy / partial sell）を投入済みです。
+1. `StrategyVersionDetail` の修正入力欄に以下を入力して再生成する。
+   - `revision_request`（必須）
+   - `compile_error_text`（任意）
+   - `validation_note`（任意）
+2. `POST /api/strategy-versions/:versionId/pine/regenerate` が成功することを確認する。
+3. 失敗時は `failure_reason` / `invalid_reason_codes` / `repair_attempts` を確認する。
 
-### 5. Home AI要約フロー確認（最小）
+## 6. Pine lineage / revision input 確認
 
-0. provider 切替と local_llm 疎通
-   - `.env` で `HOME_AI_PROVIDER=local_llm` を設定
-   - `npx tsx scripts/check-local-llm.ts`
-   - 確認: local endpoint/model が到達可能であること（接続不可時はアプリ側で stub fallback）
+1. `GET /api/strategy-versions/:versionId/pine` で以下を確認する。
+   - `parent_pine_script_id`
+   - `source_pine_script_id`
+   - `latest_revision_input`
+2. 親子関係と修正理由が追跡できることを確認する。
 
-1. 日次要約切替（Home BFF）
-   - `GET /api/home?summary_type=latest`
-   - `GET /api/home?summary_type=morning&date=2026-04-18`
-   - `GET /api/home?summary_type=evening&date=2026-04-18`
-   - 確認: `daily_summary.status` が `available|unavailable` で返ること、材料不足時に `insufficient_context=true` となること
+## 7. Backtest 作成と CSV 取込
 
-2. alert 起点要約
-   - `POST /api/alerts/:alertId/summary/generate`
-   - `GET /api/alerts/:alertId/summary`
-   - 確認: summary が保存され、`ai_jobs` の `queued -> running -> succeeded|failed` が残ること
+1. Backtest を作成する。
+   - `POST /api/backtests`
+2. CSV を取込む。
+   - `POST /api/backtests/:backtestId/imports`
+3. 受け入れ形式を確認する。
+   - Performance Summary（英語ヘッダー）
+   - List of Trades（日本語ヘッダー）
+   - List of Trades（英語ヘッダー）
+4. 失敗時は `parse_error` に不足列が表示されることを確認する。
 
-3. 日次要約 API
-   - `POST /api/summaries/daily/generate` body: `{ "type": "morning", "date": "2026-04-18" }`
-   - `GET /api/summaries/daily?type=latest|morning|evening&date=YYYY-MM-DD`
-   - 確認: 生成時に `ai_jobs(job_type=generate_daily_summary)` が記録されること
-   - 確認: `latest` は再生成ではなく既存 summary 選択であること、未生成時は `status=unavailable` で部分成立すること
+## 8. Backtest Detail 表示
+
+1. `http://localhost:5173/backtests/:backtestId` を開く。
+2. 以下を確認する。
+   - `used_strategy.snapshot`
+   - `latest_import`
+   - `imports`
+   - parse 成功時の `parsed_summary`
+
+## 9. Backtest AI 総評生成
+
+1. `BacktestDetail` から AI 総評生成を実行する。
+2. `POST /api/backtests/:backtestId/summary/generate` が成功し、`ai_jobs` が `queued -> running -> succeeded|failed` で遷移することを確認する。
+3. `GET /api/backtests/:backtestId` の `ai_review` を確認する。
+   - `status=available|unavailable`
+   - `title`
+   - `body_markdown`
+
+## 10. inline comparison
+
+1. 同一 backtest 内で parsed import が2件以上ある状態にする。
+2. `BacktestDetail` の inline 比較で差分が表示されることを確認する。
+
+## 11. saved pairwise comparison
+
+1. `この2件で比較を保存する` を実行する。
+2. `保存済み比較を見る` から `GET /api/backtest-comparisons/:comparisonId` が表示できることを確認する。
+3. `metrics_diff` / `tradeoff_summary` / `ai_summary` を再訪可能であることを確認する。
+
+## 12. seed 固定IDでの最小確認
+
+seed 後は以下で最小動作確認が可能です。
+
+1. version一覧  
+`http://localhost:5173/strategies/00000000-0000-4000-8000-000000000201/versions`
+2. version詳細  
+`http://localhost:5173/strategy-versions/00000000-0000-4000-8000-000000000202`
+3. backtest詳細  
+`http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401`
+
+## 13. 運用メモ
+
+1. TradingView は表示・監視・一次検証を担う。
+2. 北極星は保存・比較・履歴管理・AI要約を担う。
+3. 一巡導線で破綻があれば、まず docs 契約との差分を確認してから実装を修正する。
