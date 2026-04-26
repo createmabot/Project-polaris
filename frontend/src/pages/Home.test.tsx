@@ -80,12 +80,18 @@ describe('Home', () => {
             latest_price: 3021.5,
             change_rate: 1.4,
           },
+          {
+            symbol_id: 'sym_6758',
+            display_name: 'ソニーグループ',
+            latest_price: 13120,
+            change_rate: 0.8,
+          },
         ],
         positions: [
           {
             position_id: 'pos_1',
             symbol_id: 'sym_6758',
-            display_name: 'ソニーグループ',
+            display_name: 'Sony Group',
             quantity: 100,
             avg_cost: 12850,
             latest_price: 13120,
@@ -125,6 +131,8 @@ describe('Home', () => {
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
+    expect(html).toContain('ソニーグループ');
+    expect(html).not.toContain('Sony Group');
     expect(html).toContain('数量: 100 / 平均取得: 12850 / 現在値: 13120 / 評価損益: 27000');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');

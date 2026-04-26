@@ -79,7 +79,7 @@ async function resolveSymbolSummary(symbolId: string, scope: SymbolSummaryScope)
 
 async function generateSymbolSummaryWithJob(
   symbolId: string,
-  params: { scope: SymbolSummaryScope; referenceIds: string[] },
+  params: { scope: SymbolSummaryScope; referenceIds: string[]; forceRegenerate: boolean },
   logger: FastifyInstance['log'],
 ): Promise<{ jobId: string; summary: SymbolSummaryView }> {
   const symbol = await prisma.symbol.findUnique({
@@ -135,6 +135,7 @@ async function generateSymbolSummaryWithJob(
         symbol_id: symbolId,
         scope: params.scope,
         reference_ids: params.referenceIds,
+        force_regenerate: params.forceRegenerate,
       } as any,
       status: 'queued',
     },
@@ -189,7 +190,7 @@ async function generateSymbolSummaryWithJob(
       },
       orderBy: { generatedAt: 'desc' },
     });
-    if (existing) {
+    if (existing && !params.forceRegenerate) {
       await prisma.aiJob.update({
         where: { id: summaryJob.id },
         data: {
@@ -395,7 +396,10 @@ export async function symbolRoutes(fastify: FastifyInstance) {
   });
 
   fastify.post('/:symbolId/ai-summary/generate', async (
-    request: FastifyRequest<{ Params: { symbolId: string }; Body: { scope?: string; reference_ids?: unknown } }>,
+    request: FastifyRequest<{
+      Params: { symbolId: string };
+      Body: { scope?: string; reference_ids?: unknown; force_regenerate?: unknown };
+    }>,
     reply: FastifyReply,
   ) => {
     const { symbolId } = request.params;
@@ -411,10 +415,12 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       .filter((id): id is string => typeof id === 'string')
       .map((id) => id.trim())
       .filter((id) => id.length > 0);
+    const forceRegenerateRaw = request.body?.force_regenerate;
+    const forceRegenerate = forceRegenerateRaw === true;
 
     const result = await generateSymbolSummaryWithJob(
       symbolId,
-      { scope, referenceIds },
+      { scope, referenceIds, forceRegenerate },
       fastify.log,
     );
 

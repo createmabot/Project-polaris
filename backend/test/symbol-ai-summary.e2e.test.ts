@@ -405,6 +405,39 @@ describe('symbol ai-summary routes', () => {
     await app.close();
   });
 
+  it('regenerates summary when force_regenerate is true even if input is duplicated', async () => {
+    const app = await createApp();
+
+    const firstRes = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/ai-summary/generate',
+      payload: {
+        scope: 'thesis',
+        reference_ids: ['ref-1'],
+      },
+    });
+    expect(firstRes.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(1);
+    const firstSummaryId = runtime.aiSummaries[0].id;
+
+    const secondRes = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/ai-summary/generate',
+      payload: {
+        scope: 'thesis',
+        reference_ids: ['ref-1'],
+        force_regenerate: true,
+      },
+    });
+
+    expect(secondRes.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(2);
+    expect(runtime.aiSummaries[1].id).not.toBe(firstSummaryId);
+    expect(runtime.aiJobs.at(-1)?.responsePayload).toEqual({ summary_id: runtime.aiSummaries[1].id });
+
+    await app.close();
+  });
+
   it('rejects latest scope for generation endpoint', async () => {
     const app = await createApp();
     const res = await app.inject({
