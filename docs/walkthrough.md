@@ -275,3 +275,16 @@ seed 以外の運用データを Home 起点で扱う最小手順。
 - watchlist/positions API は default watchlist/default portfolio が無い場合に自動作成する。
 - symbol_code が未登録なら Symbol を最小作成して処理する。
 - positions は transactions 正本のため、更新・削除は manual transaction 経由で read model を再構築する。
+
+## 18. TradingView実送信 webhook運用手順（固定）
+
+TradingView実送信を前提にした運用手順は次を正本として利用してください。
+
+- `docs/32.北極星 TradingView実送信 webhook運用手順（MVP）.md`
+
+本手順には、以下を含みます。
+- Alert message JSON テンプレート
+- webhook URL / token / shared_secret の安全な運用手順
+- ローカル疑似送信と実送信の違い
+- webhook_receipts / alert_events / ai_jobs / Home / SymbolDetail の確認手順
+- auth/parse/unresolved/duplicate/summary failed の切り分け
