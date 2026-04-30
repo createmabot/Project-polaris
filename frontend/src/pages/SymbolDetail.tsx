@@ -16,6 +16,18 @@ function formatNumber(value: number | null | undefined, digits = 2): string {
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
 }
 
+function getReferenceBreakdown(references: Array<{ reference_type?: string | null }>) {
+  return references.reduce(
+    (acc, reference) => {
+      if (reference.reference_type === 'news') acc.news += 1;
+      if (reference.reference_type === 'disclosure') acc.disclosure += 1;
+      if (reference.reference_type === 'earnings') acc.earnings += 1;
+      return acc;
+    },
+    { news: 0, disclosure: 0, earnings: 0 },
+  );
+}
+
 const EMPTY_STATE_HINT = 'データ未投入の場合は、seed 実行後にページを再読み込みしてください。';
 
 function getThesisPoints(structuredJson: any): string[] {
@@ -119,6 +131,11 @@ export default function SymbolDetail() {
       availableSummary?.body_markdown?.trim() ||
       thesisPoints.length > 0,
   );
+  const referenceBreakdown = getReferenceBreakdown(data.related_references);
+  const aiSummaryInsufficientContext =
+    aiSummary?.insufficient_context === true ||
+    availableSummary?.structured_json?.insufficient_context === true;
+  const hasNoReferences = data.related_references.length === 0;
 
   async function handleGenerateThesis(forceRegenerate = false) {
     if (!symbolId || !data) return;
@@ -282,6 +299,13 @@ export default function SymbolDetail() {
             <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
           </div>
         )}
+        {availableSummary && hasSummaryContent && (aiSummaryInsufficientContext || hasNoReferences) && (
+          <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.82rem' }}>
+            {hasNoReferences
+              ? '参照情報は0件です。スナップショットやノート中心の要約になっている可能性があります。'
+              : '参照情報が不足しているため、要約の精度が限定的な可能性があります。'}
+          </div>
+        )}
         {generateThesisError && (
           <div style={{ marginTop: '0.5rem', color: '#b02a37', fontSize: '0.85rem' }}>{generateThesisError}</div>
         )}
@@ -328,6 +352,9 @@ export default function SymbolDetail() {
 
       <section style={{ marginTop: '2rem' }}>
         <h2>関連参照情報</h2>
+        <p style={{ marginTop: '-0.2rem', marginBottom: '0.6rem', color: '#666', fontSize: '0.85rem' }}>
+          内訳: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
+        </p>
         {data.related_references.length === 0 ? (
           <div style={{ color: '#666' }}>
             <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>関連参照情報はありません。</p>

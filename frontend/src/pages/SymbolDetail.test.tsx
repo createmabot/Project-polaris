@@ -138,4 +138,37 @@ describe('SymbolDetail', () => {
     expect(html).toContain('FX risk');
     expect(html).toContain('AI論点カードを再生成');
   });
+  it('shows reference breakdown and shortage note when no references exist', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: baseSymbolData };
+      }
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: {
+          symbol_id: 'sym-1',
+          scope: 'thesis',
+          summary: {
+            summary_id: 'sum-1',
+            title: 'Toyota thesis',
+            body_markdown: 'Body text',
+            structured_json: {},
+            generated_at: '2026-04-22T10:00:00+09:00',
+            status: 'available',
+            insufficient_context: false,
+            scope: 'thesis',
+          },
+        },
+      };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('news 0 / disclosure 0 / earnings 0');
+    expect(html).toContain('参照情報は0件です。');
+  });
 });
