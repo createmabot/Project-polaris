@@ -405,6 +405,62 @@ describe('symbol ai-summary routes', () => {
     await app.close();
   });
 
+  it('normalizes insufficient_context to true when reference_count is zero', async () => {
+    runtime.references = [];
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/ai-summary/generate',
+      payload: {
+        scope: 'thesis',
+        reference_ids: [],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(1);
+    expect(runtime.aiSummaries[0].generationContextJson?.reference_count).toBe(0);
+    expect(runtime.aiSummaries[0].structuredJson?.insufficient_context).toBe(true);
+    expect(res.json().data.summary.insufficient_context).toBe(true);
+
+    await app.close();
+  });
+
+  it('normalizes existing summary view when stored reference_count is zero', async () => {
+    runtime.aiSummaries.push({
+      id: 'sum-existing-zero-ref',
+      summaryScope: 'thesis',
+      targetEntityType: 'symbol',
+      targetEntityId: 'sym-1',
+      title: 'existing',
+      bodyMarkdown: 'existing body',
+      structuredJson: {
+        schema_name: 'symbol_thesis_summary',
+        schema_version: '1.0',
+        confidence: 'medium',
+        insufficient_context: false,
+        payload: {},
+      },
+      generatedAt: new Date('2026-04-22T10:00:00+09:00'),
+      generationContextJson: {
+        reference_count: 0,
+      },
+    });
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/ai-summary?scope=thesis',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.summary.insufficient_context).toBe(true);
+    expect(res.json().data.summary.structured_json.insufficient_context).toBe(true);
+
+    await app.close();
+  });
+
   it('regenerates summary when force_regenerate is true even if input is duplicated', async () => {
     const app = await createApp();
 

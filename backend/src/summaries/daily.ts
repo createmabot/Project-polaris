@@ -1,5 +1,10 @@
 import { AppError } from '../utils/response';
 import { HomeAiService } from '../ai/home-ai-service';
+import {
+  getReferenceCountFromGenerationContext,
+  normalizeInsufficientContext,
+  withNormalizedInsufficientContext,
+} from '../ai/insufficient-context';
 
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
 
@@ -181,10 +186,9 @@ export async function resolveDailySummary(
 
   const selected = selectDailySummary(dailySummaries, params.summaryType) as any | null;
   if (selected) {
-    const structured = isRecord(selected.structuredJson) ? selected.structuredJson : null;
-    const insufficient = structured && typeof structured.insufficient_context === 'boolean'
-      ? structured.insufficient_context
-      : false;
+    const referenceCount = getReferenceCountFromGenerationContext(selected.generationContextJson);
+    const structured = withNormalizedInsufficientContext(selected.structuredJson, referenceCount);
+    const insufficient = normalizeInsufficientContext(selected.structuredJson, referenceCount);
     return {
       id: selected.id,
       title: selected.title ?? null,
@@ -254,6 +258,7 @@ export async function generateDailySummaryWithJob(
     });
 
     const generatedAt = buildDailyGeneratedAt(effectiveDate, params.summaryType);
+    const normalizedStructuredJson = withNormalizedInsufficientContext(output.structuredJson, counts.referenceCount);
     const created = await prismaAny.aiSummary.create({
       data: {
         aiJobId: aiJob.id,
@@ -263,7 +268,7 @@ export async function generateDailySummaryWithJob(
         targetEntityId: 'market:jp',
         title: output.title,
         bodyMarkdown: output.bodyMarkdown,
-        structuredJson: output.structuredJson as any,
+        structuredJson: normalizedStructuredJson as any,
         modelName: output.modelName,
         promptVersion: output.promptVersion,
         generatedAt,
@@ -298,11 +303,9 @@ export async function generateDailySummaryWithJob(
       },
     });
 
-    const structured = isRecord(created.structuredJson) ? created.structuredJson : null;
-    const insufficient =
-      structured && typeof structured.insufficient_context === 'boolean'
-        ? structured.insufficient_context
-        : false;
+    const referenceCount = getReferenceCountFromGenerationContext(created.generationContextJson);
+    const structured = withNormalizedInsufficientContext(created.structuredJson, referenceCount);
+    const insufficient = normalizeInsufficientContext(created.structuredJson, referenceCount);
 
     return {
       jobId: aiJob.id,

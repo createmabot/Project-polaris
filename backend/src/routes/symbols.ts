@@ -4,6 +4,11 @@ import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { getCurrentSnapshotForSymbol } from '../market/snapshot';
 import { HomeAiService } from '../ai/home-ai-service';
+import {
+  getReferenceCountFromGenerationContext,
+  normalizeInsufficientContext,
+  withNormalizedInsufficientContext,
+} from '../ai/insufficient-context';
 
 type JsonObject = Record<string, unknown>;
 type SymbolSummaryScope = 'thesis' | 'latest';
@@ -47,11 +52,9 @@ function toSymbolSummaryView(summary: any | null, scope: SymbolSummaryScope): Sy
       scope,
     };
   }
-  const structured = isObject(summary.structuredJson) ? summary.structuredJson : null;
-  const insufficient =
-    structured && typeof structured.insufficient_context === 'boolean'
-      ? structured.insufficient_context
-      : false;
+  const referenceCount = getReferenceCountFromGenerationContext(summary.generationContextJson);
+  const structured = withNormalizedInsufficientContext(summary.structuredJson, referenceCount);
+  const insufficient = normalizeInsufficientContext(summary.structuredJson, referenceCount);
 
   return {
     summary_id: summary.id,
@@ -244,6 +247,7 @@ async function generateSymbolSummaryWithJob(
     });
 
     const generatedAt = new Date();
+    const normalizedStructuredJson = withNormalizedInsufficientContext(output.structuredJson, selectedReferences.length);
     const created = await prisma.aiSummary.create({
       data: {
         aiJobId: summaryJob.id,
@@ -253,7 +257,7 @@ async function generateSymbolSummaryWithJob(
         targetEntityId: symbolId,
         title: output.title,
         bodyMarkdown: output.bodyMarkdown,
-        structuredJson: output.structuredJson as any,
+        structuredJson: normalizedStructuredJson as any,
         modelName: output.modelName,
         promptVersion: output.promptVersion,
         generatedAt,

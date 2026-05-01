@@ -4,6 +4,11 @@ import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { buildAlertSummaryContext } from '../ai/context-builder';
 import { HomeAiService } from '../ai/home-ai-service';
+import {
+  getReferenceCountFromGenerationContext,
+  normalizeInsufficientContext,
+  withNormalizedInsufficientContext,
+} from '../ai/insufficient-context';
 
 type AlertSummaryView = {
   id: string | null;
@@ -50,11 +55,9 @@ function toAlertSummaryView(summary: any | null): AlertSummaryView {
       insufficient_context: true,
     };
   }
-  const structured = isRecord(summary.structuredJson) ? summary.structuredJson : null;
-  const insufficient =
-    structured && typeof structured.insufficient_context === 'boolean'
-      ? structured.insufficient_context
-      : false;
+  const referenceCount = getReferenceCountFromGenerationContext(summary.generationContextJson);
+  const structured = withNormalizedInsufficientContext(summary.structuredJson, referenceCount);
+  const insufficient = normalizeInsufficientContext(summary.structuredJson, referenceCount);
   return {
     id: summary.id,
     title: summary.title ?? null,
@@ -218,6 +221,7 @@ async function generateAlertSummaryWithJob(alertId: string) {
     const homeAiService = new HomeAiService();
     const { output, log } = await homeAiService.generateAlertSummary(context);
     const generatedAt = new Date();
+    const normalizedStructuredJson = withNormalizedInsufficientContext(output.structuredJson, context.referenceIds.length);
 
     const created = await prisma.aiSummary.create({
       data: {
@@ -228,7 +232,7 @@ async function generateAlertSummaryWithJob(alertId: string) {
         targetEntityId: alertId,
         title: output.title,
         bodyMarkdown: output.bodyMarkdown,
-        structuredJson: output.structuredJson as any,
+        structuredJson: normalizedStructuredJson as any,
         modelName: output.modelName,
         promptVersion: output.promptVersion,
         generatedAt,

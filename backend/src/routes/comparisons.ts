@@ -4,6 +4,10 @@ import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { HomeAiService } from '../ai/home-ai-service';
 import { CurrentSnapshot, getCurrentSnapshotsForSymbols } from '../market/snapshot';
+import {
+  getReferenceCountFromGenerationContext,
+  withNormalizedInsufficientContext,
+} from '../ai/insufficient-context';
 
 type JsonObject = Record<string, unknown>;
 
@@ -558,6 +562,7 @@ async function runComparisonSummaryGeneration(params: {
     });
 
     const generatedAt = new Date();
+    const normalizedStructuredJson = withNormalizedInsufficientContext(output.structuredJson, referencePool.length);
     const aiSummary = await prisma.aiSummary.create({
       data: {
         aiJobId: aiJob.id,
@@ -567,7 +572,7 @@ async function runComparisonSummaryGeneration(params: {
         targetEntityId: comparisonId,
         title: output.title,
         bodyMarkdown: output.bodyMarkdown,
-        structuredJson: output.structuredJson as any,
+        structuredJson: normalizedStructuredJson as any,
         modelName: output.modelName,
         promptVersion: output.promptVersion,
         generatedAt,
@@ -657,13 +662,14 @@ function buildComparisonAiSummaryView(params: {
   } | null;
 }) {
   if (params.aiSummary) {
+    const referenceCount = getReferenceCountFromGenerationContext(params.aiSummary.generationContextJson);
     return {
       ai_summary_id: params.aiSummary.id,
       ai_summary: {
         summary_id: params.aiSummary.id,
         title: params.aiSummary.title,
         body_markdown: params.aiSummary.bodyMarkdown,
-        structured_json: params.aiSummary.structuredJson,
+        structured_json: withNormalizedInsufficientContext(params.aiSummary.structuredJson, referenceCount),
         model_name: params.aiSummary.modelName,
         prompt_version: params.aiSummary.promptVersion,
       },
