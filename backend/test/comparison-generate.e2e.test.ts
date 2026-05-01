@@ -707,6 +707,98 @@ describe('comparison generate e2e-ish: create -> generate -> detail', () => {
     await app.close();
   });
 
+  it('normalizes insufficient_context to true when comparison references are empty', async () => {
+    runtime.externalReferences.clear();
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/comparisons/${comparisonId}/generate`,
+      payload: { include_ai_summary: true },
+      headers: { 'content-type': 'application/json' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const createdSummary = [...runtime.aiSummaries.values()]
+      .filter((summary) => summary.targetEntityType === 'comparison_session')
+      .sort((a, b) => descTime(b.generatedAt) - descTime(a.generatedAt))[0];
+    expect(createdSummary.generationContextJson?.reference_count).toBe(0);
+    expect(createdSummary.structuredJson?.insufficient_context).toBe(true);
+    expect(response.json().data.ai_summary.structured_json.insufficient_context).toBe(true);
+
+    await app.close();
+  });
+
+  it('normalizes existing comparison summary view when stored reference_count is zero', async () => {
+    const app = await createApp();
+    const comparisonId = await createComparison(app, ['sym-1', 'sym-2']);
+    runtime.aiSummaries.set('sum-cmp-existing-zero-ref', {
+      id: 'sum-cmp-existing-zero-ref',
+      aiJobId: 'ai-job-existing-zero-ref',
+      summaryScope: 'comparison',
+      targetEntityType: 'comparison_session',
+      targetEntityId: comparisonId,
+      title: 'Comparison Summary',
+      bodyMarkdown: 'A is stronger',
+      structuredJson: {
+        schema_name: 'comparison_summary',
+        schema_version: '1.0',
+        confidence: 'medium',
+        insufficient_context: false,
+        payload: {},
+      },
+      generationContextJson: {
+        reference_count: 0,
+      },
+      generatedAt: new Date('2026-04-25T05:00:00.000Z'),
+    });
+    runtime.aiJobs.set('ai-job-existing-zero-ref', {
+      id: 'ai-job-existing-zero-ref',
+      status: 'succeeded',
+      jobType: 'generate_comparison_summary',
+      targetEntityType: 'comparison_session',
+      targetEntityId: comparisonId,
+      requestPayload: null,
+      responsePayload: { summary_id: 'sum-cmp-existing-zero-ref' },
+      startedAt: new Date('2026-04-25T05:00:00.000Z'),
+      completedAt: new Date('2026-04-25T05:00:00.000Z'),
+      modelName: 'gemma4-ns',
+      promptVersion: 'v1.0.0-compare-local',
+      initialModel: null,
+      finalModel: null,
+      escalated: false,
+      escalationReason: null,
+      retryCount: 0,
+      durationMs: null,
+      estimatedTokens: null,
+      estimatedCostUsd: null,
+      errorMessage: null,
+    });
+    runtime.comparisonResults.set('cmp-with-ai-summary', {
+      id: 'cmp-with-ai-summary',
+      comparisonSessionId: comparisonId,
+      aiJobId: 'ai-job-existing-zero-ref',
+      title: null,
+      bodyMarkdown: null,
+      structuredJson: null,
+      modelName: null,
+      promptVersion: null,
+      comparedMetricJson: { schema_name: 'comparison_metric_snapshot', symbol_metrics: [] },
+      generatedAt: new Date('2026-04-25T05:01:00.000Z'),
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/comparisons/${comparisonId}`,
+    });
+
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.latest_result.ai_summary.structured_json.insufficient_context).toBe(true);
+
+    await app.close();
+  });
+
   it('returns validation error when symbol count is insufficient', async () => {
     const app = await createApp();
     runtime.comparisonSessions.set('cmp-single', {

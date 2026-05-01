@@ -40,6 +40,7 @@ type AiSummaryRow = {
   bodyMarkdown: string;
   structuredJson: Record<string, unknown> | null;
   generatedAt: Date | null;
+  generationContextJson?: Record<string, unknown> | null;
 };
 
 type AlertEventRow = {
@@ -350,6 +351,95 @@ describe('GET /api/alerts/:alertId/summary - generate_alert_summary failed 可�
       url: '/api/alerts/non-existent/summary',
     });
     expect(res.statusCode).toBe(404);
+  });
+  it('reference_count が 0 の既存 summary を insufficient_context=true で返す', async () => {
+    runtime.aiJobs.push({
+      id: 'job-ok-zero-ref',
+      jobType: 'generate_alert_summary',
+      targetEntityType: 'alert_event',
+      targetEntityId: 'alert-1',
+      status: 'succeeded',
+      errorMessage: null,
+      modelName: 'stub-v1',
+      finalModel: 'stub-v1',
+      retryCount: 0,
+      createdAt: new Date('2026-04-27T00:00:00Z'),
+      completedAt: new Date('2026-04-27T00:00:05Z'),
+      requestPayload: null,
+      responsePayload: { summary_id: 'sum-zero-ref' },
+    });
+    runtime.aiSummaries.push({
+      id: 'sum-zero-ref',
+      summaryScope: 'alert_reason',
+      targetEntityType: 'alert_event',
+      targetEntityId: 'alert-1',
+      title: 'zero ref summary',
+      bodyMarkdown: 'body',
+      structuredJson: {
+        insufficient_context: false,
+      },
+      generationContextJson: {
+        reference_count: 0,
+      },
+      generatedAt: new Date('2026-04-27T00:00:05Z'),
+    });
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/alerts/alert-1/summary',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+
+    expect(body.data.summary.status).toBe('available');
+    expect(body.data.summary.insufficient_context).toBe(true);
+    expect(body.data.summary.structured_json.insufficient_context).toBe(true);
+  });
+
+  it('referenceCount=0 の既存 summary も insufficient_context=true で返す', async () => {
+    runtime.aiJobs.push({
+      id: 'job-ok-zero-ref-camel',
+      jobType: 'generate_alert_summary',
+      targetEntityType: 'alert_event',
+      targetEntityId: 'alert-1',
+      status: 'succeeded',
+      errorMessage: null,
+      modelName: 'stub-v1',
+      finalModel: 'stub-v1',
+      retryCount: 0,
+      createdAt: new Date('2026-04-27T00:00:00Z'),
+      completedAt: new Date('2026-04-27T00:00:05Z'),
+      requestPayload: null,
+      responsePayload: { summary_id: 'sum-zero-ref-camel' },
+    });
+    runtime.aiSummaries.push({
+      id: 'sum-zero-ref-camel',
+      summaryScope: 'alert_reason',
+      targetEntityType: 'alert_event',
+      targetEntityId: 'alert-1',
+      title: 'zero ref summary camel',
+      bodyMarkdown: 'body',
+      structuredJson: {
+        insufficient_context: false,
+      },
+      generationContextJson: {
+        referenceCount: 0,
+      },
+      generatedAt: new Date('2026-04-27T00:00:05Z'),
+    });
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/alerts/alert-1/summary',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+
+    expect(body.data.summary.status).toBe('available');
+    expect(body.data.summary.insufficient_context).toBe(true);
+    expect(body.data.summary.structured_json.insufficient_context).toBe(true);
   });
 });
 

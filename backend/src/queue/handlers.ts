@@ -317,6 +317,7 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
             alertType: context.alertType,
             timeframe: context.timeframe,
             symbolLabel: context.symbol?.displayName ?? context.symbol?.tradingviewSymbol ?? null,
+            reference_count: context.referenceIds.length,
             referenceCount: context.referenceIds.length,
             provider: log.provider,
             fallbackToStub: log.fallbackToStub,
