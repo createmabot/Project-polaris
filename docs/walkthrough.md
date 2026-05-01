@@ -288,3 +288,23 @@ TradingView実送信を前提にした運用手順は次を正本として利用
 - ローカル疑似送信と実送信の違い
 - webhook_receipts / alert_events / ai_jobs / Home / SymbolDetail の確認手順
 - auth/parse/unresolved/duplicate/summary failed の切り分け
+
+## 19. references供給状況確認（2026-05）
+
+references の供給状況確認は次を正本として利用してください。
+
+- `docs/33.北極星 references供給状況整理と運用課題（MVP）.md`
+
+最小確認手順:
+
+1. SymbolDetail を開き、`関連参照情報` の内訳 `news / disclosure / earnings` を確認する
+2. ComparisonDetail を開き、比較全体の参照内訳と各 symbol card の参照内訳を確認する
+3. references 0件でも AI論点カード / AI比較総評が生成される場合があるため、本文だけで十分性を判断しない
+4. `insufficient_context` 表示だけでなく、`reference_count` と references 実数を併せて確認する
+5. alert summary 失敗時は `collect_references_for_alert` と `generate_alert_summary` を分けて確認する
+
+補足:
+
+- 2026-05-01 観測時点では `7203: news 6件 / disclosure 0件 / earnings 0件`、`6758: 0件` だった
+- `disclosure` と `earnings` は collector 未実装ではなく、実装は存在する
+- `reference_count = 0` でも `structured_json.insufficient_context = false` の AI summary が残ることがあるため、現時点では運用注意として扱う

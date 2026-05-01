@@ -138,4 +138,35 @@ describe('ComparisonDetail', () => {
     expect(html).toContain('Comparison Summary');
     expect(html).toContain('A is stronger');
   });
+
+  it('shows reference breakdown and shortage note when comparison references are empty', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { comparisonId: 'cmp-1' }]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        ...baseData,
+        latest_result: {
+          id: 'cmp-res-1',
+          generated_at: '2026-04-24T01:00:00.000Z',
+          compared_metric_json: { symbol_metrics: [] },
+          ai_summary: {
+            summary_id: 'sum-1',
+            title: 'Comparison Summary',
+            body_markdown: 'A is stronger',
+            structured_json: {},
+            model_name: 'gemma4-ns',
+            prompt_version: 'v1.0.0-compare-local',
+          },
+        },
+      },
+      mutate: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<ComparisonDetail />);
+    expect(html).toContain('news 0 / disclosure 0 / earnings 0');
+    expect(html).toContain('比較に使える参照情報は0件です。');
+  });
 });

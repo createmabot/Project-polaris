@@ -20,6 +20,18 @@ function toSummaryPreview(bodyMarkdown: string): string {
   return bodyMarkdown.length <= 220 ? bodyMarkdown : `${bodyMarkdown.slice(0, 220)}...`;
 }
 
+function getReferenceBreakdown(references: Array<{ reference_type?: string | null }>) {
+  return references.reduce(
+    (acc, reference) => {
+      if (reference.reference_type === 'news') acc.news += 1;
+      if (reference.reference_type === 'disclosure') acc.disclosure += 1;
+      if (reference.reference_type === 'earnings') acc.earnings += 1;
+      return acc;
+    },
+    { news: 0, disclosure: 0, earnings: 0 },
+  );
+}
+
 const EMPTY_STATE_HINT = 'データ未生成の場合は「比較総評を生成」を実行し、ページを再読み込みしてください。';
 
 export default function ComparisonDetail() {
@@ -83,6 +95,27 @@ export default function ComparisonDetail() {
 
   const metricSnapshot = data.latest_result?.compared_metric_json;
   const symbolMetrics = Array.isArray(metricSnapshot?.symbol_metrics) ? metricSnapshot.symbol_metrics : [];
+  const comparisonReferenceBreakdown = data.symbols.reduce(
+    (acc, item) => {
+      const breakdown = getReferenceBreakdown(item.related_references);
+      acc.news += breakdown.news;
+      acc.disclosure += breakdown.disclosure;
+      acc.earnings += breakdown.earnings;
+      return acc;
+    },
+    { news: 0, disclosure: 0, earnings: 0 },
+  );
+  const comparisonReferenceTotal =
+    comparisonReferenceBreakdown.news +
+    comparisonReferenceBreakdown.disclosure +
+    comparisonReferenceBreakdown.earnings;
+  const comparisonAiInsufficientContext =
+    data.latest_result?.ai_summary?.structured_json &&
+    typeof data.latest_result.ai_summary.structured_json === 'object' &&
+    data.latest_result.ai_summary.structured_json !== null &&
+    'insufficient_context' in data.latest_result.ai_summary.structured_json
+      ? data.latest_result.ai_summary.structured_json.insufficient_context === true
+      : false;
   const aiSummaryState: 'loading' | 'empty' | 'unavailable' | 'available' =
     isGenerating
       ? 'loading'
@@ -130,6 +163,9 @@ export default function ComparisonDetail() {
 
       <section style={{ marginBottom: '1.5rem', border: '1px solid #ddd', borderRadius: '6px', padding: '1rem', background: '#fafafa' }}>
         <h2 style={{ marginTop: 0, fontSize: '1.1rem' }}>比較メトリクス</h2>
+        <p style={{ marginTop: 0, marginBottom: '0.6rem', color: '#666', fontSize: '0.85rem' }}>
+          参照内訳: news {comparisonReferenceBreakdown.news} / disclosure {comparisonReferenceBreakdown.disclosure} / earnings {comparisonReferenceBreakdown.earnings}
+        </p>
         {data.latest_result ? (
           <>
             <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
@@ -197,6 +233,13 @@ export default function ComparisonDetail() {
             <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.5rem' }}>
               model: {data.latest_result.ai_summary.model_name || '-'} | prompt: {data.latest_result.ai_summary.prompt_version || '-'}
             </div>
+            {comparisonAiInsufficientContext || comparisonReferenceTotal === 0 ? (
+              <div style={{ marginBottom: '0.75rem', fontSize: '0.82rem', color: '#666' }}>
+                {comparisonReferenceTotal === 0
+                  ? '比較に使える参照情報は0件です。スナップショットや既存要約中心の総評になっている可能性があります。'
+                  : '参照情報が不足しているため、比較総評の精度が限定的な可能性があります。'}
+              </div>
+            ) : null}
             <div>
               <button
                 type="button"
@@ -313,6 +356,12 @@ export default function ComparisonDetail() {
 
             <section>
               <h3 style={{ fontSize: '1rem', marginBottom: '0.4rem' }}>最近の関連参照</h3>
+              <p style={{ marginTop: 0, marginBottom: '0.5rem', color: '#666', fontSize: '0.82rem' }}>
+                {(() => {
+                  const breakdown = getReferenceBreakdown(item.related_references);
+                  return `内訳: news ${breakdown.news} / disclosure ${breakdown.disclosure} / earnings ${breakdown.earnings}`;
+                })()}
+              </p>
               {item.related_references.length === 0 ? (
                 <p style={{ margin: 0, color: '#666' }}>参照情報なし</p>
               ) : (
