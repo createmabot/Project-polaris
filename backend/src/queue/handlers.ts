@@ -8,6 +8,7 @@ import {
   buildDedupeKey,
   type AlertReferenceCollectionContext,
   type CollectedReference,
+  type CollectedReferencesWithDiagnostics,
 } from '../references/collector';
 
 export type LoggerLike = {
@@ -120,6 +121,7 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
       };
 
       const collected = await deps.referenceCollector.collectForAlert(ctx);
+      const diagnostics = (collected as CollectedReferencesWithDiagnostics).diagnostics;
       const sourceBreakdown = collected.reduce((acc: Record<string, number>, ref) => {
         acc[ref.sourceType] = (acc[ref.sourceType] ?? 0) + 1;
         return acc;
@@ -131,6 +133,22 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
         count: collected.length,
         source_breakdown: sourceBreakdown,
       });
+      if (diagnostics?.disclosure) {
+        logger.info({
+          event: 'reference_collection_diagnostics',
+          alert_event_id,
+          source_type: 'disclosure',
+          diagnostics: diagnostics.disclosure,
+        });
+      }
+      if (diagnostics?.earnings) {
+        logger.info({
+          event: 'reference_collection_diagnostics',
+          alert_event_id,
+          source_type: 'earnings',
+          diagnostics: diagnostics.earnings,
+        });
+      }
 
       let savedCount = 0;
       let skippedCount = 0;
@@ -196,7 +214,13 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
         data: {
           status: 'succeeded',
           completedAt: new Date(),
-          responsePayload: { saved_count: savedCount, skipped_count: skippedCount, ref_ids: savedRefIds } as any,
+          responsePayload: {
+            saved_count: savedCount,
+            skipped_count: skippedCount,
+            ref_ids: savedRefIds,
+            source_breakdown: sourceBreakdown,
+            diagnostics: diagnostics ?? null,
+          } as any,
         },
       });
 
