@@ -308,3 +308,25 @@ references の供給状況確認は次を正本として利用してください
 - 2026-05-01 観測時点では `7203: news 6件 / disclosure 0件 / earnings 0件`、`6758: 0件` だった
 - `disclosure` と `earnings` は collector 未実装ではなく、実装は存在する
 - `reference_count = 0` でも `structured_json.insufficient_context = false` の AI summary が残ることがあるため、現時点では運用注意として扱う
+
+## 20. TDnet disclosure / earnings 0件時の切り分け（2026-05）
+
+1. まず `collect_references_for_alert` の `ai_jobs.response_payload.diagnostics` を確認する。
+2. `disclosure.reason` / `earnings.reason` を見て、0件理由を切り分ける。
+3. 理由ごとの見方:
+   - `tdnet_fetch_failed`: 取得失敗。403 / timeout / 一時障害を疑う。
+   - `tdnet_no_file_for_date`: 対象日一覧が存在しない。土日祝や対象日未掲載の可能性が高い。
+   - `tdnet_parse_zero_rows`: HTML は取れているが row 0 件。TDnet HTML 構造変更を疑う。
+   - `tdnet_rows_exist_but_no_symbol_match`: 一覧 row はあるが symbol 照合で落ちている。
+   - `tdnet_symbol_match_but_no_earnings_title`: symbol 一致 row はあるが earnings keyword に入っていない。
+   - `tdnet_no_matching_disclosure_in_lookback`: lookback 期間内に該当 disclosure がなかった。
+   - `tdnet_no_matching_earnings_in_lookback`: lookback 期間内に該当 earnings がなかった。
+4. 実データ 1 回確認の最小手順:
+   - `I_list_001_YYYYMMDD.html` を 1 回だけ取得する
+   - `parseTdnetRows` 相当で row count を確認する
+   - `7203` / `6758` など対象 code の行があるか確認する
+5. 2026-05-02 の観測メモ:
+   - `I_list_001_20260501.html` は `HTTP 200`
+   - parsed row count は `100`
+   - `7203` / `6758` 該当 row は `0`
+   - 少なくともこの 1 日については parser 崩れではなく「その日の一覧に対象銘柄がいない」寄りと判断する

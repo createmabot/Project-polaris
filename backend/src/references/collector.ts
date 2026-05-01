@@ -50,6 +50,46 @@ export interface ReferenceCollector {
   collectForSymbol(ctx: SymbolReferenceCollectionContext): Promise<CollectedReference[]>;
 }
 
+export type TdnetZeroReason =
+  | 'tdnet_fetch_failed'
+  | 'tdnet_no_file_for_date'
+  | 'tdnet_parse_zero_rows'
+  | 'tdnet_rows_exist_but_no_symbol_match'
+  | 'tdnet_symbol_match_but_no_earnings_title'
+  | 'tdnet_no_matching_disclosure_in_lookback'
+  | 'tdnet_no_matching_earnings_in_lookback';
+
+export type TdnetDateDiagnostic = {
+  date: string;
+  http_status: number | null;
+  rows_parsed: number;
+  symbol_matches: number;
+  earnings_candidates: number;
+  returned_count: number;
+  outcome: 'matched' | 'no_match' | 'parse_zero_rows' | 'no_file' | 'fetch_failed';
+};
+
+export type TdnetCollectionDiagnostic = {
+  source_type: 'disclosure' | 'earnings';
+  dates_checked: number;
+  fetched_dates: number;
+  fetch_failed_dates: number;
+  no_file_dates: number;
+  parse_zero_row_dates: number;
+  rows_parsed: number;
+  symbol_matches: number;
+  earnings_candidates: number;
+  returned_count: number;
+  reason: TdnetZeroReason | null;
+  checked_dates: string[];
+  per_date: TdnetDateDiagnostic[];
+};
+
+export type ReferenceCollectionDiagnostics = Partial<Record<'disclosure' | 'earnings', TdnetCollectionDiagnostic>>;
+export type CollectedReferencesWithDiagnostics = CollectedReference[] & {
+  diagnostics?: ReferenceCollectionDiagnostics;
+};
+
 interface ReferenceCollectorAdapter {
   readonly sourceType: ReferenceType;
   collectForAlert(ctx: AlertReferenceCollectionContext): Promise<CollectedReference[]>;
@@ -245,6 +285,54 @@ function buildDatesFrom(baseDate: Date, lookbackDays: number): string[] {
 
 function buildTdnetListUrl(template: string, yyyymmdd: string): string {
   return template.replace('{date}', yyyymmdd);
+}
+
+function attachDiagnostics(
+  references: CollectedReference[],
+  diagnostics: ReferenceCollectionDiagnostics,
+): CollectedReferencesWithDiagnostics {
+  const output = references as CollectedReferencesWithDiagnostics;
+  output.diagnostics = diagnostics;
+  return output;
+}
+
+function buildTdnetReason(params: {
+  sourceType: 'disclosure' | 'earnings';
+  datesChecked: number;
+  fetchedDates: number;
+  noFileDates: number;
+  rowsParsed: number;
+  symbolMatches: number;
+  earningsCandidates: number;
+  returnedCount: number;
+}): TdnetZeroReason | null {
+  if (params.returnedCount > 0) {
+    return null;
+  }
+
+  if (params.fetchedDates === 0) {
+    return params.noFileDates === params.datesChecked ? 'tdnet_no_file_for_date' : 'tdnet_fetch_failed';
+  }
+
+  if (params.rowsParsed === 0) {
+    return 'tdnet_parse_zero_rows';
+  }
+
+  if (params.sourceType === 'earnings') {
+    if (params.symbolMatches > 0) {
+      return 'tdnet_symbol_match_but_no_earnings_title';
+    }
+    if (params.earningsCandidates === 0) {
+      return 'tdnet_no_matching_earnings_in_lookback';
+    }
+    return 'tdnet_rows_exist_but_no_symbol_match';
+  }
+
+  if (params.symbolMatches === 0) {
+    return 'tdnet_rows_exist_but_no_symbol_match';
+  }
+
+  return 'tdnet_no_matching_disclosure_in_lookback';
 }
 
 function toTdnetPublishedAt(yyyymmdd: string, hhmm: string): Date | null {
@@ -472,6 +560,13 @@ class TdnetDisclosureCollectorAdapter implements ReferenceCollectorAdapter {
     const dates = buildDatesFrom(baseDate, params.lookbackDays);
     const results: CollectedReference[] = [];
     const errors: string[] = [];
+    const perDate: TdnetDateDiagnostic[] = [];
+    let fetchedDates = 0;
+    let fetchFailedDates = 0;
+    let noFileDates = 0;
+    let parseZeroRowDates = 0;
+    let rowsParsed = 0;
+    let symbolMatches = 0;
 
     for (const yyyymmdd of dates) {
       if (results.length >= this.maxItems) break;
@@ -485,11 +580,41 @@ class TdnetDisclosureCollectorAdapter implements ReferenceCollectorAdapter {
 
         if (!response.ok) {
           errors.push(`http_${response.status}_${yyyymmdd}`);
+          if (response.status === 404) {
+            noFileDates++;
+            perDate.push({
+              date: yyyymmdd,
+              http_status: response.status,
+              rows_parsed: 0,
+              symbol_matches: 0,
+              earnings_candidates: 0,
+              returned_count: 0,
+              outcome: 'no_file',
+            });
+          } else {
+            fetchFailedDates++;
+            perDate.push({
+              date: yyyymmdd,
+              http_status: response.status,
+              rows_parsed: 0,
+              symbol_matches: 0,
+              earnings_candidates: 0,
+              returned_count: 0,
+              outcome: 'fetch_failed',
+            });
+          }
           continue;
         }
 
+        fetchedDates++;
         const html = await response.text();
         const rows = parseTdnetRows(html);
+        rowsParsed += rows.length;
+        if (rows.length === 0) {
+          parseZeroRowDates++;
+        }
+        let perDateSymbolMatches = 0;
+        const returnedBeforeDate = results.length;
 
         for (const row of rows) {
           if (results.length >= this.maxItems) break;
@@ -500,6 +625,8 @@ class TdnetDisclosureCollectorAdapter implements ReferenceCollectorAdapter {
             tradingviewSymbol: params.tradingviewSymbol,
           });
           if (!matched.matched) continue;
+          perDateSymbolMatches++;
+          symbolMatches++;
 
           const publishedAt = toTdnetPublishedAt(yyyymmdd, row.timeText);
           const title = row.title;
@@ -551,17 +678,66 @@ class TdnetDisclosureCollectorAdapter implements ReferenceCollectorAdapter {
             },
           });
         }
+
+        perDate.push({
+          date: yyyymmdd,
+          http_status: response.status,
+          rows_parsed: rows.length,
+          symbol_matches: perDateSymbolMatches,
+          earnings_candidates: 0,
+          returned_count: results.length - returnedBeforeDate,
+          outcome:
+            rows.length === 0 ? 'parse_zero_rows' : perDateSymbolMatches > 0 ? 'matched' : 'no_match',
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`fetch_error_${yyyymmdd}:${message}`);
+        fetchFailedDates++;
+        perDate.push({
+          date: yyyymmdd,
+          http_status: null,
+          rows_parsed: 0,
+          symbol_matches: 0,
+          earnings_candidates: 0,
+          returned_count: 0,
+          outcome: 'fetch_failed',
+        });
       }
     }
 
-    if (results.length === 0 && errors.length > 0 && errors.length === dates.length) {
+    const diagnostics: ReferenceCollectionDiagnostics = {
+      disclosure: {
+        source_type: 'disclosure',
+        dates_checked: dates.length,
+        fetched_dates: fetchedDates,
+        fetch_failed_dates: fetchFailedDates,
+        no_file_dates: noFileDates,
+        parse_zero_row_dates: parseZeroRowDates,
+        rows_parsed: rowsParsed,
+        symbol_matches: symbolMatches,
+        earnings_candidates: 0,
+        returned_count: results.length,
+        reason: buildTdnetReason({
+          sourceType: 'disclosure',
+          datesChecked: dates.length,
+          fetchedDates,
+          noFileDates,
+          rowsParsed,
+          symbolMatches,
+          earningsCandidates: 0,
+          returnedCount: results.length,
+        }),
+        checked_dates: dates,
+        per_date: perDate,
+      },
+    };
+    const disclosureDiagnostics = diagnostics.disclosure!;
+
+    if (disclosureDiagnostics.reason === 'tdnet_fetch_failed' && fetchedDates === 0) {
       throw new Error(`tdnet_collect_failed:${errors.join(',')}`);
     }
 
-    return results;
+    return attachDiagnostics(results, diagnostics);
   }
 
   async collectForAlert(ctx: AlertReferenceCollectionContext): Promise<CollectedReference[]> {
@@ -613,6 +789,14 @@ class TdnetEarningsCollectorAdapter implements ReferenceCollectorAdapter {
     const dates = buildDatesFrom(baseDate, params.lookbackDays);
     const results: CollectedReference[] = [];
     const errors: string[] = [];
+    const perDate: TdnetDateDiagnostic[] = [];
+    let fetchedDates = 0;
+    let fetchFailedDates = 0;
+    let noFileDates = 0;
+    let parseZeroRowDates = 0;
+    let rowsParsed = 0;
+    let symbolMatches = 0;
+    let earningsCandidates = 0;
 
     for (const yyyymmdd of dates) {
       if (results.length >= this.maxItems) break;
@@ -626,21 +810,63 @@ class TdnetEarningsCollectorAdapter implements ReferenceCollectorAdapter {
 
         if (!response.ok) {
           errors.push(`http_${response.status}_${yyyymmdd}`);
+          if (response.status === 404) {
+            noFileDates++;
+            perDate.push({
+              date: yyyymmdd,
+              http_status: response.status,
+              rows_parsed: 0,
+              symbol_matches: 0,
+              earnings_candidates: 0,
+              returned_count: 0,
+              outcome: 'no_file',
+            });
+          } else {
+            fetchFailedDates++;
+            perDate.push({
+              date: yyyymmdd,
+              http_status: response.status,
+              rows_parsed: 0,
+              symbol_matches: 0,
+              earnings_candidates: 0,
+              returned_count: 0,
+              outcome: 'fetch_failed',
+            });
+          }
           continue;
         }
 
+        fetchedDates++;
         const html = await response.text();
         const rows = parseTdnetRows(html);
+        rowsParsed += rows.length;
+        if (rows.length === 0) {
+          parseZeroRowDates++;
+        }
+        let perDateSymbolMatches = 0;
+        let perDateEarningsCandidates = 0;
+        const returnedBeforeDate = results.length;
 
         for (const row of rows) {
           if (results.length >= this.maxItems) break;
-          if (!isEarningsTitle(row.title)) continue;
 
           const matched = matchesSymbol(row, {
             symbolCode: params.symbolCode,
             displayName: params.displayName,
             tradingviewSymbol: params.tradingviewSymbol,
           });
+          if (matched.matched) {
+            perDateSymbolMatches++;
+            symbolMatches++;
+          }
+
+          const earningsTitle = isEarningsTitle(row.title);
+          if (earningsTitle) {
+            perDateEarningsCandidates++;
+            earningsCandidates++;
+          }
+
+          if (!earningsTitle) continue;
           if (!matched.matched) continue;
 
           const publishedAt = toTdnetPublishedAt(yyyymmdd, row.timeText);
@@ -695,17 +921,70 @@ class TdnetEarningsCollectorAdapter implements ReferenceCollectorAdapter {
             },
           });
         }
+
+        perDate.push({
+          date: yyyymmdd,
+          http_status: response.status,
+          rows_parsed: rows.length,
+          symbol_matches: perDateSymbolMatches,
+          earnings_candidates: perDateEarningsCandidates,
+          returned_count: results.length - returnedBeforeDate,
+          outcome:
+            rows.length === 0
+              ? 'parse_zero_rows'
+              : results.length - returnedBeforeDate > 0
+                ? 'matched'
+                : 'no_match',
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`fetch_error_${yyyymmdd}:${message}`);
+        fetchFailedDates++;
+        perDate.push({
+          date: yyyymmdd,
+          http_status: null,
+          rows_parsed: 0,
+          symbol_matches: 0,
+          earnings_candidates: 0,
+          returned_count: 0,
+          outcome: 'fetch_failed',
+        });
       }
     }
 
-    if (results.length === 0 && errors.length > 0 && errors.length === dates.length) {
+    const diagnostics: ReferenceCollectionDiagnostics = {
+      earnings: {
+        source_type: 'earnings',
+        dates_checked: dates.length,
+        fetched_dates: fetchedDates,
+        fetch_failed_dates: fetchFailedDates,
+        no_file_dates: noFileDates,
+        parse_zero_row_dates: parseZeroRowDates,
+        rows_parsed: rowsParsed,
+        symbol_matches: symbolMatches,
+        earnings_candidates: earningsCandidates,
+        returned_count: results.length,
+        reason: buildTdnetReason({
+          sourceType: 'earnings',
+          datesChecked: dates.length,
+          fetchedDates,
+          noFileDates,
+          rowsParsed,
+          symbolMatches,
+          earningsCandidates,
+          returnedCount: results.length,
+        }),
+        checked_dates: dates,
+        per_date: perDate,
+      },
+    };
+    const earningsDiagnostics = diagnostics.earnings!;
+
+    if (earningsDiagnostics.reason === 'tdnet_fetch_failed' && fetchedDates === 0) {
       throw new Error(`tdnet_earnings_collect_failed:${errors.join(',')}`);
     }
 
-    return results;
+    return attachDiagnostics(results, diagnostics);
   }
 
   async collectForAlert(ctx: AlertReferenceCollectionContext): Promise<CollectedReference[]> {
@@ -739,10 +1018,12 @@ class CompositeReferenceCollector implements ReferenceCollector {
   async collectForAlert(ctx: AlertReferenceCollectionContext): Promise<CollectedReference[]> {
     const collected: CollectedReference[] = [];
     const errors: Error[] = [];
+    const diagnostics: ReferenceCollectionDiagnostics = {};
 
     for (const adapter of this.adapters) {
       try {
         const refs = await adapter.collectForAlert(ctx);
+        mergeReferenceDiagnostics(diagnostics, (refs as CollectedReferencesWithDiagnostics).diagnostics);
         collected.push(...refs);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -754,16 +1035,18 @@ class CompositeReferenceCollector implements ReferenceCollector {
       throw new Error(`collect_failed_all_adapters:${errors.map((e) => e.message).join(',')}`);
     }
 
-    return dedupeCollectedReferences(collected);
+    return attachDiagnostics(dedupeCollectedReferences(collected), diagnostics);
   }
 
   async collectForSymbol(ctx: SymbolReferenceCollectionContext): Promise<CollectedReference[]> {
     const collected: CollectedReference[] = [];
     const errors: Error[] = [];
+    const diagnostics: ReferenceCollectionDiagnostics = {};
 
     for (const adapter of this.adapters) {
       try {
         const refs = await adapter.collectForSymbol(ctx);
+        mergeReferenceDiagnostics(diagnostics, (refs as CollectedReferencesWithDiagnostics).diagnostics);
         collected.push(...refs);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -775,7 +1058,7 @@ class CompositeReferenceCollector implements ReferenceCollector {
       throw new Error(`collect_for_symbol_failed_all_adapters:${errors.map((e) => e.message).join(',')}`);
     }
 
-    return dedupeCollectedReferences(collected);
+    return attachDiagnostics(dedupeCollectedReferences(collected), diagnostics);
   }
 }
 
@@ -791,6 +1074,22 @@ function dedupeCollectedReferences(input: CollectedReference[]): CollectedRefere
   }
 
   return output;
+}
+
+function mergeReferenceDiagnostics(
+  target: ReferenceCollectionDiagnostics,
+  source: ReferenceCollectionDiagnostics | undefined,
+) {
+  if (!source) {
+    return;
+  }
+
+  if (source.disclosure) {
+    target.disclosure = source.disclosure;
+  }
+  if (source.earnings) {
+    target.earnings = source.earnings;
+  }
 }
 
 function createCollector(): ReferenceCollector {
@@ -843,5 +1142,14 @@ function createCollector(): ReferenceCollector {
 
   return new CompositeReferenceCollector(adapters);
 }
+
+export const _internal = {
+  parseTdnetRows,
+  normalizeTdnetCode,
+  buildCodeCandidates,
+  matchesSymbol,
+  isEarningsTitle,
+  classifyEarningsCategory,
+};
 
 export const referenceCollector: ReferenceCollector = createCollector();
