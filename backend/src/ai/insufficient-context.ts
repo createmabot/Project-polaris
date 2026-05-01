@@ -9,8 +9,13 @@ export function getReferenceCountFromGenerationContext(generationContextJson: un
     return null;
   }
 
-  const value = generationContextJson.reference_count;
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  const snakeCaseValue = generationContextJson.reference_count;
+  if (typeof snakeCaseValue === 'number' && Number.isFinite(snakeCaseValue)) {
+    return snakeCaseValue;
+  }
+
+  const camelCaseValue = generationContextJson.referenceCount;
+  return typeof camelCaseValue === 'number' && Number.isFinite(camelCaseValue) ? camelCaseValue : null;
 }
 
 export function normalizeInsufficientContext(
