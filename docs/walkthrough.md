@@ -330,3 +330,21 @@ references の供給状況確認は次を正本として利用してください
    - parsed row count は `100`
    - `7203` / `6758` 該当 row は `0`
    - 少なくともこの 1 日については parser 崩れではなく「その日の一覧に対象銘柄がいない」寄りと判断する
+
+## 21. TradingView CSV import 運用手順（2026-05-05 追記）
+
+TradingView 実 CSV の出し方と、北極星での取り込み確認手順は次の runbook を正本とする。
+
+- `docs/34.北極星 TradingView CSV import 運用手順（MVP）.md`
+
+最低限の確認順:
+1. TradingView 側で Strategy Report / Strategy Tester を開く。
+2. `Performance Summary` または `List of Trades` を CSV export する。
+3. 北極星の Rule Lab / Backtest 画面から CSV import を実行する。
+4. Backtest Detail で `latest import` `imports` `parsed件数` `failed件数` を確認する。
+5. 最新 import が failed でも、過去 parsed import が残っていれば比較・AI総評は継続確認する。
+
+注記:
+- TradingView の画面名は環境により `Strategy Report` と `Strategy Tester` の揺れがある。
+- 北極星が現行で受け付けるのは `Performance Summary 英語` `List of Trades 英語` `List of Trades 日本語`。
+- `Performance Summary 日本語` は現行 parser の受け付け対象外。

@@ -263,6 +263,9 @@ async function createApp() {
 const VALID_CSV = `Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To
 100000,120,48.5,1.42,-8.2,2024-01-01,2025-12-31
 `;
+const VALID_CSV_BOM = `\uFEFFNet Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To
+100000,120,48.5,1.42,-8.2,2024-01-01,2025-12-31
+`;
 
 const UNSUPPORTED_CSV = `foo,bar
 1,2
@@ -383,6 +386,42 @@ describe('backtest import vertical slice', () => {
     await app.close();
   });
 
+  it('accepts performance summary csv with utf-8 bom header', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'performance-bom',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'performance_summary_bom.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV_BOM,
+      },
+    });
+
+    expect(imported.statusCode).toBe(201);
+    const body = imported.json();
+    expect(body.data.import.parse_status).toBe('parsed');
+    expect(body.data.import.parsed_summary.totalTrades).toBe(120);
+    expect(body.data.import.parsed_summary.netProfit).toBe(100000);
+
+    await app.close();
+  });
+
   it('parses English list-of-trades csv and derives summary metrics', async () => {
     const app = await createApp();
 
@@ -462,6 +501,63 @@ describe('backtest import vertical slice', () => {
     expect(detailBody.data.latest_import.parse_status).toBe('failed');
     expect(detailBody.data.latest_import.parse_error).toContain('Missing required columns');
     expect(detailBody.data.used_strategy.snapshot.strategy_version_id).toBe('ver-1');
+
+    await app.close();
+  });
+
+  it('keeps previous parsed import in history when latest import fails', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'parsed-then-failed',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const firstImport = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'performance_summary.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV,
+      },
+    });
+    expect(firstImport.statusCode).toBe(201);
+    expect(firstImport.json().data.import.parse_status).toBe('parsed');
+
+    const secondImport = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'broken.csv',
+        content_type: 'text/csv',
+        csv_text: UNSUPPORTED_CSV,
+      },
+    });
+    expect(secondImport.statusCode).toBe(201);
+    expect(secondImport.json().data.import.parse_status).toBe('failed');
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/backtests/${backtestId}`,
+    });
+    expect(detail.statusCode).toBe(200);
+    const body = detail.json();
+    expect(body.data.backtest.status).toBe('import_failed');
+    expect(body.data.latest_import.parse_status).toBe('failed');
+    expect(body.data.imports).toHaveLength(2);
+    expect(body.data.imports[0].parse_status).toBe('failed');
+    expect(body.data.imports[1].parse_status).toBe('parsed');
+    expect(body.data.imports[1].parsed_summary.totalTrades).toBe(120);
 
     await app.close();
   });
