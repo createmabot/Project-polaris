@@ -20,13 +20,53 @@ export async function buildAlertSummaryContext(alertEventId: string): Promise<Al
     },
   });
 
+  const eventTime =
+    event.triggeredAt ??
+    ((event as { createdAt?: Date | null }).createdAt ?? null) ??
+    event.receivedAt;
+
+  const symbolFallbackReferences =
+    event.externalReferences.length === 0 && event.symbolId
+      ? await prisma.externalReference.findMany({
+          where: {
+            symbolId: event.symbolId,
+            OR: [
+              {
+                publishedAt: {
+                  not: null,
+                  lte: eventTime,
+                },
+              },
+              {
+                publishedAt: null,
+                createdAt: {
+                  lte: eventTime,
+                },
+              },
+            ],
+          },
+          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 30,
+        })
+      : [];
+
+  const filteredSymbolFallbackReferences = symbolFallbackReferences.filter((ref) => {
+    if (ref.publishedAt instanceof Date) {
+      return ref.publishedAt.getTime() <= eventTime.getTime();
+    }
+    return ref.createdAt instanceof Date ? ref.createdAt.getTime() <= eventTime.getTime() : false;
+  });
+
+  const sourceReferences =
+    event.externalReferences.length > 0 ? event.externalReferences : filteredSymbolFallbackReferences;
+
   const typePriority: Record<string, number> = {
     disclosure: 3,
     earnings: 2,
     news: 1,
   };
 
-  const sortedReferences = [...event.externalReferences].sort((a, b) => {
+  const sortedReferences = [...sourceReferences].sort((a, b) => {
     const typeDiff = (typePriority[b.referenceType] ?? 0) - (typePriority[a.referenceType] ?? 0);
     if (typeDiff !== 0) return typeDiff;
     const relevanceDiff = (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
