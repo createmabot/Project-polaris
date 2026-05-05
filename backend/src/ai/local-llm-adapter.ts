@@ -14,6 +14,38 @@ import { AI_CONFIG } from './config';
 interface OllamaResponse {
   message?: { content?: string };
   choices?: Array<{ message?: { content?: string } }>;
+  done_reason?: string;
+}
+
+function sanitizeReferenceIds(value: unknown, allowedReferenceIds: readonly string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const allowed = new Set(allowedReferenceIds);
+  return value
+    .filter((item): item is string => typeof item === 'string' && allowed.has(item))
+    .slice(0, 5);
+}
+
+function sanitizeReasonHypotheses(value: unknown, allowedReferenceIds: readonly string[]) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object' || typeof (item as any).text !== 'string') {
+        return null;
+      }
+      const rawConfidence = typeof (item as any).confidence === 'string' ? (item as any).confidence : 'low';
+      const confidence = rawConfidence === 'high' || rawConfidence === 'medium' || rawConfidence === 'low' ? rawConfidence : 'low';
+      return {
+        text: (item as any).text,
+        confidence,
+        reference_ids: sanitizeReferenceIds((item as any).reference_ids, allowedReferenceIds),
+      };
+    })
+    .filter((item): item is { text: string; confidence: 'low' | 'medium' | 'high'; reference_ids: string[] } => item !== null)
+    .slice(0, 4);
 }
 
 export class LocalLlmAdapter implements AiAdapter {
@@ -29,7 +61,7 @@ export class LocalLlmAdapter implements AiAdapter {
   }
 
   get promptVersion(): string {
-    return 'v1.0.0-local';
+    return 'v1.0.1-local';
   }
 
   async generateAlertSummary(ctx: AlertSummaryContext): Promise<AlertSummaryOutput> {
@@ -37,9 +69,11 @@ export class LocalLlmAdapter implements AiAdapter {
     const hasRefs = ctx.references.length > 0;
 
     const systemPrompt = [
-      'あなたは株式市場のアラート分析アシスタントです。',
-      'アラートの背景要因を JSON スキーマに従って日本語で出力してください。',
-      '断定的な表現は使わず、「可能性」「候補」として述べてください。',
+      'You are a Japanese alert-summary assistant for equity market alerts.',
+      'Use only the provided alert facts and references.',
+      'Do not give direct buy or sell recommendations.',
+      'When references are limited, explicitly say that context is limited and stay conservative.',
+      'Return strict JSON only.',
     ].join(' ');
 
     const userPrompt = this._buildUserPrompt(ctx, symbolLabel, hasRefs);
@@ -81,10 +115,13 @@ export class LocalLlmAdapter implements AiAdapter {
       `- 時間足: ${ctx.timeframe ?? 'N/A'}`,
       `- 発火時刻: ${ctx.triggeredAt?.toISOString() ?? 'N/A'}`,
       `- 発火価格: ${ctx.triggerPrice ?? 'N/A'}`,
+      `- reference_count: ${ctx.referenceIds.length}`,
       '',
       hasRefs ? `## 参照情報\n${refSummaries}` : '## 参照情報\n(なし)',
       '',
       '## 出力指示',
+      '- 断定的な売買推奨はしないこと',
+      '- 参照不足時は「追加確認が必要」と明記すること',
       '以下の JSON 形式で出力してください（コードブロックは不要）:',
       JSON.stringify({
         title: '<string: アラートタイトル>',
@@ -98,34 +135,66 @@ export class LocalLlmAdapter implements AiAdapter {
   }
 
   private async _callEndpoint(systemPrompt: string, userPrompt: string): Promise<string> {
-    // Try OpenAI-compatible endpoint first (/v1/chat/completions)
-    const url = `${this.endpoint.replace(/\/$/, '')}/v1/chat/completions`;
+    const base = this.endpoint.replace(/\/$/, '');
+    const openAiUrl = `${base}/v1/chat/completions`;
+    const ollamaUrl = `${base}/api/chat`;
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ];
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: this.modelName,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 1024,
-      }),
-      // 60 second timeout
-      signal: AbortSignal.timeout(60_000),
-    });
+    try {
+      const response = await fetch(openAiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.modelName,
+          messages,
+          temperature: 0.2,
+          max_tokens: 900,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
 
-    if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${body.slice(0, 200)}`);
+      }
+
+      const data: OllamaResponse = await response.json();
+      const content = data.choices?.[0]?.message?.content ?? data.message?.content;
+      if (typeof content === 'string' && content.trim().length > 0) {
+        return content;
+      }
+      throw new Error('Empty response from local LLM');
+    } catch (firstError: any) {
+      const response = await fetch(ollamaUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.modelName,
+          messages,
+          stream: false,
+          think: false,
+          options: {
+            temperature: 0.2,
+          },
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`${firstError.message}; fallback HTTP ${response.status}: ${body.slice(0, 200)}`);
+      }
+
+      const data: OllamaResponse = await response.json();
+      const content = data.choices?.[0]?.message?.content ?? data.message?.content;
+      if (!content || content.trim().length === 0) {
+        throw new Error(`${firstError.message}; fallback empty response from local LLM`);
+      }
+      return content;
     }
-
-    const data: OllamaResponse = await response.json();
-    const content = data.choices?.[0]?.message?.content ?? data.message?.content;
-    if (!content) throw new Error('Empty response from local LLM');
-    return content;
   }
 
   private _parseOutput(
@@ -147,23 +216,39 @@ export class LocalLlmAdapter implements AiAdapter {
     const title = parsed?.title ?? `[Local] ${ctx.alertName} — ${symbolLabel}`;
     const whatHappened = parsed?.what_happened ?? `${ctx.alertName} が ${symbolLabel} で発火した。`;
     const factPoints: string[] = parsed?.fact_points ?? ['アラート条件が成立した。'];
-    const reasonHypotheses = parsed?.reason_hypotheses ?? [{
-      text: hasRefs ? '参照情報をもとに分析中（要確認）。' : '参照情報なし。背景要因は特定されていない。',
-      confidence: 'low',
-      reference_ids: [],
-    }];
+    const reasonHypotheses = parsed?.reason_hypotheses
+      ? sanitizeReasonHypotheses(parsed.reason_hypotheses, ctx.referenceIds)
+      : [{
+          text: hasRefs ? '参照情報をもとに分析中（要確認）。' : '参照情報なし。背景要因は特定されていない。',
+          confidence: 'low' as const,
+          reference_ids: [],
+        }];
     const watchPoints: string[] = parsed?.watch_points ?? ['翌営業日の値動きを確認する。'];
     const nextActions: string[] = parsed?.next_actions ?? ['関連情報を確認する。'];
 
     const bodyMarkdown = [
       `## ${title}`,
       '',
-      `**Symbol:** ${symbolLabel}`,
-      `**Alert:** ${ctx.alertName}`,
+      `- 銘柄: ${symbolLabel}`,
+      `- アラート: ${ctx.alertName}`,
+      `- 時間足: ${ctx.timeframe ?? 'N/A'}`,
+      `- 発火価格: ${ctx.triggerPrice ?? 'N/A'}`,
+      '',
+      `### 何が起きたか`,
+      whatHappened,
+      '',
+      `### 背景要因の候補`,
+      ...(reasonHypotheses.length > 0
+        ? reasonHypotheses.slice(0, 3).map((item: any) => `- ${item.text}`)
+        : ['- 参照情報が不足しているため、背景要因は追加確認が必要です。']),
+      '',
+      `### 追加で見るべき点`,
+      ...watchPoints.slice(0, 3).map((item) => `- ${item}`),
+      ...nextActions.slice(0, 3).map((item) => `- ${item}`),
       '',
       hasRefs
-        ? `**参照情報 (${ctx.references.length}件):**\n${ctx.references.slice(0, 3).map(r => `- [${r.sourceType ?? r.referenceType}] ${r.title} (${r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A')})`).join('\n')}`
-        : '> 外部参照情報なし。背景要因の特定には追加情報が必要です。',
+        ? `### 参照情報 (${ctx.references.length}件)\n${ctx.references.slice(0, 3).map(r => `- [${r.sourceType ?? r.referenceType}] ${r.title} (${r.publishedAtIso ?? (r.publishedAt ? r.publishedAt.toISOString() : 'N/A')})`).join('\n')}`
+        : '> 参照情報が不足しているため、背景要因は暫定評価です。',
     ].join('\n');
 
     return {

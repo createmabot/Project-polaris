@@ -20,13 +20,24 @@ export async function buildAlertSummaryContext(alertEventId: string): Promise<Al
     },
   });
 
+  const symbolFallbackReferences =
+    event.externalReferences.length === 0 && event.symbolId
+      ? await prisma.externalReference.findMany({
+          where: { symbolId: event.symbolId },
+          orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 30,
+        })
+      : [];
+
+  const sourceReferences = event.externalReferences.length > 0 ? event.externalReferences : symbolFallbackReferences;
+
   const typePriority: Record<string, number> = {
     disclosure: 3,
     earnings: 2,
     news: 1,
   };
 
-  const sortedReferences = [...event.externalReferences].sort((a, b) => {
+  const sortedReferences = [...sourceReferences].sort((a, b) => {
     const typeDiff = (typePriority[b.referenceType] ?? 0) - (typePriority[a.referenceType] ?? 0);
     if (typeDiff !== 0) return typeDiff;
     const relevanceDiff = (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
