@@ -20,16 +20,45 @@ export async function buildAlertSummaryContext(alertEventId: string): Promise<Al
     },
   });
 
+  const eventTime =
+    event.triggeredAt ??
+    ((event as { createdAt?: Date | null }).createdAt ?? null) ??
+    event.receivedAt;
+
   const symbolFallbackReferences =
     event.externalReferences.length === 0 && event.symbolId
       ? await prisma.externalReference.findMany({
-          where: { symbolId: event.symbolId },
+          where: {
+            symbolId: event.symbolId,
+            OR: [
+              {
+                publishedAt: {
+                  not: null,
+                  lte: eventTime,
+                },
+              },
+              {
+                publishedAt: null,
+                createdAt: {
+                  lte: eventTime,
+                },
+              },
+            ],
+          },
           orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
           take: 30,
         })
       : [];
 
-  const sourceReferences = event.externalReferences.length > 0 ? event.externalReferences : symbolFallbackReferences;
+  const filteredSymbolFallbackReferences = symbolFallbackReferences.filter((ref) => {
+    if (ref.publishedAt instanceof Date) {
+      return ref.publishedAt.getTime() <= eventTime.getTime();
+    }
+    return ref.createdAt instanceof Date ? ref.createdAt.getTime() <= eventTime.getTime() : false;
+  });
+
+  const sourceReferences =
+    event.externalReferences.length > 0 ? event.externalReferences : filteredSymbolFallbackReferences;
 
   const typePriority: Record<string, number> = {
     disclosure: 3,
