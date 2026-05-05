@@ -306,18 +306,23 @@ function buildDeterministicDailyOutput(
   const tone: 'risk_on' | 'risk_off' | 'neutral' =
     context.alertCount >= 5 ? 'risk_on' : context.alertCount === 0 ? 'neutral' : 'neutral';
   const dateText = context.date ?? 'latest';
-  const slot = context.summaryType === 'latest' ? '最新' : context.summaryType === 'morning' ? '朝' : '夕方';
+  const slot =
+    context.summaryType === 'latest'
+      ? '\u6700\u65b0'
+      : context.summaryType === 'morning'
+        ? '\u671d'
+        : '\u5915\u65b9';
 
-  const title = `${options.titlePrefix}${slot}サマリ (${dateText})`;
+  const title = `${options.titlePrefix}${slot}\u30b5\u30de\u30ea\u30fc (${dateText})`;
   const bodyMarkdown = [
     `## ${title}`,
     '',
-    `- market_snapshots: ${context.marketSnapshotCount}件`,
-    `- alert_events: ${context.alertCount}件`,
-    `- external_references: ${context.referenceCount}件`,
+    `- market_snapshots: ${context.marketSnapshotCount}\u4ef6`,
+    `- alert_events: ${context.alertCount}\u4ef6`,
+    `- external_references: ${context.referenceCount}\u4ef6`,
     insufficientContext
-      ? '- 材料不足のため、断定を避けた要約を返却'
-      : '- 材料は揃っており、通常精度の要約を返却',
+      ? '- \u5165\u529b\u6750\u6599\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u4fdd\u5b88\u7684\u306a\u8981\u7d04\u3067\u3059\u3002'
+      : '- \u5165\u529b\u6750\u6599\u304c\u63c3\u3063\u3066\u304a\u308a\u3001\u5e02\u5834\u6982\u6cc1\u306e\u8981\u7d04\u3092\u8868\u793a\u3057\u3066\u3044\u307e\u3059\u3002',
   ].join('\n');
 
   return {
@@ -331,21 +336,25 @@ function buildDeterministicDailyOutput(
       payload: {
         highlights: [
           {
-            title: `${slot}の観測サマリ`,
-            summary: `snapshot ${context.marketSnapshotCount}件 / alert ${context.alertCount}件 / reference ${context.referenceCount}件`,
-            reason: insufficientContext ? '入力材料不足のため保守的要約' : '入力材料が揃っているため通常要約',
+            title: `${slot}\u306e\u89b3\u6e2c\u30b5\u30de\u30ea\u30fc`,
+            summary: `snapshot ${context.marketSnapshotCount}\u4ef6 / alert ${context.alertCount}\u4ef6 / reference ${context.referenceCount}\u4ef6`,
+            reason: insufficientContext
+              ? '\u5165\u529b\u6750\u6599\u4e0d\u8db3\u306e\u305f\u3081\u4fdd\u5b88\u7684\u8981\u7d04'
+              : '\u5165\u529b\u6750\u6599\u3092\u3082\u3068\u306b\u6982\u6cc1\u3092\u6574\u7406',
             confidence,
             reference_ids: [],
             symbol_ids: [],
           },
         ],
         watch_items: insufficientContext
-          ? ['market_snapshots / alert_events / external_references の不足補完']
-          : ['重要イベントと直近アラートの継続監視'],
+          ? ['market_snapshots / alert_events / external_references \u306e\u4e0d\u8db3\u88dc\u5b8c']
+          : ['\u4e3b\u8981\u30a4\u30d9\u30f3\u30c8\u3068\u76f4\u8fd1\u30a2\u30e9\u30fc\u30c8\u306e\u5909\u5316'],
         focus_symbols: [],
         market_context: {
           tone,
-          summary: insufficientContext ? '材料不足のため中立評価' : '直近シグナルを踏まえた中立評価',
+          summary: insufficientContext
+            ? '\u5165\u529b\u6750\u6599\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u4fdd\u5b88\u7684\u306a\u6982\u6cc1\u3067\u3059\u3002'
+            : '\u5165\u529b\u6750\u6599\u3092\u8e0f\u307e\u3048\u305f\u5e02\u5834\u6982\u6cc1\u3067\u3059\u3002',
         },
       },
     },
@@ -360,27 +369,28 @@ function buildDeterministicSymbolOutput(
 ): SymbolThesisOutput {
   const hasReferences = context.referenceIds.length > 0;
   const hasSnapshot = !!context.snapshot;
-  const hasNote = !!context.latestNoteSummary?.thesisText;
-  const insufficientContext = !hasReferences && !hasSnapshot && !hasNote;
+  const insufficientContext = !hasReferences;
   const confidence: 'high' | 'medium' | 'low' = insufficientContext ? 'low' : hasReferences ? 'medium' : 'low';
   const symbolLabel = context.symbol.displayName ?? context.symbol.symbolCode ?? context.symbol.symbol;
-  const title = `${options.titlePrefix}${symbolLabel} 論点カード`;
+  const title = `${options.titlePrefix}${symbolLabel} \u8ad6\u70b9\u30ab\u30fc\u30c9`;
   const snapshotText =
     context.snapshot && context.snapshot.lastPrice !== null
       ? `${context.snapshot.lastPrice} (${context.snapshot.changePercent ?? 0}%)`
-      : '取得なし';
+      : '\u53d6\u5f97\u306a\u3057';
 
   return {
     title,
     bodyMarkdown: [
       `## ${title}`,
       '',
-      `- 銘柄: ${symbolLabel}`,
-      `- スコープ: ${context.scope}`,
-      `- 参照件数: ${context.referenceIds.length}`,
-      `- スナップショット: ${snapshotText}`,
-      `- ノート: ${context.latestNoteSummary ? context.latestNoteSummary.title : 'なし'}`,
-      insufficientContext ? '- コンテキスト: 不足' : '- コンテキスト: 最低限あり',
+      `- \u9298\u67c4: ${symbolLabel}`,
+      `- \u30b9\u30b3\u30fc\u30d7: ${context.scope}`,
+      `- \u53c2\u7167\u4ef6\u6570: ${context.referenceIds.length}`,
+      `- \u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8: ${snapshotText}`,
+      `- \u30ce\u30fc\u30c8: ${context.latestNoteSummary ? context.latestNoteSummary.title : '\u306a\u3057'}`,
+      insufficientContext
+        ? '- \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8: \u53c2\u7167\u60c5\u5831\u304c\u4e0d\u8db3\u3057\u3066\u304a\u308a\u3001snapshot / note \u4e2d\u5fc3\u306e\u4eee\u8aac\u3067\u3059'
+        : '- \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8: references / snapshot / note \u3092\u3082\u3068\u306b\u6574\u7406',
     ].join('\n'),
     structuredJson: {
       schema_name: 'symbol_thesis_summary',
@@ -390,29 +400,29 @@ function buildDeterministicSymbolOutput(
       payload: {
         bullish_points: hasReferences
           ? context.references.slice(0, 2).map((reference) => ({
-              text: `論点を補強する参照情報: ${reference.title}`,
+              text: `\u53c2\u7167\u60c5\u5831\u304b\u3089\u78ba\u8a8d\u3067\u304d\u308b\u524d\u5411\u304d\u6750\u6599: ${reference.title}`,
               reference_ids: [reference.id],
             }))
-          : ['強気材料の根拠が不足しています'],
+          : ['\u53c2\u7167\u60c5\u5831\u304c\u9650\u3089\u308c\u308b\u305f\u3081\u3001\u524d\u5411\u304d\u6750\u6599\u306e\u88cf\u53d6\u308a\u306f\u672a\u5341\u5206\u3067\u3059\u3002'],
         bearish_points:
           hasSnapshot &&
           context.snapshot !== null &&
           context.snapshot.changePercent !== null &&
           context.snapshot.changePercent < 0
-          ? ['直近の価格軟化について追加確認が必要です']
-          : ['バリュエーションまたは実行面のリスクが残ります'],
-        watch_kpis: ['売上成長率', '営業利益率', 'キャッシュフロー'],
+            ? ['\u76f4\u8fd1\u682a\u4fa1\u304c\u4e0b\u843d\u3057\u3066\u304a\u308a\u3001\u77ed\u671f\u9700\u7d66\u306e\u5f31\u3055\u306b\u6ce8\u610f\u304c\u5fc5\u8981\u3067\u3059\u3002']
+            : ['\u4e8b\u696d\u74b0\u5883\u3084\u5e02\u5834\u30bb\u30f3\u30c1\u30e1\u30f3\u30c8\u306e\u5909\u5316\u3092\u7d99\u7d9a\u76e3\u8996\u3057\u3066\u304f\u3060\u3055\u3044\u3002'],
+        watch_kpis: ['\u58f2\u4e0a\u6210\u9577\u7387', '\u55b6\u696d\u5229\u76ca\u7387', '\u30ad\u30e3\u30c3\u30b7\u30e5\u30d5\u30ed\u30fc'],
         next_events: hasReferences
           ? context.references.slice(0, 2).map((reference) => ({
               label: reference.title,
               date: reference.publishedAt ?? null,
               reference_ids: [reference.id],
             }))
-          : ['次回決算'],
-        invalidation_conditions: ['会社計画の下方修正', '需要の大幅鈍化'],
+          : ['\u6b21\u56de\u6c7a\u7b97\u3084\u4e3b\u8981\u958b\u793a\u306e\u78ba\u8a8d'],
+        invalidation_conditions: ['\u696d\u7e3e\u898b\u901a\u3057\u306e\u5927\u5e45\u4e0b\u65b9\u4fee\u6b63', '\u4e3b\u8981\u4e8b\u696d\u306e\u53ce\u76ca\u6027\u60aa\u5316'],
         overall_view: insufficientContext
-          ? '入力コンテキストが不足しているため、暫定的な論点カードです。'
-          : '下振れリスクを監視しつつ、現時点の基本シナリオは維持可能です。',
+          ? '\u53c2\u7167\u60c5\u5831\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u3001snapshot \u3068\u65e2\u5b58\u30ce\u30fc\u30c8\u3092\u4e2d\u5fc3\u306b\u3057\u305f\u6682\u5b9a\u8a55\u4fa1\u3067\u3059\u3002\u8ffd\u52a0\u306e\u958b\u793a\u3084\u30cb\u30e5\u30fc\u30b9\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u5224\u65ad\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
+          : '\u53c2\u7167\u60c5\u5831\u3092\u8e0f\u307e\u3048\u3064\u3064\u3001\u696d\u7e3e\u3068\u5e02\u5834\u53cd\u5fdc\u306e\u4e21\u9762\u304b\u3089\u7d99\u7d9a\u76e3\u8996\u3059\u3079\u304d\u9298\u67c4\u3067\u3059\u3002',
       },
     },
     modelName: options.modelName,
@@ -425,23 +435,36 @@ function buildDeterministicComparisonOutput(
   options: { modelName: string; promptVersion: string; titlePrefix: string },
 ): ComparisonSummaryOutput {
   const symbolLabels = context.symbols.map((symbol) => symbol.displayName ?? symbol.symbolCode ?? symbol.symbol);
+  const symbolMetricRows = Array.isArray((context.comparedMetricJson as any)?.symbol_metrics)
+    ? ((context.comparedMetricJson as any).symbol_metrics as Array<Record<string, unknown>>)
+    : [];
+  const hasReferenceImbalance = symbolMetricRows.some((row) => {
+    const count = row?.recent_reference_count;
+    return typeof count === 'number' && count === 0;
+  });
   const insufficientContext = symbolLabels.length < 2 || context.metrics.length === 0;
   const confidence: 'high' | 'medium' | 'low' = insufficientContext
     ? 'low'
-    : context.references.length >= 2
-      ? 'high'
-      : 'medium';
-  const title = `${options.titlePrefix}比較総評: ${symbolLabels.join(' vs ')}`;
+    : hasReferenceImbalance
+      ? 'medium'
+      : context.references.length >= 2
+        ? 'high'
+        : 'medium';
+  const title = `${options.titlePrefix}\u6bd4\u8f03\u30b5\u30de\u30ea\u30fc: ${symbolLabels.join(' vs ')}`;
 
   return {
     title,
     bodyMarkdown: [
       `## ${title}`,
       '',
-      `- 銘柄: ${symbolLabels.join(', ')}`,
-      `- 指標: ${context.metrics.join(', ')}`,
-      `- 参照件数: ${context.references.length}`,
-      insufficientContext ? '- コンテキスト: 不足' : '- コンテキスト: 最低限あり',
+      `- \u5bfe\u8c61: ${symbolLabels.join(', ')}`,
+      `- \u6307\u6a19: ${context.metrics.join(', ')}`,
+      `- \u53c2\u7167\u4ef6\u6570: ${context.references.length}`,
+      insufficientContext
+        ? '- \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8: \u6bd4\u8f03\u6750\u6599\u304c\u4e0d\u8db3\u3057\u3066\u3044\u307e\u3059'
+        : hasReferenceImbalance
+          ? '- \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8: \u7247\u5074\u306e\u53c2\u7167\u60c5\u5831\u304c\u5c11\u306a\u3044\u305f\u3081\u3001\u6bd4\u8f03\u306e\u78ba\u5ea6\u306f\u4e2d\u7a0b\u5ea6\u3067\u3059'
+          : '- \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8: \u6bd4\u8f03\u6750\u6599\u306f\u4e00\u5b9a\u6570\u3042\u308a\u307e\u3059',
     ].join('\n'),
     structuredJson: {
       schema_name: 'comparison_summary',
@@ -451,18 +474,22 @@ function buildDeterministicComparisonOutput(
       payload: {
         key_differences: [
           context.metrics.length > 0
-            ? `主な差分軸: ${context.metrics.slice(0, 2).join(', ')}`
-            : '差分を特定するための指標が不足しています',
+            ? `\u4e3b\u306a\u6bd4\u8f03\u8ef8: ${context.metrics.slice(0, 2).join(', ')}`
+            : '\u6bd4\u8f03\u8ef8\u3092\u7279\u5b9a\u3059\u308b\u305f\u3081\u306e\u6307\u6a19\u304c\u4e0d\u8db3\u3057\u3066\u3044\u307e\u3059\u3002',
         ],
         risk_points: insufficientContext
-          ? ['入力コンテキストが限定的なため、暫定評価として扱ってください。']
-          : ['相場環境の変化リスクに備え、直近アラートと参照情報を再確認してください。'],
-        next_actions: ['最新開示を確認する', '現行スナップショットと論点の整合性を再検証する'],
+          ? ['\u6bd4\u8f03\u6750\u6599\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u8ffd\u52a0\u306e\u958b\u793a\u3084\u30cb\u30e5\u30fc\u30b9\u3092\u78ba\u8a8d\u3057\u3066\u304b\u3089\u8a55\u4fa1\u3057\u3066\u304f\u3060\u3055\u3044\u3002']
+          : hasReferenceImbalance
+            ? ['\u7247\u5074\u306e\u53c2\u7167\u60c5\u5831\u304c\u5c11\u306a\u3044\u305f\u3081\u3001\u6750\u6599\u306e\u591a\u5be1\u304c\u7d50\u8ad6\u306b\u4e0e\u3048\u308b\u5f71\u97ff\u3078\u6ce8\u610f\u304c\u5fc5\u8981\u3067\u3059\u3002']
+            : ['\u6750\u6599\u306e\u8cea\u3068\u5e02\u5834\u53cd\u5fdc\u306e\u5dee\u5206\u3092\u7d99\u7d9a\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002'],
+        next_actions: ['\u6700\u65b0\u958b\u793a\u3068\u30cb\u30e5\u30fc\u30b9\u306e\u5dee\u5206\u3092\u78ba\u8a8d\u3059\u308b', '\u5404\u9298\u67c4\u306e\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3068\u8ad6\u70b9\u30ab\u30fc\u30c9\u306e\u6839\u62e0\u5dee\u3092\u898b\u76f4\u3059'],
         compared_symbols: context.symbols.map((symbol) => symbol.id),
         reference_ids: context.references.map((reference) => reference.id),
         overall_view: insufficientContext
-          ? '比較コンテキストが不足しているため、初期判断としてのみ利用してください。'
-          : '現状は定量差が確認できますが、追加検証を前提に判断してください。',
+          ? '\u6bd4\u8f03\u6750\u6599\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u78ba\u5ea6\u3092\u6291\u3048\u305f\u6682\u5b9a\u6bd4\u8f03\u3068\u3057\u3066\u6271\u3063\u3066\u304f\u3060\u3055\u3044\u3002'
+          : hasReferenceImbalance
+            ? '\u4e00\u65b9\u306e\u9298\u67c4\u306f\u53c2\u7167\u60c5\u5831\u304c\u5c11\u306a\u3044\u305f\u3081\u3001\u6bd4\u8f03\u7d50\u679c\u306f\u6682\u5b9a\u7684\u3067\u3059\u3002\u6750\u6599\u5dee\u3092\u8e0f\u307e\u3048\u3066\u8ffd\u52a0\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002'
+            : '\u53c2\u7167\u60c5\u5831\u3068\u5e02\u5834\u30c7\u30fc\u30bf\u3092\u8e0f\u307e\u3048\u305f\u6bd4\u8f03\u7d50\u679c\u3067\u3059\u3002\u6750\u6599\u5dee\u3068\u4fa1\u683c\u53cd\u5fdc\u306e\u4e21\u9762\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
       },
     },
     modelName: options.modelName,
@@ -499,6 +526,55 @@ function extractTextParts(value: unknown): string[] {
     }
   }
   return [];
+}
+
+function sanitizeReferenceIds(value: unknown, allowedReferenceIds: readonly string[]): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const allowed = new Set(allowedReferenceIds);
+  return value
+    .filter((item): item is string => typeof item === 'string' && allowed.has(item))
+    .slice(0, 5);
+}
+
+function sanitizeThesisPointArray(value: unknown[], allowedReferenceIds: readonly string[], limit: number) {
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (item && typeof item === 'object' && typeof (item as any).text === 'string') {
+        return {
+          text: (item as any).text,
+          reference_ids: sanitizeReferenceIds((item as any).reference_ids, allowedReferenceIds),
+        };
+      }
+      return null;
+    })
+    .filter((item): item is string | { text: string; reference_ids: string[] } => item !== null)
+    .slice(0, limit);
+}
+
+function sanitizeNextEventArray(value: unknown[], allowedReferenceIds: readonly string[], limit: number) {
+  return value
+    .map((item) => {
+      if (typeof item === 'string') {
+        return item;
+      }
+      if (item && typeof item === 'object' && typeof (item as any).label === 'string') {
+        const date = typeof (item as any).date === 'string' || (item as any).date === null ? (item as any).date : null;
+        const referenceIds = sanitizeReferenceIds((item as any).reference_ids, allowedReferenceIds);
+        return {
+          label: (item as any).label,
+          ...(date !== undefined ? { date } : {}),
+          ...(referenceIds.length > 0 ? { reference_ids: referenceIds } : {}),
+        };
+      }
+      return null;
+    })
+    .filter((item): item is string | { label: string; date?: string | null; reference_ids?: string[] } => item !== null)
+    .slice(0, limit);
 }
 
 function extractLlmContent(data: any): string {
@@ -875,8 +951,10 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
   async generateDailySummary(context: DailySummaryContext): Promise<DailySummaryOutput> {
     const systemPrompt = [
-      'あなたは日本株のホーム画面向け日次要約アシスタントです。',
-      '入力された件数情報だけを使い、推測しすぎず JSON 形式で返答してください。',
+      'You are a Japanese market-summary assistant for the home screen.',
+      'Use only the provided market snapshots, alerts, and references.',
+      'If context is limited, say so explicitly and stay conservative.',
+      'Do not invent missing facts. Return strict JSON only.',
     ].join(' ');
 
     const userPrompt = [
@@ -989,10 +1067,19 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
     const content = await this.callOllamaSummaryChat({
       taskType: 'symbol_thesis_summary',
-      systemPrompt: 'あなたは日本株分析アシスタントです。必ず日本語で、厳密なJSONのみを返してください。',
+      systemPrompt: [
+        'You are a Japanese equity-analysis assistant.',
+        'Use only the provided references, snapshot, and note.',
+        'Do not give direct buy or sell recommendations.',
+        'When reference_count is 0, explicitly say that reference context is limited.',
+        'Prefer cautious language such as possibility, scenario, and watchpoint.',
+        'Return strict JSON only.',
+      ].join(' '),
       userPrompt: JSON.stringify({
         scope: context.scope,
         symbol: context.symbol,
+        reference_count: context.referenceIds.length,
+        insufficient_context: context.referenceIds.length === 0,
         reference_ids: context.referenceIds,
         references: context.references.slice(0, 5),
         snapshot: context.snapshot,
@@ -1031,16 +1118,16 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         ...deterministic.structuredJson,
         payload: {
           bullish_points: Array.isArray(parsed?.bullish_points)
-            ? parsed.bullish_points.slice(0, 5)
+            ? sanitizeThesisPointArray(parsed.bullish_points, context.referenceIds, 5)
             : deterministic.structuredJson.payload.bullish_points,
           bearish_points: Array.isArray(parsed?.bearish_points)
-            ? parsed.bearish_points.slice(0, 5)
+            ? sanitizeThesisPointArray(parsed.bearish_points, context.referenceIds, 5)
             : deterministic.structuredJson.payload.bearish_points,
           watch_kpis: Array.isArray(parsed?.watch_kpis)
             ? parsed.watch_kpis.filter((item: unknown) => typeof item === 'string').slice(0, 6)
             : deterministic.structuredJson.payload.watch_kpis,
           next_events: Array.isArray(parsed?.next_events)
-            ? parsed.next_events.slice(0, 4)
+            ? sanitizeNextEventArray(parsed.next_events, context.referenceIds, 4)
             : deterministic.structuredJson.payload.next_events,
           invalidation_conditions: Array.isArray(parsed?.invalidation_conditions)
             ? parsed.invalidation_conditions.filter((item: unknown) => typeof item === 'string').slice(0, 5)
@@ -1063,12 +1150,20 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
     const content = await this.callOllamaSummaryChat({
       taskType: 'comparison_summary',
-      systemPrompt: 'あなたは日本株比較アシスタントです。必ず日本語で、厳密なJSONのみを返してください。',
+      systemPrompt: [
+        'You are a Japanese comparison-analysis assistant.',
+        'Use only compared_metric_json and provided references.',
+        'If one side has fewer references, explicitly mention that limitation.',
+        'Do not give direct buy or sell recommendations.',
+        'Organize the output as differences, risks, and next checks.',
+        'Return strict JSON only.',
+      ].join(' '),
       userPrompt: JSON.stringify({
         comparison_id: context.comparisonId,
         symbols: context.symbols,
         metrics: context.metrics,
         compared_metric_json: context.comparedMetricJson,
+        reference_count: context.references.length,
         references: context.references.slice(0, 8),
         output_schema: {
           title: '<string>',
@@ -1137,11 +1232,11 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content: [
-              'あなたは北極星のバックテスト総評アシスタントです。',
-              '出力は必ずJSONのみ。',
-              'メタ情報の箇条書きは禁止し、数値を自然文で解釈してください。',
-              'body_markdown は必ず次の4セクション構成にすること: 結論 / 良い点 / 懸念点 / 次に確認すべき点。',
-              '推測は禁止。入力にない事実は書かないこと。',
+              'You are a Japanese backtest-review assistant.',
+              'Interpret numeric inputs in natural language and organize the output into conclusion, strengths, risks, and next checks.',
+              'Do not overstate quality from a short favorable period when long-term metrics disagree.',
+              'Do not give direct buy or sell recommendations.',
+              'Return strict JSON only.',
             ].join(' '),
           },
           {
