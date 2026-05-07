@@ -398,7 +398,7 @@ export default function StrategyLab() {
         <section style={{ marginTop: '2rem', display: 'grid', gap: '0.8rem' }}>
           <h2>CSV取込（MVP）</h2>
           <p style={{ margin: 0, color: '#666' }}>
-            対応CSV: Performance Summary（英語ヘッダー）/ List of Trades（英語・日本語ヘッダー）。
+            対応CSV: Performance Summary（英語・日本語ヘッダー）/ List of Trades（英語・日本語ヘッダー）。
           </p>
 
           <input

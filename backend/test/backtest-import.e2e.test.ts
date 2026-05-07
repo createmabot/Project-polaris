@@ -266,6 +266,12 @@ const VALID_CSV = `Net Profit,Total Closed Trades,Percent Profitable,Profit Fact
 const VALID_CSV_BOM = `\uFEFFNet Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To
 100000,120,48.5,1.42,-8.2,2024-01-01,2025-12-31
 `;
+const VALID_CSV_JP = `純利益,総クローズトレード数,勝率,プロフィットファクター,最大ドローダウン,開始,終了
+"¥100,000",120,48.5%,+1.42,(8.2),2024-01-01,2025-12-31
+`;
+const VALID_CSV_JP_BOM = `\uFEFF純利益,総クローズトレード数,勝率,プロフィットファクター,最大ドローダウン,開始,終了
+"¥100,000",120,48.5%,+1.42,(8.2),2024-01-01,2025-12-31
+`;
 
 const UNSUPPORTED_CSV = `foo,bar
 1,2
@@ -382,6 +388,83 @@ describe('backtest import vertical slice', () => {
     expect(body.data.import.parsed_summary.winRate).toBe(50);
     expect(body.data.import.parsed_summary.periodFrom).toBe('2026-03-25');
     expect(body.data.import.parsed_summary.periodTo).toBe('2026-04-10');
+
+    await app.close();
+  });
+
+  it('parses Japanese performance summary csv', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: '日本語 Performance Summary',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'performance_summary_jp.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV_JP,
+      },
+    });
+    expect(imported.statusCode).toBe(201);
+    const body = imported.json();
+    expect(body.data.import.parse_status).toBe('parsed');
+    expect(body.data.import.parsed_summary).toEqual({
+      totalTrades: 120,
+      winRate: 48.5,
+      profitFactor: 1.42,
+      maxDrawdown: -8.2,
+      netProfit: 100000,
+      periodFrom: '2024-01-01',
+      periodTo: '2025-12-31',
+    });
+
+    await app.close();
+  });
+
+  it('parses BOM Japanese performance summary csv', async () => {
+    const app = await createApp();
+
+    const createdBacktest = await app.inject({
+      method: 'POST',
+      url: '/api/backtests',
+      payload: {
+        strategy_version_id: 'ver-1',
+        title: 'BOM 日本語 Performance Summary',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createdBacktest.statusCode).toBe(201);
+    const backtestId = createdBacktest.json().data.backtest.id as string;
+
+    const imported = await app.inject({
+      method: 'POST',
+      url: `/api/backtests/${backtestId}/imports`,
+      payload: {
+        file_name: 'performance_summary_jp_bom.csv',
+        content_type: 'text/csv',
+        csv_text: VALID_CSV_JP_BOM,
+      },
+    });
+    expect(imported.statusCode).toBe(201);
+    const body = imported.json();
+    expect(body.data.import.parse_status).toBe('parsed');
+    expect(body.data.import.parsed_summary.netProfit).toBe(100000);
+    expect(body.data.import.parsed_summary.maxDrawdown).toBe(-8.2);
 
     await app.close();
   });
