@@ -1,202 +1,202 @@
-﻿# 蛹玲･ｵ譏・walkthrough・・ule Lab / Backtest 荳蟾｡・・
+# 北極星 walkthrough（Rule Lab / Backtest 一巡）
 
-譖ｴ譁ｰ譌･: 2026-04-26
+更新日: 2026-04-26
 
-譛ｬ雉・侭縺ｯ縲ヽule Lab 縺九ｉ Pine 逕滓・繝ｻTradingView 荳谺｡讀懆ｨｼ繝ｻCSV 蜿冶ｾｼ繝ｻBacktest AI 邱剰ｩ輔・豈碑ｼ・∪縺ｧ縺ｮ荳蟾｡蟆守ｷ壹ｒ縲∫樟陦勲VP螳溯｣・↓蜷医ｏ縺帙※遒ｺ隱阪☆繧九◆繧√・謇矩・〒縺吶・ 
-豁｣譛ｬ docs 縺ｯ `docs/0` 縺九ｉ蜿ら・縺励∵悽雉・侭縺ｯ螳滓命謇矩・・繧ｯ繧､繝・け繝√ぉ繝・け逕ｨ騾斐→縺励※謇ｱ縺・∪縺吶・
+本資料は、Rule Lab から Pine 生成・TradingView 一次検証・CSV 取込・Backtest AI 総評・比較までの一巡導線を、現行MVP実装に合わせて確認するための手順です。  
+正本 docs は `docs/0` から参照し、本資料は実施手順のクイックチェック用途として扱います。
 
-## 0. 莠句燕貅門ｙ
+## 0. 事前準備
 
-1. 萓晏ｭ倩ｵｷ蜍・
+1. 依存起動
 ```bash
 pnpm run up
 ```
-2. DB 蜿肴丐縺ｨ seed
+2. DB 反映と seed
 ```bash
 cd backend
 pnpm exec prisma migrate deploy
 pnpm exec prisma generate
 pnpm exec prisma db seed
 ```
-3. 繧｢繝励Μ襍ｷ蜍・
+3. アプリ起動
 ```bash
 cd ..
 pnpm run dev
 ```
 
-## 1. Strategy 菴懈・
+## 1. Strategy 作成
 
-1. `http://localhost:5173/strategy-lab` 繧帝幕縺上・
-2. 閾ｪ辟ｶ險隱槭Ν繝ｼ繝ｫ繧貞・蜉帙＠ strategy 繧剃ｽ懈・縺吶ｋ縲・
-3. `POST /api/strategies` 縺梧・蜉溘＠縲《trategy id 縺檎匱陦後＆繧後ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+1. `http://localhost:5173/strategy-lab` を開く。
+2. 自然言語ルールを入力し strategy を作成する。
+3. `POST /api/strategies` が成功し、strategy id が発行されることを確認する。
 
-## 2. Strategy Version 菴懈・
+## 2. Strategy Version 作成
 
-1. 蜷檎判髱｢縺ｾ縺溘・ version 菴懈・蟆守ｷ壹〒 strategy version 繧剃ｽ懈・縺吶ｋ縲・
-2. `POST /api/strategies/:strategyId/versions` 縺梧・蜉溘☆繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-3. `market` 縺ｨ `timeframe` 縺・version 縺ｫ菫晏ｭ倥＆繧後※縺・ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+1. 同画面または version 作成導線で strategy version を作成する。
+2. `POST /api/strategies/:strategyId/versions` が成功することを確認する。
+3. `market` と `timeframe` が version に保存されていることを確認する。
 
-## 3. 閾ｪ辟ｶ險隱・-> Pine 逕滓・
+## 3. 自然言語 -> Pine 生成
 
-1. `StrategyVersionDetail` 縺ｧ `Pine 繧堤函謌秦 繧貞ｮ溯｡後☆繧九・
-2. `POST /api/strategy-versions/:versionId/pine/generate` 謌仙粥繧堤｢ｺ隱阪☆繧九・
-3. `GET /api/strategy-versions/:versionId/pine` 縺ｧ `status=available` 縺ｨ `generated_script` 繧堤｢ｺ隱阪☆繧九・
-4. Pine 陦ｨ遉ｺ莉倩ｿ代・ `繧ｳ繝斐・` 繝懊ち繝ｳ縺ｧ縲ゝradingView 雋ｼ繧贋ｻ倥￠逕ｨ縺ｫ蜈ｨ譁・さ繝斐・縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+1. `StrategyVersionDetail` で `Pine を生成` を実行する。
+2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
+3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
+4. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
 
-## 4. TradingView 荳谺｡讀懆ｨｼ
+## 4. TradingView 一次検証
 
-1. 逕滓・縺励◆ Pine 繧・TradingView 縺ｸ雋ｼ繧贋ｻ倥￠縺ｦ荳谺｡讀懆ｨｼ縺吶ｋ縲・
-2. compile error 繧・隼蝟・せ縺後≠繧句ｴ蜷医・繝｡繝｢繧呈ｮ九☆縲・
+1. 生成した Pine を TradingView へ貼り付けて一次検証する。
+2. compile error や改善点がある場合はメモを残す。
 
-## 5. Pine 菫ｮ豁｣蜀咲函謌撰ｼ・egenerate・・
+## 5. Pine 修正再生成（regenerate）
 
-1. `StrategyVersionDetail` 縺ｮ菫ｮ豁｣蜈･蜉帶ｬ・↓莉･荳九ｒ蜈･蜉帙＠縺ｦ蜀咲函謌舌☆繧九・
-   - `revision_request`・亥ｿ・茨ｼ・
-   - `compile_error_text`・井ｻｻ諢擾ｼ・
-   - `validation_note`・井ｻｻ諢擾ｼ・
-2. `POST /api/strategy-versions/:versionId/pine/regenerate` 縺梧・蜉溘☆繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-3. 螟ｱ謨玲凾縺ｯ `failure_reason` / `invalid_reason_codes` / `repair_attempts` 繧堤｢ｺ隱阪☆繧九・
-4. 蜀咲函謌仙ｾ後ｂ `generated pine` 縺ｮ `繧ｳ繝斐・` 繝懊ち繝ｳ縺梧怏蜉ｹ縺ｧ縺ゅｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+1. `StrategyVersionDetail` の修正入力欄に以下を入力して再生成する。
+   - `revision_request`（必須）
+   - `compile_error_text`（任意）
+   - `validation_note`（任意）
+2. `POST /api/strategy-versions/:versionId/pine/regenerate` が成功することを確認する。
+3. 失敗時は `failure_reason` / `invalid_reason_codes` / `repair_attempts` を確認する。
+4. 再生成後も `generated pine` の `コピー` ボタンが有効であることを確認する。
 
-## 6. Pine lineage / revision input 遒ｺ隱・
+## 6. Pine lineage / revision input 確認
 
-1. `GET /api/strategy-versions/:versionId/pine` 縺ｧ莉･荳九ｒ遒ｺ隱阪☆繧九・
+1. `GET /api/strategy-versions/:versionId/pine` で以下を確認する。
    - `parent_pine_script_id`
    - `source_pine_script_id`
    - `latest_revision_input`
-2. 隕ｪ蟄宣未菫ゅ→菫ｮ豁｣逅・罰縺瑚ｿｽ霍｡縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+2. 親子関係と修正理由が追跡できることを確認する。
 
-## 7. Backtest 菴懈・縺ｨ CSV 蜿冶ｾｼ
+## 7. Backtest 作成と CSV 取込
 
-1. Backtest 繧剃ｽ懈・縺吶ｋ縲・
+1. Backtest を作成する。
    - `POST /api/backtests`
-2. CSV 繧貞叙霎ｼ繧縲・
+2. CSV を取込む。
    - `POST /api/backtests/:backtestId/imports`
-3. 蜿励￠蜈･繧悟ｽ｢蠑上ｒ遒ｺ隱阪☆繧九・
-   - Performance Summary・郁恭隱槭・繝・ム繝ｼ・・
-   - List of Trades・域律譛ｬ隱槭・繝・ム繝ｼ・・
-   - List of Trades・郁恭隱槭・繝・ム繝ｼ・・
-4. 螟ｱ謨玲凾縺ｯ `parse_error` 縺ｫ荳崎ｶｳ蛻励′陦ｨ遉ｺ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-5. 螟ｱ謨玲凾縺ｮ陬懷勧譁・ｨ縺ｧ縲∵ｬ｡縺ｫ菫ｮ豁｣縺吶∋縺榊・螳ｹ・域Φ螳壼ｽ｢蠑・/ 蠢・亥・ / 遨ｺCSV 縺ｪ縺ｩ・峨′蛻・°繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-6. HTTP 繧ｨ繝ｩ繝ｼ譎ゅ・縲∽ｻ･荳九・繝ｦ繝ｼ繧ｶ繝ｼ蜷代￠譁・ｨ縺ｫ縺ｪ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-   - 400: 蜈･蜉帛・螳ｹ繝ｻCSV蠖｢蠑上・蠢・磯・岼荳崎ｶｳ縺ｮ遒ｺ隱阪ｒ菫・☆
-   - 413: 繧ｵ繧､繧ｺ雜・℃・医ヵ繧｡繧､繝ｫ/蜈･蜉帙′螟ｧ縺阪☆縺弱ｋ・峨ｒ譯亥・
-   - 415: 騾∽ｿ｡蠖｢蠑擾ｼ・ontent-Type・我ｸ堺ｸ閾ｴ縺ｮ蜿ｯ閭ｽ諤ｧ繧呈｡亥・
+3. 受け入れ形式を確認する。
+   - Performance Summary（英語ヘッダー）
+   - List of Trades（日本語ヘッダー）
+   - List of Trades（英語ヘッダー）
+4. 失敗時は `parse_error` に不足列が表示されることを確認する。
+5. 失敗時の補助文言で、次に修正すべき内容（想定形式 / 必須列 / 空CSV など）が分かることを確認する。
+6. HTTP エラー時は、以下のユーザー向け文言になることを確認する。
+   - 400: 入力内容・CSV形式・必須項目不足の確認を促す
+   - 413: サイズ超過（ファイル/入力が大きすぎる）を案内
+   - 415: 送信形式（Content-Type）不一致の可能性を案内
 
-## 8. Backtest Detail 陦ｨ遉ｺ
+## 8. Backtest Detail 表示
 
-1. `http://localhost:5173/backtests/:backtestId` 繧帝幕縺上・
-2. 莉･荳九ｒ遒ｺ隱阪☆繧九・
+1. `http://localhost:5173/backtests/:backtestId` を開く。
+2. 以下を確認する。
    - `used_strategy.snapshot`
    - `latest_import`
    - `imports`
-   - parse 謌仙粥譎ゅ・ `parsed_summary`
+   - parse 成功時の `parsed_summary`
 
-## 9. Backtest AI 邱剰ｩ慕函謌・
+## 9. Backtest AI 総評生成
 
-1. `BacktestDetail` 縺九ｉ AI 邱剰ｩ慕函謌舌ｒ螳溯｡後☆繧九・
-2. `POST /api/backtests/:backtestId/summary/generate` 縺梧・蜉溘＠縲～ai_jobs` 縺・`queued -> running -> succeeded|failed` 縺ｧ驕ｷ遘ｻ縺吶ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
-3. `GET /api/backtests/:backtestId` 縺ｮ `ai_review` 繧堤｢ｺ隱阪☆繧九・
+1. `BacktestDetail` から AI 総評生成を実行する。
+2. `POST /api/backtests/:backtestId/summary/generate` が成功し、`ai_jobs` が `queued -> running -> succeeded|failed` で遷移することを確認する。
+3. `GET /api/backtests/:backtestId` の `ai_review` を確認する。
    - `status=available|unavailable`
    - `title`
    - `body_markdown`
 
 ## 10. inline comparison
 
-1. 蜷御ｸ backtest 蜀・〒 parsed import 縺・莉ｶ莉･荳翫≠繧狗憾諷九↓縺吶ｋ縲・
-2. `BacktestDetail` 縺ｮ inline 豈碑ｼ・〒蟾ｮ蛻・′陦ｨ遉ｺ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+1. 同一 backtest 内で parsed import が2件以上ある状態にする。
+2. `BacktestDetail` の inline 比較で差分が表示されることを確認する。
 
 ## 11. saved pairwise comparison
 
-1. `縺薙・2莉ｶ縺ｧ豈碑ｼ・ｒ菫晏ｭ倥☆繧義 繧貞ｮ溯｡後☆繧九・
-2. `菫晏ｭ俶ｸ医∩豈碑ｼ・ｒ隕九ｋ` 縺九ｉ `GET /api/backtest-comparisons/:comparisonId` 縺瑚｡ｨ遉ｺ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
-3. `metrics_diff` / `tradeoff_summary` / `ai_summary` 繧貞・險ｪ蜿ｯ閭ｽ縺ｧ縺ゅｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+1. `この2件で比較を保存する` を実行する。
+2. `保存済み比較を見る` から `GET /api/backtest-comparisons/:comparisonId` が表示できることを確認する。
+3. `metrics_diff` / `tradeoff_summary` / `ai_summary` を再訪可能であることを確認する。
 
-## 12. seed 蝗ｺ螳唔D縺ｧ縺ｮ譛蟆冗｢ｺ隱・
+## 12. seed 固定IDでの最小確認
 
-seed 蠕後・莉･荳九〒譛蟆丞虚菴懃｢ｺ隱阪′蜿ｯ閭ｽ縺ｧ縺吶・
+seed 後は以下で最小動作確認が可能です。
 
-1. version荳隕ｧ  
+1. version一覧  
 `http://localhost:5173/strategies/00000000-0000-4000-8000-000000000201/versions`
-2. version隧ｳ邏ｰ  
+2. version詳細  
 `http://localhost:5173/strategy-versions/00000000-0000-4000-8000-000000000202`
-3. backtest隧ｳ邏ｰ  
+3. backtest詳細  
 `http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401`
 
-## 13. 驕狗畑繝｡繝｢
+## 13. 運用メモ
 
-1. TradingView 縺ｯ陦ｨ遉ｺ繝ｻ逶｣隕悶・荳谺｡讀懆ｨｼ繧呈球縺・・
-2. 蛹玲･ｵ譏溘・菫晏ｭ倥・豈碑ｼ・・螻･豁ｴ邂｡逅・・AI隕∫ｴ・ｒ諡・≧縲・
-3. 荳蟾｡蟆守ｷ壹〒遐ｴ邯ｻ縺後≠繧後・縲√∪縺・docs 螂醍ｴ・→縺ｮ蟾ｮ蛻・ｒ遒ｺ隱阪＠縺ｦ縺九ｉ螳溯｣・ｒ菫ｮ豁｣縺吶ｋ縲・
+1. TradingView は表示・監視・一次検証を担う。
+2. 北極星は保存・比較・履歴管理・AI要約を担う。
+3. 一巡導線で破綻があれば、まず docs 契約との差分を確認してから実装を修正する。
 
-## 14. Home / SymbolDetail / Comparison 遒ｺ隱搾ｼ域怙蟆擾ｼ・
+## 14. Home / SymbolDetail / Comparison 確認（最小）
 
-1. Home 陦ｨ遉ｺ繝悶Ο繝・け遒ｺ隱・ 
-`http://localhost:5173/` 繧帝幕縺阪∽ｻ･荳九ｒ遒ｺ隱阪☆繧九・
-   - 繝槭・繧ｱ繝・ヨ讎よｳ・
-   - 逶｣隕夜釜譟・
-   - 菫晄怏驫俶氛
-   - AI繝・う繝ｪ繝ｼ繧ｵ繝槭Μ繝ｼ
-   - 譛譁ｰ繧｢繝ｩ繝ｼ繝・
-   - 豕ｨ逶ｮ繧､繝吶Φ繝・
+1. Home 表示ブロック確認  
+`http://localhost:5173/` を開き、以下を確認する。
+   - マーケット概況
+   - 監視銘柄
+   - 保有銘柄
+   - AIデイリーサマリー
+   - 最新アラート
+   - 注目イベント
 
-2. watchlist_symbols 縺九ｉ SymbolDetail 縺ｸ驕ｷ遘ｻ  
-逶｣隕夜釜譟・・驫俶氛蜷阪Μ繝ｳ繧ｯ繧呈款縺励～/symbols/:symbolId` 縺ｸ驕ｷ遘ｻ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+2. watchlist_symbols から SymbolDetail へ遷移  
+監視銘柄の銘柄名リンクを押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
-3. positions 縺九ｉ SymbolDetail 縺ｸ驕ｷ遘ｻ  
-菫晄怏驫俶氛縺ｮ驫俶氛蜷阪Μ繝ｳ繧ｯ・・symbol_id` 縺後≠繧玖｡鯉ｼ峨ｒ謚ｼ縺励～/symbols/:symbolId` 縺ｸ驕ｷ遘ｻ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+3. positions から SymbolDetail へ遷移  
+保有銘柄の銘柄名リンク（`symbol_id` がある行）を押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
-4. daily_summary 縺ｮ latest / morning / evening 蛻・崛  
-Home 縺ｮ `譛譁ｰ / 譛・/ 螟彖 繧貞・繧頑崛縺医∬｡ｨ遉ｺ縺梧峩譁ｰ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+4. daily_summary の latest / morning / evening 切替  
+Home の `最新 / 朝 / 夜` を切り替え、表示が更新されることを確認する。
 
-5. SymbolDetail 縺ｮ AI隲也せ繧ｫ繝ｼ繝芽｡ｨ遉ｺ  
-`/symbols/:symbolId` 縺ｧ AI隲也せ繧ｫ繝ｼ繝峨′ `available` 縺ｮ蝣ｴ蜷医√ち繧､繝医Ν繝ｻ譛ｬ譁・ｼ医∪縺溘・隲也せ繝ｪ繧ｹ繝茨ｼ峨・逕滓・譌･譎ゅ′陦ｨ遉ｺ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+5. SymbolDetail の AI論点カード表示  
+`/symbols/:symbolId` で AI論点カードが `available` の場合、タイトル・本文（または論点リスト）・生成日時が表示されることを確認する。
 
-6. SymbolDetail 縺ｮ AI隲也せ繧ｫ繝ｼ繝牙・逕滓・  
-AI隲也せ繧ｫ繝ｼ繝芽｡ｨ遉ｺ荳ｭ縺ｧ繧・`AI隲也せ繧ｫ繝ｼ繝峨ｒ蜀咲函謌秦 繝懊ち繝ｳ縺瑚｡ｨ遉ｺ縺輔ｌ縲∵款荳区凾縺ｫ `逕滓・荳ｭ...` 縺ｸ螟牙喧縺吶ｋ縺薙→繧堤｢ｺ隱阪☆繧九・ 
-譛ｪ逕滓・迥ｶ諷具ｼ・unavailable`・峨〒縺ｯ譌｢蟄倥・ `AI隲也せ繧ｫ繝ｼ繝臥函謌秦 縺瑚｡ｨ遉ｺ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+6. SymbolDetail の AI論点カード再生成  
+AI論点カード表示中でも `AI論点カードを再生成` ボタンが表示され、押下時に `生成中...` へ変化することを確認する。  
+未生成状態（`unavailable`）では既存の `AI論点カード生成` が表示されることを確認する。
 
-7. SymbolDetail 縺九ｉ Comparison 縺ｸ驕ｷ遘ｻ  
-`豈碑ｼ・判髱｢縺ｫ騾ｲ繧` 繧呈款縺励，omparison 逕ｻ髱｢縺ｸ驕ｷ遘ｻ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
+7. SymbolDetail から Comparison へ遷移  
+`比較画面に進む` を押し、Comparison 画面へ遷移できることを確認する。
 
-8. Comparison 縺ｮ AI豈碑ｼ・ｷ剰ｩ慕函謌・ 
-Comparison 逕ｻ髱｢縺ｧ AI豈碑ｼ・ｷ剰ｩ輔・逕滓・謫堺ｽ懊ｒ螳溯｡後＠縲∫ｵ先棡陦ｨ遉ｺ縺梧峩譁ｰ縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+8. Comparison の AI比較総評生成  
+Comparison 画面で AI比較総評の生成操作を実行し、結果表示が更新されることを確認する。
 
-## 15. Home / SymbolDetail / Comparison 縺ｮE2E蝗ｺ螳夲ｼ域怙蟆擾ｼ・
+## 15. Home / SymbolDetail / Comparison のE2E固定（最小）
 
-莉･荳九・蟆守ｷ壹・ backend 縺ｮ譛蟆拾2E縺ｧ蝗槫ｸｰ蝗ｺ螳壹＠縺ｦ縺・∪縺吶・
+以下の導線は backend の最小E2Eで回帰固定しています。
 
-- seed逶ｸ蠖薙ョ繝ｼ繧ｿ縺ｧ `GET /api/home` 繧帝幕縺阪∽ｸｻ隕√ヶ繝ｭ繝・け萓帷ｵｦ繝・・繧ｿ・・arket_overview / watchlist_symbols / positions / daily_summary / recent_alerts / key_events・峨ｒ遒ｺ隱・
-- Home 縺ｮ watchlist_symbols / positions 縺ｧ蜿門ｾ励＠縺・`symbol_id` 繧剃ｽｿ縺｣縺ｦ `GET /api/symbols/:symbolId` 繧堤｢ｺ隱・
-- `POST /api/symbols/:symbolId/ai-summary/generate` 縺ｧ AI隲也せ繧ｫ繝ｼ繝牙・逕滓・蟆守ｷ壹・API縺檎ｴ邯ｻ縺励※縺・↑縺・％縺ｨ繧堤｢ｺ隱・
-- `POST /api/comparisons`・・symbol_ids: ['7203', '6758']`・・> `POST /api/comparisons/:comparisonId/generate` -> `GET /api/comparisons/:comparisonId` 縺ｧ豈碑ｼ・ｰ守ｷ壹ｒ遒ｺ隱・
+- seed相当データで `GET /api/home` を開き、主要ブロック供給データ（market_overview / watchlist_symbols / positions / daily_summary / recent_alerts / key_events）を確認
+- Home の watchlist_symbols / positions で取得した `symbol_id` を使って `GET /api/symbols/:symbolId` を確認
+- `POST /api/symbols/:symbolId/ai-summary/generate` で AI論点カード再生成導線のAPIが破綻していないことを確認
+- `POST /api/comparisons`（`symbol_ids: ['7203', '6758']`）-> `POST /api/comparisons/:comparisonId/generate` -> `GET /api/comparisons/:comparisonId` で比較導線を確認
 
-螳溯｡後さ繝槭Φ繝・
+実行コマンド:
 
 ```bash
 pnpm --filter backend test:e2e:home-symbol-comparison
 ```
 
-## 16. PowerShell 縺九ｉ譌･譛ｬ隱・JSON 繧帝√ｋ髫帙・ UTF-8 謖・ｮ壽焔鬆・
+## 16. PowerShell から日本語 JSON を送る際の UTF-8 指定手順
 
-### 閭梧勹
+### 背景
 
-PowerShell・・indows 繝・ヵ繧ｩ繝ｫ繝茨ｼ峨・ `Invoke-RestMethod` / `Invoke-WebRequest` 縺ｫ縺翫＞縺ｦ縲・
-繝壹う繝ｭ繝ｼ繝峨ｒ System.DefaultEncoding・磯壼ｸｸ CP932 / Shift_JIS・峨〒繧ｨ繝ｳ繧ｳ繝ｼ繝峨☆繧句ｴ蜷医′縺ゅｋ縲・
-譌･譛ｬ隱・`natural_language_rule` 繧貞性繧 JSON 繧偵◎縺ｮ縺ｾ縺ｾ騾√ｋ縺ｨ譁・ｭ怜喧縺代＠縲￣ine 逕滓・縺ｫ螟ｱ謨励☆繧九こ繝ｼ繧ｹ縺後≠繧九・
+PowerShell（Windows デフォルト）は `Invoke-RestMethod` / `Invoke-WebRequest` において、
+ペイロードを System.DefaultEncoding（通常 CP932 / Shift_JIS）でエンコードする場合がある。
+日本語 `natural_language_rule` を含む JSON をそのまま送ると文字化けし、Pine 生成に失敗するケースがある。
 
-### 蟇ｾ遲・ UTF-8 繝舌う繝亥・縺ｫ螟画鋤縺励※騾∽ｿ｡縺吶ｋ
+### 対策: UTF-8 バイト列に変換して送信する
 
 ```powershell
-# 譌･譛ｬ隱槭ｒ蜷ｫ繧 JSON 繝壹う繝ｭ繝ｼ繝峨ｒ UTF-8 繝舌う繝亥・縺ｫ螟画鋤縺励※騾∽ｿ｡縺吶ｋ萓・
+# 日本語を含む JSON ペイロードを UTF-8 バイト列に変換して送信する例
 
 $payload = @{
-  natural_language_rule = "邨ょ､縺・5譌･遘ｻ蜍募ｹｳ蝮・ｒ荳頑栢縺代◆繧芽ｲｷ縺・∽ｸ区栢縺代◆繧牙｣ｲ繧・
+  natural_language_rule = "終値が25日移動平均を上抜けたら買い、下抜けたら売る"
   market = "JP_STOCK"
   timeframe = "D"
 } | ConvertTo-Json -Depth 10
 
-# UTF-8 繝舌う繝亥・縺ｫ螟画鋤・医％縺ｮ謇矩・′譁・ｭ怜喧縺鷹亟豁｢縺ｮ譬ｸ蠢・ｼ・
+# UTF-8 バイト列に変換（この手順が文字化け防止の核心）
 $utf8Body = [System.Text.Encoding]::UTF8.GetBytes($payload)
 
 Invoke-RestMethod `
@@ -206,10 +206,10 @@ Invoke-RestMethod `
   -Body $utf8Body
 ```
 
-### Pine 逕滓・・・trategy-versions・峨・萓・
+### Pine 生成（strategy-versions）の例
 
 ```powershell
-# Pine 逕滓・繧定ｵｷ蜍輔☆繧倶ｾ・
+# Pine 生成を起動する例
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:3000/api/strategy-versions/<versionId>/pine/generate" `
@@ -217,10 +217,10 @@ Invoke-RestMethod `
   -Body ([System.Text.Encoding]::UTF8.GetBytes('{}'))
 ```
 
-### alert summary 逕滓・縺ｮ萓・
+### alert summary 生成の例
 
 ```powershell
-# alert summary 逕滓・繧定ｵｷ蜍輔☆繧倶ｾ・
+# alert summary 生成を起動する例
 Invoke-RestMethod `
   -Method Post `
   -Uri "http://localhost:3000/api/alerts/<alertId>/summary/generate" `
@@ -228,17 +228,17 @@ Invoke-RestMethod `
   -Body ([System.Text.Encoding]::UTF8.GetBytes('{}'))
 ```
 
-### generate_alert_summary 縺・failed 縺ｮ蝣ｴ蜷医・遒ｺ隱肴焔鬆・
+### generate_alert_summary が failed の場合の確認手順
 
 ```powershell
-# failed 譎ゅ・蜴溷屏霑ｽ霍｡: latest_job 繝輔ぅ繝ｼ繝ｫ繝峨ｒ遒ｺ隱阪☆繧・
+# failed 時の原因追跡: latest_job フィールドを確認する
 $result = Invoke-RestMethod `
   -Method Get `
   -Uri "http://localhost:3000/api/alerts/<alertId>/summary"
 
-# latest_job 縺・null 縺ｧ縺ｪ縺代ｌ縺ｰ縲）ob 縺ｮ迥ｶ諷九ｒ遒ｺ隱阪〒縺阪ｋ
+# latest_job が null でなければ、job の状態を確認できる
 $result.data.latest_job | Format-List
-# 蜃ｺ蜉帑ｾ・
+# 出力例:
 # job_id       : xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 # job_type     : generate_alert_summary
 # status       : failed
@@ -249,108 +249,105 @@ $result.data.latest_job | Format-List
 # completed_at : 2026-04-27T00:00:10.000Z
 ```
 
-### 豕ｨ諢丈ｺ矩・
+### 注意事項
 
-1. `Invoke-RestMethod` 縺ｮ `-Body` 縺ｫ譁・ｭ怜・繧呈ｸ｡縺吶→縲￣owerShell 縺瑚・蜍慕噪縺ｫ繧ｨ繝ｳ繧ｳ繝ｼ繝峨☆繧九・
-   譌･譛ｬ隱槭ｒ蜷ｫ繧蝣ｴ蜷医・蠢・★ `-Body $utf8Body`・医ヰ繧､繝亥・・牙ｽ｢蠑上ｒ菴ｿ逕ｨ縺吶ｋ縺薙→縲・
-2. `-ContentType "application/json; charset=utf-8"` 縺ｮ `charset=utf-8` 繧堤怐逡･縺励※繧ょ虚縺上′縲・
-   譏守､ｺ縺吶ｋ縺薙→縺ｧ諢丞峙繧呈・遒ｺ縺ｫ縺吶ｋ縲・
-3. backend 蛛ｴ縺ｯ `REPLACEMENT CHARACTER (U+FFFD)` 繧・Windows-1252 蛻ｶ蠕｡譁・ｭ励ｒ蜷ｫ繧
-   `natural_language_rule` 繧貞女縺大叙縺｣縺溷ｴ蜷医～creation_warnings` 縺ｫ隴ｦ蜻翫ｒ霑斐☆縲・
-   縺薙ｌ縺悟・縺溷ｴ蜷医・荳願ｨ倥・ UTF-8 譏守､ｺ謇矩・ｒ遒ｺ隱阪☆繧九％縺ｨ縲・
-## 17. watchlist / positions 螳溘ョ繝ｼ繧ｿ邂｡逅・焔鬆・ｼ・026-04 霑ｽ蜉・・
+1. `Invoke-RestMethod` の `-Body` に文字列を渡すと、PowerShell が自動的にエンコードする。
+   日本語を含む場合は必ず `-Body $utf8Body`（バイト列）形式を使用すること。
+2. `-ContentType "application/json; charset=utf-8"` の `charset=utf-8` を省略しても動くが、
+   明示することで意図を明確にする。
+3. backend 側は `REPLACEMENT CHARACTER (U+FFFD)` や Windows-1252 制御文字を含む
+   `natural_language_rule` を受け取った場合、`creation_warnings` に警告を返す。
+   これが出た場合は上記の UTF-8 明示手順を確認すること。
+## 17. watchlist / positions 実データ管理手順（2026-04 追加）
 
-seed 莉･螟悶・驕狗畑繝・・繧ｿ繧・Home 襍ｷ轤ｹ縺ｧ謇ｱ縺・怙蟆乗焔鬆・・
+seed 以外の運用データを Home 起点で扱う最小手順。
 
-1. Home 縺ｧ `逶｣隕夜釜譟・ｒ邂｡逅・ 繧呈款縺・`/watchlist` 縺ｸ驕ｷ遘ｻ縺吶ｋ縲・
-2. 逶｣隕夜釜譟・ｒ霑ｽ蜉縺吶ｋ・・symbol_code` 蠢・医｝riority/memo 縺ｯ莉ｻ諢擾ｼ峨・
-3. 荳隕ｧ縺ｮ驫俶氛繝ｪ繝ｳ繧ｯ縺九ｉ SymbolDetail 縺ｸ驕ｷ遘ｻ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
-4. Home 縺ｫ謌ｻ繧翫∫屮隕夜釜譟・ヶ繝ｭ繝・け縺ｸ蜿肴丐縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
-5. Home 縺ｧ `菫晄怏驫俶氛繧堤ｮ｡逅・ 繧呈款縺・`/positions` 縺ｸ驕ｷ遘ｻ縺吶ｋ縲・
-6. 菫晄怏驫俶氛繧定ｿｽ蜉縺ｾ縺溘・譖ｴ譁ｰ縺吶ｋ・・symbol_code` `quantity` `average_cost`・峨・
-7. 荳隕ｧ縺ｮ驫俶氛繝ｪ繝ｳ繧ｯ縺九ｉ SymbolDetail 縺ｸ驕ｷ遘ｻ縺ｧ縺阪ｋ縺薙→繧堤｢ｺ隱阪☆繧九・
-8. Home 縺ｫ謌ｻ繧翫∽ｿ晄怏驫俶氛繝悶Ο繝・け縺ｸ蜿肴丐縺輔ｌ繧九％縺ｨ繧堤｢ｺ隱阪☆繧九・
+1. Home で `監視銘柄を管理` を押し `/watchlist` へ遷移する。
+2. 監視銘柄を追加する（`symbol_code` 必須、priority/memo は任意）。
+3. 一覧の銘柄リンクから SymbolDetail へ遷移できることを確認する。
+4. Home に戻り、監視銘柄ブロックへ反映されることを確認する。
+5. Home で `保有銘柄を管理` を押し `/positions` へ遷移する。
+6. 保有銘柄を追加または更新する（`symbol_code` `quantity` `average_cost`）。
+7. 一覧の銘柄リンクから SymbolDetail へ遷移できることを確認する。
+8. Home に戻り、保有銘柄ブロックへ反映されることを確認する。
 
-陬懆ｶｳ:
-- watchlist/positions API 縺ｯ default watchlist/default portfolio 縺檎┌縺・ｴ蜷医↓閾ｪ蜍穂ｽ懈・縺吶ｋ縲・
-- symbol_code 縺梧悴逋ｻ骭ｲ縺ｪ繧・Symbol 繧呈怙蟆丈ｽ懈・縺励※蜃ｦ逅・☆繧九・
-- positions 縺ｯ transactions 豁｣譛ｬ縺ｮ縺溘ａ縲∵峩譁ｰ繝ｻ蜑企勁縺ｯ manual transaction 邨檎罰縺ｧ read model 繧貞・讒狗ｯ峨☆繧九・
+補足:
+- watchlist/positions API は default watchlist/default portfolio が無い場合に自動作成する。
+- symbol_code が未登録なら Symbol を最小作成して処理する。
+- positions は transactions 正本のため、更新・削除は manual transaction 経由で read model を再構築する。
 
-## 18. TradingView螳滄∽ｿ｡ webhook驕狗畑謇矩・ｼ亥崋螳夲ｼ・
+## 18. TradingView実送信 webhook運用手順（固定）
 
-TradingView螳滄∽ｿ｡繧貞燕謠舌↓縺励◆驕狗畑謇矩・・谺｡繧呈ｭ｣譛ｬ縺ｨ縺励※蛻ｩ逕ｨ縺励※縺上□縺輔＞縲・
+TradingView実送信を前提にした運用手順は次を正本として利用してください。
 
-- `docs/32.蛹玲･ｵ譏・TradingView螳滄∽ｿ｡ webhook驕狗畑謇矩・ｼ・VP・・md`
+- `docs/32.北極星 TradingView実送信 webhook運用手順（MVP）.md`
 
-譛ｬ謇矩・↓縺ｯ縲∽ｻ･荳九ｒ蜷ｫ縺ｿ縺ｾ縺吶・
-- Alert message JSON 繝・Φ繝励Ξ繝ｼ繝・
-- webhook URL / token / shared_secret 縺ｮ螳牙・縺ｪ驕狗畑謇矩・
-- 繝ｭ繝ｼ繧ｫ繝ｫ逍台ｼｼ騾∽ｿ｡縺ｨ螳滄∽ｿ｡縺ｮ驕輔＞
-- webhook_receipts / alert_events / ai_jobs / Home / SymbolDetail 縺ｮ遒ｺ隱肴焔鬆・
-- auth/parse/unresolved/duplicate/summary failed 縺ｮ蛻・ｊ蛻・￠
+本手順には、以下を含みます。
+- Alert message JSON テンプレート
+- webhook URL / token / shared_secret の安全な運用手順
+- ローカル疑似送信と実送信の違い
+- webhook_receipts / alert_events / ai_jobs / Home / SymbolDetail の確認手順
+- auth/parse/unresolved/duplicate/summary failed の切り分け
 
-## 19. references萓帷ｵｦ迥ｶ豕∫｢ｺ隱搾ｼ・026-05・・
+## 19. references供給状況確認（2026-05）
 
-references 縺ｮ萓帷ｵｦ迥ｶ豕∫｢ｺ隱阪・谺｡繧呈ｭ｣譛ｬ縺ｨ縺励※蛻ｩ逕ｨ縺励※縺上□縺輔＞縲・
+references の供給状況確認は次を正本として利用してください。
 
-- `docs/33.蛹玲･ｵ譏・references萓帷ｵｦ迥ｶ豕∵紛逅・→驕狗畑隱ｲ鬘鯉ｼ・VP・・md`
+- `docs/33.北極星 references供給状況整理と運用課題（MVP）.md`
 
-譛蟆冗｢ｺ隱肴焔鬆・
+最小確認手順:
 
-1. SymbolDetail 繧帝幕縺阪～髢｢騾｣蜿ら・諠・ｱ` 縺ｮ蜀・ｨｳ `news / disclosure / earnings` 繧堤｢ｺ隱阪☆繧・
-2. ComparisonDetail 繧帝幕縺阪∵ｯ碑ｼ・・菴薙・蜿ら・蜀・ｨｳ縺ｨ蜷・symbol card 縺ｮ蜿ら・蜀・ｨｳ繧堤｢ｺ隱阪☆繧・
-3. references 0莉ｶ縺ｧ繧・AI隲也せ繧ｫ繝ｼ繝・/ AI豈碑ｼ・ｷ剰ｩ輔′逕滓・縺輔ｌ繧句ｴ蜷医′縺ゅｋ縺溘ａ縲∵悽譁・□縺代〒蜊∝・諤ｧ繧貞愛譁ｭ縺励↑縺・
-4. `insufficient_context` 陦ｨ遉ｺ縺縺代〒縺ｪ縺上～reference_count` 縺ｨ references 螳滓焚繧剃ｽｵ縺帙※遒ｺ隱阪☆繧・
-5. alert summary 螟ｱ謨玲凾縺ｯ `collect_references_for_alert` 縺ｨ `generate_alert_summary` 繧貞・縺代※遒ｺ隱阪☆繧・
+1. SymbolDetail を開き、`関連参照情報` の内訳 `news / disclosure / earnings` を確認する
+2. ComparisonDetail を開き、比較全体の参照内訳と各 symbol card の参照内訳を確認する
+3. references 0件でも AI論点カード / AI比較総評が生成される場合があるため、本文だけで十分性を判断しない
+4. `insufficient_context` 表示だけでなく、`reference_count` と references 実数を併せて確認する
+5. alert summary 失敗時は `collect_references_for_alert` と `generate_alert_summary` を分けて確認する
 
-陬懆ｶｳ:
+補足:
 
-- 2026-05-01 隕ｳ貂ｬ譎らせ縺ｧ縺ｯ `7203: news 6莉ｶ / disclosure 0莉ｶ / earnings 0莉ｶ`縲～6758: 0莉ｶ` 縺縺｣縺・
-- `disclosure` 縺ｨ `earnings` 縺ｯ collector 譛ｪ螳溯｣・〒縺ｯ縺ｪ縺上∝ｮ溯｣・・蟄伜惠縺吶ｋ
-- `reference_count = 0` 縺ｧ繧・`structured_json.insufficient_context = false` 縺ｮ AI summary 縺梧ｮ九ｋ縺薙→縺後≠繧九◆繧√∫樟譎らせ縺ｧ縺ｯ驕狗畑豕ｨ諢上→縺励※謇ｱ縺・
+- 2026-05-01 観測時点では `7203: news 6件 / disclosure 0件 / earnings 0件`、`6758: 0件` だった
+- `disclosure` と `earnings` は collector 未実装ではなく、実装は存在する
+- `reference_count = 0` でも `structured_json.insufficient_context = false` の AI summary が残ることがあるため、現時点では運用注意として扱う
 
-## 20. TDnet disclosure / earnings 0莉ｶ譎ゅ・蛻・ｊ蛻・￠・・026-05・・
+## 20. TDnet disclosure / earnings 0件時の切り分け（2026-05）
 
-1. 縺ｾ縺・`collect_references_for_alert` 縺ｮ `ai_jobs.response_payload.diagnostics` 繧堤｢ｺ隱阪☆繧九・
-2. `disclosure.reason` / `earnings.reason` 繧定ｦ九※縲・莉ｶ逅・罰繧貞・繧雁・縺代ｋ縲・
-3. 逅・罰縺斐→縺ｮ隕区婿:
-   - `tdnet_fetch_failed`: 蜿門ｾ怜､ｱ謨励・03 / timeout / 荳譎る囿螳ｳ繧堤桝縺・・
-   - `tdnet_no_file_for_date`: 蟇ｾ雎｡譌･荳隕ｧ縺悟ｭ伜惠縺励↑縺・ょ悄譌･逾昴ｄ蟇ｾ雎｡譌･譛ｪ謗ｲ霈峨・蜿ｯ閭ｽ諤ｧ縺碁ｫ倥＞縲・
-   - `tdnet_parse_zero_rows`: HTML 縺ｯ蜿悶ｌ縺ｦ縺・ｋ縺・row 0 莉ｶ縲５Dnet HTML 讒矩螟画峩繧堤桝縺・・
-   - `tdnet_rows_exist_but_no_symbol_match`: 荳隕ｧ row 縺ｯ縺ゅｋ縺・symbol 辣ｧ蜷医〒關ｽ縺｡縺ｦ縺・ｋ縲・
-   - `tdnet_symbol_match_but_no_earnings_title`: symbol 荳閾ｴ row 縺ｯ縺ゅｋ縺・earnings keyword 縺ｫ蜈･縺｣縺ｦ縺・↑縺・・
-   - `tdnet_no_matching_disclosure_in_lookback`: lookback 譛滄俣蜀・↓隧ｲ蠖・disclosure 縺後↑縺九▲縺溘・
-   - `tdnet_no_matching_earnings_in_lookback`: lookback 譛滄俣蜀・↓隧ｲ蠖・earnings 縺後↑縺九▲縺溘・
-4. 螳溘ョ繝ｼ繧ｿ 1 蝗樒｢ｺ隱阪・譛蟆乗焔鬆・
-   - `I_list_001_YYYYMMDD.html` 繧・1 蝗槭□縺大叙蠕励☆繧・
-   - `parseTdnetRows` 逶ｸ蠖薙〒 row count 繧堤｢ｺ隱阪☆繧・
-   - `7203` / `6758` 縺ｪ縺ｩ蟇ｾ雎｡ code 縺ｮ陦後′縺ゅｋ縺狗｢ｺ隱阪☆繧・
-5. 2026-05-02 縺ｮ隕ｳ貂ｬ繝｡繝｢:
-   - `I_list_001_20260501.html` 縺ｯ `HTTP 200`
-   - parsed row count 縺ｯ `100`
-   - `7203` / `6758` 隧ｲ蠖・row 縺ｯ `0`
-   - 蟆代↑縺上→繧ゅ％縺ｮ 1 譌･縺ｫ縺､縺・※縺ｯ parser 蟠ｩ繧後〒縺ｯ縺ｪ縺上後◎縺ｮ譌･縺ｮ荳隕ｧ縺ｫ蟇ｾ雎｡驫俶氛縺後＞縺ｪ縺・榊ｯ・ｊ縺ｨ蛻､譁ｭ縺吶ｋ
+1. まず `collect_references_for_alert` の `ai_jobs.response_payload.diagnostics` を確認する。
+2. `disclosure.reason` / `earnings.reason` を見て、0件理由を切り分ける。
+3. 理由ごとの見方:
+   - `tdnet_fetch_failed`: 取得失敗。403 / timeout / 一時障害を疑う。
+   - `tdnet_no_file_for_date`: 対象日一覧が存在しない。土日祝や対象日未掲載の可能性が高い。
+   - `tdnet_parse_zero_rows`: HTML は取れているが row 0 件。TDnet HTML 構造変更を疑う。
+   - `tdnet_rows_exist_but_no_symbol_match`: 一覧 row はあるが symbol 照合で落ちている。
+   - `tdnet_symbol_match_but_no_earnings_title`: symbol 一致 row はあるが earnings keyword に入っていない。
+   - `tdnet_no_matching_disclosure_in_lookback`: lookback 期間内に該当 disclosure がなかった。
+   - `tdnet_no_matching_earnings_in_lookback`: lookback 期間内に該当 earnings がなかった。
+4. 実データ 1 回確認の最小手順:
+   - `I_list_001_YYYYMMDD.html` を 1 回だけ取得する
+   - `parseTdnetRows` 相当で row count を確認する
+   - `7203` / `6758` など対象 code の行があるか確認する
+5. 2026-05-02 の観測メモ:
+   - `I_list_001_20260501.html` は `HTTP 200`
+   - parsed row count は `100`
+   - `7203` / `6758` 該当 row は `0`
+   - 少なくともこの 1 日については parser 崩れではなく「その日の一覧に対象銘柄がいない」寄りと判断する
 
-## 21. TradingView CSV import 驕狗畑謇矩・ｼ・026-05-05 霑ｽ險假ｼ・
+## 21. TradingView CSV import 運用手順（2026-05-05 追記）
 
-TradingView 螳・CSV 縺ｮ蜃ｺ縺玲婿縺ｨ縲∝圏讌ｵ譏溘〒縺ｮ蜿悶ｊ霎ｼ縺ｿ遒ｺ隱肴焔鬆・・谺｡縺ｮ runbook 繧呈ｭ｣譛ｬ縺ｨ縺吶ｋ縲・
+TradingView 実 CSV の出し方と、北極星での取り込み確認手順は次の runbook を正本とする。
 
-- `docs/34.蛹玲･ｵ譏・TradingView CSV import 驕狗畑謇矩・ｼ・VP・・md`
+- `docs/34.北極星 TradingView CSV import 運用手順（MVP）.md`
 
-譛菴朱剞縺ｮ遒ｺ隱埼・
-1. TradingView 蛛ｴ縺ｧ Strategy Report / Strategy Tester 繧帝幕縺上・
-2. `Performance Summary` 縺ｾ縺溘・ `List of Trades` 繧・CSV export 縺吶ｋ縲・
-3. 蛹玲･ｵ譏溘・ Rule Lab / Backtest 逕ｻ髱｢縺九ｉ CSV import 繧貞ｮ溯｡後☆繧九・
-4. Backtest Detail 縺ｧ `latest import` `imports` `parsed莉ｶ謨ｰ` `failed莉ｶ謨ｰ` 繧堤｢ｺ隱阪☆繧九・
-5. 譛譁ｰ import 縺・failed 縺ｧ繧ゅ・℃蜴ｻ parsed import 縺梧ｮ九▲縺ｦ縺・ｌ縺ｰ豈碑ｼ・・AI邱剰ｩ輔・邯咏ｶ夂｢ｺ隱阪☆繧九・
+最低限の確認順:
+1. TradingView 側で Strategy Report / Strategy Tester を開く。
+2. `Performance Summary` または `List of Trades` を CSV export する。
+3. 北極星の Rule Lab / Backtest 画面から CSV import を実行する。
+4. Backtest Detail で `latest import` `imports` `parsed件数` `failed件数` を確認する。
+5. 最新 import が failed でも、過去 parsed import が残っていれば比較・AI総評は継続確認する。
 
-豕ｨ險・
-- TradingView 縺ｮ逕ｻ髱｢蜷阪・迺ｰ蠅・↓繧医ｊ `Strategy Report` 縺ｨ `Strategy Tester` 縺ｮ謠ｺ繧後′縺ゅｋ縲・
-- 蛹玲･ｵ譏溘′迴ｾ陦後〒蜿励￠莉倥￠繧九・縺ｯ `Performance Summary 闍ｱ隱杼 `List of Trades 闍ｱ隱杼 `List of Trades 譌･譛ｬ隱杼縲・
-- `Performance Summary 譌･譛ｬ隱杼 縺ｯ迴ｾ陦・parser 縺ｮ蜿励￠莉倥￠蟇ｾ雎｡螟悶・
+注記:
+- TradingView の画面名は環境により `Strategy Report` と `Strategy Tester` の揺れがある。
+- 北極星が現行で受け付けるのは `Performance Summary 英語` `List of Trades 英語` `List of Trades 日本語`。
+- `Performance Summary 日本語` は現行 parser の受け付け対象外。
 
-- MVP蜿怜・遒ｺ隱阪・螳滓命邨先棡縺ｯ docs/37.蛹玲･ｵ譏・MVP蜿怜・遒ｺ隱咲ｵ先棡・・VP・・md 繧貞盾辣ｧ縲・
-
-
-- MVP受入確認の実施結果は docs/37.北極星 MVP受入確認結果（MVP）.md を参照。
-
+## 22. MVP受入確認チェックリスト（2026-05-07 追記）
+MVP完了判定の通し確認には docs/36.北極星 MVP受入確認チェックリスト（MVP）.md を使う。主要導線、runbook参照先、MVP後課題を1つに集約している。
