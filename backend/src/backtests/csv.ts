@@ -12,15 +12,15 @@ export type ParseCsvResult =
   | { ok: true; summary: ParsedBacktestSummary }
   | { ok: false; error: string };
 
-const SUPPORTED_HEADERS = [
-  'Net Profit',
-  'Total Closed Trades',
-  'Percent Profitable',
-  'Profit Factor',
-  'Max Drawdown',
-  'From',
-  'To',
-];
+const SUMMARY_HEADER_ALIASES = {
+  netProfit: ['Net Profit', '純利益', '純損益'],
+  totalTrades: ['Total Closed Trades', '総クローズトレード数'],
+  winRate: ['Percent Profitable', '勝率'],
+  profitFactor: ['Profit Factor', 'プロフィットファクター'],
+  maxDrawdown: ['Max Drawdown', '最大ドローダウン'],
+  periodFrom: ['From', '開始'],
+  periodTo: ['To', '終了'],
+} as const;
 
 const TRADE_HEADER_ALIASES = {
   tradeNo: ['トレード番号', 'Trade #', 'Trade'],
@@ -32,10 +32,21 @@ const TRADE_HEADER_ALIASES = {
 
 function parseNumber(raw: string | undefined): number | null {
   if (!raw) return null;
-  const cleaned = raw.replace(/[,%\s]/g, '');
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+
+  const wrappedNegative = /^\(.*\)$/.test(trimmed);
+  const cleaned = trimmed
+    .replace(/^\((.*)\)$/, '$1')
+    .replace(/[¥￥]/g, '')
+    .replace(/JPY/gi, '')
+    .replace(/\u2212/g, '-')
+    .replace(/[,%\s,]/g, '')
+    .replace(/^\+/, '');
   if (cleaned.length === 0) return null;
   const value = Number(cleaned);
-  return Number.isFinite(value) ? value : null;
+  if (!Number.isFinite(value)) return null;
+  return wrappedNegative && value > 0 ? -value : value;
 }
 
 function normalizeLineEndings(text: string): string {
@@ -81,6 +92,18 @@ function resolveHeaderIndex(headers: string[], candidates: readonly string[]): n
     }
   }
   return -1;
+}
+
+function resolveSummaryHeaderIndexes(headers: string[]) {
+  return {
+    netProfit: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.netProfit),
+    totalTrades: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.totalTrades),
+    winRate: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.winRate),
+    profitFactor: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.profitFactor),
+    maxDrawdown: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.maxDrawdown),
+    periodFrom: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.periodFrom),
+    periodTo: resolveHeaderIndex(headers, SUMMARY_HEADER_ALIASES.periodTo),
+  };
 }
 
 function toIsoDate(raw: string | undefined): string | null {
@@ -205,21 +228,23 @@ export function parseTradingViewSummaryCsv(rawCsv: string): ParseCsvResult {
   const headers = splitCsvLine(lines[0]).map((header) => header.replace(/^\uFEFF/, ''));
   const values = splitCsvLine(lines[1]);
 
-  const missingHeaders = SUPPORTED_HEADERS.filter((header) => !headers.includes(header));
+  const summaryIndexes = resolveSummaryHeaderIndexes(headers);
+  const missingHeaders = (Object.entries(summaryIndexes) as Array<[keyof typeof summaryIndexes, number]>)
+    .filter(([, index]) => index < 0)
+    .map(([key]) => SUMMARY_HEADER_ALIASES[key][0]);
+
   if (missingHeaders.length > 0) {
     return parseFromTradesCsv(headers, lines, missingHeaders);
   }
 
-  const indexOf = (header: string) => headers.indexOf(header);
-
   const summary: ParsedBacktestSummary = {
-    netProfit: parseNumber(values[indexOf('Net Profit')]),
-    totalTrades: parseNumber(values[indexOf('Total Closed Trades')]),
-    winRate: parseNumber(values[indexOf('Percent Profitable')]),
-    profitFactor: parseNumber(values[indexOf('Profit Factor')]),
-    maxDrawdown: parseNumber(values[indexOf('Max Drawdown')]),
-    periodFrom: values[indexOf('From')] ?? null,
-    periodTo: values[indexOf('To')] ?? null,
+    netProfit: parseNumber(values[summaryIndexes.netProfit]),
+    totalTrades: parseNumber(values[summaryIndexes.totalTrades]),
+    winRate: parseNumber(values[summaryIndexes.winRate]),
+    profitFactor: parseNumber(values[summaryIndexes.profitFactor]),
+    maxDrawdown: parseNumber(values[summaryIndexes.maxDrawdown]),
+    periodFrom: values[summaryIndexes.periodFrom] ?? null,
+    periodTo: values[summaryIndexes.periodTo] ?? null,
   };
 
   return { ok: true, summary };
