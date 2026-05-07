@@ -1,4 +1,4 @@
-# 北極星 walkthrough（Rule Lab / Backtest 一巡）
+﻿# 北極星 walkthrough（Rule Lab / Backtest 一巡）
 
 更新日: 2026-04-26
 
@@ -351,3 +351,11 @@ TradingView 実 CSV の出し方と、北極星での取り込み確認手順は
 
 ## 22. MVP受入確認チェックリスト（2026-05-07 追記）
 MVP完了判定の通し確認には docs/36.北極星 MVP受入確認チェックリスト（MVP）.md を使う。主要導線、runbook参照先、MVP後課題を1つに集約している。
+
+## 23. Rule Lab 日本語入力の扱い（2026-05-08 追加）
+
+- Rule Lab の通常利用経路はブラウザ UI であり、日本語自然文入力は UI 経由で確認する。
+- PowerShell / shell 経路で日本語 JSON を送る場合は、UTF-8 byte array + application/json; charset=utf-8 が必要。
+- shell 経路の encoding 制約と、UI 経路の通常利用可否は分けて扱う。
+- UI 経路の再確認メモは docs/41.北極星 Rule Lab日本語入力 UI経路再確認メモ（MVP後P1）.md を参照する。
+
