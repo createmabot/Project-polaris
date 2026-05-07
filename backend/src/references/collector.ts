@@ -1093,15 +1093,47 @@ function mergeReferenceDiagnostics(
 }
 
 function createCollector(): ReferenceCollector {
-  const enabled = parseEnabledSources(env.REFERENCE_ENABLED_SOURCES);
+  return createCollectorWithConfig({
+    enabledSources: env.REFERENCE_ENABLED_SOURCES,
+    newsRssBaseUrl: env.REFERENCE_NEWS_RSS_BASE_URL,
+    fetchTimeoutMs: env.REFERENCE_FETCH_TIMEOUT_MS,
+    newsMaxItems: env.REFERENCE_NEWS_MAX_ITEMS,
+    disclosureListUrlTemplate: env.REFERENCE_DISCLOSURE_TDNET_LIST_URL_TEMPLATE,
+    disclosureMaxItems: env.REFERENCE_DISCLOSURE_MAX_ITEMS,
+    disclosureAlertLookbackDays: env.REFERENCE_DISCLOSURE_ALERT_LOOKBACK_DAYS,
+    disclosureSymbolLookbackDays: env.REFERENCE_DISCLOSURE_SYMBOL_LOOKBACK_DAYS,
+    earningsListUrlTemplate: env.REFERENCE_EARNINGS_TDNET_LIST_URL_TEMPLATE,
+    earningsMaxItems: env.REFERENCE_EARNINGS_MAX_ITEMS,
+    earningsAlertLookbackDays: env.REFERENCE_EARNINGS_ALERT_LOOKBACK_DAYS,
+    earningsSymbolLookbackDays: env.REFERENCE_EARNINGS_SYMBOL_LOOKBACK_DAYS,
+  });
+}
+
+type CollectorConfig = {
+  enabledSources: string;
+  newsRssBaseUrl: string;
+  fetchTimeoutMs: number;
+  newsMaxItems: number;
+  disclosureListUrlTemplate: string;
+  disclosureMaxItems: number;
+  disclosureAlertLookbackDays: number;
+  disclosureSymbolLookbackDays: number;
+  earningsListUrlTemplate: string;
+  earningsMaxItems: number;
+  earningsAlertLookbackDays: number;
+  earningsSymbolLookbackDays: number;
+};
+
+function createCollectorWithConfig(config: CollectorConfig): ReferenceCollector {
+  const enabled = parseEnabledSources(config.enabledSources);
   const adapters: ReferenceCollectorAdapter[] = [];
 
   if (enabled.includes('news')) {
     adapters.push(
       new NewsCollectorAdapter(
-        env.REFERENCE_NEWS_RSS_BASE_URL,
-        env.REFERENCE_FETCH_TIMEOUT_MS,
-        env.REFERENCE_NEWS_MAX_ITEMS,
+        config.newsRssBaseUrl,
+        config.fetchTimeoutMs,
+        config.newsMaxItems,
       ),
     );
   }
@@ -1109,11 +1141,11 @@ function createCollector(): ReferenceCollector {
   if (enabled.includes('disclosure')) {
     adapters.push(
       new TdnetDisclosureCollectorAdapter(
-        env.REFERENCE_DISCLOSURE_TDNET_LIST_URL_TEMPLATE,
-        env.REFERENCE_FETCH_TIMEOUT_MS,
-        env.REFERENCE_DISCLOSURE_MAX_ITEMS,
-        env.REFERENCE_DISCLOSURE_ALERT_LOOKBACK_DAYS,
-        env.REFERENCE_DISCLOSURE_SYMBOL_LOOKBACK_DAYS,
+        config.disclosureListUrlTemplate,
+        config.fetchTimeoutMs,
+        config.disclosureMaxItems,
+        config.disclosureAlertLookbackDays,
+        config.disclosureSymbolLookbackDays,
       ),
     );
   }
@@ -1121,11 +1153,11 @@ function createCollector(): ReferenceCollector {
   if (enabled.includes('earnings')) {
     adapters.push(
       new TdnetEarningsCollectorAdapter(
-        env.REFERENCE_EARNINGS_TDNET_LIST_URL_TEMPLATE,
-        env.REFERENCE_FETCH_TIMEOUT_MS,
-        env.REFERENCE_EARNINGS_MAX_ITEMS,
-        env.REFERENCE_EARNINGS_ALERT_LOOKBACK_DAYS,
-        env.REFERENCE_EARNINGS_SYMBOL_LOOKBACK_DAYS,
+        config.earningsListUrlTemplate,
+        config.fetchTimeoutMs,
+        config.earningsMaxItems,
+        config.earningsAlertLookbackDays,
+        config.earningsSymbolLookbackDays,
       ),
     );
   }
@@ -1133,9 +1165,9 @@ function createCollector(): ReferenceCollector {
   if (adapters.length === 0) {
     adapters.push(
       new NewsCollectorAdapter(
-        env.REFERENCE_NEWS_RSS_BASE_URL,
-        env.REFERENCE_FETCH_TIMEOUT_MS,
-        env.REFERENCE_NEWS_MAX_ITEMS,
+        config.newsRssBaseUrl,
+        config.fetchTimeoutMs,
+        config.newsMaxItems,
       ),
     );
   }
@@ -1150,6 +1182,7 @@ export const _internal = {
   matchesSymbol,
   isEarningsTitle,
   classifyEarningsCategory,
+  createCollectorWithConfig,
 };
 
 export const referenceCollector: ReferenceCollector = createCollector();
