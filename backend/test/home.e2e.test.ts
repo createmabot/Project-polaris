@@ -656,6 +656,136 @@ describe('GET /api/home daily_summary query handling', () => {
     await app.close();
   });
 
+  it('returns watchlist symbols ordered by priority asc, null priority last, then addedAt asc', async () => {
+    runtime.watchlistItems = [
+      {
+        id: 'wli-null-priority',
+        watchlistId: 'wl-1',
+        symbolId: 'sym-9984',
+        priority: null,
+        addedAt: new Date('2026-04-12T00:02:00+09:00'),
+        symbol: {
+          id: 'sym-9984',
+          symbol: 'TYO:9984',
+          symbolCode: '9984',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:9984',
+          displayName: 'SoftBank Group',
+        },
+      },
+      {
+        id: 'wli-priority-2-later',
+        watchlistId: 'wl-1',
+        symbolId: 'sym-6758',
+        priority: 2,
+        addedAt: new Date('2026-04-12T00:03:00+09:00'),
+        symbol: {
+          id: 'sym-6758',
+          symbol: 'TYO:6758',
+          symbolCode: '6758',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:6758',
+          displayName: 'Sony Group',
+        },
+      },
+      {
+        id: 'wli-priority-2-earlier',
+        watchlistId: 'wl-1',
+        symbolId: 'sym-9432',
+        priority: 2,
+        addedAt: new Date('2026-04-12T00:01:00+09:00'),
+        symbol: {
+          id: 'sym-9432',
+          symbol: 'TYO:9432',
+          symbolCode: '9432',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:9432',
+          displayName: 'NTT',
+        },
+      },
+      runtime.watchlistItems[0],
+    ];
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+
+    expect(res.statusCode).toBe(200);
+    expect(
+      res.json().data.watchlist_symbols.map((row: any) => [row.symbol_id, row.user_priority]),
+    ).toEqual([
+      ['sym-7203', 1],
+      ['sym-9432', 2],
+      ['sym-6758', 2],
+      ['sym-9984', null],
+    ]);
+
+    await app.close();
+  });
+
+  it('keeps watchlist and positions rows even when snapshots are unavailable', async () => {
+    runtime.watchlistItems.push({
+      id: 'wli-no-snapshot',
+      watchlistId: 'wl-1',
+      symbolId: 'sym-6501',
+      priority: 3,
+      addedAt: new Date('2026-04-12T00:04:00+09:00'),
+      symbol: {
+        id: 'sym-6501',
+        symbol: 'TYO:6501',
+        symbolCode: '6501',
+        marketCode: 'JP',
+        tradingviewSymbol: 'TYO:6501',
+        displayName: 'Hitachi',
+      },
+    });
+    runtime.positions.push({
+      id: 'pos-no-snapshot',
+      userId: 'user-1',
+      symbolId: 'sym-6501',
+      quantity: { toNumber: () => 20 },
+      averageCost: { toNumber: () => 1000 },
+      createdAt: new Date('2026-04-12T08:05:00+09:00'),
+      symbol: {
+        id: 'sym-6501',
+        symbol: 'TYO:6501',
+        symbolCode: '6501',
+        marketCode: 'JP',
+        tradingviewSymbol: 'TYO:6501',
+        displayName: 'Hitachi',
+      },
+    });
+
+    const app = await createApp();
+    const res = await app.inject({ method: 'GET', url: '/api/home' });
+    expect(res.statusCode).toBe(200);
+
+    const body = res.json();
+    expect(body.data.watchlist_symbols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          symbol_id: 'sym-6501',
+          display_name: 'Hitachi',
+          latest_price: null,
+          change_rate: null,
+          user_priority: 3,
+        }),
+      ]),
+    );
+    expect(body.data.positions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          position_id: 'pos-no-snapshot',
+          symbol_id: 'sym-6501',
+          display_name: 'Hitachi',
+          latest_price: null,
+          unrealized_pnl: null,
+        }),
+      ]),
+    );
+
+    await app.close();
+  });
+
   it('keeps sectors as partial success when some sector snapshots are missing', async () => {
     runtime.marketSnapshots = runtime.marketSnapshots.filter(
       (row) => row.targetCode === 'TOPIX_TRANSPORT',

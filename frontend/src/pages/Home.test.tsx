@@ -145,4 +145,58 @@ describe('Home', () => {
     expect(html).toContain('決算発表');
     expect(html).toContain('日付: 2026-04-13');
   });
+
+  it('renders snapshot-dependent fields as hyphen when latest values are unavailable', () => {
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        market_overview: {
+          indices: [],
+          fx: [],
+          sectors: [],
+        },
+        watchlist_symbols: [
+          {
+            symbol_id: 'sym_6501',
+            display_name: '日立製作所',
+            latest_price: null,
+            change_rate: null,
+          },
+        ],
+        positions: [
+          {
+            position_id: 'pos_6501',
+            symbol_id: 'sym_6501',
+            display_name: 'Hitachi',
+            quantity: 20,
+            avg_cost: 1000,
+            latest_price: null,
+            unrealized_pnl: null,
+          },
+        ],
+        recent_alerts: [],
+        daily_summary: {
+          id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+          summary_type: 'latest',
+          date: null,
+        },
+        key_events: [],
+      },
+    });
+
+    const html = renderToStaticMarkup(<Home />);
+    expect(html).toContain('href="/symbols/sym_6501"');
+    expect(html).toContain('価格: - / 変化率: -');
+    expect(html).toContain('現在値: - / 評価損益: -');
+    expect(html).toContain('href="/watchlist"');
+    expect(html).toContain('href="/positions"');
+  });
 });
