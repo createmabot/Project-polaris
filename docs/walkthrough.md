@@ -348,3 +348,6 @@ TradingView 実 CSV の出し方と、北極星での取り込み確認手順は
 - TradingView の画面名は環境により `Strategy Report` と `Strategy Tester` の揺れがある。
 - 北極星が現行で受け付けるのは `Performance Summary 英語` `List of Trades 英語` `List of Trades 日本語`。
 - `Performance Summary 日本語` は現行 parser の受け付け対象外。
+
+## 22. MVP受入確認チェックリスト（2026-05-07 追記）
+MVP完了判定の通し確認には docs/36.北極星 MVP受入確認チェックリスト（MVP）.md を使う。主要導線、runbook参照先、MVP後課題を1つに集約している。
