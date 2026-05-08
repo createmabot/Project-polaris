@@ -51,7 +51,7 @@ export default function Home() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout showSideRail>
       <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
         <PageHeader
           title="北極星"
