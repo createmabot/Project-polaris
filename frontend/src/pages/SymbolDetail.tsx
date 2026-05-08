@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { Link, useRoute } from 'wouter';
+import { useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
 import { SymbolAiSummaryData, SymbolDetailData } from '../api/types';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
+import TextLink from '../components/ui/TextLink';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -103,11 +106,13 @@ export default function SymbolDetail() {
   if (error) {
     if (error.code === 'NOT_FOUND' || error.message.includes('404')) {
       return (
-        <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-          <h2>銘柄が見つかりません</h2>
-          <p>指定された銘柄IDは存在しないか、削除されています。</p>
-          <Link href="/">ホームへ戻る</Link>
-        </div>
+        <AppLayout>
+          <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
+            <h2>銘柄が見つかりません</h2>
+            <p>指定された銘柄IDは存在しないか、削除されています。</p>
+            <TextLink href="/">ホームへ戻る</TextLink>
+          </div>
+        </AppLayout>
       );
     }
     return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
@@ -156,32 +161,29 @@ export default function SymbolDetail() {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link href="/" style={{ color: '#666', textDecoration: 'none' }}>
-          ホームへ戻る
-        </Link>
-      </div>
+    <AppLayout>
+      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+        <PageHeader
+          title={data.symbol.display_name || data.symbol.symbol}
+          backLink={{ href: '/', label: 'ホームへ戻る' }}
+          description={
+            <>
+              コード: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | 市場: <code>{data.symbol.market_code || '-'}</code> |
+              処理状態: <code>{data.latest_processing_status}</code>
+            </>
+          }
+          actions={
+            <TextLink href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}>
+              比較画面に進む
+            </TextLink>
+          }
+        />
 
-      <h1>{data.symbol.display_name || data.symbol.symbol}</h1>
-      <p style={{ color: '#666' }}>
-        コード: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | 市場: <code>{data.symbol.market_code || '-'}</code> |
-        処理状態: <code>{data.latest_processing_status}</code>
-      </p>
-      <div style={{ marginBottom: '1rem' }}>
-        <Link
-          href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}
-          style={{ color: '#0066cc', textDecoration: 'none' }}
-        >
-          比較画面に進む
-        </Link>
-      </div>
-
-      {data.chart && data.chart.widget_symbol && (
-        <section style={{ marginTop: '1.25rem', height: '500px', width: '100%' }}>
-          <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} style={{ height: '100%', width: '100%' }} />
-        </section>
-      )}
+        {data.chart && data.chart.widget_symbol && (
+          <section style={{ marginTop: '1.25rem', height: '500px', width: '100%' }}>
+            <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} style={{ height: '100%', width: '100%' }} />
+          </section>
+        )}
 
       <section style={{ marginTop: '1.25rem' }}>
         <h2>現在スナップショット</h2>
@@ -214,9 +216,9 @@ export default function SymbolDetail() {
             {data.recent_alerts.map((alert) => (
               <li key={alert.id} style={{ borderBottom: '1px solid #eee', padding: '1rem 0' }}>
                 <strong>
-                  <Link href={`/alerts/${alert.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                  <TextLink href={`/alerts/${alert.id}`}>
                     {alert.alert_name}
-                  </Link>
+                  </TextLink>
                 </strong>
                 <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
                   発生: {formatDate(alert.triggered_at || alert.received_at)} | 状態: <code>{alert.processing_status}</code>
@@ -315,19 +317,19 @@ export default function SymbolDetail() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2>Research Note</h2>
           {data.latest_active_note ? (
-            <Link
+            <TextLink
               href={`/notes/${data.latest_active_note.id}`}
-              style={{ background: '#0066cc', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px' }}
+              className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline"
             >
               ノートを開く
-            </Link>
+            </TextLink>
           ) : (
-            <Link
+            <TextLink
               href={`/symbols/${symbolId}/note/new`}
-              style={{ background: '#28a745', color: '#fff', textDecoration: 'none', padding: '0.5rem 1rem', borderRadius: '4px' }}
+              className="rounded bg-emerald-600 px-4 py-2 text-white no-underline hover:no-underline"
             >
               ノートを新規作成
-            </Link>
+            </TextLink>
           )}
         </div>
 
@@ -380,6 +382,7 @@ export default function SymbolDetail() {
           </ul>
         )}
       </section>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
