@@ -10,7 +10,7 @@ type TextLinkProps = {
 const DEFAULT_CLASS_NAME = 'text-sky-700 no-underline hover:underline';
 
 export default function TextLink({ href, children, className, ...anchorProps }: TextLinkProps) {
-  const resolvedClassName = className ? `${DEFAULT_CLASS_NAME} ${className}` : DEFAULT_CLASS_NAME;
+  const resolvedClassName = className ?? DEFAULT_CLASS_NAME;
 
   return (
     <Link href={href} className={resolvedClassName} {...anchorProps}>

@@ -16,7 +16,7 @@ export default function PageHeader({ title, description, actions, backLink }: Pa
     <div className="mb-6">
       {backLink ? (
         <div className="mb-4">
-          <TextLink href={backLink.href} className="text-sm text-slate-600">
+          <TextLink href={backLink.href} className="text-sm text-slate-600 no-underline hover:underline">
             {backLink.label}
           </TextLink>
         </div>
