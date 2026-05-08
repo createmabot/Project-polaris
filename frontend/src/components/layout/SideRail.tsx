@@ -99,10 +99,10 @@ export default function SideRail() {
   return (
     <aside
       aria-label="共通サイドメニュー"
-      className={collapsed ? 'sticky top-6 w-20 shrink-0' : 'sticky top-6 w-80 shrink-0'}
+      className={collapsed ? 'sticky top-6 w-20 shrink-0 self-start' : 'sticky top-6 w-72 shrink-0 self-start'}
     >
       <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-200 p-3">
+        <div className="border-b border-slate-200 p-4">
           <div className="flex items-center justify-between gap-2">
             {!collapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
             <button
@@ -137,8 +137,8 @@ export default function SideRail() {
             </button>
           </div>
         ) : (
-          <div className="p-3">
-            <div className="mb-3 flex rounded-md bg-slate-100 p-1">
+          <div className="p-4">
+            <div className="mb-4 flex rounded-md bg-slate-100 p-1">
               <button
                 type="button"
                 onClick={() => setTab('watchlist')}
@@ -175,12 +175,12 @@ export default function SideRail() {
                   保有銘柄を追加
                 </TextLink>
               )}
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs leading-5 text-slate-500">
                 PoC では既存管理画面への補助導線です。CRUD モーダルは未実装です。
               </p>
             </div>
 
-            {renderContent()}
+            <div className="space-y-2">{renderContent()}</div>
           </div>
         )}
       </div>

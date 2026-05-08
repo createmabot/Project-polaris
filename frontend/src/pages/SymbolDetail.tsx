@@ -162,7 +162,7 @@ export default function SymbolDetail() {
 
   return (
     <AppLayout showSideRail>
-      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      <div style={{ width: '100%', fontFamily: 'sans-serif' }}>
         <PageHeader
           title={data.symbol.display_name || data.symbol.symbol}
           backLink={{ href: '/', label: 'ホームへ戻る' }}

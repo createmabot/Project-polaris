@@ -52,7 +52,7 @@ export default function Home() {
 
   return (
     <AppLayout showSideRail>
-      <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      <div style={{ width: '100%', fontFamily: 'sans-serif' }}>
         <PageHeader
           title="北極星"
           description="アラート、ノートをまとめて確認します。"
