@@ -1,8 +1,10 @@
 ﻿import useSWR from 'swr';
 import { useMemo, useState } from 'react';
-import { Link } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
+import TextLink from '../components/ui/TextLink';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
 
@@ -49,21 +51,20 @@ export default function Home() {
   }
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <h1>北極星</h1>
-      <p style={{ color: '#666' }}>アラート、ノートをまとめて確認します。</p>
-      <div style={{ marginBottom: '1.2rem' }}>
-        <Link href="/compare" style={{ color: '#0066cc', textDecoration: 'none' }}>
-          銘柄比較を開く
-        </Link>
-      </div>
-      <div style={{ marginBottom: '1.2rem' }}>
-        <Link href="/strategy-lab" style={{ color: '#0066cc', textDecoration: 'none' }}>
-          ルール検証ラボを開く
-        </Link>
-      </div>
+    <AppLayout>
+      <div style={{ padding: '2rem', maxWidth: '840px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+        <PageHeader
+          title="北極星"
+          description="アラート、ノートをまとめて確認します。"
+          actions={
+            <>
+              <TextLink href="/compare">銘柄比較を開く</TextLink>
+              <TextLink href="/strategy-lab">ルール検証ラボを開く</TextLink>
+            </>
+          }
+        />
 
-      <section style={{ marginTop: '1.5rem' }}>
+        <section style={{ marginTop: '1.5rem' }}>
         <h2>マーケット概況</h2>
         <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
           {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
@@ -95,9 +96,7 @@ export default function Home() {
       <section style={{ marginTop: '1.5rem' }}>
         <h2>監視銘柄</h2>
         <div style={{ marginBottom: '0.6rem' }}>
-          <Link href="/watchlist" style={{ color: '#0066cc', textDecoration: 'none' }}>
-            監視銘柄を管理
-          </Link>
+          <TextLink href="/watchlist">監視銘柄を管理</TextLink>
         </div>
         {data.watchlist_symbols.length === 0 ? (
           <p style={{ color: '#777' }}>監視銘柄はまだありません。</p>
@@ -106,9 +105,9 @@ export default function Home() {
             {data.watchlist_symbols.map((symbol: any, index: number) => (
               <li key={symbol.symbol_id ?? `watch-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
                 {symbol.symbol_id ? (
-                  <Link href={`/symbols/${symbol.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                  <TextLink href={`/symbols/${symbol.symbol_id}`}>
                     {symbol.display_name ?? symbol.symbol_id}
-                  </Link>
+                  </TextLink>
                 ) : (
                   <span>{symbol.display_name ?? '不明'}</span>
                 )}
@@ -124,9 +123,7 @@ export default function Home() {
       <section style={{ marginTop: '1.5rem' }}>
         <h2>保有銘柄</h2>
         <div style={{ marginBottom: '0.6rem' }}>
-          <Link href="/positions" style={{ color: '#0066cc', textDecoration: 'none' }}>
-            保有銘柄を管理
-          </Link>
+          <TextLink href="/positions">保有銘柄を管理</TextLink>
         </div>
         {data.positions.length === 0 ? (
           <p style={{ color: '#777' }}>保有銘柄はまだありません。</p>
@@ -141,9 +138,9 @@ export default function Home() {
                     position.symbol_id ??
                     '不明';
                   return position.symbol_id ? (
-                    <Link href={`/symbols/${position.symbol_id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                    <TextLink href={`/symbols/${position.symbol_id}`}>
                       {resolvedDisplayName}
-                    </Link>
+                    </TextLink>
                   ) : (
                     <span>{resolvedDisplayName}</span>
                   );
@@ -215,16 +212,16 @@ export default function Home() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
                   <div>
                     <strong>
-                      <Link href={`/alerts/${alert.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                      <TextLink href={`/alerts/${alert.id}`}>
                         {alert.alertName}
-                      </Link>
+                      </TextLink>
                     </strong>
                     <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
                       銘柄:{' '}
                       {alert.symbol?.id ? (
-                        <Link href={`/symbols/${alert.symbol.id}`} style={{ color: '#0066cc', textDecoration: 'none' }}>
+                        <TextLink href={`/symbols/${alert.symbol.id}`}>
                           {alert.symbol.displayName || alert.symbol.symbol}
-                        </Link>
+                        </TextLink>
                       ) : (
                         <span>{alert.symbol?.displayName || alert.symbol?.symbol || '不明'}</span>
                       )}
@@ -263,6 +260,7 @@ export default function Home() {
           </ul>
         )}
       </section>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
