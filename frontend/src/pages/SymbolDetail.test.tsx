@@ -183,6 +183,10 @@ describe('SymbolDetail', () => {
     expect(html).toContain('Margin improvement');
     expect(html).toContain('FX risk');
     expect(html).toContain('AI論点カードを再生成');
+    expect(html).toContain('ストラテジー / 検証結果');
+    expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
+    expect(html).toContain('ストラテジー作成を開く');
+    expect(html).toContain('検証レポート一覧を開く');
   });
 
   it('shows reference breakdown and shortage note when no references exist', () => {
