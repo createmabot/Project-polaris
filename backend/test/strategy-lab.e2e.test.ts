@@ -120,6 +120,23 @@ function createRuntime(): Runtime {
 vi.mock('../src/db', () => {
   const prisma = {
     strategyRule: {
+      count: async ({ where }: any = {}) => {
+        let rows = Array.from(runtime.strategies.values());
+        if (where?.status) {
+          rows = rows.filter((row) => row.status === where.status);
+        }
+        if (where?.title?.contains) {
+          const keyword = String(where.title.contains);
+          const insensitive = where.title.mode === 'insensitive';
+          rows = rows.filter((row) => {
+            if (insensitive) {
+              return row.title.toLowerCase().includes(keyword.toLowerCase());
+            }
+            return row.title.includes(keyword);
+          });
+        }
+        return rows.length;
+      },
       create: async ({ data }: any) => {
         const id = `str-${runtime.strategySeq++}`;
         const now = new Date();
@@ -135,6 +152,56 @@ vi.mock('../src/db', () => {
       },
       findUnique: async ({ where }: any) => {
         return runtime.strategies.get(where.id) ?? null;
+      },
+      findMany: async ({ where, orderBy, skip, take, include }: any = {}) => {
+        let rows = Array.from(runtime.strategies.values());
+        if (where?.status) {
+          rows = rows.filter((row) => row.status === where.status);
+        }
+        if (where?.title?.contains) {
+          const keyword = String(where.title.contains);
+          const insensitive = where.title.mode === 'insensitive';
+          rows = rows.filter((row) => {
+            if (insensitive) {
+              return row.title.toLowerCase().includes(keyword.toLowerCase());
+            }
+            return row.title.includes(keyword);
+          });
+        }
+        if (orderBy?.createdAt === 'desc') {
+          rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        }
+        if (orderBy?.createdAt === 'asc') {
+          rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'desc') {
+          rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        }
+        if (orderBy?.updatedAt === 'asc') {
+          rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+        }
+        if (orderBy?.title === 'desc') {
+          rows.sort((a, b) => b.title.localeCompare(a.title));
+        }
+        if (orderBy?.title === 'asc') {
+          rows.sort((a, b) => a.title.localeCompare(b.title));
+        }
+        const offset = Number.isInteger(skip) && skip > 0 ? skip : 0;
+        const limit = Number.isInteger(take) && take >= 0 ? take : rows.length;
+        rows = rows.slice(offset, offset + limit);
+        if (!include) {
+          return rows;
+        }
+        return rows.map((row) => {
+          const versions = Array.from(runtime.versions.values())
+            .filter((version) => version.strategyRuleId === row.id)
+            .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+          return {
+            ...row,
+            _count: include._count ? { versions: versions.length } : undefined,
+            versions: include.versions ? versions.slice(0, include.versions.take ?? versions.length) : undefined,
+          };
+        });
       },
     },
     strategyRuleVersion: {
@@ -468,6 +535,48 @@ describe('strategy lab vertical slice', () => {
     expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
     expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
     expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
+
+    await app.close();
+  });
+
+  it('lists existing strategies with latest version summary', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: '一覧表示テスト' },
+    });
+    expect(createStrategy.statusCode).toBe(201);
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上回ったら買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    expect(createVersion.statusCode).toBe(201);
+    const versionId = createVersion.json().data.strategy_version.id as string;
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?page=1&limit=20&q=一覧&sort=updated_at&order=desc',
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.data.query.q).toBe('一覧');
+    expect(body.data.pagination.total).toBe(1);
+    expect(body.data.strategies.length).toBe(1);
+    expect(body.data.strategies[0].id).toBe(strategyId);
+    expect(body.data.strategies[0].title).toBe('一覧表示テスト');
+    expect(body.data.strategies[0].version_count).toBe(1);
+    expect(body.data.strategies[0].latest_version.id).toBe(versionId);
+    expect(body.data.strategies[0].latest_version.market).toBe('JP_STOCK');
+    expect(body.data.strategies[0].latest_version.timeframe).toBe('D');
 
     await app.close();
   });
