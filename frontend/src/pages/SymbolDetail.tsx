@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
-import { SymbolAiSummaryData, SymbolDetailData } from '../api/types';
+import { StrategyListData, StrategyVersionListData, SymbolAiSummaryData, SymbolDetailData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
@@ -22,6 +22,22 @@ const LABELS = {
   strategyResultsIntro: 'この銘柄に適用したストラテジーと検証結果をここに集約します。',
   strategyResultsPending:
     '現在は導線準備中です。適用済みストラテジー、CSV取込、内部バックテスト、銘柄別比較は後続タスクで接続します。',
+  chooseExistingStrategy: '既存ストラテジーを選ぶ',
+  applySelectionNotice:
+    'この選択はまだ保存されません。Symbol Strategy Application の作成、CSV取込、内部バックテスト接続は後続タスクです。',
+  chooseApplyCandidate: '適用候補を選択',
+  selectedStrategy: '選択中のストラテジー',
+  selectedVersion: '選択中の version',
+  unsaved: '未保存',
+  applyNotSaved: 'この銘柄への適用保存はまだ未実装です。',
+  strategyList: 'ストラテジー一覧',
+  versionList: 'version 一覧',
+  openStrategyDetail: 'StrategyDetail を開く',
+  openStrategyVersionDetail: 'StrategyVersionDetail を開く',
+  clearSelection: '選択解除',
+  saveApplyPending: '適用を保存（準備中）',
+  csvImportLater: 'CSV取込（後続）',
+  internalBacktestLater: '内部バックテスト（後続）',
   openStrategyLab: 'ストラテジー作成を開く',
   openBacktestList: '検証レポート一覧を開く',
   researchNoteTitle: 'Research Note',
@@ -129,6 +145,183 @@ function EmptyText({ children }: { children: ReactNode }) {
 
 function MetaText({ children }: { children: ReactNode }) {
   return <div className="text-xs leading-5 text-slate-500">{children}</div>;
+}
+
+function StrategyApplySelectionPanel() {
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const {
+    data: strategyListData,
+    error: strategyListError,
+    isLoading: isStrategyListLoading,
+  } = useSWR<StrategyListData>(
+    '/api/strategies?page=1&limit=20&sort=updated_at&order=desc&status=active',
+    swrFetcher,
+  );
+
+  const strategies = strategyListData?.strategies ?? [];
+  const selectedStrategy = selectedStrategyId
+    ? strategies.find((strategy) => strategy.id === selectedStrategyId) ?? null
+    : null;
+
+  const {
+    data: versionListData,
+    error: versionListError,
+    isLoading: isVersionListLoading,
+  } = useSWR<StrategyVersionListData>(
+    selectedStrategy
+      ? `/api/strategies/${selectedStrategy.id}/versions?page=1&limit=20&sort=updated_at&order=desc`
+      : null,
+    swrFetcher,
+  );
+
+  const versions = versionListData?.strategy_versions ?? [];
+  const selectedVersion = selectedVersionId
+    ? versions.find((version) => version.id === selectedVersionId) ?? null
+    : null;
+
+  const chooseStrategy = (strategyId: string) => {
+    setSelectedStrategyId(strategyId);
+    setSelectedVersionId(null);
+  };
+
+  const chooseVersion = (versionId: string) => {
+    setSelectedVersionId(versionId);
+  };
+
+  const clearSelection = () => {
+    setSelectedStrategyId(null);
+    setSelectedVersionId(null);
+  };
+
+  return (
+    <div className="mt-5 space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+      <div>
+        <h3 className="text-base font-semibold text-slate-900">{LABELS.chooseExistingStrategy}</h3>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.applySelectionNotice}</p>
+      </div>
+
+      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3">
+        <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{LABELS.unsaved}</span>
+        <p className="mt-2 text-sm leading-6 text-amber-900">{LABELS.applyNotSaved}</p>
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900">{LABELS.chooseApplyCandidate}</h4>
+        {isStrategyListLoading ? (
+          <EmptyText>strategy 候補を読み込み中...</EmptyText>
+        ) : strategyListError ? (
+          <p className="text-sm text-rose-700">strategy 候補を取得できませんでした。</p>
+        ) : strategies.length === 0 ? (
+          <EmptyText>active strategy はまだありません。</EmptyText>
+        ) : (
+          <div className="mt-3 grid gap-2">
+            {strategies.map((strategy) => {
+              const isSelected = selectedStrategy?.id === strategy.id;
+              return (
+                <button
+                  key={strategy.id}
+                  type="button"
+                  onClick={() => chooseStrategy(strategy.id)}
+                  className={
+                    isSelected
+                      ? 'rounded-lg border border-sky-300 bg-sky-50 p-3 text-left'
+                      : 'rounded-lg border border-slate-200 bg-slate-50 p-3 text-left'
+                  }
+                >
+                  <span className="block text-sm font-semibold text-slate-900">{strategy.title}</span>
+                  <span className="mt-1 block text-xs text-slate-500">
+                    strategy_id: {strategy.id} / status: {strategy.status} / versions: {strategy.version_count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {selectedStrategy ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="text-sm font-semibold text-slate-900">{LABELS.selectedStrategy}</h4>
+              <p className="mt-1 text-sm text-slate-700">{selectedStrategy.title}</p>
+              <MetaText>
+                strategy_id: {selectedStrategy.id} / status: {selectedStrategy.status}
+              </MetaText>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <TextLink href={`/strategies/${selectedStrategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
+              <button type="button" onClick={clearSelection} className="text-sm text-slate-600 underline">
+                {LABELS.clearSelection}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedStrategy ? (
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900">{LABELS.versionList}</h4>
+          {isVersionListLoading ? (
+            <EmptyText>version 候補を読み込み中...</EmptyText>
+          ) : versionListError ? (
+            <p className="text-sm text-rose-700">version 候補を取得できませんでした。</p>
+          ) : versions.length === 0 ? (
+            <EmptyText>この strategy には version がありません。</EmptyText>
+          ) : (
+            <div className="mt-3 grid gap-2">
+              {versions.map((version) => {
+                const isSelected = selectedVersion?.id === version.id;
+                return (
+                  <button
+                    key={version.id}
+                    type="button"
+                    onClick={() => chooseVersion(version.id)}
+                    className={
+                      isSelected
+                        ? 'rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-left'
+                        : 'rounded-lg border border-slate-200 bg-white p-3 text-left'
+                    }
+                  >
+                    <span className="block text-sm font-semibold text-slate-900">{version.id}</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {version.market} / {version.timeframe} / {version.status}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {selectedStrategy && selectedVersion ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <h4 className="text-sm font-semibold text-emerald-950">{LABELS.selectedVersion}</h4>
+          <p className="mt-1 text-sm text-emerald-900">
+            version_id: {selectedVersion.id} / {selectedVersion.market} / {selectedVersion.timeframe} / {selectedVersion.status}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <TextLink href={`/strategy-versions/${selectedVersion.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+            <TextLink href={`/strategies/${selectedStrategy.id}/versions`}>{LABELS.versionList}</TextLink>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+        <button type="button" disabled className="rounded-md bg-slate-300 px-3 py-2 text-sm font-medium text-slate-600">
+          {LABELS.saveApplyPending}
+        </button>
+        <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
+          {LABELS.csvImportLater}
+        </button>
+        <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
+          {LABELS.internalBacktestLater}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function SymbolDetail() {
@@ -406,6 +599,7 @@ export default function SymbolDetail() {
                 <li>CSV取込、内部バックテスト、銘柄別比較の入口</li>
               </ul>
             </div>
+            <StrategyApplySelectionPanel />
           </InfoCard>
         </DetailSection>
 

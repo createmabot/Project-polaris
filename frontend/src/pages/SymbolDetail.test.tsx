@@ -67,12 +67,105 @@ const baseSymbolData = {
   latest_processing_status: 'idle',
 };
 
+const strategyListFixture = {
+  query: { q: '', status: 'active', sort: 'updated_at', order: 'desc' },
+  pagination: {
+    page: 1,
+    limit: 20,
+    q: '',
+    status: 'active',
+    sort: 'updated_at',
+    order: 'desc',
+    total: 1,
+    has_next: false,
+    has_prev: false,
+  },
+  strategies: [
+    {
+      id: 'strategy_1',
+      title: '押し目買い戦略',
+      status: 'active',
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-02T00:00:00.000Z',
+      version_count: 1,
+      latest_version: {
+        id: 'version_1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'generated',
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-02T00:00:00.000Z',
+      },
+    },
+  ],
+};
+
+const strategyVersionsFixture = {
+  strategy: {
+    id: 'strategy_1',
+    title: '押し目買い戦略',
+    status: 'active',
+    created_at: '2026-05-01T00:00:00.000Z',
+    updated_at: '2026-05-02T00:00:00.000Z',
+  },
+  query: { q: '', status: '', sort: 'updated_at', order: 'desc' },
+  pagination: {
+    page: 1,
+    limit: 20,
+    q: '',
+    status: '',
+    sort: 'updated_at',
+    order: 'desc',
+    total: 1,
+    has_next: false,
+    has_prev: false,
+  },
+  strategy_versions: [
+    {
+      id: 'version_1',
+      strategy_id: 'strategy_1',
+      cloned_from_version_id: null,
+      is_derived: false,
+      has_forward_validation_note: false,
+      forward_validation_note_updated_at: null,
+      has_diff_from_clone: null,
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'generated',
+      has_warnings: false,
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-02T00:00:00.000Z',
+    },
+  ],
+};
+
+function getCommonSWRResult(key: string | null) {
+  if (key === '/api/home?summary_type=latest') {
+    return { isLoading: false, error: null, data: sideRailHomeFixture };
+  }
+  if (key === '/api/watchlist-items') {
+    return { isLoading: false, error: null, data: sideRailWatchlistFixture };
+  }
+  if (key === '/api/positions') {
+    return { isLoading: false, error: null, data: sideRailPositionsFixture };
+  }
+  if (key === '/api/strategies?page=1&limit=20&sort=updated_at&order=desc&status=active') {
+    return { isLoading: false, error: null, data: strategyListFixture };
+  }
+  if (key === '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc') {
+    return { isLoading: false, error: null, data: strategyVersionsFixture };
+  }
+  return null;
+}
+
 describe('SymbolDetail', () => {
   it('shows ai summary loading state', () => {
     mockUseSWR.mockReset();
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
       }
@@ -97,6 +190,8 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
       }
@@ -140,6 +235,8 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
       }
@@ -185,8 +282,20 @@ describe('SymbolDetail', () => {
     expect(html).toContain('AI論点カードを再生成');
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
+    expect(html).toContain('既存ストラテジーを選ぶ');
+    expect(html).toContain('この選択はまだ保存されません');
+    expect(html).toContain('押し目買い戦略');
+    expect(html).toContain('strategy_id:');
+    expect(html).not.toContain('version_id: version_1');
+    expect(html).toContain('適用を保存（準備中）');
+    expect(html).toContain('CSV取込（後続）');
+    expect(html).toContain('内部バックテスト（後続）');
     expect(html).toContain('ストラテジー作成を開く');
     expect(html).toContain('検証レポート一覧を開く');
+    expect(mockUseSWR).not.toHaveBeenCalledWith(
+      '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
   });
 
   it('shows reference breakdown and shortage note when no references exist', () => {
@@ -194,6 +303,8 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
       }
