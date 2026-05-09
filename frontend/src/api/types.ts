@@ -477,6 +477,42 @@ export type StrategyVersionListData = {
   }>;
 };
 
+export type StrategyListData = {
+  query: {
+    q: string;
+    status: string;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+  };
+  pagination: {
+    page: number;
+    limit: number;
+    q: string;
+    status: string;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+    total: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  strategies: Array<{
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    version_count: number;
+    latest_version: {
+      id: string;
+      market: string;
+      timeframe: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+    } | null;
+  }>;
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;

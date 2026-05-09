@@ -25,6 +25,118 @@ function normalizeTitle(body: CreateStrategyBody): string {
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
+    Querystring: { q?: string; page?: string; limit?: string; status?: string; sort?: string; order?: string };
+  }>('/', async (request, reply) => {
+    const q = typeof request.query.q === 'string' ? request.query.q.trim() : '';
+    const status = typeof request.query.status === 'string' ? request.query.status.trim() : '';
+    const sort = typeof request.query.sort === 'string' ? request.query.sort.trim() : 'updated_at';
+    const order = typeof request.query.order === 'string' ? request.query.order.trim().toLowerCase() : 'desc';
+    const parsedPage = Number(request.query.page ?? 1);
+    const parsedLimit = Number(request.query.limit ?? 20);
+    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50 ? parsedLimit : NaN;
+    if (!Number.isFinite(page) || !Number.isFinite(limit)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
+    }
+    if (sort !== 'created_at' && sort !== 'updated_at' && sort !== 'title') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'sort must be one of: created_at, updated_at, title.');
+    }
+    if (order !== 'asc' && order !== 'desc') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
+    }
+
+    const where = {
+      ...(q
+        ? {
+            title: {
+              contains: q,
+              mode: 'insensitive' as const,
+            },
+          }
+        : {}),
+      ...(status ? { status } : {}),
+    };
+
+    const orderBy =
+      sort === 'created_at'
+        ? { createdAt: order as 'asc' | 'desc' }
+        : sort === 'title'
+          ? { title: order as 'asc' | 'desc' }
+          : { updatedAt: order as 'asc' | 'desc' };
+
+    const skip = (page - 1) * limit;
+    const total = await prisma.strategyRule.count({ where });
+    const strategies = await prisma.strategyRule.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+      include: {
+        _count: {
+          select: {
+            versions: true,
+          },
+        },
+        versions: {
+          orderBy: {
+            updatedAt: 'desc',
+          },
+          take: 1,
+          select: {
+            id: true,
+            market: true,
+            timeframe: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      query: {
+        q,
+        status,
+        sort,
+        order,
+      },
+      pagination: {
+        page,
+        limit,
+        q,
+        status,
+        sort,
+        order,
+        total,
+        has_next: skip + strategies.length < total,
+        has_prev: page > 1,
+      },
+      strategies: strategies.map((strategy) => {
+        const latestVersion = strategy.versions[0] ?? null;
+        return {
+          id: strategy.id,
+          title: strategy.title,
+          status: strategy.status,
+          created_at: strategy.createdAt,
+          updated_at: strategy.updatedAt,
+          version_count: strategy._count.versions,
+          latest_version: latestVersion
+            ? {
+                id: latestVersion.id,
+                market: latestVersion.market,
+                timeframe: latestVersion.timeframe,
+                status: latestVersion.status,
+                created_at: latestVersion.createdAt,
+                updated_at: latestVersion.updatedAt,
+              }
+            : null,
+        };
+      }),
+    }));
+  });
+
+  fastify.get<{
     Params: { strategyId: string };
     Querystring: { q?: string; page?: string; limit?: string; status?: string; sort?: string; order?: string };
   }>('/:strategyId/versions', async (request, reply) => {
