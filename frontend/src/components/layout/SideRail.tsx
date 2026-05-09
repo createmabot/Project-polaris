@@ -111,8 +111,19 @@ export default function SideRail() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { data, error, isLoading, mutate: mutateHome } = useSWR<HomeData>(HOME_API_PATH, swrFetcher);
-  const { data: watchlistData, mutate: mutateWatchlist } = useSWR<WatchlistItemData>(WATCHLIST_API_PATH, swrFetcher);
-  const { data: positionsData, mutate: mutatePositions } = useSWR<PositionManagementData>(POSITIONS_API_PATH, swrFetcher);
+  const {
+    data: watchlistData,
+    isLoading: isWatchlistLoading,
+    mutate: mutateWatchlist,
+  } = useSWR<WatchlistItemData>(WATCHLIST_API_PATH, swrFetcher);
+  const {
+    data: positionsData,
+    isLoading: isPositionsLoading,
+    mutate: mutatePositions,
+  } = useSWR<PositionManagementData>(POSITIONS_API_PATH, swrFetcher);
+
+  const watchlistActionsReady = Boolean(watchlistData);
+  const positionActionsReady = Boolean(positionsData);
 
   const watchlistDisplayNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -153,6 +164,7 @@ export default function SideRail() {
   };
 
   const openEditWatchlistModal = (symbol: any) => {
+    if (!watchlistActionsReady) return;
     const item = watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id) ?? null;
     if (!item) {
       setMessage({ kind: 'error', text: '監視銘柄の編集情報を取得できませんでした。' });
@@ -173,6 +185,7 @@ export default function SideRail() {
   };
 
   const openDeleteWatchlistModal = (symbol: any) => {
+    if (!watchlistActionsReady) return;
     const item = watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id) ?? null;
     if (!item) {
       setMessage({ kind: 'error', text: '監視銘柄の削除情報を取得できませんでした。' });
@@ -193,6 +206,7 @@ export default function SideRail() {
   };
 
   const openEditPositionModal = (position: any) => {
+    if (!positionActionsReady) return;
     const row = positionsData?.positions.find((item) => item.position_id === position.position_id) ?? null;
     if (!row) {
       setMessage({ kind: 'error', text: '保有銘柄の編集情報を取得できませんでした。' });
@@ -213,6 +227,7 @@ export default function SideRail() {
   };
 
   const openDeletePositionModal = (position: any) => {
+    if (!positionActionsReady) return;
     const row = positionsData?.positions.find((item) => item.position_id === position.position_id) ?? null;
     if (!row) {
       setMessage({ kind: 'error', text: '保有銘柄の削除情報を取得できませんでした。' });
@@ -346,14 +361,16 @@ export default function SideRail() {
                 <button
                   type="button"
                   onClick={() => openEditWatchlistModal(symbol)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                  disabled={!watchlistActionsReady}
+                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   編集
                 </button>
                 <button
                   type="button"
                   onClick={() => openDeleteWatchlistModal(symbol)}
-                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                  disabled={!watchlistActionsReady}
+                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   削除
                 </button>
@@ -365,6 +382,9 @@ export default function SideRail() {
                 ? '-'
                 : `${formatNumber(symbol.change_rate, 2)}%`}
             </div>
+            {!watchlistActionsReady && isWatchlistLoading ? (
+              <p className="mt-2 text-[11px] text-slate-400">???????????????? / ???????????</p>
+            ) : null}
           </div>
         ))}
       </div>
@@ -391,14 +411,16 @@ export default function SideRail() {
                 <button
                   type="button"
                   onClick={() => openEditPositionModal(position)}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                  disabled={!positionActionsReady}
+                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   編集
                 </button>
                 <button
                   type="button"
                   onClick={() => openDeletePositionModal(position)}
-                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
+                  disabled={!positionActionsReady}
+                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
                 >
                   削除
                 </button>
@@ -408,6 +430,9 @@ export default function SideRail() {
               数量: {formatNumber(position.quantity, 0)} / 現在値: {formatNumber(position.latest_price, 2)}
             </div>
             <div className="mt-1 text-xs text-slate-500">評価損益: {formatNumber(position.unrealized_pnl, 2)}</div>
+            {!positionActionsReady && isPositionsLoading ? (
+              <p className="mt-2 text-[11px] text-slate-400">???????????????? / ???????????</p>
+            ) : null}
           </div>
         ))}
       </div>
