@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -6,6 +6,54 @@ import { SymbolAiSummaryData, SymbolDetailData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
+
+const LABELS = {
+  backToHome: 'ホームへ戻る',
+  compare: '比較画面に進む',
+  code: 'コード',
+  market: '市場',
+  processingStatus: '処理状態',
+  chartTitle: 'TradingView chart',
+  chartDescription: '共通サイドメニューと併用しながら、銘柄の現在状況とチャートを確認します。',
+  snapshotTitle: '現在スナップショット',
+  latestAlertsTitle: '最新アラート',
+  latestAiTitle: '最新AI論点カード',
+  researchNoteTitle: 'Research Note',
+  referencesTitle: '関連参照情報',
+  currentPrice: '現在値',
+  dayChange: '前日比',
+  volume: '出来高',
+  source: 'ソース',
+  marketStatus: '市場状態',
+  snapshotUnavailable: 'スナップショットを取得できませんでした。',
+  noAlerts: 'この銘柄のアラートはまだありません。',
+  datetime: '日時',
+  status: '状態',
+  loadingAi: 'AI論点カードを読み込み中...',
+  unavailableAi: 'AI論点カードは未生成です。',
+  emptyAi: 'AI論点カードは空です。',
+  generateAi: 'AI論点カード生成',
+  regenerateAi: 'AI論点カードを再生成',
+  generating: '生成中...',
+  generatedAt: '生成日時',
+  noReferencesWarning: '参照情報は0件です。スナップショットやノート中心の要約になっている可能性があります。',
+  limitedReferencesWarning: '参照情報が不足しているため、論点の精度には限界がある可能性があります。',
+  openNote: 'ノートを開く',
+  createNote: 'ノートを新規作成',
+  lastUpdated: '最終更新',
+  nextReview: '次回確認日',
+  noResearchNote: 'アクティブな research note はありません。',
+  breakdown: '内訳',
+  noReferences: '関連参照情報はありません。',
+  emptyStateHint: 'データ未取得の場合は、seed 再投入後にページを再読み込みしてください。',
+  notFoundTitle: '銘柄が見つかりません',
+  notFoundBody: '指定された銘柄IDは存在しないか、削除されています。',
+  loadSymbol: '銘柄情報を読み込み中...',
+} as const;
+
+const PRIMARY_BUTTON_CLASS =
+  'rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-400';
+const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -31,13 +79,9 @@ function getReferenceBreakdown(references: Array<{ reference_type?: string | nul
   );
 }
 
-const EMPTY_STATE_HINT = 'データ未投入の場合は、seed 実行後にページを再読み込みしてください。';
-
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
-  if (!payload || typeof payload !== 'object') {
-    return [];
-  }
+  if (!payload || typeof payload !== 'object') return [];
 
   const points: string[] = [];
   const candidates = [...(payload.bullish_points ?? []), ...(payload.bearish_points ?? [])];
@@ -49,6 +93,36 @@ function getThesisPoints(structuredJson: any): string[] {
     }
   }
   return points.slice(0, 4);
+}
+
+type DetailSectionProps = {
+  title: string;
+  actions?: ReactNode;
+  children: ReactNode;
+};
+
+function DetailSection({ title, actions, children }: DetailSectionProps) {
+  return (
+    <section className={PANEL_CLASS}>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InfoCard({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-lg border border-slate-200 bg-slate-50 p-4 ${className}`.trim()}>{children}</div>;
+}
+
+function EmptyText({ children }: { children: ReactNode }) {
+  return <p className="text-sm leading-6 text-slate-500">{children}</p>;
+}
+
+function MetaText({ children }: { children: ReactNode }) {
+  return <div className="text-xs leading-5 text-slate-500">{children}</div>;
 }
 
 export default function SymbolDetail() {
@@ -101,21 +175,34 @@ export default function SymbolDetail() {
     tvContainerRef.current.appendChild(script);
   }, [data?.chart?.widget_symbol, data?.chart?.default_interval]);
 
-  if (isLoading) return <div style={{ padding: '2rem' }}>銘柄情報を読み込み中...</div>;
+  if (isLoading) {
+    return (
+      <AppLayout showSideRail>
+        <div className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">{LABELS.loadSymbol}</div>
+      </AppLayout>
+    );
+  }
 
   if (error) {
     if (error.code === 'NOT_FOUND' || error.message.includes('404')) {
       return (
         <AppLayout showSideRail>
-          <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
-            <h2>銘柄が見つかりません</h2>
-            <p>指定された銘柄IDは存在しないか、削除されています。</p>
-            <TextLink href="/">ホームへ戻る</TextLink>
+          <div className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-xl font-semibold text-slate-900">{LABELS.notFoundTitle}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">{LABELS.notFoundBody}</p>
+            <div className="mt-4">
+              <TextLink href="/">{LABELS.backToHome}</TextLink>
+            </div>
           </div>
         </AppLayout>
       );
     }
-    return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
+
+    return (
+      <AppLayout showSideRail>
+        <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">エラー: {error.message}</div>
+      </AppLayout>
+    );
   }
 
   if (!data) return null;
@@ -162,226 +249,203 @@ export default function SymbolDetail() {
 
   return (
     <AppLayout showSideRail>
-      <div style={{ width: '100%', fontFamily: 'sans-serif' }}>
+      <div className="w-full space-y-5">
         <PageHeader
           title={data.symbol.display_name || data.symbol.symbol}
-          backLink={{ href: '/', label: 'ホームへ戻る' }}
+          backLink={{ href: '/', label: LABELS.backToHome }}
           description={
             <>
-              コード: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | 市場: <code>{data.symbol.market_code || '-'}</code> |
-              処理状態: <code>{data.latest_processing_status}</code>
+              {LABELS.code}: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | {LABELS.market}: <code>{data.symbol.market_code || '-'}</code> | {LABELS.processingStatus}:{' '}
+              <code>{data.latest_processing_status}</code>
             </>
           }
-          actions={
-            <TextLink href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}>
-              比較画面に進む
-            </TextLink>
-          }
+          actions={<TextLink href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}>{LABELS.compare}</TextLink>}
         />
 
-        {data.chart && data.chart.widget_symbol && (
-          <section style={{ marginTop: '1.25rem', height: '500px', width: '100%' }}>
-            <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} style={{ height: '100%', width: '100%' }} />
+        {data.chart && data.chart.widget_symbol ? (
+          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">{LABELS.chartTitle}</h2>
+              <p className="mt-1 text-sm text-slate-600">{LABELS.chartDescription}</p>
+            </div>
+            <div className="h-[500px] w-full bg-white p-4">
+              <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} className="h-full w-full" />
+            </div>
           </section>
-        )}
+        ) : null}
 
-      <section style={{ marginTop: '1.25rem' }}>
-        <h2>現在スナップショット</h2>
-        {data.current_snapshot ? (
-          <div style={{ background: '#f7f9fc', border: '1px solid #dde5ef', borderRadius: '6px', padding: '0.9rem' }}>
-            <div>
-              現在値: <strong>{formatNumber(data.current_snapshot.last_price, 3)}</strong>
-            </div>
-            <div>
-              前日比: {formatNumber(data.current_snapshot.change, 3)} (
-              {data.current_snapshot.change_percent === null ? '-' : `${formatNumber(data.current_snapshot.change_percent, 2)}%`})
-            </div>
-            <div>出来高: {formatNumber(data.current_snapshot.volume, 0)}</div>
-            <div style={{ fontSize: '0.85rem', color: '#666' }}>
-              ソース: {data.current_snapshot.source_name} | asOf: {formatDate(data.current_snapshot.as_of)} | 市場状態:{' '}
-              <code>{data.current_snapshot.market_status}</code>
-            </div>
-          </div>
-        ) : (
-          <p style={{ color: '#666' }}>スナップショットを取得できませんでした。</p>
-        )}
-      </section>
-
-      <section style={{ marginTop: '2rem' }}>
-        <h2>最新アラート</h2>
-        {data.recent_alerts.length === 0 ? (
-          <p style={{ color: '#666' }}>この銘柄のアラートはまだありません。</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.recent_alerts.map((alert) => (
-              <li key={alert.id} style={{ borderBottom: '1px solid #eee', padding: '1rem 0' }}>
-                <strong>
-                  <TextLink href={`/alerts/${alert.id}`}>
-                    {alert.alert_name}
-                  </TextLink>
-                </strong>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
-                  発生: {formatDate(alert.triggered_at || alert.received_at)} | 状態: <code>{alert.processing_status}</code>
+        <DetailSection title={LABELS.snapshotTitle}>
+          {data.current_snapshot ? (
+            <InfoCard>
+              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                <div>
+                  {LABELS.currentPrice}: <strong className="text-base text-slate-900">{formatNumber(data.current_snapshot.last_price, 3)}</strong>
                 </div>
-                {alert.related_ai_summary && alert.related_ai_summary.key_points.length > 0 && (
-                  <ul style={{ margin: '0.5rem 0 0 1rem' }}>
-                    {alert.related_ai_summary.key_points.map((point, index) => (
-                      <li key={`${alert.related_ai_summary?.id}-${index}`}>{point}</li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section style={{ marginTop: '2rem' }}>
-        <h2>最新AI論点カード</h2>
-        {isAiSummaryLoading ? (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
-            AI論点カードを読み込み中...
-          </div>
-        ) : availableSummary && hasSummaryContent ? (
-          <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-            {availableSummary.title && <h3 style={{ marginTop: 0 }}>{availableSummary.title}</h3>}
-            {thesisPoints.length > 0 ? (
-              <ul style={{ margin: '0.5rem 0 0 1rem' }}>
-                {thesisPoints.map((point, index) => (
-                  <li key={`thesis-${index}`}>{point}</li>
-                ))}
-              </ul>
-            ) : (
-              <p style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{availableSummary.body_markdown}</p>
-            )}
-            <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: '#777' }}>
-              生成日時: {formatDate(availableSummary.generated_at)}
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <button
-                onClick={() => handleGenerateThesis(true)}
-                disabled={isGeneratingThesis}
-                style={{
-                  background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '0.45rem 0.8rem',
-                  cursor: isGeneratingThesis ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {isGeneratingThesis ? '生成中...' : 'AI論点カードを再生成'}
-              </button>
-            </div>
-          </div>
-        ) : aiSummary?.status === 'unavailable' || aiSummaryError ? (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
-            <div>AI論点カードは未生成です。</div>
-            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <button
-                onClick={() => handleGenerateThesis(false)}
-                disabled={isGeneratingThesis}
-                style={{
-                  background: isGeneratingThesis ? '#adb5bd' : '#0066cc',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '0.45rem 0.8rem',
-                  cursor: isGeneratingThesis ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {isGeneratingThesis ? '生成中...' : 'AI論点カード生成'}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666' }}>
-            <div>AI論点カードは空です。</div>
-            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
-          </div>
-        )}
-        {availableSummary && hasSummaryContent && (aiSummaryInsufficientContext || hasNoReferences) && (
-          <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.82rem' }}>
-            {hasNoReferences
-              ? '参照情報は0件です。スナップショットやノート中心の要約になっている可能性があります。'
-              : '参照情報が不足しているため、要約の精度が限定的な可能性があります。'}
-          </div>
-        )}
-        {generateThesisError && (
-          <div style={{ marginTop: '0.5rem', color: '#b02a37', fontSize: '0.85rem' }}>{generateThesisError}</div>
-        )}
-      </section>
-
-      <section style={{ marginTop: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2>Research Note</h2>
-          {data.latest_active_note ? (
-            <TextLink
-              href={`/notes/${data.latest_active_note.id}`}
-              className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline"
-            >
-              ノートを開く
-            </TextLink>
+                <div>
+                  {LABELS.dayChange} {formatNumber(data.current_snapshot.change, 3)} ({data.current_snapshot.change_percent === null ? '-' : `${formatNumber(data.current_snapshot.change_percent, 2)}%`})
+                </div>
+                <div>{LABELS.volume}: {formatNumber(data.current_snapshot.volume, 0)}</div>
+                <div>
+                  {LABELS.source}: <code>{data.current_snapshot.source_name}</code>
+                </div>
+              </div>
+              <div className="mt-3 border-t border-slate-200 pt-3">
+                <MetaText>
+                  asOf: {formatDate(data.current_snapshot.as_of)} | {LABELS.marketStatus}: <code>{data.current_snapshot.market_status}</code>
+                </MetaText>
+              </div>
+            </InfoCard>
           ) : (
-            <TextLink
-              href={`/symbols/${symbolId}/note/new`}
-              className="rounded bg-emerald-600 px-4 py-2 text-white no-underline hover:no-underline"
-            >
-              ノートを新規作成
-            </TextLink>
+            <EmptyText>{LABELS.snapshotUnavailable}</EmptyText>
           )}
-        </div>
+        </DetailSection>
 
-        {data.latest_active_note ? (
-          <div style={{ background: '#fff', border: '1px solid #ddd', padding: '1.2rem', borderRadius: '4px', marginTop: '1rem' }}>
-            <h3 style={{ marginTop: 0 }}>{data.latest_active_note.title}</h3>
-            <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.8rem' }}>
-              最終更新: {formatDate(data.latest_active_note.updatedAt)} | 状態: <code>{data.latest_active_note.status}</code>
+        <DetailSection title={LABELS.latestAlertsTitle}>
+          {data.recent_alerts.length === 0 ? (
+            <EmptyText>{LABELS.noAlerts}</EmptyText>
+          ) : (
+            <div className="grid gap-3">
+              {data.recent_alerts.map((alert) => (
+                <article key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <div className="min-w-0">
+                    <strong className="block text-slate-900">
+                      <TextLink href={`/alerts/${alert.id}`}>{alert.alert_name}</TextLink>
+                    </strong>
+                    <div className="mt-2">
+                      <MetaText>
+                        {LABELS.datetime}: {formatDate(alert.triggered_at || alert.received_at)} | {LABELS.status}: <code>{alert.processing_status}</code>
+                      </MetaText>
+                    </div>
+                  </div>
+                  {alert.related_ai_summary && alert.related_ai_summary.key_points.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                      {alert.related_ai_summary.key_points.map((point, index) => (
+                        <li key={`${alert.related_ai_summary?.id}-${index}`}>{point}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
             </div>
-            {data.latest_active_note.thesisText && <p style={{ whiteSpace: 'pre-wrap' }}>{data.latest_active_note.thesisText}</p>}
-            {data.latest_active_note.nextReviewAt && (
-              <div style={{ color: '#d9534f', fontWeight: 600 }}>次回確認日: {formatDate(data.latest_active_note.nextReviewAt)}</div>
+          )}
+        </DetailSection>
+
+        <DetailSection title={LABELS.latestAiTitle}>
+          {isAiSummaryLoading ? (
+            <InfoCard>
+              <EmptyText>{LABELS.loadingAi}</EmptyText>
+            </InfoCard>
+          ) : availableSummary && hasSummaryContent ? (
+            <InfoCard>
+              {availableSummary.title ? <h3 className="text-base font-semibold text-slate-900">{availableSummary.title}</h3> : null}
+              {thesisPoints.length > 0 ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                  {thesisPoints.map((point, index) => (
+                    <li key={`thesis-${index}`}>{point}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{availableSummary.body_markdown}</p>
+              )}
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                <MetaText>{LABELS.generatedAt}: {formatDate(availableSummary.generated_at)}</MetaText>
+                <button type="button" onClick={() => handleGenerateThesis(true)} disabled={isGeneratingThesis} className={PRIMARY_BUTTON_CLASS}>
+                  {isGeneratingThesis ? LABELS.generating : LABELS.regenerateAi}
+                </button>
+              </div>
+            </InfoCard>
+          ) : aiSummary?.status === 'unavailable' || aiSummaryError ? (
+            <InfoCard>
+              <EmptyText>{LABELS.unavailableAi}</EmptyText>
+              <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
+              <div className="mt-4">
+                <button type="button" onClick={() => handleGenerateThesis(false)} disabled={isGeneratingThesis} className={PRIMARY_BUTTON_CLASS}>
+                  {isGeneratingThesis ? LABELS.generating : LABELS.generateAi}
+                </button>
+              </div>
+            </InfoCard>
+          ) : (
+            <InfoCard>
+              <EmptyText>{LABELS.emptyAi}</EmptyText>
+              <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
+            </InfoCard>
+          )}
+          {availableSummary && hasSummaryContent && (aiSummaryInsufficientContext || hasNoReferences) ? (
+            <p className="text-sm leading-6 text-slate-500">{hasNoReferences ? LABELS.noReferencesWarning : LABELS.limitedReferencesWarning}</p>
+          ) : null}
+          {generateThesisError ? <div className="text-sm text-rose-700">{generateThesisError}</div> : null}
+        </DetailSection>
+
+        <DetailSection
+          title={LABELS.researchNoteTitle}
+          actions={
+            data.latest_active_note ? (
+              <TextLink href={`/notes/${data.latest_active_note.id}`} className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline">
+                {LABELS.openNote}
+              </TextLink>
+            ) : (
+              <TextLink href={`/symbols/${symbolId}/note/new`} className="rounded bg-emerald-600 px-4 py-2 text-white no-underline hover:no-underline">
+                {LABELS.createNote}
+              </TextLink>
+            )
+          }
+        >
+          {data.latest_active_note ? (
+            <InfoCard>
+              <h3 className="text-base font-semibold text-slate-900">{data.latest_active_note.title}</h3>
+              <div className="mb-3 mt-2">
+                <MetaText>
+                  {LABELS.lastUpdated}: {formatDate(data.latest_active_note.updatedAt)} | {LABELS.status}: <code>{data.latest_active_note.status}</code>
+                </MetaText>
+              </div>
+              {data.latest_active_note.thesisText ? (
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{data.latest_active_note.thesisText}</p>
+              ) : null}
+              {data.latest_active_note.nextReviewAt ? (
+                <div className="mt-3 text-sm font-semibold text-rose-600">{LABELS.nextReview}: {formatDate(data.latest_active_note.nextReviewAt)}</div>
+              ) : null}
+            </InfoCard>
+          ) : (
+            <InfoCard>
+              <EmptyText>{LABELS.noResearchNote}</EmptyText>
+              <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
+            </InfoCard>
+          )}
+        </DetailSection>
+
+        <DetailSection title={LABELS.referencesTitle}>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              {LABELS.breakdown}: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
+            </p>
+            {data.related_references.length === 0 ? (
+              <InfoCard>
+                <EmptyText>{LABELS.noReferences}</EmptyText>
+                <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
+              </InfoCard>
+            ) : (
+              <div className="grid gap-3">
+                {data.related_references.map((reference) => (
+                  <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <MetaText>
+                      [{reference.reference_type}] {formatDate(reference.published_at)}
+                    </MetaText>
+                    <div className="mt-2 text-sm font-medium text-slate-900">
+                      {reference.source_url ? (
+                        <a href={reference.source_url} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline">
+                          {reference.title}
+                        </a>
+                      ) : (
+                        <strong>{reference.title}</strong>
+                      )}
+                    </div>
+                    {reference.summary_text ? <p className="mt-2 text-sm leading-6 text-slate-700">{reference.summary_text}</p> : null}
+                  </article>
+                ))}
+              </div>
             )}
           </div>
-        ) : (
-          <div style={{ padding: '1rem', border: '1px dashed #ccc', color: '#666', marginTop: '1rem' }}>
-            <div>アクティブな research note はありません。</div>
-            <div style={{ marginTop: '0.35rem', fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</div>
-          </div>
-        )}
-      </section>
-
-      <section style={{ marginTop: '2rem' }}>
-        <h2>関連参照情報</h2>
-        <p style={{ marginTop: '-0.2rem', marginBottom: '0.6rem', color: '#666', fontSize: '0.85rem' }}>
-          内訳: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
-        </p>
-        {data.related_references.length === 0 ? (
-          <div style={{ color: '#666' }}>
-            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>関連参照情報はありません。</p>
-            <p style={{ margin: 0, fontSize: '0.82rem' }}>{EMPTY_STATE_HINT}</p>
-          </div>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.related_references.map((reference) => (
-              <li key={reference.id} style={{ borderBottom: '1px solid #eee', padding: '0.75rem 0' }}>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: '4px' }}>
-                  [{reference.reference_type}] {formatDate(reference.published_at)}
-                </div>
-                {reference.source_url ? (
-                  <a href={reference.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc' }}>
-                    {reference.title}
-                  </a>
-                ) : (
-                  <strong>{reference.title}</strong>
-                )}
-                {reference.summary_text && <p style={{ margin: '4px 0 0 0' }}>{reference.summary_text}</p>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+        </DetailSection>
       </div>
     </AppLayout>
   );
