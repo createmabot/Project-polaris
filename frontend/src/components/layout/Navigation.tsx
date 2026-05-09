@@ -2,6 +2,7 @@ import TextLink from '../ui/TextLink';
 
 const NAV_ITEMS = [
   { href: '/', label: 'ホーム' },
+  { href: '/strategies', label: 'ストラテジー' },
   { href: '/strategy-lab', label: 'ストラテジー作成' },
   { href: '/backtests', label: '検証レポート' },
   { href: '/watchlist', label: '監視銘柄管理' },

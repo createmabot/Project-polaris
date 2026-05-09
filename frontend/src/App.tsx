@@ -1,4 +1,4 @@
-﻿import { Route, Switch } from "wouter";
+import { Route, Switch } from "wouter";
 import Home from "./pages/Home";
 import AlertDetail from "./pages/AlertDetail";
 import SymbolDetail from "./pages/SymbolDetail";
@@ -6,6 +6,7 @@ import NoteDetail from "./pages/NoteDetail";
 import CompareCreate from "./pages/CompareCreate";
 import ComparisonDetail from "./pages/ComparisonDetail";
 import StrategyLab from "./pages/StrategyLab";
+import StrategyList from "./pages/StrategyList";
 import BacktestDetail from "./pages/BacktestDetail";
 import BacktestComparisonDetail from "./pages/BacktestComparisonDetail";
 import BacktestList from "./pages/BacktestList";
@@ -25,6 +26,7 @@ function App() {
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
       <Route path="/compare" component={CompareCreate} />
       <Route path="/strategy-lab" component={StrategyLab} />
+      <Route path="/strategies" component={StrategyList} />
       <Route path="/strategies/:strategyId/versions" component={StrategyVersionList} />
       <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
       <Route path="/watchlist" component={WatchlistManage} />
@@ -39,4 +41,3 @@ function App() {
 }
 
 export default App;
-
