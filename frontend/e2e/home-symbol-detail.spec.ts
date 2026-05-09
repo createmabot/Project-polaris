@@ -27,8 +27,14 @@ async function pickFirstSymbolLink(page: Page): Promise<Locator | null> {
 test.describe('Home -> SymbolDetail smoke', () => {
   test('opens Home and navigates to SymbolDetail from a symbol link', async ({ page }) => {
     await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForFunction(
+      () => !document.body.textContent?.includes('読み込み中...'),
+      undefined,
+      { timeout: 15000 },
+    );
 
-    await expect(page.getByRole('heading', { level: 1, name: '北極星' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '北極星' })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('heading', { level: 2, name: 'マーケット概況' })).toBeVisible();
     await expect(page.getByLabel('共通サイドメニュー')).toBeVisible();
 
