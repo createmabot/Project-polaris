@@ -355,6 +355,9 @@ describe('SymbolDetail', () => {
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('CSVテキスト');
     expect(html).toContain('CSV取込を実行');
+    expect(html).toContain('内部バックテスト');
+    expect(html).toContain('内部バックテストを開始');
+    expect(html).toContain('実行結果の詳細表示は後続タスクです。');
     expect(html).toContain('検証レポートを開く');
     expect(html).toContain('既存ストラテジーを選ぶ');
     expect(html).toContain('保存すると、この銘柄のストラテジー適用として記録されます。');

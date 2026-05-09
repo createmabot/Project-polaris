@@ -2,6 +2,11 @@ import { Prisma } from '@prisma/client';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { parseTradingViewSummaryCsv } from '../backtests/csv';
 import { prisma } from '../db';
+import {
+  createInternalBacktestExecution,
+  toInternalBacktestExecutionResponse,
+} from '../internal-backtests/create-execution';
+import { type CreateExecutionRequestInput } from '../internal-backtests/contracts';
 import { AppError, formatSuccess } from '../utils/response';
 
 type CsvImportBody = {
@@ -131,6 +136,28 @@ function toCsvImportResponse(payload: {
   };
 }
 
+function toApplicationRunResponse(run: {
+  id: string;
+  runType: string;
+  status: string;
+  backtestId: string | null;
+  backtestImportId: string | null;
+  internalBacktestExecutionId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: run.id,
+    run_type: run.runType,
+    status: run.status,
+    backtest_id: run.backtestId,
+    backtest_import_id: run.backtestImportId,
+    internal_backtest_execution_id: run.internalBacktestExecutionId,
+    created_at: run.createdAt,
+    updated_at: run.updatedAt,
+  };
+}
+
 export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) {
   fastify.post('/:applicationId/csv-import', async (
     request: FastifyRequest<{
@@ -250,5 +277,70 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       backtest: result.backtest,
       backtestImport: result.backtestImport,
     })));
+  });
+
+  fastify.post('/:applicationId/internal-backtests', async (
+    request: FastifyRequest<{
+      Params: { applicationId: string };
+      Body: CreateExecutionRequestInput;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { applicationId } = request.params;
+    const application = await prisma.symbolStrategyApplication.findUnique({
+      where: { id: applicationId },
+      include: {
+        symbol: {
+          select: {
+            id: true,
+            symbol: true,
+            symbolCode: true,
+            tradingviewSymbol: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol strategy application was not found.');
+    }
+    if (application.status !== 'active') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'only active application can start internal backtest.');
+    }
+
+    const executionTargetSymbol =
+      application.symbol.symbolCode || application.symbol.symbol || application.symbol.tradingviewSymbol;
+    const { execution } = await createInternalBacktestExecution({
+      body: request.body ?? {},
+      logger: request.log,
+      strategyRuleVersionId: application.strategyRuleVersionId,
+      executionTargetSymbol,
+    });
+
+    const run = await prisma.symbolStrategyApplicationRun.create({
+      data: {
+        applicationId: application.id,
+        runType: 'internal_backtest',
+        status: execution.status,
+        backtestId: null,
+        backtestImportId: null,
+        internalBacktestExecutionId: execution.id,
+        startedAt: execution.startedAt,
+        finishedAt: execution.finishedAt,
+        errorCode: null,
+        errorMessage: null,
+      },
+    });
+
+    return reply.status(201).send(formatSuccess(request, {
+      application_id: application.id,
+      run: toApplicationRunResponse(run),
+      execution: toInternalBacktestExecutionResponse(execution),
+    }));
   });
 }
