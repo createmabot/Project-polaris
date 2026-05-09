@@ -18,6 +18,12 @@ const LABELS = {
   snapshotTitle: '現在スナップショット',
   latestAlertsTitle: '最新アラート',
   latestAiTitle: '最新AI論点カード',
+  strategyResultsTitle: 'ストラテジー / 検証結果',
+  strategyResultsIntro: 'この銘柄に適用したストラテジーと検証結果をここに集約します。',
+  strategyResultsPending:
+    '現在は導線準備中です。適用済みストラテジー、CSV取込、内部バックテスト、銘柄別比較は後続タスクで接続します。',
+  openStrategyLab: 'ストラテジー作成を開く',
+  openBacktestList: '検証レポート一覧を開く',
   researchNoteTitle: 'Research Note',
   referencesTitle: '関連参照情報',
   currentPrice: '現在値',
@@ -374,6 +380,33 @@ export default function SymbolDetail() {
             <p className="text-sm leading-6 text-slate-500">{hasNoReferences ? LABELS.noReferencesWarning : LABELS.limitedReferencesWarning}</p>
           ) : null}
           {generateThesisError ? <div className="text-sm text-rose-700">{generateThesisError}</div> : null}
+        </DetailSection>
+
+        <DetailSection
+          title={LABELS.strategyResultsTitle}
+          actions={
+            <>
+              <TextLink href="/strategy-lab" className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline">
+                {LABELS.openStrategyLab}
+              </TextLink>
+              <TextLink href="/backtests" className="rounded border border-slate-300 bg-white px-4 py-2 text-slate-700 no-underline hover:no-underline">
+                {LABELS.openBacktestList}
+              </TextLink>
+            </>
+          }
+        >
+          <InfoCard>
+            <p className="text-sm leading-6 text-slate-700">{LABELS.strategyResultsIntro}</p>
+            <p className="mt-2 text-sm leading-6 text-slate-500">{LABELS.strategyResultsPending}</p>
+            <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4">
+              <MetaText>今後ここに表示する予定の要素</MetaText>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                <li>この銘柄に適用済みのストラテジー一覧</li>
+                <li>最新の検証結果と検証レポート詳細への導線</li>
+                <li>CSV取込、内部バックテスト、銘柄別比較の入口</li>
+              </ul>
+            </div>
+          </InfoCard>
         </DetailSection>
 
         <DetailSection
