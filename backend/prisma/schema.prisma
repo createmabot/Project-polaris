@@ -44,6 +44,7 @@ model Symbol {
   positions          Position[]
   watchlistItems     WatchlistItem[]
   comparisonSymbols  ComparisonSymbol[]
+  strategyApplications SymbolStrategyApplication[]
 
   @@map("symbols")
 }
@@ -422,6 +423,7 @@ model StrategyRule {
   updatedAt DateTime @updatedAt
 
   versions StrategyRuleVersion[]
+  symbolStrategyApplications SymbolStrategyApplication[]
 
   @@index([userId])
   @@index([createdAt])
@@ -457,6 +459,7 @@ model StrategyRuleVersion {
   pineScripts PineScript[]
   pineRevisionInputs PineRevisionInput[]
   internalBacktestExecutions InternalBacktestExecution[]
+  symbolStrategyApplications SymbolStrategyApplication[]
 }
 
 model PineScript {
@@ -517,6 +520,7 @@ model Backtest {
   imports BacktestImport[]
   comparisonsAsBase   BacktestComparison[] @relation("BacktestComparisonBase")
   comparisonsAsTarget BacktestComparison[] @relation("BacktestComparisonTarget")
+  symbolStrategyApplicationRuns SymbolStrategyApplicationRun[]
 
   @@index([strategyRuleVersionId, createdAt])
   @@index([status])
@@ -536,6 +540,7 @@ model BacktestImport {
   parsedSummaryJson Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  symbolStrategyApplicationRuns SymbolStrategyApplicationRun[]
 
   @@index([backtestId, createdAt])
   @@index([parseStatus])
@@ -587,10 +592,62 @@ model InternalBacktestExecution {
   createdAt             DateTime                        @default(now())
   updatedAt             DateTime                        @updatedAt
   artifacts             InternalBacktestExecutionArtifact[]
+  symbolStrategyApplicationRuns SymbolStrategyApplicationRun[]
 
   @@index([strategyRuleVersionId, requestedAt])
   @@index([status, requestedAt])
   @@map("internal_backtest_executions")
+}
+
+model SymbolStrategyApplication {
+  id                    String              @id @default(uuid())
+  symbolId              String
+  symbol                Symbol              @relation(fields: [symbolId], references: [id], onDelete: Restrict)
+  strategyRuleId        String
+  strategyRule          StrategyRule        @relation(fields: [strategyRuleId], references: [id], onDelete: Restrict)
+  strategyRuleVersionId String
+  strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id], onDelete: Restrict)
+  status                String              @default("active")
+  source                String              @default("manual")
+  memo                  String?             @db.Text
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  runs SymbolStrategyApplicationRun[]
+
+  @@index([symbolId, status, updatedAt])
+  @@index([strategyRuleId, status])
+  @@index([strategyRuleVersionId])
+  @@index([symbolId, strategyRuleVersionId, status])
+  @@map("symbol_strategy_applications")
+}
+
+model SymbolStrategyApplicationRun {
+  id                          String                    @id @default(uuid())
+  applicationId               String
+  application                 SymbolStrategyApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  runType                     String
+  status                      String                    @default("pending")
+  backtestId                  String?
+  backtest                    Backtest?                 @relation(fields: [backtestId], references: [id], onDelete: SetNull)
+  backtestImportId            String?
+  backtestImport              BacktestImport?           @relation(fields: [backtestImportId], references: [id], onDelete: SetNull)
+  internalBacktestExecutionId String?
+  internalBacktestExecution   InternalBacktestExecution? @relation(fields: [internalBacktestExecutionId], references: [id], onDelete: SetNull)
+  startedAt                   DateTime?
+  finishedAt                  DateTime?
+  errorCode                   String?
+  errorMessage                String?                   @db.Text
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
+
+  @@index([applicationId, createdAt])
+  @@index([applicationId, status])
+  @@index([runType, status])
+  @@index([backtestId])
+  @@index([backtestImportId])
+  @@index([internalBacktestExecutionId])
+  @@map("symbol_strategy_application_runs")
 }
 
 model InternalBacktestExecutionArtifact {
