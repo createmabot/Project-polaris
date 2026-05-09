@@ -357,6 +357,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('押し目買い戦略');
     expect(html).toContain('strategy_id:');
     expect(html).not.toContain('選択中の version');
+    expect(html).not.toContain('未保存');
     expect(html).toContain('適用を保存');
     expect(html).toContain('CSV取込（後続）');
     expect(html).toContain('内部バックテスト（後続）');

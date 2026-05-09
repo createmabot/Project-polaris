@@ -346,10 +346,12 @@ function StrategyApplySelectionPanel({
         <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.applySelectionNotice}</p>
       </div>
 
-      <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3">
-        <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{LABELS.unsaved}</span>
-        <p className="mt-2 text-sm leading-6 text-amber-900">{LABELS.applyNotSaved}</p>
-      </div>
+      {selectedStrategy && selectedVersion ? (
+        <div className="rounded-lg border border-dashed border-amber-300 bg-amber-50 p-3">
+          <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">{LABELS.unsaved}</span>
+          <p className="mt-2 text-sm leading-6 text-amber-900">{LABELS.applyNotSaved}</p>
+        </div>
+      ) : null}
 
       <div>
         <h4 className="text-sm font-semibold text-slate-900">{LABELS.chooseApplyCandidate}</h4>
