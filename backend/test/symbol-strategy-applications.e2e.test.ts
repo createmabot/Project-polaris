@@ -84,6 +84,7 @@ function createRuntime(): Runtime {
     strategies: new Map([
       ['strategy-1', { id: 'strategy-1', title: 'Breakout strategy', status: 'active' }],
       ['strategy-archived', { id: 'strategy-archived', title: 'Archived strategy', status: 'archived' }],
+      ['strategy-paused', { id: 'strategy-paused', title: 'Paused strategy', status: 'paused' }],
     ]),
     versions: new Map([
       ['version-1', {
@@ -118,6 +119,15 @@ function createRuntime(): Runtime {
         strategyRuleId: 'strategy-archived',
         market: 'TSE',
         timeframe: '60',
+        status: 'generated',
+        createdAt,
+        updatedAt,
+      }],
+      ['version-paused', {
+        id: 'version-paused',
+        strategyRuleId: 'strategy-paused',
+        market: 'TSE',
+        timeframe: 'D',
         status: 'generated',
         createdAt,
         updatedAt,
@@ -434,6 +444,34 @@ describe('symbol strategy applications route', () => {
     await app.close();
   });
 
+  it('rejects empty create payload identifiers', async () => {
+    const app = await createApp();
+
+    const emptyStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: '  ',
+        strategy_version_id: 'version-2',
+      },
+    });
+    const emptyVersion = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: '',
+      },
+    });
+
+    expect(emptyStrategy.statusCode).toBe(400);
+    expect(emptyStrategy.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyVersion.statusCode).toBe(400);
+    expect(emptyVersion.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
   it('rejects invalid create payload references and archived strategies', async () => {
     const app = await createApp();
 
@@ -461,6 +499,14 @@ describe('symbol strategy applications route', () => {
         strategy_version_id: 'version-archived',
       },
     });
+    const pausedStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-paused',
+        strategy_version_id: 'version-paused',
+      },
+    });
     const mismatchedVersion = await app.inject({
       method: 'POST',
       url: '/api/symbols/sym-1/strategy-applications',
@@ -476,8 +522,28 @@ describe('symbol strategy applications route', () => {
     expect(missingVersion.json().error.code).toBe('NOT_FOUND');
     expect(archivedStrategy.statusCode).toBe(400);
     expect(archivedStrategy.json().error.code).toBe('VALIDATION_ERROR');
+    expect(pausedStrategy.statusCode).toBe(400);
+    expect(pausedStrategy.json().error.code).toBe('VALIDATION_ERROR');
     expect(mismatchedVersion.statusCode).toBe(400);
     expect(mismatchedVersion.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('returns 404 when creating an application for a missing symbol', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/missing-symbol/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'version-2',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
 
     await app.close();
   });

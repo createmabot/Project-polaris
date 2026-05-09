@@ -665,8 +665,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     if (!strategyVersion) {
       throw new AppError(404, 'NOT_FOUND', 'The specified strategy version was not found.');
     }
-    if (strategy.status === 'archived') {
-      throw new AppError(400, 'VALIDATION_ERROR', 'archived strategy cannot be applied.');
+    if (strategy.status !== 'active') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'only active strategy can be applied.');
     }
     if (strategyVersion.strategyRuleId !== strategy.id) {
       throw new AppError(400, 'VALIDATION_ERROR', 'strategy_version_id must belong to strategy_id.');
