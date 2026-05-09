@@ -2,7 +2,15 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
-import { StrategyListData, StrategyVersionListData, SymbolAiSummaryData, SymbolDetailData } from '../api/types';
+import {
+  StrategyListData,
+  StrategyVersionListData,
+  SymbolAiSummaryData,
+  SymbolDetailData,
+  SymbolStrategyApplicationCreateData,
+  SymbolStrategyApplicationItem,
+  SymbolStrategyApplicationListData,
+} from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
@@ -21,15 +29,27 @@ const LABELS = {
   strategyResultsTitle: 'ストラテジー / 検証結果',
   strategyResultsIntro: 'この銘柄に適用したストラテジーと検証結果をここに集約します。',
   strategyResultsPending:
-    '現在は導線準備中です。適用済みストラテジー、CSV取込、内部バックテスト、銘柄別比較は後続タスクで接続します。',
+    '保存済み application から CSV取込 / 内部バックテストへ進む接続は後続タスクです。',
+  savedApplicationsTitle: '保存済みストラテジー適用',
+  savedApplicationsLoading: '保存済み application を読み込み中...',
+  savedApplicationsError: '保存済み application を取得できませんでした。',
+  noSavedApplications: '保存済み application はまだありません。',
+  latestRun: '最新run',
+  latestBacktestReport: '最新検証レポート',
+  noLatestRun: '最新run はまだありません。',
+  noLatestBacktestReport: '最新検証レポートはまだありません。',
+  runCount: 'run count',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
-    'この選択はまだ保存されません。Symbol Strategy Application の作成、CSV取込、内部バックテスト接続は後続タスクです。',
+    '保存すると、この銘柄のストラテジー適用として記録されます。',
   chooseApplyCandidate: '適用候補を選択',
   selectedStrategy: '選択中のストラテジー',
   selectedVersion: '選択中の version',
   unsaved: '未保存',
-  applyNotSaved: 'この銘柄への適用保存はまだ未実装です。',
+  applyNotSaved: '選択中の内容は保存するまで未保存です。',
+  saveApply: '適用を保存',
+  saveApplySuccess: '保存しました。',
+  saveApplyDescription: '保存後に、保存済みストラテジー適用一覧へ反映します。',
   strategyList: 'ストラテジー一覧',
   versionList: 'version 一覧',
   openStrategyDetail: 'StrategyDetail を開く',
@@ -147,9 +167,106 @@ function MetaText({ children }: { children: ReactNode }) {
   return <div className="text-xs leading-5 text-slate-500">{children}</div>;
 }
 
-function StrategyApplySelectionPanel() {
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
+
+function SavedApplicationRow({ application }: { application: SymbolStrategyApplicationItem }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900">{application.strategy.title}</h4>
+          <MetaText>
+            application_id: {application.id} / status: {application.status} / source: {application.source}
+          </MetaText>
+          <MetaText>
+            version_id: {application.strategy_version.id} / {application.strategy_version.market} / {application.strategy_version.timeframe} / {application.strategy_version.status}
+          </MetaText>
+          {application.memo ? <p className="mt-2 text-sm text-slate-600">{application.memo}</p> : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
+          <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
+          {application.latest_run ? (
+            <MetaText>
+              {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
+            </MetaText>
+          ) : (
+            <EmptyText>{LABELS.noLatestRun}</EmptyText>
+          )}
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
+          {application.latest_backtest_report ? (
+            <div>
+              <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
+              <MetaText>
+                {application.latest_backtest_report.execution_source} / {application.latest_backtest_report.status} / {formatDate(application.latest_backtest_report.updated_at)}
+              </MetaText>
+              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>BacktestDetail</TextLink>
+            </div>
+          ) : (
+            <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
+          )}
+        </div>
+      </div>
+      <MetaText>{LABELS.runCount}: {application.run_count}</MetaText>
+    </div>
+  );
+}
+
+function SavedStrategyApplicationsPanel({
+  applications,
+  isLoading,
+  error,
+}: {
+  applications: SymbolStrategyApplicationItem[];
+  isLoading: boolean;
+  error: unknown;
+}) {
+  return (
+    <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+      <h3 className="text-base font-semibold text-slate-900">{LABELS.savedApplicationsTitle}</h3>
+      <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.strategyResultsPending}</p>
+      {isLoading ? (
+        <EmptyText>{LABELS.savedApplicationsLoading}</EmptyText>
+      ) : error ? (
+        <p className="mt-3 text-sm text-rose-700">{LABELS.savedApplicationsError}</p>
+      ) : applications.length === 0 ? (
+        <EmptyText>{LABELS.noSavedApplications}</EmptyText>
+      ) : (
+        <div className="mt-3 grid gap-3">
+          {applications.map((application) => (
+            <SavedApplicationRow key={application.id} application={application} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StrategyApplySelectionPanel({
+  symbolId,
+  mutateApplications,
+}: {
+  symbolId: string;
+  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
+}) {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [isSavingApplication, setIsSavingApplication] = useState(false);
+  const [saveApplicationError, setSaveApplicationError] = useState<string | null>(null);
+  const [saveApplicationMessage, setSaveApplicationMessage] = useState<string | null>(null);
   const {
     data: strategyListData,
     error: strategyListError,
@@ -183,15 +300,43 @@ function StrategyApplySelectionPanel() {
   const chooseStrategy = (strategyId: string) => {
     setSelectedStrategyId(strategyId);
     setSelectedVersionId(null);
+    setSaveApplicationError(null);
+    setSaveApplicationMessage(null);
   };
 
   const chooseVersion = (versionId: string) => {
     setSelectedVersionId(versionId);
+    setSaveApplicationError(null);
+    setSaveApplicationMessage(null);
   };
 
   const clearSelection = () => {
     setSelectedStrategyId(null);
     setSelectedVersionId(null);
+    setSaveApplicationError(null);
+  };
+
+  const saveApplication = async () => {
+    if (!selectedStrategy || !selectedVersion) {
+      return;
+    }
+    setIsSavingApplication(true);
+    setSaveApplicationError(null);
+    setSaveApplicationMessage(null);
+    try {
+      await postApi<SymbolStrategyApplicationCreateData>(`/api/symbols/${symbolId}/strategy-applications`, {
+        strategy_id: selectedStrategy.id,
+        strategy_version_id: selectedVersion.id,
+      });
+      await mutateApplications();
+      setSaveApplicationMessage(LABELS.saveApplySuccess);
+      setSelectedStrategyId(null);
+      setSelectedVersionId(null);
+    } catch (error) {
+      setSaveApplicationError(getErrorMessage(error, 'application を保存できませんでした。'));
+    } finally {
+      setIsSavingApplication(false);
+    }
   };
 
   return (
@@ -302,6 +447,7 @@ function StrategyApplySelectionPanel() {
           <p className="mt-1 text-sm text-emerald-900">
             version_id: {selectedVersion.id} / {selectedVersion.market} / {selectedVersion.timeframe} / {selectedVersion.status}
           </p>
+          <p className="mt-2 text-sm text-emerald-900">{LABELS.saveApplyDescription}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <TextLink href={`/strategy-versions/${selectedVersion.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
             <TextLink href={`/strategies/${selectedStrategy.id}/versions`}>{LABELS.versionList}</TextLink>
@@ -309,9 +455,21 @@ function StrategyApplySelectionPanel() {
         </div>
       ) : null}
 
+      {saveApplicationMessage ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{saveApplicationMessage}</p>
+      ) : null}
+      {saveApplicationError ? (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{saveApplicationError}</p>
+      ) : null}
+
       <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
-        <button type="button" disabled className="rounded-md bg-slate-300 px-3 py-2 text-sm font-medium text-slate-600">
-          {LABELS.saveApplyPending}
+        <button
+          type="button"
+          disabled={!selectedStrategy || !selectedVersion || isSavingApplication}
+          onClick={saveApplication}
+          className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+        >
+          {isSavingApplication ? '保存中...' : LABELS.saveApply}
         </button>
         <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
           {LABELS.csvImportLater}
@@ -342,6 +500,17 @@ export default function SymbolDetail() {
     mutate: mutateAiSummary,
   } = useSWR<SymbolAiSummaryData>(
     symbolId ? `/api/symbols/${symbolId}/ai-summary?scope=thesis` : null,
+    swrFetcher,
+  );
+  const {
+    data: applicationListData,
+    error: applicationListError,
+    isLoading: isApplicationListLoading,
+    mutate: mutateApplicationList,
+  } = useSWR<SymbolStrategyApplicationListData>(
+    symbolId
+      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc`
+      : null,
     swrFetcher,
   );
 
@@ -599,7 +768,17 @@ export default function SymbolDetail() {
                 <li>CSV取込、内部バックテスト、銘柄別比較の入口</li>
               </ul>
             </div>
-            <StrategyApplySelectionPanel />
+            <SavedStrategyApplicationsPanel
+              applications={applicationListData?.applications ?? []}
+              isLoading={isApplicationListLoading}
+              error={applicationListError}
+            />
+            {symbolId ? (
+              <StrategyApplySelectionPanel
+                symbolId={symbolId}
+                mutateApplications={mutateApplicationList}
+              />
+            ) : null}
           </InfoCard>
         </DetailSection>
 
