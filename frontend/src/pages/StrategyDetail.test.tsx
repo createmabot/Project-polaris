@@ -68,6 +68,7 @@ describe('StrategyDetail', () => {
     expect(html).toContain('ストラテジー詳細');
     expect(html).toContain('押し目買い戦略');
     expect(html).toContain('strategy_id: <code>strategy_1</code>');
+    expect(html).toContain('アーカイブ</button>');
     expect(html).toContain('このストラテジー定義の version、関連検証レポート、適用済み銘柄をここに集約します。');
     expect(html).toContain('version 一覧を開く');
     expect(html).toContain('href="/strategies/strategy_1/versions"');
@@ -77,7 +78,7 @@ describe('StrategyDetail', () => {
     expect(html).toContain('href="/backtests"');
     expect(html).toContain('related reports は準備中です。');
     expect(html).toContain('applied symbols は準備中です。');
-    expect(html).toContain('favorite / archive / delete は準備中です。');
+    expect(html).toContain('favorite / hard delete は準備中です。archive / restore は status 操作として利用できます。');
     expect(html).toContain('BacktestDetail は個別検証レポート詳細として継続し、この画面には吸収しません。');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/strategies/strategy_1/versions?page=1&limit=50&sort=updated_at&order=desc',
@@ -118,6 +119,44 @@ describe('StrategyDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyDetail />);
     expect(html).toContain('空の戦略');
+    expect(html).toContain('このストラテジーにはまだ version がありません。');
+  });
+
+  it('renders restore action for archived strategy', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { strategyId: 'strategy_archived' }]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        strategy: {
+          id: 'strategy_archived',
+          title: '休止中の戦略',
+          status: 'archived',
+          created_at: '2026-05-01T00:00:00.000Z',
+          updated_at: '2026-05-02T00:00:00.000Z',
+        },
+        query: { q: '', status: '', sort: 'updated_at', order: 'desc' },
+        pagination: {
+          page: 1,
+          limit: 50,
+          q: '',
+          status: '',
+          sort: 'updated_at',
+          order: 'desc',
+          total: 0,
+          has_next: false,
+          has_prev: false,
+        },
+        strategy_versions: [],
+      },
+    });
+
+    const html = renderToStaticMarkup(<StrategyDetail />);
+    expect(html).toContain('休止中の戦略');
+    expect(html).toContain('archived');
+    expect(html).toContain('復元</button>');
     expect(html).toContain('このストラテジーにはまだ version がありません。');
   });
 });

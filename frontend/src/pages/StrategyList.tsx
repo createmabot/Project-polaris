@@ -1,12 +1,14 @@
+import { useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { swrFetcher } from '../api/client';
-import { StrategyListData } from '../api/types';
+import { patchApi, swrFetcher } from '../api/client';
+import { StrategyListData, StrategyMutateData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
 
 const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
+type StatusFilter = 'active' | 'archived' | 'all';
 
 function formatDate(value: string | null | undefined): string {
   if (!value) {
@@ -20,11 +22,43 @@ function formatDate(value: string | null | undefined): string {
 }
 
 function StrategyList(): JSX.Element {
-  const { data, error, isLoading } = useSWR<StrategyListData>(
-    '/api/strategies?page=1&limit=20&sort=updated_at&order=desc',
-    swrFetcher,
-  );
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
+  const [mutatingStrategyId, setMutatingStrategyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const listApiPath = useMemo(() => {
+    const params = new URLSearchParams({
+      page: '1',
+      limit: '20',
+      sort: 'updated_at',
+      order: 'desc',
+    });
+    if (statusFilter !== 'all') {
+      params.set('status', statusFilter);
+    }
+    return `/api/strategies?${params.toString()}`;
+  }, [statusFilter]);
+  const { data, error, isLoading, mutate } = useSWR<StrategyListData>(listApiPath, swrFetcher);
   const strategies = data?.strategies ?? [];
+
+  const handleArchiveRestore = async (strategyId: string, nextAction: 'archive' | 'restore') => {
+    const confirmMessage =
+      nextAction === 'archive'
+        ? 'このストラテジーをアーカイブしますか？'
+        : 'このストラテジーを復元しますか？';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+      return;
+    }
+    setMutatingStrategyId(strategyId);
+    setActionError(null);
+    try {
+      await patchApi<StrategyMutateData>(`/api/strategies/${strategyId}/${nextAction}`, {});
+      await mutate();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'ストラテジーの更新に失敗しました。');
+    } finally {
+      setMutatingStrategyId(null);
+    }
+  };
 
   return (
     <AppLayout>
@@ -42,8 +76,9 @@ function StrategyList(): JSX.Element {
               再利用可能なストラテジー定義をここに集約します。
             </p>
             <p className={MUTED_TEXT_CLASS}>
-              現在は既存の StrategyRule / StrategyRuleVersion の read-only 表示のみです。favorite / archive /
-              delete、applied symbols、related reports は後続タスクで接続します。
+              現在は既存の StrategyRule / StrategyRuleVersion の read-only 表示のみです。favorite / hard
+              delete、applied symbols、related reports は後続タスクで接続します。archive / restore は status
+              操作として利用できます。
             </p>
           </div>
 
@@ -68,7 +103,31 @@ function StrategyList(): JSX.Element {
         </section>
 
         <section className={PANEL_CLASS}>
-          <h2 className="text-lg font-semibold text-slate-900">既存ストラテジー</h2>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <h2 className="text-lg font-semibold text-slate-900">既存ストラテジー</h2>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium text-slate-700">表示対象</span>
+              {([
+                ['active', '有効'],
+                ['archived', 'アーカイブ'],
+                ['all', 'すべて'],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setStatusFilter(value)}
+                  className={
+                    statusFilter === value
+                      ? 'rounded-full bg-sky-700 px-3 py-1 text-white'
+                      : 'rounded-full border border-slate-300 bg-white px-3 py-1 text-slate-700'
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {actionError ? <p className="mt-3 text-sm text-red-700">{actionError}</p> : null}
           {isLoading ? (
             <p className={MUTED_TEXT_CLASS}>ストラテジーを読み込み中...</p>
           ) : error ? (
@@ -114,6 +173,27 @@ function StrategyList(): JSX.Element {
                       </dd>
                     </div>
                   </dl>
+                  <div className="mt-4">
+                    {strategy.status === 'archived' ? (
+                      <button
+                        type="button"
+                        disabled={mutatingStrategyId === strategy.id}
+                        onClick={() => handleArchiveRestore(strategy.id, 'restore')}
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        復元
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={mutatingStrategyId === strategy.id}
+                        onClick={() => handleArchiveRestore(strategy.id, 'archive')}
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        アーカイブ
+                      </button>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>

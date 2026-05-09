@@ -513,6 +513,16 @@ export type StrategyListData = {
   }>;
 };
 
+export type StrategyMutateData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;
