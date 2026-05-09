@@ -187,6 +187,11 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+type CsvImportMessage = {
+  type: 'success' | 'warning';
+  text: string;
+};
+
 function SavedApplicationRow({
   application,
   mutateApplications,
@@ -197,7 +202,7 @@ function SavedApplicationRow({
   const [fileName, setFileName] = useState('tradingview.csv');
   const [csvText, setCsvText] = useState('');
   const [isImportingCsv, setIsImportingCsv] = useState(false);
-  const [csvImportMessage, setCsvImportMessage] = useState<string | null>(null);
+  const [csvImportMessage, setCsvImportMessage] = useState<CsvImportMessage | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [csvBacktestLink, setCsvBacktestLink] = useState<string | null>(null);
 
@@ -222,15 +227,18 @@ function SavedApplicationRow({
       );
       setCsvBacktestLink(result.backtest.id);
       if (result.import.parse_status === 'failed') {
-        setCsvImportMessage(`${LABELS.csvImportParseFailed}: ${result.import.parse_error ?? '-'}`);
+        setCsvImportMessage({
+          type: 'warning',
+          text: `${LABELS.csvImportParseFailed}: ${result.import.parse_error ?? '-'}`,
+        });
       } else {
-        setCsvImportMessage(LABELS.csvImportSuccess);
+        setCsvImportMessage({ type: 'success', text: LABELS.csvImportSuccess });
       }
       setCsvText('');
       try {
         await mutateApplications();
       } catch {
-        setCsvImportMessage(LABELS.csvImportRefreshFailed);
+        setCsvImportMessage({ type: 'warning', text: LABELS.csvImportRefreshFailed });
       }
     } catch (error) {
       setCsvImportError(getErrorMessage(error, LABELS.csvImportError));
@@ -324,7 +332,15 @@ function SavedApplicationRow({
           {csvBacktestLink ? <TextLink href={`/backtests/${csvBacktestLink}`}>{LABELS.openBacktestDetail}</TextLink> : null}
         </div>
         {csvImportMessage ? (
-          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{csvImportMessage}</p>
+          <p
+            className={
+              csvImportMessage.type === 'success'
+                ? 'mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800'
+                : 'mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'
+            }
+          >
+            {csvImportMessage.text}
+          </p>
         ) : null}
         {csvImportError ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{csvImportError}</p>
