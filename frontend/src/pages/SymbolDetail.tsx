@@ -150,7 +150,6 @@ function MetaText({ children }: { children: ReactNode }) {
 function StrategyApplySelectionPanel() {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
-  const [isSelectionCleared, setIsSelectionCleared] = useState(false);
   const {
     data: strategyListData,
     error: strategyListError,
@@ -161,10 +160,9 @@ function StrategyApplySelectionPanel() {
   );
 
   const strategies = strategyListData?.strategies ?? [];
-  const selectedStrategy =
-    !isSelectionCleared
-      ? strategies.find((strategy) => strategy.id === selectedStrategyId) ?? strategies[0] ?? null
-      : null;
+  const selectedStrategy = selectedStrategyId
+    ? strategies.find((strategy) => strategy.id === selectedStrategyId) ?? null
+    : null;
 
   const {
     data: versionListData,
@@ -178,26 +176,22 @@ function StrategyApplySelectionPanel() {
   );
 
   const versions = versionListData?.strategy_versions ?? [];
-  const selectedVersion =
-    selectedStrategy && !isSelectionCleared
-      ? versions.find((version) => version.id === selectedVersionId) ?? versions[0] ?? null
-      : null;
+  const selectedVersion = selectedVersionId
+    ? versions.find((version) => version.id === selectedVersionId) ?? null
+    : null;
 
   const chooseStrategy = (strategyId: string) => {
     setSelectedStrategyId(strategyId);
     setSelectedVersionId(null);
-    setIsSelectionCleared(false);
   };
 
   const chooseVersion = (versionId: string) => {
     setSelectedVersionId(versionId);
-    setIsSelectionCleared(false);
   };
 
   const clearSelection = () => {
     setSelectedStrategyId(null);
     setSelectedVersionId(null);
-    setIsSelectionCleared(true);
   };
 
   return (

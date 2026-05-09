@@ -286,13 +286,16 @@ describe('SymbolDetail', () => {
     expect(html).toContain('この選択はまだ保存されません');
     expect(html).toContain('押し目買い戦略');
     expect(html).toContain('strategy_id:');
-    expect(html).toContain('version 一覧');
-    expect(html).toContain('version_id: version_1');
+    expect(html).not.toContain('version_id: version_1');
     expect(html).toContain('適用を保存（準備中）');
     expect(html).toContain('CSV取込（後続）');
     expect(html).toContain('内部バックテスト（後続）');
     expect(html).toContain('ストラテジー作成を開く');
     expect(html).toContain('検証レポート一覧を開く');
+    expect(mockUseSWR).not.toHaveBeenCalledWith(
+      '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
   });
 
   it('shows reference breakdown and shortage note when no references exist', () => {
