@@ -30,6 +30,16 @@ const sideRailHomeFixture = {
   key_events: [],
 };
 
+const sideRailWatchlistFixture = {
+  watchlist: { id: 'wl-1', name: 'default', description: null },
+  items: [],
+};
+
+const sideRailPositionsFixture = {
+  portfolio: { id: 'pf-1', name: 'default', is_default: true },
+  positions: [],
+};
+
 const baseSymbolData = {
   symbol: {
     id: 'sym-1',
@@ -66,6 +76,12 @@ describe('SymbolDetail', () => {
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
       }
+      if (key === '/api/watchlist-items') {
+        return { isLoading: false, error: null, data: sideRailWatchlistFixture };
+      }
+      if (key === '/api/positions') {
+        return { isLoading: false, error: null, data: sideRailPositionsFixture };
+      }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
       }
@@ -83,6 +99,12 @@ describe('SymbolDetail', () => {
     mockUseSWR.mockImplementation((key: string) => {
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
+      if (key === '/api/watchlist-items') {
+        return { isLoading: false, error: null, data: sideRailWatchlistFixture };
+      }
+      if (key === '/api/positions') {
+        return { isLoading: false, error: null, data: sideRailPositionsFixture };
       }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
@@ -120,6 +142,12 @@ describe('SymbolDetail', () => {
     mockUseSWR.mockImplementation((key: string) => {
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
+      if (key === '/api/watchlist-items') {
+        return { isLoading: false, error: null, data: sideRailWatchlistFixture };
+      }
+      if (key === '/api/positions') {
+        return { isLoading: false, error: null, data: sideRailPositionsFixture };
       }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
@@ -164,6 +192,12 @@ describe('SymbolDetail', () => {
     mockUseSWR.mockImplementation((key: string) => {
       if (key === '/api/home?summary_type=latest') {
         return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
+      if (key === '/api/watchlist-items') {
+        return { isLoading: false, error: null, data: sideRailWatchlistFixture };
+      }
+      if (key === '/api/positions') {
+        return { isLoading: false, error: null, data: sideRailPositionsFixture };
       }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
