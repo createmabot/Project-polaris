@@ -92,6 +92,6 @@ describe('StrategyList', () => {
 
     const html = renderToStaticMarkup(<StrategyList />);
     expect(html).toContain('既存のストラテジー定義はまだありません。');
-    expect(html).toContain('StrategyLab で作成したルール定義と version は、後続でここに表示されます。');
+    expect(html).toContain('StrategyLab でルール定義を作成すると、この一覧に表示されます。');
   });
 });

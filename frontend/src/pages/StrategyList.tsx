@@ -77,7 +77,7 @@ function StrategyList(): JSX.Element {
             <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
               <p className={MUTED_TEXT_CLASS}>既存のストラテジー定義はまだありません。</p>
               <p className={MUTED_TEXT_CLASS}>
-                StrategyLab で作成したルール定義と version は、後続でここに表示されます。
+                StrategyLab でルール定義を作成すると、この一覧に表示されます。
               </p>
             </div>
           ) : (
