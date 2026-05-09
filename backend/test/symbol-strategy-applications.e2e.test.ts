@@ -52,6 +52,7 @@ type Runtime = {
   strategies: Map<string, { id: string; title: string; status: string }>;
   versions: Map<string, {
     id: string;
+    strategyRuleId: string;
     market: string;
     timeframe: string;
     status: string;
@@ -61,6 +62,7 @@ type Runtime = {
   applications: ApplicationRow[];
   runs: RunRow[];
   backtests: Map<string, BacktestRow>;
+  nextApplicationId: number;
 };
 
 let runtime: Runtime;
@@ -82,20 +84,50 @@ function createRuntime(): Runtime {
     strategies: new Map([
       ['strategy-1', { id: 'strategy-1', title: 'Breakout strategy', status: 'active' }],
       ['strategy-archived', { id: 'strategy-archived', title: 'Archived strategy', status: 'archived' }],
+      ['strategy-paused', { id: 'strategy-paused', title: 'Paused strategy', status: 'paused' }],
     ]),
     versions: new Map([
       ['version-1', {
         id: 'version-1',
+        strategyRuleId: 'strategy-1',
         market: 'TSE',
         timeframe: 'D',
         status: 'generated',
         createdAt,
         updatedAt,
       }],
-      ['version-archived', {
-        id: 'version-archived',
+      ['version-2', {
+        id: 'version-2',
+        strategyRuleId: 'strategy-1',
         market: 'TSE',
         timeframe: 'W',
+        status: 'generated',
+        createdAt,
+        updatedAt,
+      }],
+      ['version-archived', {
+        id: 'version-archived',
+        strategyRuleId: 'strategy-archived',
+        market: 'TSE',
+        timeframe: 'W',
+        status: 'generated',
+        createdAt,
+        updatedAt,
+      }],
+      ['version-mismatch', {
+        id: 'version-mismatch',
+        strategyRuleId: 'strategy-archived',
+        market: 'TSE',
+        timeframe: '60',
+        status: 'generated',
+        createdAt,
+        updatedAt,
+      }],
+      ['version-paused', {
+        id: 'version-paused',
+        strategyRuleId: 'strategy-paused',
+        market: 'TSE',
+        timeframe: 'D',
         status: 'generated',
         createdAt,
         updatedAt,
@@ -171,6 +203,7 @@ function createRuntime(): Runtime {
         updatedAt: new Date('2026-05-02T00:00:00.000Z'),
       }],
     ]),
+    nextApplicationId: 2,
   };
 }
 
@@ -178,14 +211,42 @@ function filterApplications(where: any): ApplicationRow[] {
   return runtime.applications.filter((application) => {
     if (where?.symbolId && application.symbolId !== where.symbolId) return false;
     if (where?.status && application.status !== where.status) return false;
+    if (where?.strategyRuleVersionId && application.strategyRuleVersionId !== where.strategyRuleVersionId) {
+      return false;
+    }
     return true;
   });
 }
 
 vi.mock('../src/db', () => {
+  function hydrateApplication(application: ApplicationRow) {
+    const runs = runtime.runs
+      .filter((run) => run.applicationId === application.id)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const latestRun = runs[0] ?? null;
+    return {
+      ...application,
+      strategyRule: runtime.strategies.get(application.strategyRuleId),
+      strategyRuleVersion: runtime.versions.get(application.strategyRuleVersionId),
+      _count: { runs: runs.length },
+      runs: latestRun
+        ? [{
+            ...latestRun,
+            backtest: latestRun.backtestId ? runtime.backtests.get(latestRun.backtestId) ?? null : null,
+          }]
+        : [],
+    };
+  }
+
   const prisma = {
     symbol: {
       findUnique: async ({ where }: any) => runtime.symbols.get(where.id) ?? null,
+    },
+    strategyRule: {
+      findUnique: async ({ where }: any) => runtime.strategies.get(where.id) ?? null,
+    },
+    strategyRuleVersion: {
+      findUnique: async ({ where }: any) => runtime.versions.get(where.id) ?? null,
     },
     symbolStrategyApplication: {
       count: async ({ where }: any) => filterApplications(where).length,
@@ -202,24 +263,26 @@ vi.mock('../src/db', () => {
         }
         const offset = Number.isInteger(skip) ? skip : 0;
         const limit = Number.isInteger(take) ? take : rows.length;
-        return rows.slice(offset, offset + limit).map((application) => {
-          const runs = runtime.runs
-            .filter((run) => run.applicationId === application.id)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-          const latestRun = runs[0] ?? null;
-          return {
-            ...application,
-            strategyRule: runtime.strategies.get(application.strategyRuleId),
-            strategyRuleVersion: runtime.versions.get(application.strategyRuleVersionId),
-            _count: { runs: runs.length },
-            runs: latestRun
-              ? [{
-                  ...latestRun,
-                  backtest: latestRun.backtestId ? runtime.backtests.get(latestRun.backtestId) ?? null : null,
-                }]
-              : [],
-          };
-        });
+        return rows.slice(offset, offset + limit).map(hydrateApplication);
+      },
+      findFirst: async ({ where }: any) => {
+        return filterApplications(where)[0] ?? null;
+      },
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-04T00:00:00.000Z');
+        const application: ApplicationRow = {
+          id: `app-created-${runtime.nextApplicationId++}`,
+          symbolId: data.symbolId,
+          strategyRuleId: data.strategyRuleId,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          status: data.status ?? 'active',
+          source: data.source ?? 'manual',
+          memo: data.memo ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.applications.push(application);
+        return hydrateApplication(application);
       },
     },
   };
@@ -332,6 +395,173 @@ describe('symbol strategy applications route', () => {
     expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
     expect(invalidPage.statusCode).toBe(400);
     expect(invalidSort.statusCode).toBe(400);
+
+    await app.close();
+  });
+
+  it('creates a manual active application for a symbol and strategy version', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'version-2',
+        memo: '  watch weekly setup  ',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.symbol.id).toBe('sym-1');
+    expect(res.json().data.application).toMatchObject({
+      status: 'active',
+      source: 'manual',
+      memo: 'watch weekly setup',
+      strategy: {
+        id: 'strategy-1',
+        title: 'Breakout strategy',
+        status: 'active',
+      },
+      strategy_version: {
+        id: 'version-2',
+        market: 'TSE',
+        timeframe: 'W',
+        status: 'generated',
+      },
+      latest_run: null,
+      latest_backtest_report: null,
+      run_count: 0,
+    });
+    expect(runtime.applications.some((application) => (
+      application.symbolId === 'sym-1'
+      && application.strategyRuleId === 'strategy-1'
+      && application.strategyRuleVersionId === 'version-2'
+      && application.status === 'active'
+      && application.memo === 'watch weekly setup'
+    ))).toBe(true);
+
+    await app.close();
+  });
+
+  it('rejects empty create payload identifiers', async () => {
+    const app = await createApp();
+
+    const emptyStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: '  ',
+        strategy_version_id: 'version-2',
+      },
+    });
+    const emptyVersion = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: '',
+      },
+    });
+
+    expect(emptyStrategy.statusCode).toBe(400);
+    expect(emptyStrategy.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyVersion.statusCode).toBe(400);
+    expect(emptyVersion.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('rejects invalid create payload references and archived strategies', async () => {
+    const app = await createApp();
+
+    const missingStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'missing-strategy',
+        strategy_version_id: 'version-2',
+      },
+    });
+    const missingVersion = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'missing-version',
+      },
+    });
+    const archivedStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-archived',
+        strategy_version_id: 'version-archived',
+      },
+    });
+    const pausedStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-paused',
+        strategy_version_id: 'version-paused',
+      },
+    });
+    const mismatchedVersion = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'version-mismatch',
+      },
+    });
+
+    expect(missingStrategy.statusCode).toBe(404);
+    expect(missingStrategy.json().error.code).toBe('NOT_FOUND');
+    expect(missingVersion.statusCode).toBe(404);
+    expect(missingVersion.json().error.code).toBe('NOT_FOUND');
+    expect(archivedStrategy.statusCode).toBe(400);
+    expect(archivedStrategy.json().error.code).toBe('VALIDATION_ERROR');
+    expect(pausedStrategy.statusCode).toBe(400);
+    expect(pausedStrategy.json().error.code).toBe('VALIDATION_ERROR');
+    expect(mismatchedVersion.statusCode).toBe(400);
+    expect(mismatchedVersion.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('returns 404 when creating an application for a missing symbol', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/missing-symbol/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'version-2',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('NOT_FOUND');
+
+    await app.close();
+  });
+
+  it('rejects duplicate active application for the same symbol and strategy version', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/strategy-applications',
+      payload: {
+        strategy_id: 'strategy-1',
+        strategy_version_id: 'version-1',
+      },
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
 
     await app.close();
   });
