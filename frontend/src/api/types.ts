@@ -523,6 +523,78 @@ export type StrategyMutateData = {
   };
 };
 
+export type SymbolStrategyApplicationItem = {
+  id: string;
+  status: string;
+  source: string;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  strategy_version: {
+    id: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  latest_run: {
+    id: string;
+    run_type: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    backtest_id: string | null;
+    backtest_import_id: string | null;
+    internal_backtest_execution_id: string | null;
+  } | null;
+  latest_backtest_report: {
+    id: string;
+    title: string;
+    status: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  run_count: number;
+};
+
+export type SymbolStrategyApplicationListData = {
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+  };
+  query: {
+    status: string;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+  };
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  applications: SymbolStrategyApplicationItem[];
+};
+
+export type SymbolStrategyApplicationCreateData = {
+  symbol: SymbolStrategyApplicationListData['symbol'];
+  application: SymbolStrategyApplicationItem;
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;

@@ -139,6 +139,69 @@ const strategyVersionsFixture = {
   ],
 };
 
+const symbolApplicationsFixture = {
+  symbol: {
+    id: 'sym-1',
+    symbol: 'TYO:7203',
+    symbol_code: '7203',
+    display_name: 'Toyota',
+    market_code: 'JP',
+    tradingview_symbol: 'TYO:7203',
+  },
+  query: { status: 'active', sort: 'updated_at', order: 'desc' },
+  pagination: {
+    page: 1,
+    limit: 20,
+    total: 1,
+    has_next: false,
+    has_prev: false,
+  },
+  applications: [
+    {
+      id: 'application_1',
+      status: 'active',
+      source: 'manual',
+      memo: null,
+      created_at: '2026-05-03T00:00:00.000Z',
+      updated_at: '2026-05-04T00:00:00.000Z',
+      strategy: {
+        id: 'strategy_1',
+        title: '押し目買い戦略',
+        status: 'active',
+      },
+      strategy_version: {
+        id: 'version_1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'generated',
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-02T00:00:00.000Z',
+      },
+      latest_run: {
+        id: 'run_1',
+        run_type: 'csv_import',
+        status: 'succeeded',
+        created_at: '2026-05-04T00:00:00.000Z',
+        updated_at: '2026-05-04T00:00:00.000Z',
+        backtest_id: 'backtest_1',
+        backtest_import_id: 'import_1',
+        internal_backtest_execution_id: null,
+      },
+      latest_backtest_report: {
+        id: 'backtest_1',
+        title: '7203 strategy report',
+        status: 'ready',
+        execution_source: 'tradingview',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        created_at: '2026-05-04T00:00:00.000Z',
+        updated_at: '2026-05-04T00:00:00.000Z',
+      },
+      run_count: 1,
+    },
+  ],
+};
+
 function getCommonSWRResult(key: string | null) {
   if (key === '/api/home?summary_type=latest') {
     return { isLoading: false, error: null, data: sideRailHomeFixture };
@@ -154,6 +217,9 @@ function getCommonSWRResult(key: string | null) {
   }
   if (key === '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc') {
     return { isLoading: false, error: null, data: strategyVersionsFixture };
+  }
+  if (key === '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc') {
+    return { isLoading: false, error: null, mutate: vi.fn(), data: symbolApplicationsFixture };
   }
   return null;
 }
@@ -282,12 +348,17 @@ describe('SymbolDetail', () => {
     expect(html).toContain('AI論点カードを再生成');
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
+    expect(html).toContain('保存済みストラテジー適用');
+    expect(html).toContain('application_id: application_1');
+    expect(html).toContain('run count: 1');
+    expect(html).toContain('7203 strategy report');
     expect(html).toContain('既存ストラテジーを選ぶ');
-    expect(html).toContain('この選択はまだ保存されません');
+    expect(html).toContain('保存すると、この銘柄のストラテジー適用として記録されます。');
     expect(html).toContain('押し目買い戦略');
     expect(html).toContain('strategy_id:');
-    expect(html).not.toContain('version_id: version_1');
-    expect(html).toContain('適用を保存（準備中）');
+    expect(html).not.toContain('選択中の version');
+    expect(html).not.toContain('未保存');
+    expect(html).toContain('適用を保存');
     expect(html).toContain('CSV取込（後続）');
     expect(html).toContain('内部バックテスト（後続）');
     expect(html).toContain('ストラテジー作成を開く');
