@@ -48,6 +48,8 @@ describe('Home', () => {
 
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
+    expect(html).toContain('日次確認の見方');
+    expect(html).toContain('監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。');
     expect(html).toContain('AIデイリーサマリー');
     expect(html).toContain('AIがマーケット・アラート・参照情報をもとに生成した要約です。');
     expect(html).toContain('最新');
@@ -56,11 +58,6 @@ describe('Home', () => {
     expect(html).toContain('マーケット概況');
     expect(html).toContain('マーケット概況データはまだありません。');
     expect(html).toContain('監視銘柄はまだありません。');
-    expect(html).toContain('href="/watchlist"');
-    expect(html).toContain('監視銘柄を管理');
-    expect(html).toContain('保有銘柄はまだありません。');
-    expect(html).toContain('href="/positions"');
-    expect(html).toContain('保有銘柄を管理');
     expect(html).toContain('サマリーはまだありません。');
     expect(html).toContain('アラートはありません。');
     expect(html).toContain('注目イベントはまだありません。');
@@ -135,11 +132,8 @@ describe('Home', () => {
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
-    expect(html).toContain('href="/watchlist"');
-    expect(html).toContain('href="/positions"');
     expect(html).toContain('ソニーグループ');
     expect(html).not.toContain('Sony Group');
-    expect(html).toContain('数量: 100 / 平均取得: 12850 / 現在値: 13120 / 評価損益: 27000');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
     expect(html).toContain('決算発表');
@@ -195,8 +189,5 @@ describe('Home', () => {
     const html = renderToStaticMarkup(<Home />);
     expect(html).toContain('href="/symbols/sym_6501"');
     expect(html).toContain('価格: - / 変化率: -');
-    expect(html).toContain('現在値: - / 評価損益: -');
-    expect(html).toContain('href="/watchlist"');
-    expect(html).toContain('href="/positions"');
   });
 });

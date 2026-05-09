@@ -1,5 +1,5 @@
-﻿import useSWR from 'swr';
-import { useMemo, useState } from 'react';
+import useSWR from 'swr';
+import { useMemo, useState, type ReactNode } from 'react';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
@@ -34,6 +34,36 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
+type HomeSectionProps = {
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+  children: ReactNode;
+};
+
+function HomeSection({ title, description, actions, children }: HomeSectionProps) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+          {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
+        </div>
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function EmptyText({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-slate-500">{children}</p>;
+}
+
+function InfoCard({ children }: { children: ReactNode }) {
+  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">{children}</div>;
+}
+
 export default function Home() {
   const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
   const [summaryDate] = useState<string | null>(null);
@@ -43,19 +73,13 @@ export default function Home() {
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
   if (!data) return null;
-  const watchlistDisplayNameById = new Map<string, string>();
-  for (const symbol of data.watchlist_symbols) {
-    if (symbol?.symbol_id && symbol?.display_name) {
-      watchlistDisplayNameById.set(symbol.symbol_id, symbol.display_name);
-    }
-  }
 
   return (
     <AppLayout showSideRail>
-      <div style={{ width: '100%', fontFamily: 'sans-serif' }}>
+      <div className="w-full">
         <PageHeader
           title="北極星"
-          description="アラート、ノートをまとめて確認します。"
+          description="アラート、ノート、日次サマリーをまとめて確認します。"
           actions={
             <>
               <TextLink href="/compare">銘柄比較を開く</TextLink>
@@ -64,202 +88,149 @@ export default function Home() {
           }
         />
 
-        <section style={{ marginTop: '1.5rem' }}>
-        <h2>マーケット概況</h2>
-        <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-          {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
-          asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
-          asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
-            <p style={{ margin: 0, color: '#777' }}>マーケット概況データはまだありません。</p>
-          ) : (
-            <div style={{ display: 'grid', gap: '0.6rem' }}>
-              {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
-                <div key={`index-${index}`} style={{ fontSize: '0.9rem' }}>
-                  指数: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                </div>
-              ))}
-              {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).map((item, index) => (
-                <div key={`fx-${index}`} style={{ fontSize: '0.9rem' }}>
-                  為替: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                </div>
-              ))}
-              {asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).map((item, index) => (
-                <div key={`sector-${index}`} style={{ fontSize: '0.9rem' }}>
-                  セクター: {item.display_name ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>監視銘柄</h2>
-        <div style={{ marginBottom: '0.6rem' }}>
-          <TextLink href="/watchlist">監視銘柄を管理</TextLink>
-        </div>
-        {data.watchlist_symbols.length === 0 ? (
-          <p style={{ color: '#777' }}>監視銘柄はまだありません。</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.watchlist_symbols.map((symbol: any, index: number) => (
-              <li key={symbol.symbol_id ?? `watch-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
-                {symbol.symbol_id ? (
-                  <TextLink href={`/symbols/${symbol.symbol_id}`}>
-                    {symbol.display_name ?? symbol.symbol_id}
-                  </TextLink>
-                ) : (
-                  <span>{symbol.display_name ?? '不明'}</span>
-                )}
-                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
-                  価格: {symbol.latest_price ?? '-'} / 変化率: {symbol.change_rate ?? '-'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>保有銘柄</h2>
-        <div style={{ marginBottom: '0.6rem' }}>
-          <TextLink href="/positions">保有銘柄を管理</TextLink>
-        </div>
-        {data.positions.length === 0 ? (
-          <p style={{ color: '#777' }}>保有銘柄はまだありません。</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.positions.map((position: any, index: number) => (
-              <li key={position.position_id ?? `position-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
-                {(() => {
-                  const resolvedDisplayName =
-                    (position.symbol_id ? watchlistDisplayNameById.get(position.symbol_id) : null) ??
-                    position.display_name ??
-                    position.symbol_id ??
-                    '不明';
-                  return position.symbol_id ? (
-                    <TextLink href={`/symbols/${position.symbol_id}`}>
-                      {resolvedDisplayName}
-                    </TextLink>
-                  ) : (
-                    <span>{resolvedDisplayName}</span>
-                  );
-                })()}
-                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
-                  数量: {position.quantity ?? '-'} / 平均取得: {position.avg_cost ?? '-'} / 現在値: {position.latest_price ?? '-'} / 評価損益: {position.unrealized_pnl ?? '-'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>AIデイリーサマリー</h2>
-        <p style={{ marginTop: '-0.2rem', marginBottom: '0.6rem', color: '#666', fontSize: '0.88rem' }}>
-          AIがマーケット・アラート・参照情報をもとに生成した要約です。
-        </p>
-        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
-          {SUMMARY_OPTIONS.map((option) => {
-            const selected = summaryType === option.value;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => setSummaryType(option.value)}
-                style={{
-                  padding: '0.3rem 0.7rem',
-                  borderRadius: '999px',
-                  border: selected ? '1px solid #1f6feb' : '1px solid #ccc',
-                  background: selected ? '#e7f1ff' : '#fff',
-                  color: selected ? '#0b3d91' : '#333',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                }}
-                aria-pressed={selected}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-        <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '4px' }}>
-          {data.daily_summary && data.daily_summary.status === 'available' ? (
-            <div>
-              <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                {data.daily_summary.body_markdown ?? '-'}
+        <div className="grid gap-5">
+          <HomeSection title="日次確認の見方">
+            <InfoCard>
+              <p className="text-sm leading-6 text-slate-600">
+                監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。
+                Home 本体ではマーケット概況、AIデイリーサマリー、最新アラート、注目イベントを優先表示します。
               </p>
-              {data.daily_summary.insufficient_context ? (
-                <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#666' }}>
-                  参考情報が不足しているため、要約の精度が限定的です。
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <p style={{ margin: 0, color: '#777' }}>サマリーはまだありません。</p>
-          )}
-        </div>
-      </section>
+            </InfoCard>
+          </HomeSection>
 
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>最新アラート</h2>
-        {data.recent_alerts.length === 0 ? (
-          <p style={{ color: '#777' }}>アラートはありません。</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.recent_alerts.map((alert) => (
-              <li key={alert.id} style={{ padding: '1rem 0', borderBottom: '1px solid #eee' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
-                  <div>
-                    <strong>
-                      <TextLink href={`/alerts/${alert.id}`}>
-                        {alert.alertName}
-                      </TextLink>
-                    </strong>
-                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
-                      銘柄:{' '}
-                      {alert.symbol?.id ? (
-                        <TextLink href={`/symbols/${alert.symbol.id}`}>
-                          {alert.symbol.displayName || alert.symbol.symbol}
-                        </TextLink>
-                      ) : (
-                        <span>{alert.symbol?.displayName || alert.symbol?.symbol || '不明'}</span>
-                      )}
+          <HomeSection title="マーケット概況">
+            <InfoCard>
+              {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
+              asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
+              asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
+                <EmptyText>マーケット概況データはまだありません。</EmptyText>
+              ) : (
+                <div className="grid gap-3">
+                  {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
+                    <div key={`index-${index}`} className="text-sm text-slate-700">
+                      指数: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                      発生: {formatDate(alert.triggeredAt || alert.receivedAt)} | 状態: <code>{alert.processingStatus}</code>
+                  ))}
+                  {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).map((item, index) => (
+                    <div key={`fx-${index}`} className="text-sm text-slate-700">
+                      為替: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
                     </div>
-                  </div>
+                  ))}
+                  {asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).map((item, index) => (
+                    <div key={`sector-${index}`} className="text-sm text-slate-700">
+                      セクター: {item.display_name ?? '-'} / 変化率: {item.change_rate ?? '-'}
+                    </div>
+                  ))}
                 </div>
-                {alert.related_ai_summary && (
-                  <div style={{ marginTop: '0.5rem', background: '#f9f9f9', borderLeft: '3px solid #0066cc', padding: '0.5rem' }}>
-                    <div style={{ fontWeight: 600 }}>{alert.related_ai_summary.title || 'AI要約'}</div>
-                    <p style={{ margin: '4px 0 0 0', whiteSpace: 'pre-wrap' }}>{alert.related_ai_summary.bodyMarkdown}</p>
-                  </div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+              )}
+            </InfoCard>
+          </HomeSection>
 
-      <section style={{ marginTop: '1.5rem' }}>
-        <h2>注目イベント</h2>
-        {data.key_events.length === 0 ? (
-          <p style={{ color: '#777' }}>注目イベントはまだありません。</p>
-        ) : (
-          <ul style={{ listStyle: 'none', padding: 0 }}>
-            {data.key_events.map((event: any, index: number) => (
-              <li key={`${event.label ?? 'event'}-${index}`} style={{ padding: '0.45rem 0', borderBottom: '1px solid #eee' }}>
-                <strong>{event.label ?? 'イベント'}</strong>
-                <span style={{ fontSize: '0.85rem', color: '#666', marginLeft: '0.6rem' }}>
-                  日付: {event.date ?? '-'}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          <HomeSection
+            title="AIデイリーサマリー"
+            description="AIがマーケット・アラート・参照情報をもとに生成した要約です。"
+            actions={
+              <div className="flex flex-wrap gap-2">
+                {SUMMARY_OPTIONS.map((option) => {
+                  const selected = summaryType === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setSummaryType(option.value)}
+                      className={`rounded-full border px-3 py-1.5 text-sm ${
+                        selected
+                          ? 'border-sky-600 bg-sky-100 text-sky-900'
+                          : 'border-slate-300 bg-white text-slate-600'
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            }
+          >
+            <InfoCard>
+              {data.daily_summary && data.daily_summary.status === 'available' ? (
+                <div>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                    {data.daily_summary.body_markdown ?? '-'}
+                  </p>
+                  {data.daily_summary.insufficient_context ? (
+                    <p className="mt-3 text-xs text-slate-500">
+                      参考情報が不足しているため、要約の精度が限定的です。
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <EmptyText>サマリーはまだありません。</EmptyText>
+              )}
+            </InfoCard>
+          </HomeSection>
+
+          <HomeSection title="最新アラート">
+            {data.recent_alerts.length === 0 ? (
+              <EmptyText>アラートはありません。</EmptyText>
+            ) : (
+              <div className="grid gap-3">
+                {data.recent_alerts.map((alert) => (
+                  <article key={alert.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <strong className="block text-slate-900">
+                          <TextLink href={`/alerts/${alert.id}`}>{alert.alertName}</TextLink>
+                        </strong>
+                        <div className="mt-1 text-sm text-slate-600">
+                          銘柄:{' '}
+                          {alert.symbol?.id ? (
+                            <TextLink href={`/symbols/${alert.symbol.id}`}>
+                              {alert.symbol.displayName || alert.symbol.symbol}
+                            </TextLink>
+                          ) : (
+                            <span>{alert.symbol?.displayName || alert.symbol?.symbol || '不明'}</span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          発生: {formatDate(alert.triggeredAt || alert.receivedAt)} | 状態:{' '}
+                          <code>{alert.processingStatus}</code>
+                        </div>
+                      </div>
+                    </div>
+                    {alert.related_ai_summary ? (
+                      <div className="mt-3 rounded-md border-l-4 border-sky-600 bg-slate-50 p-3">
+                        <div className="font-medium text-slate-900">
+                          {alert.related_ai_summary.title || 'AI要約'}
+                        </div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
+                          {alert.related_ai_summary.bodyMarkdown}
+                        </p>
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </HomeSection>
+
+          <HomeSection title="注目イベント">
+            {data.key_events.length === 0 ? (
+              <EmptyText>注目イベントはまだありません。</EmptyText>
+            ) : (
+              <div className="grid gap-3">
+                {data.key_events.map((event: any, index: number) => (
+                  <InfoCard key={`${event.label ?? 'event'}-${index}`}>
+                    <div className="text-sm text-slate-800">
+                      <strong>{event.label ?? 'イベント'}</strong>
+                      <span className="ml-3 text-slate-500">日付: {event.date ?? '-'}</span>
+                    </div>
+                  </InfoCard>
+                ))}
+              </div>
+            )}
+          </HomeSection>
+        </div>
       </div>
     </AppLayout>
   );
