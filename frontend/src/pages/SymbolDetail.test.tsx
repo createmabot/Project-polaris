@@ -21,6 +21,15 @@ vi.mock('../api/client', () => ({
 
 import SymbolDetail from './SymbolDetail';
 
+const sideRailHomeFixture = {
+  market_overview: { indices: [], fx: [], sectors: [] },
+  watchlist_symbols: [],
+  positions: [],
+  recent_alerts: [],
+  daily_summary: null,
+  key_events: [],
+};
+
 const baseSymbolData = {
   symbol: {
     id: 'sym-1',
@@ -54,6 +63,9 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      if (key === '/api/home?summary_type=latest') {
+        return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
       }
@@ -69,6 +81,9 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      if (key === '/api/home?summary_type=latest') {
+        return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
       }
@@ -94,7 +109,7 @@ describe('SymbolDetail', () => {
     });
 
     const html = renderToStaticMarkup(<SymbolDetail />);
-    expect(html).toContain('AI論点カードは未生成です');
+    expect(html).toContain('AI論点カードは未生成です。');
     expect(html).toContain('AI論点カード生成');
   });
 
@@ -103,6 +118,9 @@ describe('SymbolDetail', () => {
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      if (key === '/api/home?summary_type=latest') {
+        return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
       }
@@ -138,11 +156,15 @@ describe('SymbolDetail', () => {
     expect(html).toContain('FX risk');
     expect(html).toContain('AI論点カードを再生成');
   });
+
   it('shows reference breakdown and shortage note when no references exist', () => {
     mockUseSWR.mockReset();
     mockUseRoute.mockReset();
     mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
     mockUseSWR.mockImplementation((key: string) => {
+      if (key === '/api/home?summary_type=latest') {
+        return { isLoading: false, error: null, data: sideRailHomeFixture };
+      }
       if (key === '/api/symbols/sym-1') {
         return { isLoading: false, error: null, data: baseSymbolData };
       }

@@ -106,7 +106,7 @@ export default function SymbolDetail() {
   if (error) {
     if (error.code === 'NOT_FOUND' || error.message.includes('404')) {
       return (
-        <AppLayout>
+        <AppLayout showSideRail>
           <div style={{ padding: '2rem', fontFamily: 'sans-serif' }}>
             <h2>銘柄が見つかりません</h2>
             <p>指定された銘柄IDは存在しないか、削除されています。</p>
@@ -161,8 +161,8 @@ export default function SymbolDetail() {
   }
 
   return (
-    <AppLayout>
-      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+    <AppLayout showSideRail>
+      <div style={{ width: '100%', fontFamily: 'sans-serif' }}>
         <PageHeader
           title={data.symbol.display_name || data.symbol.symbol}
           backLink={{ href: '/', label: 'ホームへ戻る' }}
