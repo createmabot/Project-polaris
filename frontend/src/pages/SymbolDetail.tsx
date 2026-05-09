@@ -49,6 +49,7 @@ const LABELS = {
   applyNotSaved: '選択中の内容は保存するまで未保存です。',
   saveApply: '適用を保存',
   saveApplySuccess: '保存しました。',
+  saveApplyRefreshFailed: '保存しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   saveApplyDescription: '保存後に、保存済みストラテジー適用一覧へ反映します。',
   strategyList: 'ストラテジー一覧',
   versionList: 'version 一覧',
@@ -328,12 +329,19 @@ function StrategyApplySelectionPanel({
         strategy_id: selectedStrategy.id,
         strategy_version_id: selectedVersion.id,
       });
-      await mutateApplications();
       setSaveApplicationMessage(LABELS.saveApplySuccess);
       setSelectedStrategyId(null);
       setSelectedVersionId(null);
     } catch (error) {
       setSaveApplicationError(getErrorMessage(error, 'application を保存できませんでした。'));
+      setIsSavingApplication(false);
+      return;
+    }
+
+    try {
+      await mutateApplications();
+    } catch {
+      setSaveApplicationMessage(LABELS.saveApplyRefreshFailed);
     } finally {
       setIsSavingApplication(false);
     }
