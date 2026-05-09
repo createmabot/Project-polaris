@@ -1,19 +1,18 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 async function pickFirstSymbolLink(page: Page): Promise<Locator | null> {
-  const watchlistSection = page.locator('section', {
-    has: page.getByRole('heading', { name: '監視銘柄' }),
-  });
-  const positionsSection = page.locator('section', {
-    has: page.getByRole('heading', { name: '保有銘柄' }),
+  const sideRail = page.getByLabel('共通サイドメニュー');
+  const watchlistRegion = sideRail.locator('div').filter({
+    has: page.getByRole('button', { name: '監視' }),
   });
 
-  const watchlistLinks = watchlistSection.locator('a[href^="/symbols/"]');
+  const watchlistLinks = watchlistRegion.locator('a[href^="/symbols/"]');
   if ((await watchlistLinks.count()) > 0) {
     return watchlistLinks.first();
   }
 
-  const positionLinks = positionsSection.locator('a[href^="/symbols/"]');
+  await sideRail.getByRole('button', { name: '保有' }).click();
+  const positionLinks = sideRail.locator('a[href^="/symbols/"]');
   if ((await positionLinks.count()) > 0) {
     return positionLinks.first();
   }
@@ -26,14 +25,15 @@ test.describe('Home -> SymbolDetail smoke', () => {
     await page.goto('/');
 
     await expect(page.getByRole('heading', { level: 1, name: '北極星' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: '監視銘柄' })).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: '保有銘柄' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'マーケット概況' })).toBeVisible();
+    await expect(page.getByLabel('共通サイドメニュー')).toBeVisible();
 
     const symbolLink = await pickFirstSymbolLink(page);
     expect(symbolLink, 'seed または既存データに symbol link が必要です').not.toBeNull();
     if (!symbolLink) return;
 
     const linkText = (await symbolLink.textContent())?.trim() ?? '';
+    const symbolName = linkText.split('価格:')[0]?.trim() ?? linkText;
     await symbolLink.click();
 
     await expect(page).toHaveURL(/\/symbols\/.+/);
@@ -41,8 +41,8 @@ test.describe('Home -> SymbolDetail smoke', () => {
     await expect(page.getByRole('heading', { level: 2, name: '現在スナップショット' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: '関連参照情報' })).toBeVisible();
 
-    if (linkText) {
-      await expect(page.getByRole('heading', { level: 1 })).toContainText(linkText);
+    if (symbolName) {
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(symbolName);
     }
   });
 });
