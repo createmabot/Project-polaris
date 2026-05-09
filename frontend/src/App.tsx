@@ -6,6 +6,7 @@ import NoteDetail from "./pages/NoteDetail";
 import CompareCreate from "./pages/CompareCreate";
 import ComparisonDetail from "./pages/ComparisonDetail";
 import StrategyLab from "./pages/StrategyLab";
+import StrategyDetail from "./pages/StrategyDetail";
 import StrategyList from "./pages/StrategyList";
 import BacktestDetail from "./pages/BacktestDetail";
 import BacktestComparisonDetail from "./pages/BacktestComparisonDetail";
@@ -26,8 +27,9 @@ function App() {
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
       <Route path="/compare" component={CompareCreate} />
       <Route path="/strategy-lab" component={StrategyLab} />
-      <Route path="/strategies" component={StrategyList} />
       <Route path="/strategies/:strategyId/versions" component={StrategyVersionList} />
+      <Route path="/strategies/:strategyId" component={StrategyDetail} />
+      <Route path="/strategies" component={StrategyList} />
       <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
       <Route path="/watchlist" component={WatchlistManage} />
       <Route path="/positions" component={PositionsManage} />
