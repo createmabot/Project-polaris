@@ -1,5 +1,9 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
+function extractSymbolName(text: string): string {
+  return text.split('価格:')[0].split('数量:')[0].trim();
+}
+
 async function pickFirstSymbolLink(page: Page): Promise<Locator | null> {
   const sideRail = page.getByLabel('共通サイドメニュー');
   const watchlistRegion = sideRail.locator('div').filter({
@@ -33,7 +37,7 @@ test.describe('Home -> SymbolDetail smoke', () => {
     if (!symbolLink) return;
 
     const linkText = (await symbolLink.textContent())?.trim() ?? '';
-    const symbolName = linkText.split('価格:')[0]?.trim() ?? linkText;
+    const symbolName = extractSymbolName(linkText);
     await symbolLink.click();
 
     await expect(page).toHaveURL(/\/symbols\/.+/);
