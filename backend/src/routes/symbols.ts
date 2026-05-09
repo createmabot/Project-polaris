@@ -12,6 +12,9 @@ import {
 
 type JsonObject = Record<string, unknown>;
 type SymbolSummaryScope = 'thesis' | 'latest';
+type SymbolApplicationStatus = 'active' | 'archived';
+type SymbolApplicationSort = 'created_at' | 'updated_at';
+type SortOrder = 'asc' | 'desc';
 
 type SymbolSummaryView = {
   summary_id: string | null;
@@ -37,6 +40,55 @@ function normalizeSymbolSummaryScope(input?: string): SymbolSummaryScope {
     return 'latest';
   }
   throw new AppError(400, 'VALIDATION_ERROR', 'scope must be one of thesis|latest');
+}
+
+function normalizeApplicationStatus(input?: string): SymbolApplicationStatus {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'active';
+  }
+  if (normalized === 'active' || normalized === 'archived') {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'status must be one of active|archived');
+}
+
+function normalizePositiveInt(input: string | undefined, fallback: number, fieldName: string): number {
+  const value = Number(input ?? fallback);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a positive integer`);
+  }
+  return value;
+}
+
+function normalizeApplicationLimit(input?: string): number {
+  const limit = normalizePositiveInt(input, 20, 'limit');
+  if (limit > 50) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'limit must be <= 50');
+  }
+  return limit;
+}
+
+function normalizeApplicationSort(input?: string): SymbolApplicationSort {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'updated_at';
+  }
+  if (normalized === 'created_at' || normalized === 'updated_at') {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'sort must be one of created_at|updated_at');
+}
+
+function normalizeSortOrder(input?: string): SortOrder {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'desc';
+  }
+  if (normalized === 'asc' || normalized === 'desc') {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of asc|desc');
 }
 
 function toSymbolSummaryView(summary: any | null, scope: SymbolSummaryScope): SymbolSummaryView {
@@ -376,6 +428,167 @@ function getAlertSummaryPoints(summary: { bodyMarkdown: string; structuredJson: 
 }
 
 export async function symbolRoutes(fastify: FastifyInstance) {
+  fastify.get('/:symbolId/strategy-applications', async (
+    request: FastifyRequest<{
+      Params: { symbolId: string };
+      Querystring: { status?: string; page?: string; limit?: string; sort?: string; order?: string };
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { symbolId } = request.params;
+    const status = normalizeApplicationStatus(request.query.status);
+    const page = normalizePositiveInt(request.query.page, 1, 'page');
+    const limit = normalizeApplicationLimit(request.query.limit);
+    const sort = normalizeApplicationSort(request.query.sort);
+    const order = normalizeSortOrder(request.query.order);
+    const skip = (page - 1) * limit;
+
+    const symbol = await prisma.symbol.findUnique({
+      where: { id: symbolId },
+      select: {
+        id: true,
+        symbol: true,
+        symbolCode: true,
+        displayName: true,
+        marketCode: true,
+        tradingviewSymbol: true,
+      },
+    });
+    if (!symbol) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
+    }
+
+    const where = { symbolId, status };
+    const orderBy = sort === 'created_at'
+      ? { createdAt: order }
+      : { updatedAt: order };
+
+    const [total, applications] = await Promise.all([
+      prisma.symbolStrategyApplication.count({ where }),
+      prisma.symbolStrategyApplication.findMany({
+        where,
+        orderBy,
+        skip,
+        take: limit,
+        include: {
+          strategyRule: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            },
+          },
+          strategyRuleVersion: {
+            select: {
+              id: true,
+              market: true,
+              timeframe: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          _count: {
+            select: {
+              runs: true,
+            },
+          },
+          runs: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            include: {
+              backtest: {
+                select: {
+                  id: true,
+                  title: true,
+                  status: true,
+                  executionSource: true,
+                  market: true,
+                  timeframe: true,
+                  createdAt: true,
+                  updatedAt: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return reply.status(200).send(formatSuccess(request, {
+      symbol: {
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbol_code: symbol.symbolCode,
+        display_name: symbol.displayName,
+        market_code: symbol.marketCode,
+        tradingview_symbol: symbol.tradingviewSymbol,
+      },
+      query: {
+        status,
+        sort,
+        order,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        has_next: skip + applications.length < total,
+        has_prev: page > 1,
+      },
+      applications: applications.map((application) => {
+        const latestRun = application.runs[0] ?? null;
+        const latestBacktest = latestRun?.backtest ?? null;
+        return {
+          id: application.id,
+          status: application.status,
+          source: application.source,
+          memo: application.memo,
+          created_at: application.createdAt,
+          updated_at: application.updatedAt,
+          strategy: {
+            id: application.strategyRule.id,
+            title: application.strategyRule.title,
+            status: application.strategyRule.status,
+          },
+          strategy_version: {
+            id: application.strategyRuleVersion.id,
+            market: application.strategyRuleVersion.market,
+            timeframe: application.strategyRuleVersion.timeframe,
+            status: application.strategyRuleVersion.status,
+            created_at: application.strategyRuleVersion.createdAt,
+            updated_at: application.strategyRuleVersion.updatedAt,
+          },
+          latest_run: latestRun
+            ? {
+                id: latestRun.id,
+                run_type: latestRun.runType,
+                status: latestRun.status,
+                created_at: latestRun.createdAt,
+                updated_at: latestRun.updatedAt,
+                backtest_id: latestRun.backtestId,
+                backtest_import_id: latestRun.backtestImportId,
+                internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
+              }
+            : null,
+          latest_backtest_report: latestBacktest
+            ? {
+                id: latestBacktest.id,
+                title: latestBacktest.title,
+                status: latestBacktest.status,
+                execution_source: latestBacktest.executionSource,
+                market: latestBacktest.market,
+                timeframe: latestBacktest.timeframe,
+                created_at: latestBacktest.createdAt,
+                updated_at: latestBacktest.updatedAt,
+              }
+            : null,
+          run_count: application._count.runs,
+        };
+      }),
+    }));
+  });
+
   fastify.get('/:symbolId/ai-summary', async (
     request: FastifyRequest<{ Params: { symbolId: string }; Querystring: { scope?: string } }>,
     reply: FastifyReply,
