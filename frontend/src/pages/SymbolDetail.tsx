@@ -8,47 +8,47 @@ import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
 
 const LABELS = {
-  backToHome: '\u30db\u30fc\u30e0\u3078\u623b\u308b',
-  compare: '\u6bd4\u8f03\u753b\u9762\u306b\u9032\u3080',
-  code: '\u30b3\u30fc\u30c9',
-  market: '\u5e02\u5834',
-  processingStatus: '\u51e6\u7406\u72b6\u614b',
+  backToHome: 'ホームへ戻る',
+  compare: '比較画面に進む',
+  code: 'コード',
+  market: '市場',
+  processingStatus: '処理状態',
   chartTitle: 'TradingView chart',
-  chartDescription: '\u5171\u901a\u30b5\u30a4\u30c9\u30e1\u30cb\u30e5\u30fc\u3068\u4f75\u7528\u3057\u306a\u304c\u3089\u3001\u9298\u67c4\u306e\u73fe\u5728\u72b6\u6cc1\u3068\u30c1\u30e3\u30fc\u30c8\u3092\u78ba\u8a8d\u3057\u307e\u3059\u3002',
-  snapshotTitle: '\u73fe\u5728\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8',
-  latestAlertsTitle: '\u6700\u65b0\u30a2\u30e9\u30fc\u30c8',
-  latestAiTitle: '\u6700\u65b0AI\u8ad6\u70b9\u30ab\u30fc\u30c9',
+  chartDescription: '共通サイドメニューと併用しながら、銘柄の現在状況とチャートを確認します。',
+  snapshotTitle: '現在スナップショット',
+  latestAlertsTitle: '最新アラート',
+  latestAiTitle: '最新AI論点カード',
   researchNoteTitle: 'Research Note',
-  referencesTitle: '\u95a2\u9023\u53c2\u7167\u60c5\u5831',
-  currentPrice: '\u73fe\u5728\u5024',
-  dayChange: '\u524d\u65e5\u6bd4',
-  volume: '\u51fa\u6765\u9ad8',
-  source: '\u30bd\u30fc\u30b9',
-  marketStatus: '\u5e02\u5834\u72b6\u614b',
-  snapshotUnavailable: '\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002',
-  noAlerts: '\u3053\u306e\u9298\u67c4\u306e\u30a2\u30e9\u30fc\u30c8\u306f\u307e\u3060\u3042\u308a\u307e\u305b\u3093\u3002',
-  datetime: '\u65e5\u6642',
-  status: '\u72b6\u614b',
-  loadingAi: 'AI\u8ad6\u70b9\u30ab\u30fc\u30c9\u3092\u8aad\u307f\u8fbc\u307f\u4e2d...',
-  unavailableAi: 'AI\u8ad6\u70b9\u30ab\u30fc\u30c9\u306f\u672a\u751f\u6210\u3067\u3059\u3002',
-  emptyAi: 'AI\u8ad6\u70b9\u30ab\u30fc\u30c9\u306f\u7a7a\u3067\u3059\u3002',
-  generateAi: 'AI\u8ad6\u70b9\u30ab\u30fc\u30c9\u751f\u6210',
-  regenerateAi: 'AI\u8ad6\u70b9\u30ab\u30fc\u30c9\u3092\u518d\u751f\u6210',
-  generating: '\u751f\u6210\u4e2d...',
-  generatedAt: '\u751f\u6210\u65e5\u6642',
-  noReferencesWarning: '\u53c2\u7167\u60c5\u5831\u306f0\u4ef6\u3067\u3059\u3002\u30b9\u30ca\u30c3\u30d7\u30b7\u30e7\u30c3\u30c8\u3084\u30ce\u30fc\u30c8\u4e2d\u5fc3\u306e\u8981\u7d04\u306b\u306a\u3063\u3066\u3044\u308b\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002',
-  limitedReferencesWarning: '\u53c2\u7167\u60c5\u5831\u304c\u4e0d\u8db3\u3057\u3066\u3044\u308b\u305f\u3081\u3001\u8ad6\u70b9\u306e\u7cbe\u5ea6\u306b\u306f\u9650\u754c\u304c\u3042\u308b\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002',
-  openNote: '\u30ce\u30fc\u30c8\u3092\u958b\u304f',
-  createNote: '\u30ce\u30fc\u30c8\u3092\u65b0\u898f\u4f5c\u6210',
-  lastUpdated: '\u6700\u7d42\u66f4\u65b0',
-  nextReview: '\u6b21\u56de\u78ba\u8a8d\u65e5',
-  noResearchNote: '\u30a2\u30af\u30c6\u30a3\u30d6\u306a research note \u306f\u3042\u308a\u307e\u305b\u3093\u3002',
-  breakdown: '\u5185\u8a33',
-  noReferences: '\u95a2\u9023\u53c2\u7167\u60c5\u5831\u306f\u3042\u308a\u307e\u305b\u3093\u3002',
-  emptyStateHint: '\u30c7\u30fc\u30bf\u672a\u53d6\u5f97\u306e\u5834\u5408\u306f\u3001seed \u518d\u6295\u5165\u5f8c\u306b\u30da\u30fc\u30b8\u3092\u518d\u8aad\u307f\u8fbc\u307f\u3057\u3066\u304f\u3060\u3055\u3044\u3002',
-  notFoundTitle: '\u9298\u67c4\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093',
-  notFoundBody: '\u6307\u5b9a\u3055\u308c\u305f\u9298\u67c4ID\u306f\u5b58\u5728\u3057\u306a\u3044\u304b\u3001\u524a\u9664\u3055\u308c\u3066\u3044\u307e\u3059\u3002',
-  loadSymbol: '\u9298\u67c4\u60c5\u5831\u3092\u8aad\u307f\u8fbc\u307f\u4e2d...',
+  referencesTitle: '関連参照情報',
+  currentPrice: '現在値',
+  dayChange: '前日比',
+  volume: '出来高',
+  source: 'ソース',
+  marketStatus: '市場状態',
+  snapshotUnavailable: 'スナップショットを取得できませんでした。',
+  noAlerts: 'この銘柄のアラートはまだありません。',
+  datetime: '日時',
+  status: '状態',
+  loadingAi: 'AI論点カードを読み込み中...',
+  unavailableAi: 'AI論点カードは未生成です。',
+  emptyAi: 'AI論点カードは空です。',
+  generateAi: 'AI論点カード生成',
+  regenerateAi: 'AI論点カードを再生成',
+  generating: '生成中...',
+  generatedAt: '生成日時',
+  noReferencesWarning: '参照情報は0件です。スナップショットやノート中心の要約になっている可能性があります。',
+  limitedReferencesWarning: '参照情報が不足しているため、論点の精度には限界がある可能性があります。',
+  openNote: 'ノートを開く',
+  createNote: 'ノートを新規作成',
+  lastUpdated: '最終更新',
+  nextReview: '次回確認日',
+  noResearchNote: 'アクティブな research note はありません。',
+  breakdown: '内訳',
+  noReferences: '関連参照情報はありません。',
+  emptyStateHint: 'データ未取得の場合は、seed 再投入後にページを再読み込みしてください。',
+  notFoundTitle: '銘柄が見つかりません',
+  notFoundBody: '指定された銘柄IDは存在しないか、削除されています。',
+  loadSymbol: '銘柄情報を読み込み中...',
 } as const;
 
 const PRIMARY_BUTTON_CLASS =
@@ -200,7 +200,7 @@ export default function SymbolDetail() {
 
     return (
       <AppLayout showSideRail>
-        <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">\u30a8\u30e9\u30fc: {error.message}</div>
+        <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">エラー: {error.message}</div>
       </AppLayout>
     );
   }
@@ -241,7 +241,7 @@ export default function SymbolDetail() {
       });
       await mutateAiSummary();
     } catch (err: any) {
-      setGenerateThesisError(err?.message ?? '\u0041\u0049\u8ad6\u70b9\u30ab\u30fc\u30c9\u751f\u6210\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002');
+      setGenerateThesisError(err?.message ?? 'AI論点カード生成に失敗しました。');
     } finally {
       setIsGeneratingThesis(false);
     }
