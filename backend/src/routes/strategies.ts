@@ -14,6 +14,8 @@ type CreateStrategyVersionBody = {
   timeframe?: string;
 };
 
+type StrategyStatus = 'active' | 'archived';
+
 function normalizeTitle(body: CreateStrategyBody): string {
   const raw = typeof body.title === 'string' ? body.title : body.name;
   const trimmed = typeof raw === 'string' ? raw.trim() : '';
@@ -21,6 +23,28 @@ function normalizeTitle(body: CreateStrategyBody): string {
     throw new AppError(400, 'VALIDATION_ERROR', 'title is required.');
   }
   return trimmed;
+}
+
+function validateStrategyStatus(status: string): asserts status is '' | StrategyStatus {
+  if (status && status !== 'active' && status !== 'archived') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'status must be one of: active, archived.');
+  }
+}
+
+function toStrategyResponse(strategy: {
+  id: string;
+  title: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: strategy.id,
+    title: strategy.title,
+    status: strategy.status,
+    created_at: strategy.createdAt,
+    updated_at: strategy.updatedAt,
+  };
 }
 
 export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
@@ -44,6 +68,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     if (order !== 'asc' && order !== 'desc') {
       throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
     }
+    validateStrategyStatus(status);
 
     const where = {
       ...(q
@@ -115,11 +140,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       strategies: strategies.map((strategy) => {
         const latestVersion = strategy.versions[0] ?? null;
         return {
-          id: strategy.id,
-          title: strategy.title,
-          status: strategy.status,
-          created_at: strategy.createdAt,
-          updated_at: strategy.updatedAt,
+          ...toStrategyResponse(strategy),
           version_count: strategy._count.versions,
           latest_version: latestVersion
             ? {
@@ -133,6 +154,40 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
             : null,
         };
       }),
+    }));
+  });
+
+  fastify.patch<{ Params: { strategyId: string } }>('/:strategyId/archive', async (request, reply) => {
+    const { strategyId } = request.params;
+    const existing = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
+    if (!existing) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
+    }
+
+    const strategy = await prisma.strategyRule.update({
+      where: { id: strategyId },
+      data: { status: 'archived' },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      strategy: toStrategyResponse(strategy),
+    }));
+  });
+
+  fastify.patch<{ Params: { strategyId: string } }>('/:strategyId/restore', async (request, reply) => {
+    const { strategyId } = request.params;
+    const existing = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
+    if (!existing) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
+    }
+
+    const strategy = await prisma.strategyRule.update({
+      where: { id: strategyId },
+      data: { status: 'active' },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      strategy: toStrategyResponse(strategy),
     }));
   });
 
@@ -202,11 +257,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send(formatSuccess(request, {
       strategy: {
-        id: strategy.id,
-        title: strategy.title,
-        status: strategy.status,
-        created_at: strategy.createdAt,
-        updated_at: strategy.updatedAt,
+        ...toStrategyResponse(strategy),
       },
       query: {
         q,
@@ -259,13 +310,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return reply.status(201).send(formatSuccess(request, {
-      strategy: {
-        id: strategy.id,
-        title: strategy.title,
-        status: strategy.status,
-        created_at: strategy.createdAt,
-        updated_at: strategy.updatedAt,
-      },
+      strategy: toStrategyResponse(strategy),
     }));
   });
 

@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
-import { swrFetcher } from '../api/client';
-import { StrategyVersionListData } from '../api/types';
+import { patchApi, swrFetcher } from '../api/client';
+import { StrategyMutateData, StrategyVersionListData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
@@ -23,12 +24,37 @@ function formatDate(value: string | null | undefined): string {
 function StrategyDetail(): JSX.Element {
   const [, params] = useRoute('/strategies/:strategyId') as [boolean, { strategyId?: string } | null];
   const strategyId = params?.strategyId ?? '-';
-  const { data, error, isLoading } = useSWR<StrategyVersionListData>(
+  const [isMutatingStatus, setIsMutatingStatus] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { data, error, isLoading, mutate } = useSWR<StrategyVersionListData>(
     strategyId === '-' ? null : `/api/strategies/${strategyId}/versions?page=1&limit=50&sort=updated_at&order=desc`,
     swrFetcher,
   );
   const strategy = data?.strategy;
   const versions = data?.strategy_versions ?? [];
+
+  const handleArchiveRestore = async (nextAction: 'archive' | 'restore') => {
+    if (strategyId === '-') {
+      return;
+    }
+    const confirmMessage =
+      nextAction === 'archive'
+        ? 'このストラテジーをアーカイブしますか？'
+        : 'このストラテジーを復元しますか？';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
+      return;
+    }
+    setIsMutatingStatus(true);
+    setActionError(null);
+    try {
+      await patchApi<StrategyMutateData>(`/api/strategies/${strategyId}/${nextAction}`, {});
+      await mutate();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'ストラテジーの更新に失敗しました。');
+    } finally {
+      setIsMutatingStatus(false);
+    }
+  };
 
   return (
     <AppLayout>
@@ -65,6 +91,28 @@ function StrategyDetail(): JSX.Element {
                     <dd>{formatDate(strategy?.updated_at)}</dd>
                   </div>
                 </dl>
+                <div className="flex flex-wrap items-center gap-3">
+                  {strategy?.status === 'archived' ? (
+                    <button
+                      type="button"
+                      disabled={isMutatingStatus}
+                      onClick={() => handleArchiveRestore('restore')}
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      復元
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isMutatingStatus}
+                      onClick={() => handleArchiveRestore('archive')}
+                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      アーカイブ
+                    </button>
+                  )}
+                  {actionError ? <p className="text-sm text-red-700">{actionError}</p> : null}
+                </div>
               </>
             )}
             <p className={MUTED_TEXT_CLASS}>

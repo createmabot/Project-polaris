@@ -153,6 +153,19 @@ vi.mock('../src/db', () => {
       findUnique: async ({ where }: any) => {
         return runtime.strategies.get(where.id) ?? null;
       },
+      update: async ({ where, data }: any) => {
+        const row = runtime.strategies.get(where.id);
+        if (!row) {
+          throw new Error(`strategy_not_found:${where.id}`);
+        }
+        const next: StrategyRuleRow = {
+          ...row,
+          ...data,
+          updatedAt: new Date(),
+        };
+        runtime.strategies.set(where.id, next);
+        return next;
+      },
       findMany: async ({ where, orderBy, skip, take, include }: any = {}) => {
         let rows = Array.from(runtime.strategies.values());
         if (where?.status) {
@@ -577,6 +590,81 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.strategies[0].latest_version.id).toBe(versionId);
     expect(body.data.strategies[0].latest_version.market).toBe('JP_STOCK');
     expect(body.data.strategies[0].latest_version.timeframe).toBe('D');
+
+    await app.close();
+  });
+
+  it('archives and restores strategies with status filters', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'archive-restore-test' },
+    });
+    expect(createStrategy.statusCode).toBe(201);
+    const strategyId = createStrategy.json().data.strategy.id as string;
+    expect(createStrategy.json().data.strategy.status).toBe('active');
+
+    const activeBefore = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?status=active',
+    });
+    expect(activeBefore.statusCode).toBe(200);
+    expect(activeBefore.json().data.strategies.map((item: any) => item.id)).toContain(strategyId);
+
+    const invalidStatus = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?status=deleted',
+    });
+    expect(invalidStatus.statusCode).toBe(400);
+
+    const archive = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategies/${strategyId}/archive`,
+    });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.json().data.strategy.status).toBe('archived');
+
+    const activeAfterArchive = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?status=active',
+    });
+    expect(activeAfterArchive.statusCode).toBe(200);
+    expect(activeAfterArchive.json().data.strategies.map((item: any) => item.id)).not.toContain(strategyId);
+
+    const archivedAfterArchive = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?status=archived',
+    });
+    expect(archivedAfterArchive.statusCode).toBe(200);
+    expect(archivedAfterArchive.json().data.strategies.map((item: any) => item.id)).toContain(strategyId);
+
+    const restore = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategies/${strategyId}/restore`,
+    });
+    expect(restore.statusCode).toBe(200);
+    expect(restore.json().data.strategy.status).toBe('active');
+
+    const activeAfterRestore = await app.inject({
+      method: 'GET',
+      url: '/api/strategies?status=active',
+    });
+    expect(activeAfterRestore.statusCode).toBe(200);
+    expect(activeAfterRestore.json().data.strategies.map((item: any) => item.id)).toContain(strategyId);
+
+    const archiveMissing = await app.inject({
+      method: 'PATCH',
+      url: '/api/strategies/missing/archive',
+    });
+    expect(archiveMissing.statusCode).toBe(404);
+
+    const restoreMissing = await app.inject({
+      method: 'PATCH',
+      url: '/api/strategies/missing/restore',
+    });
+    expect(restoreMissing.statusCode).toBe(404);
 
     await app.close();
   });
