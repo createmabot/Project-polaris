@@ -352,6 +352,10 @@ describe('SymbolDetail', () => {
     expect(html).toContain('application_id: application_1');
     expect(html).toContain('run count: 1');
     expect(html).toContain('7203 strategy report');
+    expect(html).toContain('TradingView CSVを取り込む');
+    expect(html).toContain('CSVテキスト');
+    expect(html).toContain('CSV取込を実行');
+    expect(html).toContain('検証レポートを開く');
     expect(html).toContain('既存ストラテジーを選ぶ');
     expect(html).toContain('保存すると、この銘柄のストラテジー適用として記録されます。');
     expect(html).toContain('押し目買い戦略');

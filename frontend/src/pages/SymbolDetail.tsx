@@ -8,6 +8,7 @@ import {
   SymbolAiSummaryData,
   SymbolDetailData,
   SymbolStrategyApplicationCreateData,
+  SymbolStrategyApplicationCsvImportData,
   SymbolStrategyApplicationItem,
   SymbolStrategyApplicationListData,
 } from '../api/types';
@@ -29,7 +30,7 @@ const LABELS = {
   strategyResultsTitle: 'ストラテジー / 検証結果',
   strategyResultsIntro: 'この銘柄に適用したストラテジーと検証結果をここに集約します。',
   strategyResultsPending:
-    '保存済み application から CSV取込 / 内部バックテストへ進む接続は後続タスクです。',
+    '保存済み application から CSV取込へ進めます。内部バックテスト接続は後続タスクです。',
   savedApplicationsTitle: '保存済みストラテジー適用',
   savedApplicationsLoading: '保存済み application を読み込み中...',
   savedApplicationsError: '保存済み application を取得できませんでした。',
@@ -39,6 +40,17 @@ const LABELS = {
   noLatestRun: '最新run はまだありません。',
   noLatestBacktestReport: '最新検証レポートはまだありません。',
   runCount: 'run count',
+  csvImport: 'CSV取込',
+  csvImportTitle: 'TradingView CSVを取り込む',
+  csvFileName: 'ファイル名',
+  csvText: 'CSVテキスト',
+  runCsvImport: 'CSV取込を実行',
+  csvImporting: 'CSV取込中...',
+  csvImportSuccess: 'CSV取込が完了しました。',
+  csvImportRefreshFailed: 'CSV取込が完了しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
+  csvImportParseFailed: '解析失敗',
+  csvImportError: 'CSV取込に失敗しました。',
+  openBacktestDetail: '検証レポートを開く',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
     '保存すると、この銘柄のストラテジー適用として記録されます。',
@@ -175,7 +187,66 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function SavedApplicationRow({ application }: { application: SymbolStrategyApplicationItem }) {
+type CsvImportMessage = {
+  type: 'success' | 'warning';
+  text: string;
+};
+
+function SavedApplicationRow({
+  application,
+  mutateApplications,
+}: {
+  application: SymbolStrategyApplicationItem;
+  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
+}) {
+  const [fileName, setFileName] = useState('tradingview.csv');
+  const [csvText, setCsvText] = useState('');
+  const [isImportingCsv, setIsImportingCsv] = useState(false);
+  const [csvImportMessage, setCsvImportMessage] = useState<CsvImportMessage | null>(null);
+  const [csvImportError, setCsvImportError] = useState<string | null>(null);
+  const [csvBacktestLink, setCsvBacktestLink] = useState<string | null>(null);
+
+  const importCsv = async () => {
+    const normalizedFileName = fileName.trim();
+    const normalizedCsvText = csvText.trim();
+    if (!normalizedFileName || !normalizedCsvText) {
+      return;
+    }
+    setIsImportingCsv(true);
+    setCsvImportMessage(null);
+    setCsvImportError(null);
+    setCsvBacktestLink(null);
+    try {
+      const result = await postApi<SymbolStrategyApplicationCsvImportData>(
+        `/api/symbol-strategy-applications/${application.id}/csv-import`,
+        {
+          file_name: normalizedFileName,
+          content_type: 'text/csv',
+          csv_text: csvText,
+        },
+      );
+      setCsvBacktestLink(result.backtest.id);
+      if (result.import.parse_status === 'failed') {
+        setCsvImportMessage({
+          type: 'warning',
+          text: `${LABELS.csvImportParseFailed}: ${result.import.parse_error ?? '-'}`,
+        });
+      } else {
+        setCsvImportMessage({ type: 'success', text: LABELS.csvImportSuccess });
+      }
+      setCsvText('');
+      try {
+        await mutateApplications();
+      } catch {
+        setCsvImportMessage({ type: 'warning', text: LABELS.csvImportRefreshFailed });
+      }
+    } catch (error) {
+      setCsvImportError(getErrorMessage(error, LABELS.csvImportError));
+    } finally {
+      setIsImportingCsv(false);
+    }
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -214,7 +285,7 @@ function SavedApplicationRow({ application }: { application: SymbolStrategyAppli
               <MetaText>
                 {application.latest_backtest_report.execution_source} / {application.latest_backtest_report.status} / {formatDate(application.latest_backtest_report.updated_at)}
               </MetaText>
-              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>BacktestDetail</TextLink>
+              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
             </div>
           ) : (
             <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
@@ -222,6 +293,59 @@ function SavedApplicationRow({ application }: { application: SymbolStrategyAppli
         </div>
       </div>
       <MetaText>{LABELS.runCount}: {application.run_count}</MetaText>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <h5 className="text-sm font-semibold text-slate-900">{LABELS.csvImportTitle}</h5>
+        <div className="mt-3 grid gap-3">
+          <label className="grid gap-1 text-sm text-slate-700">
+            <span className="font-medium">{LABELS.csvFileName}</span>
+            <input
+              type="text"
+              value={fileName}
+              onChange={(event) => setFileName(event.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-sm text-slate-700">
+            <span className="font-medium">{LABELS.csvText}</span>
+            <textarea
+              value={csvText}
+              onChange={(event) => setCsvText(event.target.value)}
+              rows={4}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+              placeholder="TradingView CSV"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={importCsv}
+            disabled={isImportingCsv || !fileName.trim() || !csvText.trim()}
+            className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+          >
+            {isImportingCsv ? LABELS.csvImporting : LABELS.runCsvImport}
+          </button>
+          <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
+            {LABELS.internalBacktestLater}
+          </button>
+          {csvBacktestLink ? <TextLink href={`/backtests/${csvBacktestLink}`}>{LABELS.openBacktestDetail}</TextLink> : null}
+        </div>
+        {csvImportMessage ? (
+          <p
+            className={
+              csvImportMessage.type === 'success'
+                ? 'mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800'
+                : 'mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'
+            }
+          >
+            {csvImportMessage.text}
+          </p>
+        ) : null}
+        {csvImportError ? (
+          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{csvImportError}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -230,10 +354,12 @@ function SavedStrategyApplicationsPanel({
   applications,
   isLoading,
   error,
+  mutateApplications,
 }: {
   applications: SymbolStrategyApplicationItem[];
   isLoading: boolean;
   error: unknown;
+  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
@@ -248,7 +374,7 @@ function SavedStrategyApplicationsPanel({
       ) : (
         <div className="mt-3 grid gap-3">
           {applications.map((application) => (
-            <SavedApplicationRow key={application.id} application={application} />
+            <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
           ))}
         </div>
       )}
@@ -782,6 +908,7 @@ export default function SymbolDetail() {
               applications={applicationListData?.applications ?? []}
               isLoading={isApplicationListLoading}
               error={applicationListError}
+              mutateApplications={mutateApplicationList}
             />
             {symbolId ? (
               <StrategyApplySelectionPanel

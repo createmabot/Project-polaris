@@ -595,6 +595,42 @@ export type SymbolStrategyApplicationCreateData = {
   application: SymbolStrategyApplicationItem;
 };
 
+export type SymbolStrategyApplicationCsvImportData = {
+  application_id: string;
+  run: {
+    id: string;
+    run_type: string;
+    status: string;
+    backtest_id: string | null;
+    backtest_import_id: string | null;
+    internal_backtest_execution_id: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  backtest: {
+    id: string;
+    title: string;
+    status: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    created_at: string;
+    updated_at: string;
+  };
+  import: {
+    id: string;
+    backtest_id: string;
+    file_name: string;
+    file_size: number;
+    content_type: string | null;
+    parse_status: 'pending' | 'parsed' | 'failed' | string;
+    parse_error: string | null;
+    parsed_summary: BacktestImportData['import']['parsed_summary'];
+    created_at: string;
+    updated_at: string;
+  };
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;

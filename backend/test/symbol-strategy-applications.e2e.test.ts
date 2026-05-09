@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { symbolRoutes } from '../src/routes/symbols';
+import { symbolStrategyApplicationRoutes } from '../src/routes/symbol-strategy-applications';
 import { errorHandler } from '../src/utils/response';
 
 type SymbolRow = {
@@ -32,17 +33,37 @@ type RunRow = {
   backtestId: string | null;
   backtestImportId: string | null;
   internalBacktestExecutionId: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  errorCode: string | null;
+  errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
 type BacktestRow = {
   id: string;
+  strategyRuleVersionId: string;
+  strategySnapshotJson: any;
   title: string;
   status: string;
   executionSource: string;
   market: string;
   timeframe: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type BacktestImportRow = {
+  id: string;
+  backtestId: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string | null;
+  rawCsvText: string;
+  parseStatus: string;
+  parseError: string | null;
+  parsedSummaryJson: any;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -53,6 +74,10 @@ type Runtime = {
   versions: Map<string, {
     id: string;
     strategyRuleId: string;
+    naturalLanguageRule: string;
+    generatedPine: string | null;
+    warningsJson: string[];
+    assumptionsJson: string[];
     market: string;
     timeframe: string;
     status: string;
@@ -62,7 +87,11 @@ type Runtime = {
   applications: ApplicationRow[];
   runs: RunRow[];
   backtests: Map<string, BacktestRow>;
+  backtestImports: Map<string, BacktestImportRow>;
   nextApplicationId: number;
+  nextBacktestId: number;
+  nextBacktestImportId: number;
+  nextRunId: number;
 };
 
 let runtime: Runtime;
@@ -90,6 +119,10 @@ function createRuntime(): Runtime {
       ['version-1', {
         id: 'version-1',
         strategyRuleId: 'strategy-1',
+        naturalLanguageRule: 'Buy breakout.',
+        generatedPine: '//@version=5\nstrategy("Breakout")',
+        warningsJson: [],
+        assumptionsJson: [],
         market: 'TSE',
         timeframe: 'D',
         status: 'generated',
@@ -99,6 +132,10 @@ function createRuntime(): Runtime {
       ['version-2', {
         id: 'version-2',
         strategyRuleId: 'strategy-1',
+        naturalLanguageRule: 'Buy weekly breakout.',
+        generatedPine: '//@version=5\nstrategy("Weekly Breakout")',
+        warningsJson: [],
+        assumptionsJson: [],
         market: 'TSE',
         timeframe: 'W',
         status: 'generated',
@@ -108,6 +145,10 @@ function createRuntime(): Runtime {
       ['version-archived', {
         id: 'version-archived',
         strategyRuleId: 'strategy-archived',
+        naturalLanguageRule: 'Archived setup.',
+        generatedPine: null,
+        warningsJson: [],
+        assumptionsJson: [],
         market: 'TSE',
         timeframe: 'W',
         status: 'generated',
@@ -117,6 +158,10 @@ function createRuntime(): Runtime {
       ['version-mismatch', {
         id: 'version-mismatch',
         strategyRuleId: 'strategy-archived',
+        naturalLanguageRule: 'Mismatch setup.',
+        generatedPine: null,
+        warningsJson: [],
+        assumptionsJson: [],
         market: 'TSE',
         timeframe: '60',
         status: 'generated',
@@ -126,6 +171,10 @@ function createRuntime(): Runtime {
       ['version-paused', {
         id: 'version-paused',
         strategyRuleId: 'strategy-paused',
+        naturalLanguageRule: 'Paused setup.',
+        generatedPine: null,
+        warningsJson: [],
+        assumptionsJson: [],
         market: 'TSE',
         timeframe: 'D',
         status: 'generated',
@@ -166,6 +215,10 @@ function createRuntime(): Runtime {
         backtestId: 'backtest-old',
         backtestImportId: 'import-old',
         internalBacktestExecutionId: null,
+        startedAt: new Date('2026-05-02T00:00:00.000Z'),
+        finishedAt: new Date('2026-05-02T00:00:00.000Z'),
+        errorCode: null,
+        errorMessage: null,
         createdAt: new Date('2026-05-02T00:00:00.000Z'),
         updatedAt: new Date('2026-05-02T00:00:00.000Z'),
       },
@@ -177,6 +230,10 @@ function createRuntime(): Runtime {
         backtestId: 'backtest-1',
         backtestImportId: null,
         internalBacktestExecutionId: 'internal-1',
+        startedAt: new Date('2026-05-03T00:00:00.000Z'),
+        finishedAt: new Date('2026-05-03T00:00:00.000Z'),
+        errorCode: null,
+        errorMessage: null,
         createdAt: new Date('2026-05-03T00:00:00.000Z'),
         updatedAt: new Date('2026-05-03T00:00:00.000Z'),
       },
@@ -184,6 +241,8 @@ function createRuntime(): Runtime {
     backtests: new Map([
       ['backtest-1', {
         id: 'backtest-1',
+        strategyRuleVersionId: 'version-1',
+        strategySnapshotJson: {},
         title: '2148 breakout report',
         status: 'ready',
         executionSource: 'internal',
@@ -194,6 +253,8 @@ function createRuntime(): Runtime {
       }],
       ['backtest-old', {
         id: 'backtest-old',
+        strategyRuleVersionId: 'version-1',
+        strategySnapshotJson: {},
         title: 'old report',
         status: 'ready',
         executionSource: 'tradingview',
@@ -203,7 +264,25 @@ function createRuntime(): Runtime {
         updatedAt: new Date('2026-05-02T00:00:00.000Z'),
       }],
     ]),
+    backtestImports: new Map([
+      ['import-old', {
+        id: 'import-old',
+        backtestId: 'backtest-old',
+        fileName: 'old.csv',
+        fileSize: 100,
+        contentType: 'text/csv',
+        rawCsvText: 'old',
+        parseStatus: 'parsed',
+        parseError: null,
+        parsedSummaryJson: {},
+        createdAt: new Date('2026-05-02T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-02T00:00:00.000Z'),
+      }],
+    ]),
     nextApplicationId: 2,
+    nextBacktestId: 2,
+    nextBacktestImportId: 2,
+    nextRunId: 2,
   };
 }
 
@@ -226,6 +305,7 @@ vi.mock('../src/db', () => {
     const latestRun = runs[0] ?? null;
     return {
       ...application,
+      symbol: runtime.symbols.get(application.symbolId),
       strategyRule: runtime.strategies.get(application.strategyRuleId),
       strategyRuleVersion: runtime.versions.get(application.strategyRuleVersionId),
       _count: { runs: runs.length },
@@ -238,7 +318,8 @@ vi.mock('../src/db', () => {
     };
   }
 
-  const prisma = {
+  const prisma: any = {
+    $transaction: async (callback: any) => callback(prisma),
     symbol: {
       findUnique: async ({ where }: any) => runtime.symbols.get(where.id) ?? null,
     },
@@ -268,6 +349,10 @@ vi.mock('../src/db', () => {
       findFirst: async ({ where }: any) => {
         return filterApplications(where)[0] ?? null;
       },
+      findUnique: async ({ where }: any) => {
+        const application = runtime.applications.find((row) => row.id === where.id);
+        return application ? hydrateApplication(application) : null;
+      },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-04T00:00:00.000Z');
         const application: ApplicationRow = {
@@ -285,6 +370,78 @@ vi.mock('../src/db', () => {
         return hydrateApplication(application);
       },
     },
+    backtest: {
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-05T00:00:00.000Z');
+        const backtest: BacktestRow = {
+          id: `backtest-created-${runtime.nextBacktestId++}`,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          strategySnapshotJson: data.strategySnapshotJson,
+          title: data.title,
+          executionSource: data.executionSource,
+          market: data.market,
+          timeframe: data.timeframe,
+          status: data.status,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.backtests.set(backtest.id, backtest);
+        return backtest;
+      },
+      update: async ({ where, data }: any) => {
+        const backtest = runtime.backtests.get(where.id);
+        if (!backtest) return null;
+        const updated = {
+          ...backtest,
+          ...data,
+          updatedAt: new Date('2026-05-05T00:01:00.000Z'),
+        };
+        runtime.backtests.set(updated.id, updated);
+        return updated;
+      },
+    },
+    backtestImport: {
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-05T00:02:00.000Z');
+        const backtestImport: BacktestImportRow = {
+          id: `import-created-${runtime.nextBacktestImportId++}`,
+          backtestId: data.backtestId,
+          fileName: data.fileName,
+          fileSize: data.fileSize,
+          contentType: data.contentType ?? null,
+          rawCsvText: data.rawCsvText,
+          parseStatus: data.parseStatus,
+          parseError: data.parseError ?? null,
+          parsedSummaryJson: data.parsedSummaryJson ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.backtestImports.set(backtestImport.id, backtestImport);
+        return backtestImport;
+      },
+    },
+    symbolStrategyApplicationRun: {
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-05T00:03:00.000Z');
+        const run: RunRow = {
+          id: `run-created-${runtime.nextRunId++}`,
+          applicationId: data.applicationId,
+          runType: data.runType,
+          status: data.status,
+          backtestId: data.backtestId ?? null,
+          backtestImportId: data.backtestImportId ?? null,
+          internalBacktestExecutionId: data.internalBacktestExecutionId ?? null,
+          startedAt: data.startedAt ?? null,
+          finishedAt: data.finishedAt ?? null,
+          errorCode: data.errorCode ?? null,
+          errorMessage: data.errorMessage ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.runs.push(run);
+        return run;
+      },
+    },
   };
   return { prisma };
 });
@@ -293,6 +450,7 @@ async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);
   app.register(symbolRoutes, { prefix: '/api/symbols' });
+  app.register(symbolStrategyApplicationRoutes, { prefix: '/api/symbol-strategy-applications' });
   await app.ready();
   return app;
 }
@@ -576,6 +734,139 @@ describe('symbol strategy applications route', () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('NOT_FOUND');
+
+    await app.close();
+  });
+
+  it('imports valid TradingView CSV for an active application and updates latest run', async () => {
+    const app = await createApp();
+    const csvText = [
+      'Net Profit,Total Closed Trades,Percent Profitable,Profit Factor,Max Drawdown,From,To',
+      '12345,12,58.3,1.7,-1234,2026-01-01,2026-02-01',
+    ].join('\n');
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/csv-import',
+      payload: {
+        file_name: 'tradingview.csv',
+        content_type: 'text/csv',
+        csv_text: csvText,
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.application_id).toBe('app-1');
+    expect(res.json().data.run).toMatchObject({
+      run_type: 'csv_import',
+      status: 'succeeded',
+      internal_backtest_execution_id: null,
+    });
+    expect(res.json().data.backtest).toMatchObject({
+      status: 'imported',
+      execution_source: 'tradingview',
+      market: 'TSE',
+      timeframe: 'D',
+    });
+    expect(res.json().data.import).toMatchObject({
+      file_name: 'tradingview.csv',
+      content_type: 'text/csv',
+      parse_status: 'parsed',
+      parse_error: null,
+    });
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+    const application = listRes.json().data.applications[0];
+    expect(application.latest_run).toMatchObject({
+      run_type: 'csv_import',
+      status: 'succeeded',
+      backtest_id: res.json().data.backtest.id,
+      backtest_import_id: res.json().data.import.id,
+    });
+    expect(application.latest_backtest_report).toMatchObject({
+      id: res.json().data.backtest.id,
+      status: 'imported',
+      execution_source: 'tradingview',
+    });
+    expect(application.run_count).toBe(3);
+
+    await app.close();
+  });
+
+  it('stores failed CSV parse as failed import and failed application run', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/csv-import',
+      payload: {
+        file_name: 'broken.csv',
+        csv_text: 'not,a,supported,csv\n1,2,3,4',
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.run).toMatchObject({
+      run_type: 'csv_import',
+      status: 'failed',
+    });
+    expect(res.json().data.backtest.status).toBe('import_failed');
+    expect(res.json().data.import).toMatchObject({
+      file_name: 'broken.csv',
+      parse_status: 'failed',
+    });
+    expect(res.json().data.import.parse_error).toBeTruthy();
+
+    await app.close();
+  });
+
+  it('rejects invalid CSV import requests', async () => {
+    const app = await createApp();
+
+    const missingApplication = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/missing-app/csv-import',
+      payload: {
+        file_name: 'tradingview.csv',
+        csv_text: 'a,b\n1,2',
+      },
+    });
+    const archivedApplication = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-archived/csv-import',
+      payload: {
+        file_name: 'tradingview.csv',
+        csv_text: 'a,b\n1,2',
+      },
+    });
+    const emptyFileName = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/csv-import',
+      payload: {
+        file_name: '  ',
+        csv_text: 'a,b\n1,2',
+      },
+    });
+    const emptyCsvText = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/csv-import',
+      payload: {
+        file_name: 'tradingview.csv',
+        csv_text: '',
+      },
+    });
+
+    expect(missingApplication.statusCode).toBe(404);
+    expect(missingApplication.json().error.code).toBe('NOT_FOUND');
+    expect(archivedApplication.statusCode).toBe(400);
+    expect(archivedApplication.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyFileName.statusCode).toBe(400);
+    expect(emptyFileName.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyCsvText.statusCode).toBe(400);
+    expect(emptyCsvText.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });
