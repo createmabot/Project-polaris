@@ -76,8 +76,9 @@ function StrategyList(): JSX.Element {
               再利用可能なストラテジー定義をここに集約します。
             </p>
             <p className={MUTED_TEXT_CLASS}>
-              現在は既存の StrategyRule / StrategyRuleVersion の read-only 表示のみです。favorite / archive /
-              delete、applied symbols、related reports は後続タスクで接続します。
+              現在は既存の StrategyRule / StrategyRuleVersion の read-only 表示のみです。favorite / hard
+              delete、applied symbols、related reports は後続タスクで接続します。archive / restore は status
+              操作として利用できます。
             </p>
           </div>
 

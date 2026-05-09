@@ -78,7 +78,7 @@ describe('StrategyDetail', () => {
     expect(html).toContain('href="/backtests"');
     expect(html).toContain('related reports は準備中です。');
     expect(html).toContain('applied symbols は準備中です。');
-    expect(html).toContain('favorite / archive / delete は準備中です。');
+    expect(html).toContain('favorite / hard delete は準備中です。archive / restore は status 操作として利用できます。');
     expect(html).toContain('BacktestDetail は個別検証レポート詳細として継続し、この画面には吸収しません。');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/strategies/strategy_1/versions?page=1&limit=50&sort=updated_at&order=desc',

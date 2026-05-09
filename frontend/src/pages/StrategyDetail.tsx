@@ -119,8 +119,8 @@ function StrategyDetail(): JSX.Element {
               このストラテジー定義の version、関連検証レポート、適用済み銘柄をここに集約します。
             </p>
             <p className={MUTED_TEXT_CLASS}>
-              現在は既存 version の read-only 表示までです。関連検証レポート、適用済み銘柄、favorite / archive /
-              delete は後続タスクで接続します。
+              現在は既存 version の read-only 表示までです。関連検証レポート、適用済み銘柄、favorite /
+              hard delete は後続タスクで接続します。archive / restore は status 操作として利用できます。
             </p>
           </div>
 
@@ -196,7 +196,7 @@ function StrategyDetail(): JSX.Element {
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>related reports は準備中です。</li>
             <li>applied symbols は準備中です。</li>
-            <li>favorite / archive / delete は準備中です。</li>
+            <li>favorite / hard delete は準備中です。archive / restore は status 操作として利用できます。</li>
           </ul>
         </section>
       </div>
