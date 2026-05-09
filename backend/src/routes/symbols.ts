@@ -91,6 +91,75 @@ function normalizeSortOrder(input?: string): SortOrder {
   throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of asc|desc');
 }
 
+function normalizeRequiredBodyString(value: unknown, fieldName: string): string {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} is required`);
+  }
+  return value.trim();
+}
+
+function normalizeOptionalBodyText(value: unknown, fieldName: string): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a string`);
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toSymbolApplicationView(application: any) {
+  const latestRun = application.runs?.[0] ?? null;
+  const latestBacktest = latestRun?.backtest ?? null;
+  return {
+    id: application.id,
+    status: application.status,
+    source: application.source,
+    memo: application.memo,
+    created_at: application.createdAt,
+    updated_at: application.updatedAt,
+    strategy: {
+      id: application.strategyRule.id,
+      title: application.strategyRule.title,
+      status: application.strategyRule.status,
+    },
+    strategy_version: {
+      id: application.strategyRuleVersion.id,
+      market: application.strategyRuleVersion.market,
+      timeframe: application.strategyRuleVersion.timeframe,
+      status: application.strategyRuleVersion.status,
+      created_at: application.strategyRuleVersion.createdAt,
+      updated_at: application.strategyRuleVersion.updatedAt,
+    },
+    latest_run: latestRun
+      ? {
+          id: latestRun.id,
+          run_type: latestRun.runType,
+          status: latestRun.status,
+          created_at: latestRun.createdAt,
+          updated_at: latestRun.updatedAt,
+          backtest_id: latestRun.backtestId,
+          backtest_import_id: latestRun.backtestImportId,
+          internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
+        }
+      : null,
+    latest_backtest_report: latestBacktest
+      ? {
+          id: latestBacktest.id,
+          title: latestBacktest.title,
+          status: latestBacktest.status,
+          execution_source: latestBacktest.executionSource,
+          market: latestBacktest.market,
+          timeframe: latestBacktest.timeframe,
+          created_at: latestBacktest.createdAt,
+          updated_at: latestBacktest.updatedAt,
+        }
+      : null,
+    run_count: application._count.runs,
+  };
+}
+
 function toSymbolSummaryView(summary: any | null, scope: SymbolSummaryScope): SymbolSummaryView {
   if (!summary) {
     return {
@@ -536,56 +605,152 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         has_next: skip + applications.length < total,
         has_prev: page > 1,
       },
-      applications: applications.map((application) => {
-        const latestRun = application.runs[0] ?? null;
-        const latestBacktest = latestRun?.backtest ?? null;
-        return {
-          id: application.id,
-          status: application.status,
-          source: application.source,
-          memo: application.memo,
-          created_at: application.createdAt,
-          updated_at: application.updatedAt,
-          strategy: {
-            id: application.strategyRule.id,
-            title: application.strategyRule.title,
-            status: application.strategyRule.status,
-          },
-          strategy_version: {
-            id: application.strategyRuleVersion.id,
-            market: application.strategyRuleVersion.market,
-            timeframe: application.strategyRuleVersion.timeframe,
-            status: application.strategyRuleVersion.status,
-            created_at: application.strategyRuleVersion.createdAt,
-            updated_at: application.strategyRuleVersion.updatedAt,
-          },
-          latest_run: latestRun
-            ? {
-                id: latestRun.id,
-                run_type: latestRun.runType,
-                status: latestRun.status,
-                created_at: latestRun.createdAt,
-                updated_at: latestRun.updatedAt,
-                backtest_id: latestRun.backtestId,
-                backtest_import_id: latestRun.backtestImportId,
-                internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
-              }
-            : null,
-          latest_backtest_report: latestBacktest
-            ? {
-                id: latestBacktest.id,
-                title: latestBacktest.title,
-                status: latestBacktest.status,
-                execution_source: latestBacktest.executionSource,
-                market: latestBacktest.market,
-                timeframe: latestBacktest.timeframe,
-                created_at: latestBacktest.createdAt,
-                updated_at: latestBacktest.updatedAt,
-              }
-            : null,
-          run_count: application._count.runs,
-        };
+      applications: applications.map(toSymbolApplicationView),
+    }));
+  });
+
+  fastify.post('/:symbolId/strategy-applications', async (
+    request: FastifyRequest<{
+      Params: { symbolId: string };
+      Body: { strategy_id?: unknown; strategy_version_id?: unknown; memo?: unknown };
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { symbolId } = request.params;
+    const strategyId = normalizeRequiredBodyString(request.body?.strategy_id, 'strategy_id');
+    const strategyVersionId = normalizeRequiredBodyString(request.body?.strategy_version_id, 'strategy_version_id');
+    const memo = normalizeOptionalBodyText(request.body?.memo, 'memo');
+
+    const symbol = await prisma.symbol.findUnique({
+      where: { id: symbolId },
+      select: {
+        id: true,
+        symbol: true,
+        symbolCode: true,
+        displayName: true,
+        marketCode: true,
+        tradingviewSymbol: true,
+      },
+    });
+    if (!symbol) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
+    }
+
+    const [strategy, strategyVersion] = await Promise.all([
+      prisma.strategyRule.findUnique({
+        where: { id: strategyId },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+        },
       }),
+      prisma.strategyRuleVersion.findUnique({
+        where: { id: strategyVersionId },
+        select: {
+          id: true,
+          strategyRuleId: true,
+          market: true,
+          timeframe: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+    ]);
+
+    if (!strategy) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified strategy was not found.');
+    }
+    if (!strategyVersion) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified strategy version was not found.');
+    }
+    if (strategy.status === 'archived') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'archived strategy cannot be applied.');
+    }
+    if (strategyVersion.strategyRuleId !== strategy.id) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'strategy_version_id must belong to strategy_id.');
+    }
+
+    const duplicate = await prisma.symbolStrategyApplication.findFirst({
+      where: {
+        symbolId,
+        strategyRuleVersionId: strategyVersion.id,
+        status: 'active',
+      },
+      select: { id: true },
+    });
+    if (duplicate) {
+      throw new AppError(
+        409,
+        'CONFLICT',
+        'active application already exists for this symbol and strategy version.',
+      );
+    }
+
+    const application = await prisma.symbolStrategyApplication.create({
+      data: {
+        symbolId,
+        strategyRuleId: strategy.id,
+        strategyRuleVersionId: strategyVersion.id,
+        status: 'active',
+        source: 'manual',
+        memo,
+      },
+      include: {
+        strategyRule: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+            market: true,
+            timeframe: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        _count: {
+          select: {
+            runs: true,
+          },
+        },
+        runs: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            backtest: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                executionSource: true,
+                market: true,
+                timeframe: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return reply.status(201).send(formatSuccess(request, {
+      symbol: {
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbol_code: symbol.symbolCode,
+        display_name: symbol.displayName,
+        market_code: symbol.marketCode,
+        tradingview_symbol: symbol.tradingviewSymbol,
+      },
+      application: toSymbolApplicationView(application),
     }));
   });
 
