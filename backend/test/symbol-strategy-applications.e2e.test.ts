@@ -329,19 +329,16 @@ vi.mock('../src/db', () => {
     const runs = runtime.runs
       .filter((run) => run.applicationId === application.id)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    const latestRun = runs[0] ?? null;
     return {
       ...application,
       symbol: runtime.symbols.get(application.symbolId),
       strategyRule: runtime.strategies.get(application.strategyRuleId),
       strategyRuleVersion: runtime.versions.get(application.strategyRuleVersionId),
       _count: { runs: runs.length },
-      runs: latestRun
-        ? [{
-            ...latestRun,
-            backtest: latestRun.backtestId ? runtime.backtests.get(latestRun.backtestId) ?? null : null,
-          }]
-        : [],
+      runs: runs.map((run) => ({
+        ...run,
+        backtest: run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null,
+      })),
     };
   }
 
@@ -639,6 +636,86 @@ describe('symbol strategy applications route', () => {
         title: '2148 breakout report',
       },
       run_count: 2,
+    });
+
+    await app.close();
+  });
+
+  it('resolves latest run separately from latest backtest report for strategy symbol applications', async () => {
+    runtime.applications.push({
+      id: 'app-internal-latest',
+      symbolId: 'sym-1',
+      strategyRuleId: 'strategy-1',
+      strategyRuleVersionId: 'version-1',
+      status: 'active',
+      source: 'manual',
+      memo: null,
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T00:00:00.000Z'),
+    });
+    runtime.backtests.set('backtest-csv-fallback', {
+      id: 'backtest-csv-fallback',
+      strategyRuleVersionId: 'version-1',
+      strategySnapshotJson: {},
+      title: 'CSV fallback report',
+      status: 'imported',
+      executionSource: 'tradingview',
+      market: 'TSE',
+      timeframe: 'D',
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T00:00:00.000Z'),
+    });
+    runtime.runs.push(
+      {
+        id: 'run-csv-fallback',
+        applicationId: 'app-internal-latest',
+        runType: 'csv_import',
+        status: 'succeeded',
+        backtestId: 'backtest-csv-fallback',
+        backtestImportId: 'import-old',
+        internalBacktestExecutionId: null,
+        startedAt: new Date('2026-05-04T00:00:00.000Z'),
+        finishedAt: new Date('2026-05-04T00:00:00.000Z'),
+        errorCode: null,
+        errorMessage: null,
+        createdAt: new Date('2026-05-04T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-04T00:00:00.000Z'),
+      },
+      {
+        id: 'run-internal-no-report',
+        applicationId: 'app-internal-latest',
+        runType: 'internal_backtest',
+        status: 'queued',
+        backtestId: null,
+        backtestImportId: null,
+        internalBacktestExecutionId: 'internal-no-report',
+        startedAt: null,
+        finishedAt: null,
+        errorCode: null,
+        errorMessage: null,
+        createdAt: new Date('2026-05-05T00:00:00.000Z'),
+        updatedAt: new Date('2026-05-05T00:00:00.000Z'),
+      },
+    );
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=active',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const application = res.json().data.applications.find((item: any) => item.id === 'app-internal-latest');
+    expect(application.latest_run).toMatchObject({
+      id: 'run-internal-no-report',
+      run_type: 'internal_backtest',
+      backtest_id: null,
+      internal_backtest_execution_id: 'internal-no-report',
+    });
+    expect(application.latest_backtest_report).toMatchObject({
+      id: 'backtest-csv-fallback',
+      title: 'CSV fallback report',
+      execution_source: 'tradingview',
     });
 
     await app.close();

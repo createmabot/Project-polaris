@@ -56,7 +56,8 @@ function toStrategyResponse(strategy: {
 
 function toStrategySymbolApplicationResponse(application: any) {
   const latestRun = application.runs?.[0] ?? null;
-  const latestBacktest = latestRun?.backtest ?? null;
+  const latestBacktestRun = application.runs?.find((run: any) => run.backtest) ?? null;
+  const latestBacktest = latestBacktestRun?.backtest ?? null;
   return {
     id: application.id,
     status: application.status,
@@ -327,7 +328,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
           orderBy: {
             createdAt: 'desc',
           },
-          take: 1,
+          take: 5,
           include: {
             backtest: true,
           },
