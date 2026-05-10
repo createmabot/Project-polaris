@@ -93,7 +93,7 @@ test.describe('Home -> SymbolDetail smoke', () => {
 
     await expect(page).toHaveURL(/\/strategies\/.+/);
     await expect(page.getByText('strategy_id:')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('application:')).toBeVisible();
+    await expect(page.getByText('application:').first()).toBeVisible();
 
     const backtestLink = page.locator('a[href^="/backtests/"]').first();
     await expect(backtestLink).toBeVisible({ timeout: 15000 });
