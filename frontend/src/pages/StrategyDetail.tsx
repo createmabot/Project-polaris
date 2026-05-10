@@ -10,6 +10,7 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import LoadingState from '../components/ui/LoadingState';
@@ -128,23 +129,19 @@ function StrategyDetail(): JSX.Element {
                 </dl>
                 <div className="flex flex-wrap items-center gap-3">
                   {strategy?.status === 'archived' ? (
-                    <button
-                      type="button"
+                    <Button
                       disabled={isMutatingStatus}
                       onClick={() => handleArchiveRestore('restore')}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       復元
-                    </button>
+                    </Button>
                   ) : (
-                    <button
-                      type="button"
+                    <Button
                       disabled={isMutatingStatus}
                       onClick={() => handleArchiveRestore('archive')}
-                      className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       アーカイブ
-                    </button>
+                    </Button>
                   )}
                   {actionError ? <p className="text-sm text-red-700">{actionError}</p> : null}
                 </div>
@@ -273,23 +270,19 @@ function StrategyDetail(): JSX.Element {
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {application.status === 'archived' ? (
-                      <button
-                        type="button"
+                      <Button
                         onClick={() => handleApplicationArchiveRestore(application.id, 'restore')}
                         disabled={mutatingApplicationId === application.id}
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         復元
-                      </button>
+                      </Button>
                     ) : (
-                      <button
-                        type="button"
+                      <Button
                         onClick={() => handleApplicationArchiveRestore(application.id, 'archive')}
                         disabled={mutatingApplicationId === application.id}
-                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         アーカイブ
-                      </button>
+                      </Button>
                     )}
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
