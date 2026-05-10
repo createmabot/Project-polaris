@@ -44,6 +44,19 @@ describe('parseBacktestsReturnPath', () => {
 });
 
 describe('BacktestDetail', () => {
+  it('renders shared loading state text while fetching detail data', () => {
+    mockLocation = '/backtests/bt-loading';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: true,
+      error: null,
+      data: null,
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-loading' }} />);
+    expect(html).toContain('読み込み中...');
+  });
+
   it('renders shared error state text when detail fetch fails', () => {
     mockLocation = '/backtests/bt-error';
     mockUseSWR.mockReset();

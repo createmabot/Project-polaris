@@ -5,6 +5,7 @@ import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import LoadingState from '../components/ui/LoadingState';
 
 type BacktestDetailProps = {
   params: { backtestId: string };
@@ -438,7 +439,13 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     isLoading: isSavedComparisonLoading,
   } = useSWR<BacktestComparisonData>(comparisonApiPath, swrFetcher);
 
-  if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
+  if (isLoading) {
+    return (
+      <div style={{ padding: '2rem' }}>
+        <LoadingState title="読み込み中..." />
+      </div>
+    );
+  }
   if (error) {
     return (
       <div style={{ padding: '2rem' }}>
@@ -768,7 +775,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
                   >
                     <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>保存済み比較（要約）</div>
                     {isSavedComparisonLoading ? (
-                      <div style={{ color: '#666' }}>保存済み比較を読み込み中...</div>
+                      <LoadingState title="保存済み比較を読み込み中..." />
                     ) : savedComparisonError ? (
                       <div style={{ color: '#a10000' }}>保存済み比較の取得に失敗しました: {savedComparisonError.message}</div>
                     ) : savedComparisonData ? (

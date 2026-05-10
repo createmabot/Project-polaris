@@ -12,6 +12,7 @@ import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import LoadingState from '../components/ui/LoadingState';
 import TextLink from '../components/ui/TextLink';
 
 const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
@@ -105,7 +106,7 @@ function StrategyDetail(): JSX.Element {
               strategy_id: <code>{strategyId}</code>
             </p>
             {isLoading ? (
-              <p className={MUTED_TEXT_CLASS}>ストラテジー詳細を読み込み中...</p>
+              <LoadingState title="ストラテジー詳細を読み込み中..." />
             ) : error ? (
               <ErrorState title="ストラテジー詳細を取得できませんでした。" />
             ) : (
@@ -186,7 +187,7 @@ function StrategyDetail(): JSX.Element {
         <section className={PANEL_CLASS}>
           <h2 className="text-lg font-semibold text-slate-900">version 一覧</h2>
           {isLoading ? (
-            <p className={MUTED_TEXT_CLASS}>version を読み込み中...</p>
+            <LoadingState title="version を読み込み中..." className="mt-4" />
           ) : error ? (
             <ErrorState title="version 一覧を取得できませんでした。" className="mt-4" />
           ) : versions.length === 0 ? (
@@ -248,7 +249,7 @@ function StrategyDetail(): JSX.Element {
             ))}
           </div>
           {isSymbolApplicationsLoading ? (
-            <p className={MUTED_TEXT_CLASS}>適用済み銘柄を読み込み中...</p>
+            <LoadingState title="適用済み銘柄を読み込み中..." className="mt-4" />
           ) : symbolApplicationsError ? (
             <ErrorState title="適用済み銘柄を取得できませんでした。" className="mt-4" />
           ) : symbolApplications.length === 0 ? (
@@ -322,7 +323,7 @@ function StrategyDetail(): JSX.Element {
         <section className={PANEL_CLASS}>
           <h2 className="text-lg font-semibold text-slate-900">関連検証レポート</h2>
           {isSymbolApplicationsLoading ? (
-            <p className={MUTED_TEXT_CLASS}>関連検証レポートを読み込み中...</p>
+            <LoadingState title="関連検証レポートを読み込み中..." className="mt-4" />
           ) : symbolApplicationsError ? (
             <ErrorState title="関連検証レポートを取得できませんでした。" className="mt-4" />
           ) : relatedReports.length === 0 ? (
