@@ -149,7 +149,7 @@ const symbolApplicationsFixture = {
     market_code: 'JP',
     tradingview_symbol: 'TYO:7203',
   },
-  query: { status: 'active', sort: 'updated_at', order: 'desc' },
+  query: { status: 'active', report_presence: null, report_source: null, sort: 'updated_at', order: 'desc' },
   pagination: {
     page: 1,
     limit: 20,
@@ -483,6 +483,9 @@ describe('SymbolDetail', () => {
     expect(html).toContain('すべて');
     expect(html).toContain('reportあり');
     expect(html).toContain('reportなし');
+    expect(html).toContain('source');
+    expect(html).toContain('CSV');
+    expect(html).toContain('internal');
     expect(html).toContain('application 2 / 2 件を表示中');
     expect(html).toContain('CSV report: 1 / internal report: 1');
     expect(mockUseSWR).toHaveBeenCalledWith(
