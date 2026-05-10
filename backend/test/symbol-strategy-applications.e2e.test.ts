@@ -315,6 +315,26 @@ function createRuntime(): Runtime {
 }
 
 function filterApplications(where: any): ApplicationRow[] {
+  function matchesRunFilter(run: RunRow, filter: any): boolean {
+    if (filter?.backtestId?.not === null && run.backtestId === null) return false;
+    if (filter?.runType && run.runType !== filter.runType) return false;
+    return true;
+  }
+
+  function matchesRunCondition(application: ApplicationRow, condition: any): boolean {
+    if (condition?.some) {
+      return runtime.runs.some((run) => (
+        run.applicationId === application.id && matchesRunFilter(run, condition.some)
+      ));
+    }
+    if (condition?.none) {
+      return !runtime.runs.some((run) => (
+        run.applicationId === application.id && matchesRunFilter(run, condition.none)
+      ));
+    }
+    return true;
+  }
+
   return runtime.applications.filter((application) => {
     if (where?.id?.not && application.id === where.id.not) return false;
     if (typeof where?.id === 'string' && application.id !== where.id) return false;
@@ -324,13 +344,15 @@ function filterApplications(where: any): ApplicationRow[] {
     if (where?.strategyRuleVersionId && application.strategyRuleVersionId !== where.strategyRuleVersionId) {
       return false;
     }
-    if (where?.runs?.some?.backtestId?.not === null) {
-      const hasReport = runtime.runs.some((run) => run.applicationId === application.id && run.backtestId !== null);
-      if (!hasReport) return false;
+    if (where?.runs && !matchesRunCondition(application, where.runs)) {
+      return false;
     }
-    if (where?.runs?.none?.backtestId?.not === null) {
-      const hasReport = runtime.runs.some((run) => run.applicationId === application.id && run.backtestId !== null);
-      if (hasReport) return false;
+    if (Array.isArray(where?.AND)) {
+      for (const clause of where.AND) {
+        if (clause?.runs && !matchesRunCondition(application, clause.runs)) {
+          return false;
+        }
+      }
     }
     return true;
   });
@@ -759,6 +781,22 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?report_presence=without_reports',
     });
+    const csvReportsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_source=csv_import',
+    });
+    const internalReportsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_source=internal_backtest',
+    });
+    const withCsvReportsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_presence=with_reports&report_source=csv_import',
+    });
+    const conflictingReportFiltersRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_presence=without_reports&report_source=csv_import',
+    });
 
     expect(allRes.statusCode).toBe(200);
     expect(allRes.json().data.query).toMatchObject({
@@ -776,6 +814,20 @@ describe('symbol strategy applications route', () => {
     expect(withoutReportsRes.statusCode).toBe(200);
     expect(withoutReportsRes.json().data.query.report_presence).toBe('without_reports');
     expect(withoutReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-no-report']);
+    expect(csvReportsRes.statusCode).toBe(200);
+    expect(csvReportsRes.json().data.query.report_source).toBe('csv_import');
+    expect(csvReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(internalReportsRes.statusCode).toBe(200);
+    expect(internalReportsRes.json().data.query.report_source).toBe('internal_backtest');
+    expect(internalReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(withCsvReportsRes.statusCode).toBe(200);
+    expect(withCsvReportsRes.json().data.query).toMatchObject({
+      report_presence: 'with_reports',
+      report_source: 'csv_import',
+    });
+    expect(withCsvReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(conflictingReportFiltersRes.statusCode).toBe(200);
+    expect(conflictingReportFiltersRes.json().data.applications).toEqual([]);
 
     await app.close();
   });
@@ -1011,6 +1063,10 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?report_presence=maybe',
     });
+    const invalidReportSource = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_source=manual',
+    });
 
     expect(invalidStatus.statusCode).toBe(400);
     expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
@@ -1018,6 +1074,8 @@ describe('symbol strategy applications route', () => {
     expect(invalidSort.statusCode).toBe(400);
     expect(invalidReportPresence.statusCode).toBe(400);
     expect(invalidReportPresence.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidReportSource.statusCode).toBe(400);
+    expect(invalidReportSource.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });

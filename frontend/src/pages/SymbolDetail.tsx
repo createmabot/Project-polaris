@@ -50,6 +50,10 @@ const LABELS = {
   savedApplicationsFilterAll: 'すべて',
   savedApplicationsFilterWithReports: 'reportあり',
   savedApplicationsFilterWithoutReports: 'reportなし',
+  savedApplicationsSourceFilter: 'source',
+  savedApplicationsSourceAll: 'すべて',
+  savedApplicationsSourceCsv: 'CSV',
+  savedApplicationsSourceInternal: 'internal',
   savedApplicationsSummary: 'application {shown} / {total} 件を表示中',
   savedApplicationsReportSummary: 'CSV report: {csv} / internal report: {internal}',
   noFilteredApplications: '条件に一致する application はありません。',
@@ -260,10 +264,17 @@ type CsvImportMessage = {
 };
 
 type ApplicationReportFilter = 'all' | 'with_reports' | 'without_reports';
+type ApplicationReportSourceFilter = 'all' | 'csv_import' | 'internal_backtest';
 
 function getApplicationReportPresenceQuery(filter: ApplicationReportFilter): string {
   if (filter === 'with_reports') return '&report_presence=with_reports';
   if (filter === 'without_reports') return '&report_presence=without_reports';
+  return '';
+}
+
+function getApplicationReportSourceQuery(filter: ApplicationReportSourceFilter): string {
+  if (filter === 'csv_import') return '&report_source=csv_import';
+  if (filter === 'internal_backtest') return '&report_source=internal_backtest';
   return '';
 }
 
@@ -822,7 +833,9 @@ function SavedStrategyApplicationsPanel({
   applications,
   totalApplications,
   applicationFilter,
+  applicationSourceFilter,
   onApplicationFilterChange,
+  onApplicationSourceFilterChange,
   isLoading,
   error,
   mutateApplications,
@@ -830,7 +843,9 @@ function SavedStrategyApplicationsPanel({
   applications: SymbolStrategyApplicationItem[];
   totalApplications: number;
   applicationFilter: ApplicationReportFilter;
+  applicationSourceFilter: ApplicationReportSourceFilter;
   onApplicationFilterChange: (filter: ApplicationReportFilter) => void;
+  onApplicationSourceFilterChange: (filter: ApplicationReportSourceFilter) => void;
   isLoading: boolean;
   error: unknown;
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
@@ -848,6 +863,11 @@ function SavedStrategyApplicationsPanel({
     { value: 'with_reports' as const, label: LABELS.savedApplicationsFilterWithReports },
     { value: 'without_reports' as const, label: LABELS.savedApplicationsFilterWithoutReports },
   ];
+  const sourceFilterOptions = [
+    { value: 'all' as const, label: LABELS.savedApplicationsSourceAll },
+    { value: 'csv_import' as const, label: LABELS.savedApplicationsSourceCsv },
+    { value: 'internal_backtest' as const, label: LABELS.savedApplicationsSourceInternal },
+  ];
 
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
@@ -857,7 +877,7 @@ function SavedStrategyApplicationsPanel({
         <EmptyText>{LABELS.savedApplicationsLoading}</EmptyText>
       ) : error ? (
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
-      ) : applications.length === 0 && applicationFilter === 'all' ? (
+      ) : applications.length === 0 && applicationFilter === 'all' && applicationSourceFilter === 'all' ? (
         <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
       ) : (
         <>
@@ -869,6 +889,19 @@ function SavedStrategyApplicationsPanel({
                   key={option.value}
                   variant={applicationFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationFilterChange(option.value)}
+                  className="py-1 text-xs"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsSourceFilter}</span>
+              {sourceFilterOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={applicationSourceFilter === option.value ? 'primary' : 'secondary'}
+                  onClick={() => onApplicationSourceFilterChange(option.value)}
                   className="py-1 text-xs"
                 >
                   {option.label}
@@ -1146,6 +1179,7 @@ export default function SymbolDetail() {
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
   const [applicationFilter, setApplicationFilter] = useState<ApplicationReportFilter>('all');
+  const [applicationSourceFilter, setApplicationSourceFilter] = useState<ApplicationReportSourceFilter>('all');
 
   const { data, error, isLoading } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
@@ -1167,7 +1201,7 @@ export default function SymbolDetail() {
     mutate: mutateApplicationList,
   } = useSWR<SymbolStrategyApplicationListData>(
     symbolId
-      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}`
+      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}${getApplicationReportSourceQuery(applicationSourceFilter)}`
       : null,
     swrFetcher,
   );
@@ -1440,7 +1474,9 @@ export default function SymbolDetail() {
               applications={applicationListData?.applications ?? []}
               totalApplications={applicationListData?.pagination.total ?? applicationListData?.applications.length ?? 0}
               applicationFilter={applicationFilter}
+              applicationSourceFilter={applicationSourceFilter}
               onApplicationFilterChange={setApplicationFilter}
+              onApplicationSourceFilterChange={setApplicationSourceFilter}
               isLoading={isApplicationListLoading}
               error={applicationListError}
               mutateApplications={mutateApplicationList}
