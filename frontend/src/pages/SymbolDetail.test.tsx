@@ -149,7 +149,15 @@ const symbolApplicationsFixture = {
     market_code: 'JP',
     tradingview_symbol: 'TYO:7203',
   },
-  query: { status: 'active', report_presence: null, report_source: null, sort: 'updated_at', order: 'desc' },
+  query: {
+    status: 'active',
+    report_presence: null,
+    report_source: null,
+    run_type: null,
+    run_status: null,
+    sort: 'updated_at',
+    order: 'desc',
+  },
   pagination: {
     page: 1,
     limit: 20,
@@ -486,6 +494,11 @@ describe('SymbolDetail', () => {
     expect(html).toContain('source');
     expect(html).toContain('CSV');
     expect(html).toContain('internal');
+    expect(html).toContain('latest run type');
+    expect(html).toContain('latest run status');
+    expect(html).toContain('running');
+    expect(html).toContain('succeeded');
+    expect(html).toContain('failed');
     expect(html).toContain('application 2 / 2 件を表示中');
     expect(html).toContain('CSV report: 1 / internal report: 1');
     expect(mockUseSWR).toHaveBeenCalledWith(
