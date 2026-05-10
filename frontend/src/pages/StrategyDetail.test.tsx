@@ -195,6 +195,9 @@ describe('StrategyDetail', () => {
     expect(html).toContain('アーカイブ');
     expect(html).toContain('関連検証レポート');
     expect(html).toContain('7203 strategy report');
+    expect(html).toContain('report type:</strong> CSV import report');
+    expect(html).toContain('source:</strong> <code>tradingview</code>');
+    expect(html).toContain('market / timeframe:</strong> JP_STOCK / D');
     expect(html).toContain('href="/backtests/backtest_1"');
   });
 

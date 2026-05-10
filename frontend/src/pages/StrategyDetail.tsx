@@ -13,6 +13,7 @@ import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -26,6 +27,12 @@ function formatDate(value: string | null | undefined): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '日時不明';
   return date.toLocaleString('ja-JP');
+}
+
+function reportOriginLabel(executionSource: string | null | undefined): string {
+  if (executionSource === 'internal_backtest') return 'internal backtest report';
+  if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'CSV import report';
+  return 'report';
 }
 
 function StrategyDetail(): JSX.Element {
@@ -332,9 +339,12 @@ function StrategyDetail(): JSX.Element {
                     <TextLink href={`/backtests/${report.id}`} className="font-semibold text-sky-700 no-underline hover:underline">
                       {report.title}
                     </TextLink>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {report.execution_source} / {report.status} / {report.market} / {report.timeframe}
-                    </p>
+                    <KeyValueList className="mt-2 gap-1 text-sm text-slate-600 sm:grid-cols-2">
+                      <KeyValueRow label="report type">{reportOriginLabel(report.execution_source)}</KeyValueRow>
+                      <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+                      <KeyValueRow label="status"><StatusBadge status={report.status} className="px-2 py-0.5" /></KeyValueRow>
+                      <KeyValueRow label="market / timeframe">{report.market} / {report.timeframe}</KeyValueRow>
+                    </KeyValueList>
                     <p className="mt-1 text-xs text-slate-500">
                       symbol: {application.symbol.display_name ?? application.symbol.symbol_code ?? application.symbol.symbol}
                     </p>

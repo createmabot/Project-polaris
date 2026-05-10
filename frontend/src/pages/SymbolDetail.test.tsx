@@ -463,6 +463,8 @@ describe('SymbolDetail', () => {
     expect(html).toContain('run status:</strong>');
     expect(html).toContain('market / timeframe');
     expect(html).toContain('7203 strategy report');
+    expect(html).toContain('report type:</strong> CSV import report');
+    expect(html).toContain('source:</strong> <code>tradingview</code>');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('CSVテキスト');
     expect(html).toContain('CSV取込を実行');
