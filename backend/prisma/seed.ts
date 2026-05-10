@@ -937,12 +937,63 @@ async function main() {
     },
   });
 
+  const symbolStrategyApplication = await prisma.symbolStrategyApplication.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000601' },
+    update: {
+      symbolId: toyota.id,
+      strategyRuleId: strategy.id,
+      strategyRuleVersionId: strategyVersion.id,
+      status: 'active',
+      source: 'manual',
+      memo: 'seed read-only navigation application',
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000601',
+      symbolId: toyota.id,
+      strategyRuleId: strategy.id,
+      strategyRuleVersionId: strategyVersion.id,
+      status: 'active',
+      source: 'manual',
+      memo: 'seed read-only navigation application',
+    },
+  });
+
+  await prisma.symbolStrategyApplicationRun.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000602' },
+    update: {
+      applicationId: symbolStrategyApplication.id,
+      runType: 'csv_import',
+      status: 'succeeded',
+      backtestId: backtest.id,
+      backtestImportId: backtestImport.id,
+      internalBacktestExecutionId: null,
+      startedAt: new Date('2026-03-09T18:30:00+09:00'),
+      finishedAt: new Date('2026-03-09T18:31:00+09:00'),
+      errorCode: null,
+      errorMessage: null,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000602',
+      applicationId: symbolStrategyApplication.id,
+      runType: 'csv_import',
+      status: 'succeeded',
+      backtestId: backtest.id,
+      backtestImportId: backtestImport.id,
+      internalBacktestExecutionId: null,
+      startedAt: new Date('2026-03-09T18:30:00+09:00'),
+      finishedAt: new Date('2026-03-09T18:31:00+09:00'),
+      errorCode: null,
+      errorMessage: null,
+    },
+  });
+
   console.log(`Seeded user: ${user.email}`);
   console.log(`Seeded symbols: ${Array.from(upsertedSymbols.values()).map((s) => `${s.symbolCode}:${s.id}`).join(', ')}`);
   console.log(`Seeded note: ${note.id}`);
   console.log(`Seeded comparison: ${comparisonSession.id}`);
   console.log(`Seeded backtest/import: ${backtest.id} / ${backtestImport.id}`);
   console.log(`Seeded backtest comparison: 00000000-0000-4000-8000-000000000404`);
+  console.log(`Seeded symbol strategy application: ${symbolStrategyApplication.id}`);
   console.log('Seed completed for UI walkthrough dataset.');
 }
 
