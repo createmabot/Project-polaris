@@ -136,6 +136,19 @@ function mockSWR(applications: any = emptyApplicationsData) {
 }
 
 describe('StrategyDetail', () => {
+  it('renders shared loading state text while fetching strategy data', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { strategyId: 'strategy_1' }]);
+    mockUseSWR.mockReturnValue({ isLoading: true, error: null, data: null, mutate: vi.fn() });
+
+    const html = renderToStaticMarkup(<StrategyDetail />);
+    expect(html).toContain('ストラテジー詳細を読み込み中...');
+    expect(html).toContain('version を読み込み中...');
+    expect(html).toContain('適用済み銘柄を読み込み中...');
+    expect(html).toContain('関連検証レポートを読み込み中...');
+  });
+
   it('renders strategy versions and fetches related application data', () => {
     mockUseSWR.mockReset();
     mockUseRoute.mockReset();
