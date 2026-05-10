@@ -44,6 +44,19 @@ describe('parseBacktestsReturnPath', () => {
 });
 
 describe('BacktestDetail', () => {
+  it('renders shared error state text when detail fetch fails', () => {
+    mockLocation = '/backtests/bt-error';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: new Error('detail failed'),
+      data: null,
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-error' }} />);
+    expect(html).toContain('エラー: detail failed');
+  });
+
   it('renders parsed summary and uses validated return link', () => {
     mockLocation = '/backtests/bt-1?return=%2Fbacktests%3Fq%3Dma%26page%3D2';
     mockUseSWR.mockReset();
