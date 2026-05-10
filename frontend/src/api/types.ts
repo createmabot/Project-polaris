@@ -615,6 +615,7 @@ export type StrategySymbolApplicationsData = {
   };
   query: {
     status: string;
+    report_presence?: string | null;
     sort: string;
     order: 'asc' | 'desc' | string;
   };

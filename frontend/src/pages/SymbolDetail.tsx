@@ -188,10 +188,6 @@ function hasInternalReport(application: SymbolStrategyApplicationItem): boolean 
   return Boolean(application.latest_reports_by_source?.internal_backtest);
 }
 
-function hasAnyApplicationReport(application: SymbolStrategyApplicationItem): boolean {
-  return Boolean(application.latest_backtest_report) || hasCsvReport(application) || hasInternalReport(application);
-}
-
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
@@ -262,6 +258,14 @@ type CsvImportMessage = {
   type: 'success' | 'warning';
   text: string;
 };
+
+type ApplicationReportFilter = 'all' | 'with_reports' | 'without_reports';
+
+function getApplicationReportPresenceQuery(filter: ApplicationReportFilter): string {
+  if (filter === 'with_reports') return '&report_presence=with_reports';
+  if (filter === 'without_reports') return '&report_presence=without_reports';
+  return '';
+}
 
 function InternalBacktestResultPanel({
   applicationId,
@@ -816,16 +820,21 @@ function SavedApplicationRow({
 
 function SavedStrategyApplicationsPanel({
   applications,
+  totalApplications,
+  applicationFilter,
+  onApplicationFilterChange,
   isLoading,
   error,
   mutateApplications,
 }: {
   applications: SymbolStrategyApplicationItem[];
+  totalApplications: number;
+  applicationFilter: ApplicationReportFilter;
+  onApplicationFilterChange: (filter: ApplicationReportFilter) => void;
   isLoading: boolean;
   error: unknown;
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
-  const [applicationFilter, setApplicationFilter] = useState<'all' | 'with_reports' | 'without_reports'>('all');
   const reportCounts = applications.reduce(
     (acc, application) => {
       if (hasCsvReport(application)) acc.csv += 1;
@@ -834,11 +843,6 @@ function SavedStrategyApplicationsPanel({
     },
     { csv: 0, internal: 0 },
   );
-  const filteredApplications = applications.filter((application) => {
-    if (applicationFilter === 'with_reports') return hasAnyApplicationReport(application);
-    if (applicationFilter === 'without_reports') return !hasAnyApplicationReport(application);
-    return true;
-  });
   const filterOptions = [
     { value: 'all' as const, label: LABELS.savedApplicationsFilterAll },
     { value: 'with_reports' as const, label: LABELS.savedApplicationsFilterWithReports },
@@ -853,7 +857,7 @@ function SavedStrategyApplicationsPanel({
         <EmptyText>{LABELS.savedApplicationsLoading}</EmptyText>
       ) : error ? (
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
-      ) : applications.length === 0 ? (
+      ) : applications.length === 0 && applicationFilter === 'all' ? (
         <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
       ) : (
         <>
@@ -864,7 +868,7 @@ function SavedStrategyApplicationsPanel({
                 <Button
                   key={option.value}
                   variant={applicationFilter === option.value ? 'primary' : 'secondary'}
-                  onClick={() => setApplicationFilter(option.value)}
+                  onClick={() => onApplicationFilterChange(option.value)}
                   className="py-1 text-xs"
                 >
                   {option.label}
@@ -874,8 +878,8 @@ function SavedStrategyApplicationsPanel({
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
               <span>
                 {LABELS.savedApplicationsSummary
-                  .replace('{shown}', String(filteredApplications.length))
-                  .replace('{total}', String(applications.length))}
+                  .replace('{shown}', String(applications.length))
+                  .replace('{total}', String(totalApplications))}
               </span>
               <span>
                 {LABELS.savedApplicationsReportSummary
@@ -884,11 +888,11 @@ function SavedStrategyApplicationsPanel({
               </span>
             </div>
           </div>
-          {filteredApplications.length === 0 ? (
+          {applications.length === 0 ? (
             <EmptyState title={LABELS.noFilteredApplications} className="mt-3" />
           ) : (
             <div className="mt-3 grid gap-3">
-              {filteredApplications.map((application) => (
+              {applications.map((application) => (
                 <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
               ))}
             </div>
@@ -1141,6 +1145,7 @@ export default function SymbolDetail() {
   const tvContainerRef = useRef<HTMLDivElement>(null);
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationReportFilter>('all');
 
   const { data, error, isLoading } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
@@ -1162,7 +1167,7 @@ export default function SymbolDetail() {
     mutate: mutateApplicationList,
   } = useSWR<SymbolStrategyApplicationListData>(
     symbolId
-      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc`
+      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}`
       : null,
     swrFetcher,
   );
@@ -1433,6 +1438,9 @@ export default function SymbolDetail() {
             </div>
             <SavedStrategyApplicationsPanel
               applications={applicationListData?.applications ?? []}
+              totalApplications={applicationListData?.pagination.total ?? applicationListData?.applications.length ?? 0}
+              applicationFilter={applicationFilter}
+              onApplicationFilterChange={setApplicationFilter}
               isLoading={isApplicationListLoading}
               error={applicationListError}
               mutateApplications={mutateApplicationList}
