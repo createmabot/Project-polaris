@@ -614,6 +614,25 @@ describe('BacktestDetail', () => {
             market: 'JP_STOCK',
             timeframe: 'D',
           },
+          current_report: {
+            backtest_id: 'bt-application',
+            title: 'application report',
+            execution_source: 'tradingview',
+            status: 'imported',
+            run_type: 'csv_import',
+            run_status: 'succeeded',
+            updated_at: '2026-01-02T00:00:00.000Z',
+            metrics: {
+              period_from: '2024-01-01',
+              period_to: '2025-12-31',
+              trade_count: 120,
+              total_return_percent: null,
+              price_change_percent: null,
+              max_drawdown_percent: -8.2,
+              profit_factor: 1.42,
+              win_rate: 48.5,
+            },
+          },
           related_reports: [
             {
               backtest_id: 'bt-internal',
@@ -623,6 +642,16 @@ describe('BacktestDetail', () => {
               run_type: 'internal_backtest',
               run_status: 'succeeded',
               updated_at: '2026-01-03T00:00:00.000Z',
+              metrics: {
+                period_from: '2024-01-01',
+                period_to: '2025-12-31',
+                trade_count: 4,
+                total_return_percent: 12.3,
+                price_change_percent: 10.5,
+                max_drawdown_percent: -4.2,
+                profit_factor: 1.8,
+                win_rate: 55,
+              },
             },
           ],
         },
@@ -654,6 +683,13 @@ describe('BacktestDetail', () => {
     expect(html).toContain('href="/backtests/bt-internal"');
     expect(html).toContain('report type:</strong> internal backtest report');
     expect(html).toContain('source:</strong> <code>internal_backtest</code>');
+    expect(html).toContain('metrics 横並び比較');
+    expect(html).toContain('current report');
+    expect(html).toContain('related report');
+    expect(html).toContain('trade_count');
+    expect(html).toContain('120');
+    expect(html).toContain('total_return_percent');
+    expect(html).toContain('12.3');
   });
 
   it('renders internal backtest report without imports', () => {

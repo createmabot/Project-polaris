@@ -227,6 +227,8 @@ export function buildBacktestRuleLabVersionDetailPath(strategyId: string, strate
 }
 
 type SymbolStrategyApplicationBacklink = NonNullable<BacktestDetailData['symbol_strategy_application']>;
+type RelatedApplicationReport = NonNullable<SymbolStrategyApplicationBacklink['related_reports']>[number];
+type ApplicationReportMetrics = NonNullable<SymbolStrategyApplicationBacklink['current_report']>['metrics'];
 
 function BacklinkInfoCard({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -275,6 +277,68 @@ function RelatedApplicationReports({ relatedReports }: { relatedReports: NonNull
             </KeyValueList>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+const METRIC_COMPARISON_ROWS: Array<{ key: keyof ApplicationReportMetrics; label: string }> = [
+  { key: 'period_from', label: 'period from' },
+  { key: 'period_to', label: 'period to' },
+  { key: 'trade_count', label: 'trade_count' },
+  { key: 'total_return_percent', label: 'total_return_percent' },
+  { key: 'price_change_percent', label: 'price_change_percent' },
+  { key: 'max_drawdown_percent', label: 'max_drawdown_percent' },
+  { key: 'profit_factor', label: 'profit_factor' },
+  { key: 'win_rate', label: 'win_rate' },
+];
+
+function ReportMetricCard({
+  title,
+  report,
+}: {
+  title: string;
+  report: NonNullable<SymbolStrategyApplicationBacklink['current_report']> | RelatedApplicationReport;
+}) {
+  const metrics = report.metrics;
+  return (
+    <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
+      <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>{title}</div>
+      <Link href={`/backtests/${report.backtest_id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+        {report.title}
+      </Link>
+      <KeyValueList className="mt-2 gap-1 text-sm">
+        <KeyValueRow label="report type">{reportOriginLabel(report.execution_source)}</KeyValueRow>
+        <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+        <KeyValueRow label="status"><StatusBadge status={report.status} /></KeyValueRow>
+        {METRIC_COMPARISON_ROWS.map((row) => (
+          <KeyValueRow key={row.key} label={row.label}>{valueText(metrics?.[row.key])}</KeyValueRow>
+        ))}
+        <KeyValueRow label="updated">{formatDateTime(report.updated_at)}</KeyValueRow>
+      </KeyValueList>
+    </div>
+  );
+}
+
+function ApplicationReportMetricsComparison({
+  currentReport,
+  relatedReports,
+}: {
+  currentReport: SymbolStrategyApplicationBacklink['current_report'];
+  relatedReports: NonNullable<SymbolStrategyApplicationBacklink['related_reports']>;
+}) {
+  const relatedReport = relatedReports.find((report) => report.metrics) ?? null;
+  if (!currentReport || !relatedReport) return null;
+
+  return (
+    <div style={{ marginTop: '1rem' }}>
+      <h3 style={{ margin: '0 0 0.5rem' }}>metrics 横並び比較</h3>
+      <p style={{ margin: '0 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
+        同じ application 配下の current report と related report を、既存 response で取得できる主要 metrics だけで比較します。
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+        <ReportMetricCard title="current report" report={currentReport} />
+        <ReportMetricCard title="related report" report={relatedReport} />
       </div>
     </div>
   );
@@ -332,6 +396,10 @@ function SymbolStrategyApplicationBacklinkSection({
       </div>
       <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
       <RelatedApplicationReports relatedReports={symbolStrategyApplication.related_reports ?? []} />
+      <ApplicationReportMetricsComparison
+        currentReport={symbolStrategyApplication.current_report}
+        relatedReports={symbolStrategyApplication.related_reports ?? []}
+      />
       <p style={{ marginBottom: 0, marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
         BacktestDetail は検証レポート詳細として維持し、application parent への backlink だけを表示します。
       </p>
