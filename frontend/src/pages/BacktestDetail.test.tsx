@@ -610,4 +610,111 @@ describe('BacktestDetail', () => {
     expect(html).toContain('href="/strategy-versions/ver-1"');
     expect(html).toContain('StrategyVersionDetail に戻る');
   });
+
+  it('renders internal backtest report without imports', () => {
+    mockLocation = '/backtests/bt-internal';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-internal',
+          strategy_version_id: 'ver-1',
+          title: 'internal report',
+          execution_source: 'internal_backtest',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'completed',
+          created_at: '2026-05-01T00:00:00.000Z',
+          updated_at: '2026-05-01T00:00:00.000Z',
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-1',
+            natural_language_rule: '25?????????????',
+            generated_pine: 'strategy("base")',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            warnings: [],
+            assumptions: [],
+            captured_at: '2026-05-01T00:00:00.000Z',
+            execution_source: 'internal_backtest',
+            internal_backtest_execution_id: 'exec-1',
+            result_summary: {
+              summary_kind: 'engine_estimated',
+              period: {
+                from: '2025-01-01',
+                to: '2025-12-31',
+              },
+              metrics: {
+                bar_count: 245,
+                price_change_percent: 12.34,
+                range_percent: 26.32,
+              },
+            },
+            artifact_pointer: {
+              kind: 'internal_backtest_result',
+              execution_id: 'exec-1',
+            },
+            reported_at: '2026-05-01T01:00:00.000Z',
+          },
+        },
+        latest_import: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [],
+        symbol_strategy_application: {
+          application_id: 'app-1',
+          application_status: 'active',
+          application_source: 'manual',
+          application_memo: null,
+          application_created_at: '2026-05-01T00:00:00.000Z',
+          application_updated_at: '2026-05-01T00:00:00.000Z',
+          run_id: 'run-1',
+          run_type: 'internal_backtest',
+          run_status: 'succeeded',
+          run_created_at: '2026-05-01T00:10:00.000Z',
+          run_updated_at: '2026-05-01T00:10:00.000Z',
+          symbol: {
+            id: 'sym-1',
+            symbol: 'TSE:2148',
+            symbol_code: '2148',
+            market_code: 'JP',
+            tradingview_symbol: 'TSE:2148',
+            display_name: 'Sample Corp',
+          },
+          strategy: {
+            id: 'str-1',
+            title: 'Breakout strategy',
+          },
+          strategy_version: {
+            id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-internal' }} />);
+    expect(html).toContain('internal backtest report');
+    expect(html).toContain('BacktestImport');
+    expect(html).toContain('exec-1');
+    expect(html).toContain('engine_estimated');
+    expect(html).toContain('bar_count');
+    expect(html).toContain('245');
+    expect(html).toContain('artifact_pointer');
+    expect(html).toContain('internal_backtest_result');
+  });
 });

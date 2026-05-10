@@ -785,6 +785,11 @@ export type BacktestDetailData = {
       warnings: string[];
       assumptions: string[];
       captured_at: string | null;
+      execution_source?: string | null;
+      internal_backtest_execution_id?: string | null;
+      result_summary?: Record<string, unknown> | null;
+      artifact_pointer?: Record<string, unknown> | null;
+      reported_at?: string | null;
     } | null;
   };
   latest_import: BacktestImportData['import'] | null;

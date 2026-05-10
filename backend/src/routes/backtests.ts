@@ -30,6 +30,11 @@ type BacktestStrategySnapshot = {
   warnings: string[];
   assumptions: string[];
   captured_at: string;
+  execution_source?: string | null;
+  internal_backtest_execution_id?: string | null;
+  result_summary?: Record<string, unknown> | null;
+  artifact_pointer?: Record<string, unknown> | null;
+  reported_at?: string | null;
 };
 
 type ParsedImportSummary = {
@@ -223,6 +228,12 @@ function normalizeBacktestStrategySnapshot(value: unknown): BacktestStrategySnap
     warnings: toStringArray(row.warnings),
     assumptions: toStringArray(row.assumptions),
     captured_at: typeof row.captured_at === 'string' ? row.captured_at : '',
+    execution_source: typeof row.execution_source === 'string' ? row.execution_source : null,
+    internal_backtest_execution_id:
+      typeof row.internal_backtest_execution_id === 'string' ? row.internal_backtest_execution_id : null,
+    result_summary: isRecord(row.result_summary) ? row.result_summary : null,
+    artifact_pointer: isRecord(row.artifact_pointer) ? row.artifact_pointer : null,
+    reported_at: typeof row.reported_at === 'string' ? row.reported_at : null,
   };
 }
 
@@ -808,6 +819,11 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
               warnings: snapshot.warnings,
               assumptions: snapshot.assumptions,
               captured_at: snapshot.captured_at || backtest.createdAt.toISOString(),
+              execution_source: snapshot.execution_source,
+              internal_backtest_execution_id: snapshot.internal_backtest_execution_id,
+              result_summary: snapshot.result_summary,
+              artifact_pointer: snapshot.artifact_pointer,
+              reported_at: snapshot.reported_at,
             }
           : null,
       },
