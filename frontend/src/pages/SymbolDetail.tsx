@@ -467,6 +467,7 @@ function ApplicationLatestRunCard({
             <>
               <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
               <InternalBacktestResultPanel
+                key={application.latest_run.internal_backtest_execution_id}
                 applicationId={application.id}
                 executionId={application.latest_run.internal_backtest_execution_id}
                 existingBacktestId={application.latest_run.backtest_id}
