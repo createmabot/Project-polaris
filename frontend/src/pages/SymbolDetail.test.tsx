@@ -314,6 +314,23 @@ function getCommonSWRResult(key: string | null) {
 }
 
 describe('SymbolDetail', () => {
+  it('renders shared error state text when symbol detail fetch fails', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: new Error('detail failed'), data: null };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('エラー: detail failed');
+  });
+
   it('shows ai summary loading state', () => {
     mockUseSWR.mockReset();
     mockUseRoute.mockReset();

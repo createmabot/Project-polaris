@@ -19,6 +19,8 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
 import SectionCard from '../components/ui/SectionCard';
 import TextLink from '../components/ui/TextLink';
 
@@ -764,9 +766,9 @@ function SavedStrategyApplicationsPanel({
       {isLoading ? (
         <EmptyText>{LABELS.savedApplicationsLoading}</EmptyText>
       ) : error ? (
-        <p className="mt-3 text-sm text-rose-700">{LABELS.savedApplicationsError}</p>
+        <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
       ) : applications.length === 0 ? (
-        <EmptyText>{LABELS.noSavedApplications}</EmptyText>
+        <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
       ) : (
         <div className="mt-3 grid gap-3">
           {applications.map((application) => (
@@ -1100,7 +1102,7 @@ export default function SymbolDetail() {
 
     return (
       <AppLayout showSideRail>
-        <div className="w-full rounded-xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">エラー: {error.message}</div>
+        <ErrorState title={`エラー: ${error.message}`} className="w-full p-6" />
       </AppLayout>
     );
   }
@@ -1202,7 +1204,7 @@ export default function SymbolDetail() {
 
         <DetailSection title={LABELS.latestAlertsTitle}>
           {data.recent_alerts.length === 0 ? (
-            <EmptyText>{LABELS.noAlerts}</EmptyText>
+            <EmptyState title={LABELS.noAlerts} />
           ) : (
             <div className="grid gap-3">
               {data.recent_alerts.map((alert) => (
@@ -1345,10 +1347,9 @@ export default function SymbolDetail() {
               ) : null}
             </InfoCard>
           ) : (
-            <InfoCard>
-              <EmptyText>{LABELS.noResearchNote}</EmptyText>
+            <EmptyState title={LABELS.noResearchNote}>
               <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
-            </InfoCard>
+            </EmptyState>
           )}
         </DetailSection>
 
