@@ -560,12 +560,22 @@ describe('BacktestDetail', () => {
         imports: [],
         symbol_strategy_application: {
           application_id: 'app-1',
+          application_status: 'active',
+          application_source: 'manual',
+          application_memo: 'watch for breakout',
+          application_created_at: '2026-01-01T00:00:00.000Z',
+          application_updated_at: '2026-01-02T00:00:00.000Z',
           run_id: 'run-1',
           run_type: 'csv_import',
+          run_status: 'succeeded',
+          run_created_at: '2026-01-01T01:00:00.000Z',
+          run_updated_at: '2026-01-02T01:00:00.000Z',
           symbol: {
             id: 'sym-1',
             symbol: 'TYO:7203',
             symbol_code: '7203',
+            market_code: 'JP',
+            tradingview_symbol: 'TYO:7203',
             display_name: 'Toyota',
           },
           strategy: {
@@ -583,10 +593,21 @@ describe('BacktestDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-application' }} />);
     expect(html).toContain('銘柄起点の適用情報');
+    expect(html).toContain('この検証レポートは、保存済み Symbol Strategy Application の run から作成されています。');
     expect(html).toContain('application ID:</strong> <code>app-1</code>');
+    expect(html).toContain('status:</strong> <code>active</code>');
+    expect(html).toContain('source:</strong> <code>manual</code>');
+    expect(html).toContain('memo:</strong> watch for breakout');
     expect(html).toContain('run ID:</strong> <code>run-1</code>');
+    expect(html).toContain('run status:</strong> <code>succeeded</code>');
+    expect(html).toContain('market_code:</strong> <code>JP</code>');
+    expect(html).toContain('strategy ID:</strong> <code>str-1</code>');
+    expect(html).toContain('market / timeframe:</strong> JP_STOCK / D');
     expect(html).toContain('href="/symbols/sym-1"');
+    expect(html).toContain('SymbolDetail に戻る');
     expect(html).toContain('href="/strategies/str-1"');
+    expect(html).toContain('StrategyDetail に戻る');
     expect(html).toContain('href="/strategy-versions/ver-1"');
+    expect(html).toContain('StrategyVersionDetail に戻る');
   });
 });

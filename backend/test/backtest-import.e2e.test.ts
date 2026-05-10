@@ -56,6 +56,8 @@ type SymbolRow = {
   id: string;
   symbol: string;
   symbolCode: string | null;
+  marketCode: string | null;
+  tradingviewSymbol: string | null;
   displayName: string | null;
 };
 
@@ -69,14 +71,21 @@ type ApplicationRow = {
   symbolId: string;
   strategyRuleId: string;
   strategyRuleVersionId: string;
+  status: string;
+  source: string;
+  memo: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type ApplicationRunRow = {
   id: string;
   applicationId: string;
   runType: string;
+  status: string;
   backtestId: string | null;
   createdAt: Date;
+  updatedAt: Date;
 };
 
 type Runtime = {
@@ -416,6 +425,8 @@ describe('backtest import vertical slice', () => {
       id: 'sym-1',
       symbol: 'TSE:2148',
       symbolCode: '2148',
+      marketCode: 'JP',
+      tradingviewSymbol: 'TSE:2148',
       displayName: 'Sample Corp',
     });
     runtime.strategies.set('str-1', {
@@ -427,6 +438,11 @@ describe('backtest import vertical slice', () => {
       symbolId: 'sym-1',
       strategyRuleId: 'str-1',
       strategyRuleVersionId: 'ver-1',
+      status: 'active',
+      source: 'manual',
+      memo: 'watch for breakout',
+      createdAt: now,
+      updatedAt: now,
     });
     runtime.backtests.set('bt-ssa', {
       id: 'bt-ssa',
@@ -444,8 +460,10 @@ describe('backtest import vertical slice', () => {
       id: 'run-ssa',
       applicationId: 'app-1',
       runType: 'csv_import',
+      status: 'succeeded',
       backtestId: 'bt-ssa',
       createdAt: now,
+      updatedAt: now,
     });
 
     const detail = await app.inject({
@@ -456,11 +474,17 @@ describe('backtest import vertical slice', () => {
     expect(detail.statusCode).toBe(200);
     expect(detail.json().data.symbol_strategy_application).toMatchObject({
       application_id: 'app-1',
+      application_status: 'active',
+      application_source: 'manual',
+      application_memo: 'watch for breakout',
       run_id: 'run-ssa',
       run_type: 'csv_import',
+      run_status: 'succeeded',
       symbol: {
         id: 'sym-1',
         symbol_code: '2148',
+        market_code: 'JP',
+        tradingview_symbol: 'TSE:2148',
         display_name: 'Sample Corp',
       },
       strategy: {

@@ -784,12 +784,22 @@ export type BacktestDetailData = {
   };
   symbol_strategy_application: {
     application_id: string;
+    application_status: string;
+    application_source: string;
+    application_memo: string | null;
+    application_created_at: string;
+    application_updated_at: string;
     run_id: string;
     run_type: string;
+    run_status: string;
+    run_created_at: string;
+    run_updated_at: string;
     symbol: {
       id: string;
       symbol: string;
       symbol_code: string | null;
+      market_code: string | null;
+      tradingview_symbol: string | null;
       display_name: string | null;
     };
     strategy: {

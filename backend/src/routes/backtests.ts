@@ -268,6 +268,8 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
               id: true,
               symbol: true,
               symbolCode: true,
+              marketCode: true,
+              tradingviewSymbol: true,
               displayName: true,
             },
           },
@@ -295,12 +297,22 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
 
   return {
     application_id: run.application.id,
+    application_status: run.application.status,
+    application_source: run.application.source,
+    application_memo: run.application.memo,
+    application_created_at: run.application.createdAt,
+    application_updated_at: run.application.updatedAt,
     run_id: run.id,
     run_type: run.runType,
+    run_status: run.status,
+    run_created_at: run.createdAt,
+    run_updated_at: run.updatedAt,
     symbol: {
       id: run.application.symbol.id,
       symbol: run.application.symbol.symbol,
       symbol_code: run.application.symbol.symbolCode,
+      market_code: run.application.symbol.marketCode,
+      tradingview_symbol: run.application.symbol.tradingviewSymbol,
       display_name: run.application.symbol.displayName,
     },
     strategy: {
