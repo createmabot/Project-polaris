@@ -320,6 +320,7 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       logger: request.log,
       strategyRuleVersionId: application.strategyRuleVersionId,
       executionTargetSymbol,
+      forceExecutionTargetSymbol: true,
     });
 
     const run = await prisma.symbolStrategyApplicationRun.create({

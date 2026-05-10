@@ -17,6 +17,7 @@ type CreateInternalBacktestExecutionArgs = {
   logger: FastifyBaseLogger;
   strategyRuleVersionId?: string;
   executionTargetSymbol?: string | null;
+  forceExecutionTargetSymbol?: boolean;
 };
 
 export type InternalBacktestExecutionResponse = {
@@ -31,7 +32,11 @@ export type InternalBacktestExecutionResponse = {
 
 function withExecutionDefaults(
   body: CreateExecutionRequestInput | Record<string, unknown>,
-  defaults: { strategyRuleVersionId?: string; executionTargetSymbol?: string | null },
+  defaults: {
+    strategyRuleVersionId?: string;
+    executionTargetSymbol?: string | null;
+    forceExecutionTargetSymbol?: boolean;
+  },
 ): CreateExecutionRequestInput | Record<string, unknown> {
   const nextBody = { ...(body as Record<string, unknown>) };
   if (defaults.strategyRuleVersionId) {
@@ -46,7 +51,11 @@ function withExecutionDefaults(
         ? { ...(rawExecutionTarget as Record<string, unknown>) }
         : {};
 
-    if (typeof executionTarget.symbol !== 'string' || executionTarget.symbol.trim().length === 0) {
+    if (
+      defaults.forceExecutionTargetSymbol ||
+      typeof executionTarget.symbol !== 'string' ||
+      executionTarget.symbol.trim().length === 0
+    ) {
       executionTarget.symbol = defaultSymbol;
     }
     nextBody.execution_target = executionTarget;
@@ -82,6 +91,7 @@ export async function createInternalBacktestExecution(args: CreateInternalBackte
       withExecutionDefaults(args.body ?? {}, {
         strategyRuleVersionId: args.strategyRuleVersionId,
         executionTargetSymbol: args.executionTargetSymbol,
+        forceExecutionTargetSymbol: args.forceExecutionTargetSymbol,
       }),
     );
   } catch (error) {

@@ -987,6 +987,33 @@ describe('symbol strategy applications route', () => {
     await app.close();
   });
 
+  it('forces application symbol for application-origin internal backtest', async () => {
+    runtime.runs = [];
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        execution_target: {
+          symbol: '9999',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const savedExecution = runtime.internalExecutions.get(res.json().data.execution.id);
+    expect(savedExecution?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: '2148',
+      source_kind: 'daily_ohlcv',
+    });
+
+    await app.close();
+  });
+
   it('rejects invalid internal backtest requests', async () => {
     const app = await createApp();
 
