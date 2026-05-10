@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
-import { postApi, swrFetcher } from '../api/client';
+import { patchApi, postApi, swrFetcher } from '../api/client';
 import {
   StrategyListData,
   StrategyVersionListData,
@@ -12,6 +12,7 @@ import {
   SymbolStrategyApplicationItem,
   SymbolStrategyApplicationInternalBacktestData,
   SymbolStrategyApplicationListData,
+  SymbolStrategyApplicationMutateData,
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
@@ -63,6 +64,11 @@ const LABELS = {
   internalBacktestRefreshFailed: '内部バックテストを開始しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   internalBacktestError: '内部バックテストを開始できませんでした。',
   internalBacktestResultPending: '実行結果の詳細表示は後続タスクです。',
+  archiveApplication: 'アーカイブ',
+  archiveApplicationConfirm: 'この application をアーカイブしますか？',
+  archiveApplicationSuccess: 'アーカイブしました。',
+  archiveApplicationRefreshFailed: 'アーカイブしました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
+  archiveApplicationError: 'アーカイブに失敗しました。',
   executionId: 'execution_id',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
@@ -224,6 +230,9 @@ function SavedApplicationRow({
   const [internalBacktestMessage, setInternalBacktestMessage] = useState<string | null>(null);
   const [internalBacktestError, setInternalBacktestError] = useState<string | null>(null);
   const [internalExecutionId, setInternalExecutionId] = useState<string | null>(null);
+  const [isArchivingApplication, setIsArchivingApplication] = useState(false);
+  const [archiveApplicationMessage, setArchiveApplicationMessage] = useState<string | null>(null);
+  const [archiveApplicationError, setArchiveApplicationError] = useState<string | null>(null);
 
   const importCsv = async () => {
     const normalizedFileName = fileName.trim();
@@ -263,6 +272,31 @@ function SavedApplicationRow({
       setCsvImportError(getErrorMessage(error, LABELS.csvImportError));
     } finally {
       setIsImportingCsv(false);
+    }
+  };
+
+  const archiveApplication = async () => {
+    if (typeof window !== 'undefined' && !window.confirm(LABELS.archiveApplicationConfirm)) {
+      return;
+    }
+    setIsArchivingApplication(true);
+    setArchiveApplicationMessage(null);
+    setArchiveApplicationError(null);
+    try {
+      await patchApi<SymbolStrategyApplicationMutateData>(
+        `/api/symbol-strategy-applications/${application.id}/archive`,
+        {},
+      );
+      setArchiveApplicationMessage(LABELS.archiveApplicationSuccess);
+      try {
+        await mutateApplications();
+      } catch {
+        setArchiveApplicationMessage(LABELS.archiveApplicationRefreshFailed);
+      }
+    } catch (error) {
+      setArchiveApplicationError(getErrorMessage(error, LABELS.archiveApplicationError));
+    } finally {
+      setIsArchivingApplication(false);
     }
   };
 
@@ -317,8 +351,22 @@ function SavedApplicationRow({
         <div className="flex flex-wrap gap-2">
           <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
           <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+          <button
+            type="button"
+            onClick={archiveApplication}
+            disabled={isArchivingApplication}
+            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {LABELS.archiveApplication}
+          </button>
         </div>
       </div>
+      {archiveApplicationMessage ? (
+        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{archiveApplicationMessage}</p>
+      ) : null}
+      {archiveApplicationError ? (
+        <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{archiveApplicationError}</p>
+      ) : null}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">

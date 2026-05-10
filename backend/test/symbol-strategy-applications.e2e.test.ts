@@ -314,6 +314,8 @@ function createRuntime(): Runtime {
 
 function filterApplications(where: any): ApplicationRow[] {
   return runtime.applications.filter((application) => {
+    if (where?.id?.not && application.id === where.id.not) return false;
+    if (typeof where?.id === 'string' && application.id !== where.id) return false;
     if (where?.symbolId && application.symbolId !== where.symbolId) return false;
     if (where?.strategyRuleId && application.strategyRuleId !== where.strategyRuleId) return false;
     if (where?.status && application.status !== where.status) return false;
@@ -376,6 +378,17 @@ vi.mock('../src/db', () => {
       findUnique: async ({ where }: any) => {
         const application = runtime.applications.find((row) => row.id === where.id);
         return application ? hydrateApplication(application) : null;
+      },
+      update: async ({ where, data }: any) => {
+        const index = runtime.applications.findIndex((row) => row.id === where.id);
+        if (index < 0) return null;
+        const updated = {
+          ...runtime.applications[index],
+          ...data,
+          updatedAt: new Date('2026-05-07T00:00:00.000Z'),
+        };
+        runtime.applications[index] = updated;
+        return hydrateApplication(updated);
       },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-04T00:00:00.000Z');
@@ -975,6 +988,136 @@ describe('symbol strategy applications route', () => {
 
     expect(res.statusCode).toBe(409);
     expect(res.json().error.code).toBe('CONFLICT');
+
+    await app.close();
+  });
+
+  it('archives and restores an application without deleting runs or reports', async () => {
+    const app = await createApp();
+
+    const archiveRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/app-1/archive',
+    });
+    expect(archiveRes.statusCode).toBe(200);
+    expect(archiveRes.json().data.application).toMatchObject({
+      id: 'app-1',
+      status: 'archived',
+      run_count: 2,
+      strategy: {
+        id: 'strategy-1',
+      },
+      strategy_version: {
+        id: 'version-1',
+      },
+    });
+
+    const activeAfterArchive = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+    const archivedAfterArchive = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=archived',
+    });
+    expect(activeAfterArchive.statusCode).toBe(200);
+    expect(activeAfterArchive.json().data.applications.map((application: any) => application.id)).toEqual([]);
+    expect(archivedAfterArchive.statusCode).toBe(200);
+    expect(archivedAfterArchive.json().data.applications.map((application: any) => application.id)).toContain('app-1');
+    const archivedApplication = archivedAfterArchive.json().data.applications.find((application: any) => application.id === 'app-1');
+    expect(archivedApplication.latest_run).toMatchObject({
+      id: 'run-latest',
+      run_type: 'internal_backtest',
+    });
+    expect(archivedApplication.latest_backtest_report).toMatchObject({
+      id: 'backtest-1',
+    });
+
+    const strategyArchived = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=archived',
+    });
+    expect(strategyArchived.statusCode).toBe(200);
+    expect(strategyArchived.json().data.applications.map((application: any) => application.id)).toContain('app-1');
+
+    const restoreRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/app-1/restore',
+    });
+    expect(restoreRes.statusCode).toBe(200);
+    expect(restoreRes.json().data.application).toMatchObject({
+      id: 'app-1',
+      status: 'active',
+      run_count: 2,
+    });
+
+    const activeAfterRestore = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+    expect(activeAfterRestore.json().data.applications.map((application: any) => application.id)).toContain('app-1');
+
+    await app.close();
+  });
+
+  it('returns 404 for missing application archive and restore', async () => {
+    const app = await createApp();
+
+    const archiveRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/missing-app/archive',
+    });
+    const restoreRes = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/missing-app/restore',
+    });
+
+    expect(archiveRes.statusCode).toBe(404);
+    expect(archiveRes.json().error.code).toBe('NOT_FOUND');
+    expect(restoreRes.statusCode).toBe(404);
+    expect(restoreRes.json().error.code).toBe('NOT_FOUND');
+
+    await app.close();
+  });
+
+  it('rejects restore when another active duplicate application exists', async () => {
+    runtime.applications.push({
+      id: 'app-duplicate-archived',
+      symbolId: 'sym-1',
+      strategyRuleId: 'strategy-1',
+      strategyRuleVersionId: 'version-1',
+      status: 'archived',
+      source: 'manual',
+      memo: null,
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    });
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/app-duplicate-archived/restore',
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error.code).toBe('CONFLICT');
+
+    await app.close();
+  });
+
+  it('treats restore on an already active application as idempotent', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/api/symbol-strategy-applications/app-1/restore',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.application).toMatchObject({
+      id: 'app-1',
+      status: 'active',
+    });
 
     await app.close();
   });

@@ -16,6 +16,7 @@ vi.mock('wouter', () => ({
 
 vi.mock('../api/client', () => ({
   swrFetcher: vi.fn(),
+  patchApi: vi.fn(async () => ({})),
   postApi: vi.fn(async () => ({})),
 }));
 
@@ -383,6 +384,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');
     expect(html).toContain('application_id: application_1');
+    expect(html).toContain('アーカイブ');
     expect(html).toContain('run count: 1');
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('TradingView CSVを取り込む');

@@ -158,7 +158,179 @@ function toApplicationRunResponse(run: {
   };
 }
 
+function toApplicationMutationResponse(application: {
+  id: string;
+  status: string;
+  source: string;
+  memo: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  symbol: {
+    id: string;
+    symbol: string;
+    symbolCode: string | null;
+    displayName: string | null;
+  };
+  strategyRule: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  strategyRuleVersion: {
+    id: string;
+    market: string;
+    timeframe: string;
+    status: string;
+  };
+  _count?: {
+    runs?: number;
+  };
+}) {
+  return {
+    application: {
+      id: application.id,
+      status: application.status,
+      source: application.source,
+      memo: application.memo,
+      created_at: application.createdAt,
+      updated_at: application.updatedAt,
+      symbol: {
+        id: application.symbol.id,
+        symbol: application.symbol.symbol,
+        symbol_code: application.symbol.symbolCode,
+        display_name: application.symbol.displayName,
+      },
+      strategy: {
+        id: application.strategyRule.id,
+        title: application.strategyRule.title,
+        status: application.strategyRule.status,
+      },
+      strategy_version: {
+        id: application.strategyRuleVersion.id,
+        market: application.strategyRuleVersion.market,
+        timeframe: application.strategyRuleVersion.timeframe,
+        status: application.strategyRuleVersion.status,
+      },
+      run_count: application._count?.runs ?? 0,
+    },
+  };
+}
+
 export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) {
+  fastify.patch('/:applicationId/archive', async (
+    request: FastifyRequest<{ Params: { applicationId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { applicationId } = request.params;
+    const existing = await prisma.symbolStrategyApplication.findUnique({
+      where: { id: applicationId },
+    });
+    if (!existing) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol strategy application was not found.');
+    }
+
+    const application = await prisma.symbolStrategyApplication.update({
+      where: { id: applicationId },
+      data: { status: 'archived' },
+      include: {
+        symbol: {
+          select: {
+            id: true,
+            symbol: true,
+            symbolCode: true,
+            displayName: true,
+          },
+        },
+        strategyRule: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+            market: true,
+            timeframe: true,
+            status: true,
+          },
+        },
+        _count: {
+          select: {
+            runs: true,
+          },
+        },
+      },
+    });
+
+    return reply.status(200).send(formatSuccess(request, toApplicationMutationResponse(application)));
+  });
+
+  fastify.patch('/:applicationId/restore', async (
+    request: FastifyRequest<{ Params: { applicationId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { applicationId } = request.params;
+    const existing = await prisma.symbolStrategyApplication.findUnique({
+      where: { id: applicationId },
+    });
+    if (!existing) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol strategy application was not found.');
+    }
+
+    if (existing.status !== 'active') {
+      const duplicate = await prisma.symbolStrategyApplication.findFirst({
+        where: {
+          id: { not: applicationId },
+          symbolId: existing.symbolId,
+          strategyRuleVersionId: existing.strategyRuleVersionId,
+          status: 'active',
+        },
+      });
+      if (duplicate) {
+        throw new AppError(409, 'CONFLICT', 'active application already exists for this symbol and strategy version.');
+      }
+    }
+
+    const application = await prisma.symbolStrategyApplication.update({
+      where: { id: applicationId },
+      data: { status: 'active' },
+      include: {
+        symbol: {
+          select: {
+            id: true,
+            symbol: true,
+            symbolCode: true,
+            displayName: true,
+          },
+        },
+        strategyRule: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+            market: true,
+            timeframe: true,
+            status: true,
+          },
+        },
+        _count: {
+          select: {
+            runs: true,
+          },
+        },
+      },
+    });
+
+    return reply.status(200).send(formatSuccess(request, toApplicationMutationResponse(application)));
+  });
+
   fastify.post('/:applicationId/csv-import', async (
     request: FastifyRequest<{
       Params: { applicationId: string };
