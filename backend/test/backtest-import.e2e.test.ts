@@ -52,6 +52,33 @@ type AiSummaryRow = {
   createdAt: Date;
 };
 
+type SymbolRow = {
+  id: string;
+  symbol: string;
+  symbolCode: string | null;
+  displayName: string | null;
+};
+
+type StrategyRow = {
+  id: string;
+  title: string;
+};
+
+type ApplicationRow = {
+  id: string;
+  symbolId: string;
+  strategyRuleId: string;
+  strategyRuleVersionId: string;
+};
+
+type ApplicationRunRow = {
+  id: string;
+  applicationId: string;
+  runType: string;
+  backtestId: string | null;
+  createdAt: Date;
+};
+
 type Runtime = {
   backtestSeq: number;
   importSeq: number;
@@ -60,6 +87,10 @@ type Runtime = {
   backtests: Map<string, BacktestRow>;
   imports: Map<string, BacktestImportRow>;
   aiSummaries: Map<string, AiSummaryRow>;
+  symbols: Map<string, SymbolRow>;
+  strategies: Map<string, StrategyRow>;
+  applications: Map<string, ApplicationRow>;
+  applicationRuns: Map<string, ApplicationRunRow>;
 };
 
 let runtime: Runtime;
@@ -73,6 +104,10 @@ function createRuntime(): Runtime {
     backtests: new Map(),
     imports: new Map(),
     aiSummaries: new Map(),
+    symbols: new Map(),
+    strategies: new Map(),
+    applications: new Map(),
+    applicationRuns: new Map(),
   };
 }
 
@@ -247,6 +282,26 @@ vi.mock('../src/db', () => {
         return rows[0] ?? null;
       },
     },
+    symbolStrategyApplicationRun: {
+      findFirst: async ({ where }: any) => {
+        const rows = [...runtime.applicationRuns.values()]
+          .filter((run) => run.backtestId === where?.backtestId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        const run = rows[0] ?? null;
+        if (!run) return null;
+        const application = runtime.applications.get(run.applicationId);
+        if (!application) return null;
+        return {
+          ...run,
+          application: {
+            ...application,
+            symbol: runtime.symbols.get(application.symbolId),
+            strategyRule: runtime.strategies.get(application.strategyRuleId),
+            strategyRuleVersion: runtime.strategyVersions.get(application.strategyRuleVersionId),
+          },
+        };
+      },
+    },
   };
 
   return { prisma };
@@ -349,6 +404,75 @@ describe('backtest import vertical slice', () => {
     expect(detailBody.data.used_strategy.strategy_version_id).toBe('ver-1');
     expect(detailBody.data.used_strategy.snapshot.natural_language_rule).toContain('25日移動平均');
     expect(detailBody.data.used_strategy.snapshot.generated_pine).toBe('strategy("base")');
+    expect(detailBody.data.symbol_strategy_application).toBeNull();
+
+    await app.close();
+  });
+
+  it('returns symbol strategy application backlink on backtest detail', async () => {
+    const app = await createApp();
+    const now = new Date('2026-05-01T00:00:00.000Z');
+    runtime.symbols.set('sym-1', {
+      id: 'sym-1',
+      symbol: 'TSE:2148',
+      symbolCode: '2148',
+      displayName: 'Sample Corp',
+    });
+    runtime.strategies.set('str-1', {
+      id: 'str-1',
+      title: 'Breakout strategy',
+    });
+    runtime.applications.set('app-1', {
+      id: 'app-1',
+      symbolId: 'sym-1',
+      strategyRuleId: 'str-1',
+      strategyRuleVersionId: 'ver-1',
+    });
+    runtime.backtests.set('bt-ssa', {
+      id: 'bt-ssa',
+      strategyRuleVersionId: 'ver-1',
+      strategySnapshotJson: null,
+      title: 'application report',
+      executionSource: 'tradingview',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'imported',
+      createdAt: now,
+      updatedAt: now,
+    });
+    runtime.applicationRuns.set('run-ssa', {
+      id: 'run-ssa',
+      applicationId: 'app-1',
+      runType: 'csv_import',
+      backtestId: 'bt-ssa',
+      createdAt: now,
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: '/api/backtests/bt-ssa',
+    });
+
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.symbol_strategy_application).toMatchObject({
+      application_id: 'app-1',
+      run_id: 'run-ssa',
+      run_type: 'csv_import',
+      symbol: {
+        id: 'sym-1',
+        symbol_code: '2148',
+        display_name: 'Sample Corp',
+      },
+      strategy: {
+        id: 'str-1',
+        title: 'Breakout strategy',
+      },
+      strategy_version: {
+        id: 'ver-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
 
     await app.close();
   });

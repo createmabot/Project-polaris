@@ -15,6 +15,7 @@ type CreateStrategyVersionBody = {
 };
 
 type StrategyStatus = 'active' | 'archived';
+type StrategyApplicationStatus = StrategyStatus | 'all';
 
 function normalizeTitle(body: CreateStrategyBody): string {
   const raw = typeof body.title === 'string' ? body.title : body.name;
@@ -31,6 +32,12 @@ function validateStrategyStatus(status: string): asserts status is '' | Strategy
   }
 }
 
+function validateStrategyApplicationStatus(status: string): asserts status is StrategyApplicationStatus {
+  if (status !== 'active' && status !== 'archived' && status !== 'all') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'status must be one of: active, archived, all.');
+  }
+}
+
 function toStrategyResponse(strategy: {
   id: string;
   title: string;
@@ -44,6 +51,61 @@ function toStrategyResponse(strategy: {
     status: strategy.status,
     created_at: strategy.createdAt,
     updated_at: strategy.updatedAt,
+  };
+}
+
+function toStrategySymbolApplicationResponse(application: any) {
+  const latestRun = application.runs?.[0] ?? null;
+  const latestBacktestRun = application.runs?.find((run: any) => run.backtest) ?? null;
+  const latestBacktest = latestBacktestRun?.backtest ?? null;
+  return {
+    id: application.id,
+    status: application.status,
+    source: application.source,
+    memo: application.memo,
+    created_at: application.createdAt,
+    updated_at: application.updatedAt,
+    symbol: {
+      id: application.symbol.id,
+      symbol: application.symbol.symbol,
+      symbol_code: application.symbol.symbolCode,
+      display_name: application.symbol.displayName,
+      market_code: application.symbol.marketCode,
+      tradingview_symbol: application.symbol.tradingviewSymbol,
+    },
+    strategy_version: {
+      id: application.strategyRuleVersion.id,
+      market: application.strategyRuleVersion.market,
+      timeframe: application.strategyRuleVersion.timeframe,
+      status: application.strategyRuleVersion.status,
+      created_at: application.strategyRuleVersion.createdAt,
+      updated_at: application.strategyRuleVersion.updatedAt,
+    },
+    latest_run: latestRun
+      ? {
+          id: latestRun.id,
+          run_type: latestRun.runType,
+          status: latestRun.status,
+          backtest_id: latestRun.backtestId,
+          backtest_import_id: latestRun.backtestImportId,
+          internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
+          created_at: latestRun.createdAt,
+          updated_at: latestRun.updatedAt,
+        }
+      : null,
+    latest_backtest_report: latestBacktest
+      ? {
+          id: latestBacktest.id,
+          title: latestBacktest.title,
+          status: latestBacktest.status,
+          execution_source: latestBacktest.executionSource,
+          market: latestBacktest.market,
+          timeframe: latestBacktest.timeframe,
+          created_at: latestBacktest.createdAt,
+          updated_at: latestBacktest.updatedAt,
+        }
+      : null,
+    run_count: application._count?.runs ?? 0,
   };
 }
 
@@ -188,6 +250,111 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
 
     return reply.status(200).send(formatSuccess(request, {
       strategy: toStrategyResponse(strategy),
+    }));
+  });
+
+  fastify.get<{
+    Params: { strategyId: string };
+    Querystring: { page?: string; limit?: string; status?: string; sort?: string; order?: string };
+  }>('/:strategyId/symbol-applications', async (request, reply) => {
+    const { strategyId } = request.params;
+    const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
+    if (!strategy) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
+    }
+
+    const status = typeof request.query.status === 'string' && request.query.status.trim()
+      ? request.query.status.trim()
+      : 'active';
+    const sort = typeof request.query.sort === 'string' ? request.query.sort.trim() : 'updated_at';
+    const order = typeof request.query.order === 'string' ? request.query.order.trim().toLowerCase() : 'desc';
+    const parsedPage = Number(request.query.page ?? 1);
+    const parsedLimit = Number(request.query.limit ?? 20);
+    const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 50 ? parsedLimit : NaN;
+    if (!Number.isFinite(page) || !Number.isFinite(limit)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'page and limit must be positive integers. limit must be <= 50.');
+    }
+    validateStrategyApplicationStatus(status);
+    if (sort !== 'created_at' && sort !== 'updated_at') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'sort must be one of: created_at, updated_at.');
+    }
+    if (order !== 'asc' && order !== 'desc') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
+    }
+
+    const where = {
+      strategyRuleId: strategy.id,
+      ...(status === 'all' ? {} : { status }),
+    };
+    const orderBy =
+      sort === 'created_at'
+        ? { createdAt: order as 'asc' | 'desc' }
+        : { updatedAt: order as 'asc' | 'desc' };
+    const skip = (page - 1) * limit;
+    const total = await prisma.symbolStrategyApplication.count({ where });
+    const applications = await prisma.symbolStrategyApplication.findMany({
+      where,
+      orderBy,
+      skip,
+      take: limit,
+      include: {
+        symbol: {
+          select: {
+            id: true,
+            symbol: true,
+            symbolCode: true,
+            displayName: true,
+            marketCode: true,
+            tradingviewSymbol: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+            market: true,
+            timeframe: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+        _count: {
+          select: {
+            runs: true,
+          },
+        },
+        runs: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 5,
+          include: {
+            backtest: true,
+          },
+        },
+      },
+    });
+
+    return reply.status(200).send(formatSuccess(request, {
+      strategy: {
+        id: strategy.id,
+        title: strategy.title,
+        status: strategy.status,
+      },
+      query: {
+        status,
+        sort,
+        order,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        has_next: skip + applications.length < total,
+        has_prev: page > 1,
+      },
+      applications: applications.map(toStrategySymbolApplicationResponse),
     }));
   });
 

@@ -566,6 +566,48 @@ export type SymbolStrategyApplicationItem = {
   run_count: number;
 };
 
+export type StrategySymbolApplicationItem = {
+  id: string;
+  status: string;
+  source: string;
+  memo: string | null;
+  created_at: string;
+  updated_at: string;
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+    market_code: string | null;
+    tradingview_symbol: string | null;
+  };
+  strategy_version: SymbolStrategyApplicationItem['strategy_version'];
+  latest_run: SymbolStrategyApplicationItem['latest_run'];
+  latest_backtest_report: SymbolStrategyApplicationItem['latest_backtest_report'];
+  run_count: number;
+};
+
+export type StrategySymbolApplicationsData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  query: {
+    status: string;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+  };
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  applications: StrategySymbolApplicationItem[];
+};
+
 export type SymbolStrategyApplicationListData = {
   symbol: {
     id: string;
@@ -711,6 +753,26 @@ export type BacktestDetailData = {
     status: 'available' | 'unavailable';
     insufficient_context: boolean;
   };
+  symbol_strategy_application: {
+    application_id: string;
+    run_id: string;
+    run_type: string;
+    symbol: {
+      id: string;
+      symbol: string;
+      symbol_code: string | null;
+      display_name: string | null;
+    };
+    strategy: {
+      id: string;
+      title: string;
+    };
+    strategy_version: {
+      id: string;
+      market: string;
+      timeframe: string;
+    };
+  } | null;
 };
 
 export type BacktestComparisonData = {

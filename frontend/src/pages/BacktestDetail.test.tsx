@@ -523,4 +523,70 @@ describe('BacktestDetail', () => {
     expect(html).toContain('AI比較総評');
     expect(html).toContain('href="/backtest-comparisons/cmp-1"');
   });
+
+  it('renders symbol strategy application backlink when present', () => {
+    mockLocation = '/backtests/bt-application';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-application',
+          strategy_version_id: 'ver-1',
+          title: 'application report',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'imported',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: null,
+        },
+        latest_import: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [],
+        symbol_strategy_application: {
+          application_id: 'app-1',
+          run_id: 'run-1',
+          run_type: 'csv_import',
+          symbol: {
+            id: 'sym-1',
+            symbol: 'TYO:7203',
+            symbol_code: '7203',
+            display_name: 'Toyota',
+          },
+          strategy: {
+            id: 'str-1',
+            title: 'Breakout strategy',
+          },
+          strategy_version: {
+            id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-application' }} />);
+    expect(html).toContain('銘柄起点の適用情報');
+    expect(html).toContain('application ID:</strong> <code>app-1</code>');
+    expect(html).toContain('run ID:</strong> <code>run-1</code>');
+    expect(html).toContain('href="/symbols/sym-1"');
+    expect(html).toContain('href="/strategies/str-1"');
+    expect(html).toContain('href="/strategy-versions/ver-1"');
+  });
 });

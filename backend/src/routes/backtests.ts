@@ -252,6 +252,69 @@ async function resolveLatestBacktestAiReview(backtestId: string, importIds: stri
   return toBacktestAiReviewView(summary);
 }
 
+async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
+  const run = await prisma.symbolStrategyApplicationRun.findFirst({
+    where: {
+      backtestId,
+    },
+    orderBy: {
+      createdAt: 'desc',
+    },
+    include: {
+      application: {
+        include: {
+          symbol: {
+            select: {
+              id: true,
+              symbol: true,
+              symbolCode: true,
+              displayName: true,
+            },
+          },
+          strategyRule: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
+          strategyRuleVersion: {
+            select: {
+              id: true,
+              market: true,
+              timeframe: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!run) {
+    return null;
+  }
+
+  return {
+    application_id: run.application.id,
+    run_id: run.id,
+    run_type: run.runType,
+    symbol: {
+      id: run.application.symbol.id,
+      symbol: run.application.symbol.symbol,
+      symbol_code: run.application.symbol.symbolCode,
+      display_name: run.application.symbol.displayName,
+    },
+    strategy: {
+      id: run.application.strategyRule.id,
+      title: run.application.strategyRule.title,
+    },
+    strategy_version: {
+      id: run.application.strategyRuleVersion.id,
+      market: run.application.strategyRuleVersion.market,
+      timeframe: run.application.strategyRuleVersion.timeframe,
+    },
+  };
+}
+
 async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
   const backtest = await prisma.backtest.findUnique({
     where: { id: backtestId },
@@ -702,6 +765,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
 
     const backtestRunIds = backtest.imports.map((item) => item.id);
     const aiReview = await resolveLatestBacktestAiReview(backtest.id, backtestRunIds);
+    const symbolStrategyApplication = await resolveBacktestSymbolStrategyApplication(backtest.id);
 
     const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
     const strategyVersion = backtest.strategyRuleVersion;
@@ -760,6 +824,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         updated_at: item.updatedAt,
       })),
       ai_review: aiReview,
+      symbol_strategy_application: symbolStrategyApplication,
     }));
   });
 
