@@ -237,6 +237,31 @@ function normalizeBacktestStrategySnapshot(value: unknown): BacktestStrategySnap
   };
 }
 
+function buildInternalBacktestContext(snapshot: BacktestStrategySnapshot | null, executionSource: string) {
+  if (executionSource !== 'internal_backtest' && snapshot?.execution_source !== 'internal_backtest') {
+    return null;
+  }
+  const resultSummary = snapshot?.result_summary ?? null;
+  const period = isRecord(resultSummary?.period) ? resultSummary.period : null;
+  const metrics = isRecord(resultSummary?.metrics) ? resultSummary.metrics : null;
+  const summaryKind =
+    typeof resultSummary?.summary_kind === 'string'
+      ? resultSummary.summary_kind
+      : typeof resultSummary?.kind === 'string'
+        ? resultSummary.kind
+        : null;
+
+  return {
+    executionSource: 'internal_backtest' as const,
+    internalBacktestExecutionId: snapshot?.internal_backtest_execution_id ?? null,
+    summaryKind,
+    period,
+    metrics,
+    artifactPointer: snapshot?.artifact_pointer ?? null,
+    resultSummary,
+  };
+}
+
 async function resolveLatestBacktestAiReview(backtestId: string, importIds: string[]) {
   const summary = await prisma.aiSummary.findFirst({
     where: {
@@ -358,6 +383,7 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
   const tradeSummary = buildTradeSummaryForAi(parsedImportsForAi);
   const comparisonDiff = buildComparisonDiffForAi(parsedImportsForAi);
   const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
+  const internalBacktestContext = buildInternalBacktestContext(snapshot, backtest.executionSource);
   const strategyVersion = backtest.strategyRuleVersion;
   const importFiles = backtest.imports.map((item) => ({
     id: item.id,
@@ -405,6 +431,17 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
       })),
       import_parsed_summaries: parsedImportsForAi,
       comparison_diff: comparisonDiff,
+      report_context_type: internalBacktestContext ? 'internal_backtest' : 'csv_import',
+      internal_backtest_context: internalBacktestContext
+        ? {
+            execution_source: internalBacktestContext.executionSource,
+            internal_backtest_execution_id: internalBacktestContext.internalBacktestExecutionId,
+            summary_kind: internalBacktestContext.summaryKind,
+            period: internalBacktestContext.period,
+            metrics: internalBacktestContext.metrics,
+            artifact_pointer: internalBacktestContext.artifactPointer,
+          }
+        : null,
       strategy: {
         strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
         strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
@@ -450,6 +487,7 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
       importFiles,
       importParsedSummaries: parsedImportsForAi,
       comparisonDiff,
+      internalBacktestContext,
       strategy: {
         strategyId: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
         strategyVersionId: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
@@ -479,6 +517,8 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
           has_metrics: !!metrics,
           has_trade_summary: !!tradeSummary,
           has_comparison_diff: !!comparisonDiff,
+          has_internal_backtest_context: !!internalBacktestContext,
+          internal_backtest_execution_id: internalBacktestContext?.internalBacktestExecutionId ?? null,
           import_count: importFiles.length,
           market: backtest.market,
           timeframe: backtest.timeframe,

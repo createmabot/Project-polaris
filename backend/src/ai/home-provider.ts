@@ -201,6 +201,15 @@ export type BacktestSummaryContext = {
     naturalLanguageRule: string | null;
     generatedPine: string | null;
   } | null;
+  internalBacktestContext: {
+    executionSource: 'internal_backtest';
+    internalBacktestExecutionId: string | null;
+    summaryKind: string | null;
+    period: Record<string, unknown> | null;
+    metrics: Record<string, unknown> | null;
+    artifactPointer: Record<string, unknown> | null;
+    resultSummary: Record<string, unknown> | null;
+  } | null;
 };
 
 export type BacktestSummaryOutput = {
@@ -601,6 +610,24 @@ function average(values: Array<number | null | undefined>, digits = 2): number |
   return Number((sum / valid.length).toFixed(digits));
 }
 
+function getRecordNumber(record: Record<string, unknown> | null | undefined, keys: string[]): number | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function getRecordString(record: Record<string, unknown> | null | undefined, keys: string[]): string | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+  }
+  return null;
+}
+
 function renderBacktestBodyMarkdown(
   title: string,
   conclusion: string,
@@ -631,8 +658,15 @@ function buildDeterministicBacktestOutput(
 ): BacktestSummaryOutput {
   const hasMetrics = !!context.metrics;
   const hasParsedImports = context.importParsedSummaries.length > 0;
-  const insufficientContext = !hasMetrics && !hasParsedImports;
-  const confidence: 'high' | 'medium' | 'low' = insufficientContext ? 'low' : hasMetrics ? 'high' : 'medium';
+  const internalContext = context.internalBacktestContext;
+  const internalMetrics = internalContext?.metrics ?? null;
+  const hasInternalBacktestContext = !!internalContext && (!!internalContext.resultSummary || !!internalMetrics);
+  const insufficientContext = !hasMetrics && !hasParsedImports && !hasInternalBacktestContext;
+  const confidence: 'high' | 'medium' | 'low' = insufficientContext
+    ? 'low'
+    : hasMetrics || hasInternalBacktestContext
+      ? 'high'
+      : 'medium';
   const title = `${options.titlePrefix}Backtest Review: ${context.title}`;
   const keyMetrics = {
     total_trades: context.metrics?.totalTrades ?? null,
@@ -645,6 +679,12 @@ function buildDeterministicBacktestOutput(
   const profitFactorText = toSigned(context.metrics?.profitFactor, 2);
   const winRateText = toSigned(context.metrics?.winRate, 2, 'pt');
   const maxDrawdownText = toSigned(context.metrics?.maxDrawdown, 2, '%');
+  const internalSummaryKind = internalContext?.summaryKind ?? getRecordString(internalContext?.resultSummary, ['kind', 'summary_kind']);
+  const internalPeriodFrom = getRecordString(internalContext?.period, ['from', 'start', 'period_from']);
+  const internalPeriodTo = getRecordString(internalContext?.period, ['to', 'end', 'period_to']);
+  const internalBarCount = getRecordNumber(internalMetrics, ['bar_count', 'bars', 'sample_count']);
+  const internalPriceChange = getRecordNumber(internalMetrics, ['price_change_percent', 'priceChangePercent']);
+  const internalRange = getRecordNumber(internalMetrics, ['range_percent', 'rangePercent']);
 
   const tradeSummary = context.tradeSummary ?? {
     parsedImportCount: context.importParsedSummaries.length,
@@ -667,14 +707,24 @@ function buildDeterministicBacktestOutput(
   };
 
   const conclusion = insufficientContext
-    ? '入力素材が不足しているため、総評は暫定です。最低1件の解析済みCSVを追加して再評価してください。'
-    : context.metrics && context.metrics.netProfit !== null && context.metrics.profitFactor !== null
+    ? '入力素材が不足しているため、総評は暫定です。最低1件の解析済みCSVまたはinternal backtest resultを追加して再評価してください。'
+    : hasInternalBacktestContext && !hasMetrics
+      ? `internal_backtest result_summary をもとにした暫定評価です。${internalSummaryKind ? `summary kind は ${internalSummaryKind} です。` : 'CSV import 指標とは別文脈で確認してください。'}`
+      : context.metrics && context.metrics.netProfit !== null && context.metrics.profitFactor !== null
       ? context.metrics.netProfit > 0 && context.metrics.profitFactor > 1
         ? `純利益${netProfitText ?? '-'}、Profit Factor${profitFactorText ?? '-'}で、現時点の成績は前向きです。`
         : `純利益${netProfitText ?? '-'}、Profit Factor${profitFactorText ?? '-'}で、成績の安定性には追加検証が必要です。`
       : '主要指標は一部取得済みですが、追加の検証素材を加えて判断精度を上げる段階です。';
 
   const strengths = [
+    hasInternalBacktestContext ? `internal_backtest execution ${internalContext?.internalBacktestExecutionId ?? '-'} の result summary を参照しています。` : '',
+    hasInternalBacktestContext && internalPeriodFrom && internalPeriodTo
+      ? `対象期間は ${internalPeriodFrom} から ${internalPeriodTo} です。`
+      : '',
+    hasInternalBacktestContext && internalBarCount !== null ? `内部検証のサンプル数は ${internalBarCount} 件です。` : '',
+    hasInternalBacktestContext && internalPriceChange !== null
+      ? `期間内の価格変化率は ${toSigned(internalPriceChange, 2, '%') ?? '-'} です。`
+      : '',
     hasMetrics && netProfitText ? `純利益は${netProfitText}で、定量的な優位を確認できます。` : '',
     hasMetrics && profitFactorText ? `Profit Factorは${profitFactorText}で、損益比の把握が可能です。` : '',
     hasMetrics && winRateText ? `勝率は${winRateText}で、再現性の初期判断材料があります。` : '',
@@ -687,6 +737,10 @@ function buildDeterministicBacktestOutput(
   ].filter(Boolean);
 
   const risks = [
+    hasInternalBacktestContext ? 'internal_backtest report は BacktestImport を持たないため、CSVの取引明細・parsed summaryとは比較軸が異なります。' : '',
+    hasInternalBacktestContext && internalRange !== null && internalRange > 30
+      ? `期間内レンジは ${toSigned(internalRange, 2, '%') ?? '-'} で、ボラティリティ依存を確認してください。`
+      : '',
     hasMetrics && (context.metrics?.profitFactor ?? 0) <= 1 ? 'Profit Factor が1以下で、損益比が弱い可能性があります。' : '',
     hasMetrics && (context.metrics?.maxDrawdown ?? 0) <= -15
       ? `最大ドローダウンは${maxDrawdownText ?? '-'}で、下振れ耐性に懸念があります。`
@@ -699,6 +753,8 @@ function buildDeterministicBacktestOutput(
   ].filter(Boolean);
 
   const nextActions = [
+    hasInternalBacktestContext ? 'artifact pointer と internal execution result を確認し、report 化した前提条件を記録してください。' : '',
+    hasInternalBacktestContext ? '必要に応じて同じ strategy version のTradingView CSV import reportと比較してください。' : '',
     `同条件で期間を分割し、PF・DD・勝率の再現性を確認してください。`,
     context.strategy?.naturalLanguageRule ? '自然言語ルールの exit 条件が現行ボラティリティに合うか見直してください。' : '',
     context.comparisonDiff ? '最新取込と前回取込の差分要因（期間/銘柄条件）を切り分けてください。' : '',
@@ -717,7 +773,7 @@ function buildDeterministicBacktestOutput(
         conclusion,
         strengths: strengths.length > 0 ? strengths : ['定量評価に使える入力が限定的です。'],
         risks: risks.length > 0 ? risks : ['主要リスクを断定するには材料が不足しています。'],
-        next_actions: nextActions.length > 0 ? nextActions : ['追加CSVの取込後に再評価してください。'],
+        next_actions: nextActions.length > 0 ? nextActions : ['追加CSVまたはinternal backtest resultの取込後に再評価してください。'],
         key_metrics: keyMetrics,
         overall_view: conclusion,
       },
@@ -1253,6 +1309,17 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               import_files: context.importFiles.slice(0, 10),
               import_parsed_summaries: context.importParsedSummaries.slice(0, 3),
               comparison_diff: context.comparisonDiff,
+              report_context_type: context.internalBacktestContext ? 'internal_backtest' : 'csv_import',
+              internal_backtest_context: context.internalBacktestContext
+                ? {
+                    execution_source: context.internalBacktestContext.executionSource,
+                    internal_backtest_execution_id: context.internalBacktestContext.internalBacktestExecutionId,
+                    summary_kind: context.internalBacktestContext.summaryKind,
+                    period: context.internalBacktestContext.period,
+                    metrics: context.internalBacktestContext.metrics,
+                    artifact_pointer: context.internalBacktestContext.artifactPointer,
+                  }
+                : null,
               strategy: context.strategy,
               output_schema: {
                 title: '<string>',
@@ -1757,6 +1824,17 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               import_files: context.importFiles.slice(0, 10),
               import_parsed_summaries: context.importParsedSummaries.slice(0, 3),
               comparison_diff: context.comparisonDiff,
+              report_context_type: context.internalBacktestContext ? 'internal_backtest' : 'csv_import',
+              internal_backtest_context: context.internalBacktestContext
+                ? {
+                    execution_source: context.internalBacktestContext.executionSource,
+                    internal_backtest_execution_id: context.internalBacktestContext.internalBacktestExecutionId,
+                    summary_kind: context.internalBacktestContext.summaryKind,
+                    period: context.internalBacktestContext.period,
+                    metrics: context.internalBacktestContext.metrics,
+                    artifact_pointer: context.internalBacktestContext.artifactPointer,
+                  }
+                : null,
               strategy: context.strategy,
               output_schema: {
                 title: '<string>',
