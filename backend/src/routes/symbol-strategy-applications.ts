@@ -20,6 +20,12 @@ type InternalBacktestReportBody = {
   title?: unknown;
 };
 
+class BacktestReportLinkConflictError extends Error {
+  constructor() {
+    super('BACKTEST_REPORT_LINK_CONFLICT');
+  }
+}
+
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} is required`);
@@ -182,6 +188,24 @@ function toBacktestReportResponse(backtest: {
     created_at: backtest.createdAt,
     updated_at: backtest.updatedAt,
   };
+}
+
+async function findLinkedBacktestReport(runId: string) {
+  const linkedRun = await prisma.symbolStrategyApplicationRun.findFirst({
+    where: { id: runId },
+  });
+  if (!linkedRun?.backtestId) {
+    return null;
+  }
+
+  const linkedBacktest = await prisma.backtest.findUnique({
+    where: { id: linkedRun.backtestId },
+  });
+  if (!linkedBacktest) {
+    throw new AppError(404, 'NOT_FOUND', 'The linked backtest report was not found.');
+  }
+
+  return { run: linkedRun, backtest: linkedBacktest };
 }
 
 function toApplicationMutationResponse(application: {
@@ -641,32 +665,61 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       reported_at: reportedAt.toISOString(),
     };
 
-    const result = await prisma.$transaction(async (tx) => {
-      const backtest = await tx.backtest.create({
-        data: {
-          strategyRuleVersionId: application.strategyRuleVersionId,
-          strategySnapshotJson,
-          title: title ?? defaultTitle,
-          executionSource: 'internal_backtest',
-          market: application.strategyRuleVersion.market,
-          timeframe: application.strategyRuleVersion.timeframe,
-          status: 'completed',
-        },
-      });
+    let result;
+    try {
+      result = await prisma.$transaction(async (tx) => {
+        const backtest = await tx.backtest.create({
+          data: {
+            strategyRuleVersionId: application.strategyRuleVersionId,
+            strategySnapshotJson,
+            title: title ?? defaultTitle,
+            executionSource: 'internal_backtest',
+            market: application.strategyRuleVersion.market,
+            timeframe: application.strategyRuleVersion.timeframe,
+            status: 'completed',
+          },
+        });
 
-      const updatedRun = await tx.symbolStrategyApplicationRun.update({
-        where: { id: run.id },
-        data: {
-          status: 'succeeded',
-          backtestId: backtest.id,
-          finishedAt: execution.finishedAt ?? run.finishedAt,
-          errorCode: null,
-          errorMessage: null,
-        },
-      });
+        const updateResult = await tx.symbolStrategyApplicationRun.updateMany({
+          where: {
+            id: run.id,
+            backtestId: null,
+          },
+          data: {
+            status: 'succeeded',
+            backtestId: backtest.id,
+            finishedAt: execution.finishedAt ?? run.finishedAt,
+            errorCode: null,
+            errorMessage: null,
+          },
+        });
+        if (updateResult.count !== 1) {
+          throw new BacktestReportLinkConflictError();
+        }
 
-      return { backtest, run: updatedRun };
-    });
+        const updatedRun = await tx.symbolStrategyApplicationRun.findFirst({
+          where: { id: run.id },
+        });
+        if (!updatedRun) {
+          throw new AppError(404, 'NOT_FOUND', 'The specified internal backtest run was not found for this application.');
+        }
+
+        return { backtest, run: updatedRun };
+      });
+    } catch (error) {
+      if (error instanceof BacktestReportLinkConflictError) {
+        const linked = await findLinkedBacktestReport(run.id);
+        if (linked) {
+          return reply.status(200).send(formatSuccess(request, {
+            application_id: application.id,
+            run: toApplicationRunResponse(linked.run),
+            execution: toInternalBacktestExecutionResponse(execution),
+            backtest: toBacktestReportResponse(linked.backtest),
+          }));
+        }
+      }
+      throw error;
+    }
 
     return reply.status(201).send(formatSuccess(request, {
       application_id: application.id,

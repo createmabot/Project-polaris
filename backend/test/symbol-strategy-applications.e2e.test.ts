@@ -116,6 +116,7 @@ type Runtime = {
   nextBacktestImportId: number;
   nextInternalExecutionId: number;
   nextRunId: number;
+  simulateReportLinkRace: { runId: string; backtestId: string } | null;
 };
 
 let runtime: Runtime;
@@ -309,6 +310,7 @@ function createRuntime(): Runtime {
     nextBacktestImportId: 2,
     nextInternalExecutionId: 2,
     nextRunId: 2,
+    simulateReportLinkRace: null,
   };
 }
 
@@ -345,7 +347,46 @@ vi.mock('../src/db', () => {
   }
 
   const prisma: any = {
-    $transaction: async (callback: any) => callback(prisma),
+    $transaction: async (callback: any) => {
+      const snapshot = {
+        applications: runtime.applications.map((application) => ({ ...application })),
+        runs: runtime.runs.map((run) => ({ ...run })),
+        backtests: new Map([...runtime.backtests.entries()].map(([key, value]) => [key, { ...value }])),
+        backtestImports: new Map([...runtime.backtestImports.entries()].map(([key, value]) => [key, { ...value }])),
+        internalExecutions: new Map([...runtime.internalExecutions.entries()].map(([key, value]) => [key, { ...value }])),
+        nextApplicationId: runtime.nextApplicationId,
+        nextBacktestId: runtime.nextBacktestId,
+        nextBacktestImportId: runtime.nextBacktestImportId,
+        nextInternalExecutionId: runtime.nextInternalExecutionId,
+        nextRunId: runtime.nextRunId,
+        simulateReportLinkRace: runtime.simulateReportLinkRace,
+      };
+      try {
+        return await callback(prisma);
+      } catch (error) {
+        const race = runtime.simulateReportLinkRace;
+        runtime.applications = snapshot.applications;
+        runtime.runs = snapshot.runs;
+        runtime.backtests = snapshot.backtests;
+        runtime.backtestImports = snapshot.backtestImports;
+        runtime.internalExecutions = snapshot.internalExecutions;
+        runtime.nextApplicationId = snapshot.nextApplicationId;
+        runtime.nextBacktestId = snapshot.nextBacktestId;
+        runtime.nextBacktestImportId = snapshot.nextBacktestImportId;
+        runtime.nextInternalExecutionId = snapshot.nextInternalExecutionId;
+        runtime.nextRunId = snapshot.nextRunId;
+        runtime.simulateReportLinkRace = snapshot.simulateReportLinkRace;
+        if (race) {
+          const run = runtime.runs.find((candidate) => candidate.id === race.runId);
+          if (run) {
+            run.backtestId = race.backtestId;
+            run.updatedAt = new Date('2026-05-06T00:03:00.000Z');
+          }
+          runtime.simulateReportLinkRace = null;
+        }
+        throw error;
+      }
+    },
     symbol: {
       findUnique: async ({ where }: any) => runtime.symbols.get(where.id) ?? null,
     },
@@ -499,6 +540,7 @@ vi.mock('../src/db', () => {
           if (where?.id && run.id !== where.id) return false;
           if (where?.applicationId && run.applicationId !== where.applicationId) return false;
           if (where?.runType && run.runType !== where.runType) return false;
+          if ('backtestId' in (where ?? {}) && run.backtestId !== where.backtestId) return false;
           if (where?.internalBacktestExecutionId && run.internalBacktestExecutionId !== where.internalBacktestExecutionId) {
             return false;
           }
@@ -524,6 +566,23 @@ vi.mock('../src/db', () => {
         };
         runtime.runs.push(run);
         return run;
+      },
+      updateMany: async ({ where, data }: any) => {
+        if (runtime.simulateReportLinkRace?.runId === where.id) {
+          return { count: 0 };
+        }
+        let count = 0;
+        runtime.runs = runtime.runs.map((run) => {
+          if (where?.id && run.id !== where.id) return run;
+          if ('backtestId' in (where ?? {}) && run.backtestId !== where.backtestId) return run;
+          count += 1;
+          return {
+            ...run,
+            ...data,
+            updatedAt: new Date('2026-05-06T00:02:00.000Z'),
+          };
+        });
+        return { count };
       },
       update: async ({ where, data }: any) => {
         const index = runtime.runs.findIndex((run) => run.id === where.id);
@@ -1439,6 +1498,74 @@ describe('symbol strategy applications route', () => {
     expect(secondReportRes.statusCode).toBe(200);
     expect(secondReportRes.json().data.backtest.id).toBe(backtestId);
     expect([...runtime.backtests.values()].filter((backtest) => backtest.id === backtestId)).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('returns the existing report when a guarded report link loses a race', async () => {
+    runtime.runs = [];
+    const app = await createApp();
+
+    const startRes = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const executionId = startRes.json().data.execution.id;
+    const runId = startRes.json().data.run.id;
+
+    const execution = runtime.internalExecutions.get(executionId);
+    runtime.internalExecutions.set(executionId, {
+      ...execution!,
+      status: 'succeeded',
+      finishedAt: new Date('2026-05-06T00:10:00.000Z'),
+      resultSummaryJson: { total_return: 0.07 },
+      artifactPointerJson: null,
+    });
+    runtime.backtests.set('backtest-concurrent', {
+      id: 'backtest-concurrent',
+      strategyRuleVersionId: 'version-1',
+      strategySnapshotJson: {
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: executionId,
+      },
+      title: 'concurrent internal report',
+      status: 'completed',
+      executionSource: 'internal_backtest',
+      market: 'TSE',
+      timeframe: 'D',
+      createdAt: new Date('2026-05-06T00:09:00.000Z'),
+      updatedAt: new Date('2026-05-06T00:09:00.000Z'),
+    });
+    runtime.simulateReportLinkRace = {
+      runId,
+      backtestId: 'backtest-concurrent',
+    };
+
+    const reportRes = await app.inject({
+      method: 'POST',
+      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
+      payload: {
+        title: 'losing internal report',
+      },
+    });
+
+    expect(reportRes.statusCode).toBe(200);
+    expect(reportRes.json().data.run).toMatchObject({
+      id: runId,
+      backtest_id: 'backtest-concurrent',
+      internal_backtest_execution_id: executionId,
+    });
+    expect(reportRes.json().data.backtest).toMatchObject({
+      id: 'backtest-concurrent',
+      title: 'concurrent internal report',
+      execution_source: 'internal_backtest',
+    });
+    expect([...runtime.backtests.values()].some((backtest) => backtest.title === 'losing internal report')).toBe(false);
 
     await app.close();
   });
