@@ -13,6 +13,7 @@ import {
   SymbolStrategyApplicationCsvImportData,
   SymbolStrategyApplicationItem,
   SymbolStrategyApplicationInternalBacktestData,
+  SymbolStrategyApplicationInternalBacktestReportData,
   SymbolStrategyApplicationListData,
   SymbolStrategyApplicationMutateData,
 } from '../api/types';
@@ -57,7 +58,7 @@ const LABELS = {
   csvImportError: 'CSV取込に失敗しました。',
   openBacktestDetail: '検証レポートを開く',
   internalBacktest: '内部バックテスト',
-  internalBacktestDescription: '保存済み application 起点で internal backtest execution を作成します。結果詳細や report 化は後続タスクです。',
+  internalBacktestDescription: '保存済み application 起点で internal backtest execution を作成します。succeeded execution は Backtest report 化できます。',
   internalBacktestFrom: '開始日',
   internalBacktestTo: '終了日',
   internalBacktestMode: 'summary_mode',
@@ -78,6 +79,12 @@ const LABELS = {
   internalBacktestResultFailed: '内部バックテストは failed です。',
   internalBacktestResultCanceled: '内部バックテストは canceled です。',
   internalBacktestResultStatus: 'execution status',
+  createBacktestReport: 'Backtest report を作成',
+  creatingBacktestReport: 'Backtest report 作成中...',
+  backtestReportCreated: 'Backtest report を作成しました。',
+  backtestReportRefreshFailed: 'Backtest report を作成しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
+  backtestReportError: 'Backtest report を作成できませんでした。',
+  backtestReportAlreadyCreated: 'Backtest report は作成済みです。',
   resultSummaryKind: 'summary_kind',
   resultPeriod: 'period',
   resultBarCount: 'bar_count',
@@ -226,7 +233,21 @@ type CsvImportMessage = {
   text: string;
 };
 
-function InternalBacktestResultPanel({ executionId }: { executionId: string }) {
+function InternalBacktestResultPanel({
+  applicationId,
+  executionId,
+  existingBacktestId,
+  mutateApplications,
+}: {
+  applicationId: string;
+  executionId: string;
+  existingBacktestId: string | null;
+  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
+}) {
+  const [isCreatingReport, setIsCreatingReport] = useState(false);
+  const [reportMessage, setReportMessage] = useState<string | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [createdBacktestId, setCreatedBacktestId] = useState<string | null>(null);
   const {
     data: executionStatusData,
     error: executionStatusError,
@@ -254,12 +275,39 @@ function InternalBacktestResultPanel({ executionId }: { executionId: string }) {
 
   const metrics = executionResultData?.result_summary?.metrics ?? null;
   const period = executionResultData?.result_summary?.period ?? null;
+  const backtestLink = existingBacktestId ?? createdBacktestId;
   const statusTone =
     executionStatus === 'failed' || executionStatus === 'canceled'
       ? 'border-rose-200 bg-rose-50 text-rose-800'
       : executionStatus === 'succeeded'
         ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
         : 'border-sky-200 bg-sky-50 text-sky-800';
+
+  const createBacktestReport = async () => {
+    if (executionStatus !== 'succeeded' || backtestLink) {
+      return;
+    }
+    setIsCreatingReport(true);
+    setReportMessage(null);
+    setReportError(null);
+    try {
+      const result = await postApi<SymbolStrategyApplicationInternalBacktestReportData>(
+        `/api/symbol-strategy-applications/${applicationId}/internal-backtests/${executionId}/report`,
+        {},
+      );
+      setCreatedBacktestId(result.backtest.id);
+      setReportMessage(LABELS.backtestReportCreated);
+      try {
+        await mutateApplications();
+      } catch {
+        setReportMessage(LABELS.backtestReportRefreshFailed);
+      }
+    } catch (error) {
+      setReportError(getErrorMessage(error, LABELS.backtestReportError));
+    } finally {
+      setIsCreatingReport(false);
+    }
+  };
 
   return (
     <div className={`mt-3 rounded-lg border p-3 text-sm ${statusTone}`}>
@@ -329,6 +377,29 @@ function InternalBacktestResultPanel({ executionId }: { executionId: string }) {
               ) : (
                 <p>{LABELS.internalBacktestResultUnavailable}</p>
               )}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {backtestLink ? (
+                  <>
+                    <span className="text-xs font-medium">{LABELS.backtestReportAlreadyCreated}</span>
+                    <TextLink href={`/backtests/${backtestLink}`}>{LABELS.openBacktestDetail}</TextLink>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={createBacktestReport}
+                    disabled={isCreatingReport}
+                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+                  >
+                    {isCreatingReport ? LABELS.creatingBacktestReport : LABELS.createBacktestReport}
+                  </button>
+                )}
+              </div>
+              {reportMessage ? (
+                <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reportMessage}</p>
+              ) : null}
+              {reportError ? (
+                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{reportError}</p>
+              ) : null}
             </div>
           ) : null}
         </>
@@ -377,7 +448,13 @@ function ApplicationSummaryHeader({
   );
 }
 
-function ApplicationLatestRunCard({ application }: { application: SymbolStrategyApplicationItem }) {
+function ApplicationLatestRunCard({
+  application,
+  mutateApplications,
+}: {
+  application: SymbolStrategyApplicationItem;
+  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
+}) {
   return (
     <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
       <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
@@ -389,7 +466,12 @@ function ApplicationLatestRunCard({ application }: { application: SymbolStrategy
           {application.latest_run.internal_backtest_execution_id ? (
             <>
               <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
-              <InternalBacktestResultPanel executionId={application.latest_run.internal_backtest_execution_id} />
+              <InternalBacktestResultPanel
+                applicationId={application.id}
+                executionId={application.latest_run.internal_backtest_execution_id}
+                existingBacktestId={application.latest_run.backtest_id}
+                mutateApplications={mutateApplications}
+              />
             </>
           ) : null}
         </div>
@@ -558,7 +640,7 @@ function SavedApplicationRow({
       ) : null}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <ApplicationLatestRunCard application={application} />
+        <ApplicationLatestRunCard application={application} mutateApplications={mutateApplications} />
         <ApplicationLatestReportCard application={application} />
       </div>
 

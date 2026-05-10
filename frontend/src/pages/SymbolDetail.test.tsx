@@ -451,6 +451,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('内部バックテスト結果');
     expect(html).toContain('execution status: succeeded');
     expect(html).toContain('実行結果 summary を表示しています。');
+    expect(html).toContain('Backtest report');
     expect(html).toContain('engine_estimated');
     expect(html).toContain('bar_count');
     expect(html).toContain('245');

@@ -717,6 +717,22 @@ export type SymbolStrategyApplicationInternalBacktestData = {
   execution: InternalBacktestExecutionCreateData['execution'];
 };
 
+export type SymbolStrategyApplicationInternalBacktestReportData = {
+  application_id: string;
+  run: {
+    id: string;
+    run_type: string;
+    status: string;
+    backtest_id: string | null;
+    backtest_import_id: string | null;
+    internal_backtest_execution_id: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+  execution: InternalBacktestExecutionCreateData['execution'];
+  backtest: BacktestCreateData['backtest'];
+};
+
 export type BacktestCreateData = {
   backtest: {
     id: string;
