@@ -3,6 +3,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { swrFetcher } from '../api/client';
 import { HomeData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
+import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
 
@@ -68,14 +69,21 @@ export default function Home() {
   const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
   const [summaryDate] = useState<string | null>(null);
   const homeApiPath = useMemo(() => buildHomeApiPath(summaryType, summaryDate), [summaryType, summaryDate]);
-  const { data, error, isLoading } = useSWR<HomeData>(homeApiPath, swrFetcher);
+  const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
+  const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
   if (!data) return null;
 
   return (
-    <AppLayout showSideRail>
+    <AppLayout
+      showSideRail
+      sideRailHomeData={canShareSideRailHomeData ? data : undefined}
+      sideRailHomeError={canShareSideRailHomeData ? error : undefined}
+      sideRailHomeIsLoading={canShareSideRailHomeData ? isLoading : undefined}
+      sideRailMutateHome={canShareSideRailHomeData ? mutate : undefined}
+    >
       <div className="w-full">
         <PageHeader
           title="北極星"
