@@ -2,13 +2,19 @@ import { useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { patchApi, swrFetcher } from '../api/client';
-import { StrategyMutateData, StrategySymbolApplicationsData, StrategyVersionListData } from '../api/types';
+import {
+  StrategyMutateData,
+  StrategySymbolApplicationsData,
+  StrategyVersionListData,
+  SymbolStrategyApplicationMutateData,
+} from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
 
 const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
+type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 
 function formatDate(value: string | null | undefined): string {
   if (!value) return '-';
@@ -21,6 +27,8 @@ function StrategyDetail(): JSX.Element {
   const [, params] = useRoute('/strategies/:strategyId') as [boolean, { strategyId?: string } | null];
   const strategyId = params?.strategyId ?? '-';
   const [isMutatingStatus, setIsMutatingStatus] = useState(false);
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState<ApplicationStatusFilter>('active');
+  const [mutatingApplicationId, setMutatingApplicationId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionListData>(
     strategyId === '-' ? null : `/api/strategies/${strategyId}/versions?page=1&limit=50&sort=updated_at&order=desc`,
@@ -30,8 +38,11 @@ function StrategyDetail(): JSX.Element {
     data: symbolApplicationsData,
     error: symbolApplicationsError,
     isLoading: isSymbolApplicationsLoading,
+    mutate: mutateSymbolApplications,
   } = useSWR<StrategySymbolApplicationsData>(
-    strategyId === '-' ? null : `/api/strategies/${strategyId}/symbol-applications?status=active&page=1&limit=20&sort=updated_at&order=desc`,
+    strategyId === '-'
+      ? null
+      : `/api/strategies/${strategyId}/symbol-applications?status=${applicationStatusFilter}&page=1&limit=20&sort=updated_at&order=desc`,
     swrFetcher,
   );
   const strategy = data?.strategy;
@@ -54,6 +65,26 @@ function StrategyDetail(): JSX.Element {
       setActionError(err instanceof Error ? err.message : 'ストラテジーの更新に失敗しました。');
     } finally {
       setIsMutatingStatus(false);
+    }
+  };
+
+  const handleApplicationArchiveRestore = async (applicationId: string, nextAction: 'archive' | 'restore') => {
+    const confirmMessage = nextAction === 'archive'
+      ? 'この application をアーカイブしますか？'
+      : 'この application を復元しますか？';
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) return;
+    setMutatingApplicationId(applicationId);
+    setActionError(null);
+    try {
+      await patchApi<SymbolStrategyApplicationMutateData>(
+        `/api/symbol-strategy-applications/${applicationId}/${nextAction}`,
+        {},
+      );
+      await mutateSymbolApplications();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'application の更新に失敗しました。');
+    } finally {
+      setMutatingApplicationId(null);
     }
   };
 
@@ -193,6 +224,27 @@ function StrategyDetail(): JSX.Element {
 
         <section className={PANEL_CLASS}>
           <h2 className="text-lg font-semibold text-slate-900">適用済み銘柄</h2>
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium text-slate-700">表示対象</span>
+            {([
+              ['active', '有効'],
+              ['archived', 'アーカイブ'],
+              ['all', 'すべて'],
+            ] as Array<[ApplicationStatusFilter, string]>).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setApplicationStatusFilter(value)}
+                className={
+                  applicationStatusFilter === value
+                    ? 'rounded-md bg-sky-700 px-3 py-1.5 font-medium text-white'
+                    : 'rounded-md border border-slate-300 bg-white px-3 py-1.5 font-medium text-slate-700'
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           {isSymbolApplicationsLoading ? (
             <p className={MUTED_TEXT_CLASS}>適用済み銘柄を読み込み中...</p>
           ) : symbolApplicationsError ? (
@@ -215,6 +267,27 @@ function StrategyDetail(): JSX.Element {
                     <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
                       runs: {application.run_count}
                     </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {application.status === 'archived' ? (
+                      <button
+                        type="button"
+                        onClick={() => handleApplicationArchiveRestore(application.id, 'restore')}
+                        disabled={mutatingApplicationId === application.id}
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        復元
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleApplicationArchiveRestore(application.id, 'archive')}
+                        disabled={mutatingApplicationId === application.id}
+                        className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        アーカイブ
+                      </button>
+                    )}
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
                     <div>
@@ -279,7 +352,7 @@ function StrategyDetail(): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-900">後続接続予定</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
             <li>favorite / hard delete は準備中です。</li>
-            <li>application archive / restore は後続タスクで接続します。</li>
+            <li>application archive / restore は status 操作として利用できます。</li>
             <li>internal execution result detail は後続タスクで接続します。</li>
           </ul>
         </section>

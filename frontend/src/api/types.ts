@@ -637,6 +637,35 @@ export type SymbolStrategyApplicationCreateData = {
   application: SymbolStrategyApplicationItem;
 };
 
+export type SymbolStrategyApplicationMutateData = {
+  application: {
+    id: string;
+    status: string;
+    source: string;
+    memo: string | null;
+    created_at: string;
+    updated_at: string;
+    symbol: {
+      id: string;
+      symbol: string;
+      symbol_code: string | null;
+      display_name: string | null;
+    };
+    strategy: {
+      id: string;
+      title: string;
+      status: string;
+    };
+    strategy_version: {
+      id: string;
+      market: string;
+      timeframe: string;
+      status: string;
+    };
+    run_count: number;
+  };
+};
+
 export type SymbolStrategyApplicationCsvImportData = {
   application_id: string;
   run: {
