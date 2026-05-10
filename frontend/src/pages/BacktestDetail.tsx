@@ -6,6 +6,7 @@ import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import LoadingState from '../components/ui/LoadingState';
+import StatusBadge from '../components/ui/StatusBadge';
 
 type BacktestDetailProps = {
   params: { backtestId: string };
@@ -72,13 +73,6 @@ function parseStatusText(status: string | null | undefined): string {
   if (status === 'failed') return '解析失敗';
   if (status === 'pending') return '解析待ち';
   return valueText(status);
-}
-
-function parseStatusStyle(status: string | null | undefined): { background: string; color: string } {
-  if (status === 'parsed') return { background: '#e8f6ea', color: '#176b2d' };
-  if (status === 'failed') return { background: '#fdeaea', color: '#9f1c1c' };
-  if (status === 'pending') return { background: '#eef4ff', color: '#144b9a' };
-  return { background: '#f2f2f2', color: '#444' };
 }
 
 function metricCard(label: string, value: string) {
@@ -266,7 +260,7 @@ function SymbolStrategyApplicationBacklinkSection({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
         <BacklinkInfoCard title="Application">
           <div><strong>application ID:</strong> <code>{symbolStrategyApplication.application_id}</code></div>
-          <div><strong>status:</strong> <code>{symbolStrategyApplication.application_status}</code></div>
+          <div><strong>status:</strong> <StatusBadge status={symbolStrategyApplication.application_status} /></div>
           <div><strong>source:</strong> <code>{symbolStrategyApplication.application_source}</code></div>
           <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.application_updated_at)}</div>
           {symbolStrategyApplication.application_memo ? (
@@ -276,7 +270,7 @@ function SymbolStrategyApplicationBacklinkSection({
         <BacklinkInfoCard title="Application Run">
           <div><strong>run ID:</strong> <code>{symbolStrategyApplication.run_id}</code></div>
           <div><strong>run type:</strong> <code>{symbolStrategyApplication.run_type}</code></div>
-          <div><strong>run status:</strong> <code>{symbolStrategyApplication.run_status}</code></div>
+          <div><strong>run status:</strong> <StatusBadge status={symbolStrategyApplication.run_status} /></div>
           <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.run_updated_at)}</div>
         </BacklinkInfoCard>
         <BacklinkInfoCard title="Symbol">
@@ -457,7 +451,6 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
   const latestImport = data.latest_import;
   const latestStatus = parseStatusText(latestImport?.parse_status);
-  const latestStatusStyle = parseStatusStyle(latestImport?.parse_status);
   const summary = latestImport?.parsed_summary;
   const parsedImports = data.imports.filter((item) => item.parsed_summary);
   const parsedImportCount = data.imports.filter((item) => item.parse_status === 'parsed').length;
@@ -535,7 +528,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         <div><strong>実行ソース:</strong> {data.backtest.execution_source}</div>
         <div><strong>市場:</strong> {data.backtest.market}</div>
         <div><strong>時間軸:</strong> {data.backtest.timeframe}</div>
-        <div><strong>状態:</strong> <code>{data.backtest.status}</code></div>
+        <div><strong>状態:</strong> <StatusBadge status={data.backtest.status} /></div>
       </section>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
@@ -607,19 +600,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           <>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <div><strong>最新 import ID:</strong> <code>{latestImport.id}</code></div>
-              <div
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  borderRadius: '999px',
-                  padding: '0.2rem 0.6rem',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  ...latestStatusStyle,
-                }}
-              >
-                {latestStatus}
-              </div>
+              <StatusBadge status={latestImport.parse_status}>{latestStatus}</StatusBadge>
             </div>
 
             <div style={{ marginTop: '0.8rem', fontSize: '0.95rem', color: '#444' }}>
@@ -869,7 +850,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           <ul style={{ margin: 0, paddingLeft: '1rem' }}>
             {data.imports.map((item) => (
               <li key={item.id} style={{ marginBottom: '0.4rem' }}>
-                <code>{item.id}</code> / {item.file_name} / <code>{parseStatusText(item.parse_status)}</code>
+                <code>{item.id}</code> / {item.file_name} / <StatusBadge status={item.parse_status}>{parseStatusText(item.parse_status)}</StatusBadge>
                 {item.parse_error ? ` / エラー: ${item.parse_error}` : ''}
               </li>
             ))}

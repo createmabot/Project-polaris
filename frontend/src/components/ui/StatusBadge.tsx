@@ -18,7 +18,7 @@ const TONE_CLASSES: Record<StatusBadgeTone, string> = {
 
 function inferTone(status: string | null | undefined): StatusBadgeTone {
   const normalizedStatus = status?.toLowerCase() ?? '';
-  if (['active', 'available', 'completed', 'generated', 'imported', 'ready', 'succeeded'].includes(normalizedStatus)) {
+  if (['active', 'available', 'completed', 'generated', 'imported', 'parsed', 'ready', 'succeeded'].includes(normalizedStatus)) {
     return 'positive';
   }
   if (['failed', 'canceled', 'error', 'import_failed'].includes(normalizedStatus)) {
