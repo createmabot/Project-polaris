@@ -10,6 +10,7 @@ import {
   SymbolStrategyApplicationCreateData,
   SymbolStrategyApplicationCsvImportData,
   SymbolStrategyApplicationItem,
+  SymbolStrategyApplicationInternalBacktestData,
   SymbolStrategyApplicationListData,
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
@@ -51,6 +52,18 @@ const LABELS = {
   csvImportParseFailed: '解析失敗',
   csvImportError: 'CSV取込に失敗しました。',
   openBacktestDetail: '検証レポートを開く',
+  internalBacktest: '内部バックテスト',
+  internalBacktestDescription: '保存済み application 起点で internal backtest execution を作成します。結果詳細や report 化は後続タスクです。',
+  internalBacktestFrom: '開始日',
+  internalBacktestTo: '終了日',
+  internalBacktestMode: 'summary_mode',
+  runInternalBacktest: '内部バックテストを開始',
+  internalBacktestStarting: '内部バックテスト開始中...',
+  internalBacktestSuccess: '内部バックテストを開始しました。',
+  internalBacktestRefreshFailed: '内部バックテストを開始しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
+  internalBacktestError: '内部バックテストを開始できませんでした。',
+  internalBacktestResultPending: '実行結果の詳細表示は後続タスクです。',
+  executionId: 'execution_id',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
     '保存すると、この銘柄のストラテジー適用として記録されます。',
@@ -205,6 +218,12 @@ function SavedApplicationRow({
   const [csvImportMessage, setCsvImportMessage] = useState<CsvImportMessage | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [csvBacktestLink, setCsvBacktestLink] = useState<string | null>(null);
+  const [internalBacktestFrom, setInternalBacktestFrom] = useState('2025-01-01');
+  const [internalBacktestTo, setInternalBacktestTo] = useState('2026-01-01');
+  const [isStartingInternalBacktest, setIsStartingInternalBacktest] = useState(false);
+  const [internalBacktestMessage, setInternalBacktestMessage] = useState<string | null>(null);
+  const [internalBacktestError, setInternalBacktestError] = useState<string | null>(null);
+  const [internalExecutionId, setInternalExecutionId] = useState<string | null>(null);
 
   const importCsv = async () => {
     const normalizedFileName = fileName.trim();
@@ -244,6 +263,41 @@ function SavedApplicationRow({
       setCsvImportError(getErrorMessage(error, LABELS.csvImportError));
     } finally {
       setIsImportingCsv(false);
+    }
+  };
+
+  const startInternalBacktest = async () => {
+    if (!internalBacktestFrom.trim() || !internalBacktestTo.trim()) {
+      return;
+    }
+    setIsStartingInternalBacktest(true);
+    setInternalBacktestMessage(null);
+    setInternalBacktestError(null);
+    setInternalExecutionId(null);
+    try {
+      const result = await postApi<SymbolStrategyApplicationInternalBacktestData>(
+        `/api/symbol-strategy-applications/${application.id}/internal-backtests`,
+        {
+          data_range: {
+            from: internalBacktestFrom.trim(),
+            to: internalBacktestTo.trim(),
+          },
+          engine_config: {
+            summary_mode: 'engine_estimated',
+          },
+        },
+      );
+      setInternalExecutionId(result.execution.id);
+      setInternalBacktestMessage(LABELS.internalBacktestSuccess);
+      try {
+        await mutateApplications();
+      } catch {
+        setInternalBacktestMessage(LABELS.internalBacktestRefreshFailed);
+      }
+    } catch (error) {
+      setInternalBacktestError(getErrorMessage(error, LABELS.internalBacktestError));
+    } finally {
+      setIsStartingInternalBacktest(false);
     }
   };
 
@@ -326,9 +380,6 @@ function SavedApplicationRow({
           >
             {isImportingCsv ? LABELS.csvImporting : LABELS.runCsvImport}
           </button>
-          <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
-            {LABELS.internalBacktestLater}
-          </button>
           {csvBacktestLink ? <TextLink href={`/backtests/${csvBacktestLink}`}>{LABELS.openBacktestDetail}</TextLink> : null}
         </div>
         {csvImportMessage ? (
@@ -344,6 +395,54 @@ function SavedApplicationRow({
         ) : null}
         {csvImportError ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{csvImportError}</p>
+        ) : null}
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <h5 className="text-sm font-semibold text-slate-900">{LABELS.internalBacktest}</h5>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.internalBacktestDescription}</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1 text-sm text-slate-700">
+            <span className="font-medium">{LABELS.internalBacktestFrom}</span>
+            <input
+              type="date"
+              value={internalBacktestFrom}
+              onChange={(event) => setInternalBacktestFrom(event.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
+          <label className="grid gap-1 text-sm text-slate-700">
+            <span className="font-medium">{LABELS.internalBacktestTo}</span>
+            <input
+              type="date"
+              value={internalBacktestTo}
+              onChange={(event) => setInternalBacktestTo(event.target.value)}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
+        </div>
+        <MetaText>{LABELS.internalBacktestMode}: engine_estimated</MetaText>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={startInternalBacktest}
+            disabled={isStartingInternalBacktest || !internalBacktestFrom.trim() || !internalBacktestTo.trim()}
+            className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+          >
+            {isStartingInternalBacktest ? LABELS.internalBacktestStarting : LABELS.runInternalBacktest}
+          </button>
+          <span className="text-sm text-slate-500">{LABELS.internalBacktestResultPending}</span>
+        </div>
+        {internalExecutionId ? (
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+            {LABELS.executionId}: {internalExecutionId}
+          </p>
+        ) : null}
+        {internalBacktestMessage ? (
+          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{internalBacktestMessage}</p>
+        ) : null}
+        {internalBacktestError ? (
+          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{internalBacktestError}</p>
         ) : null}
       </div>
     </div>

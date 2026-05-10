@@ -1,18 +1,13 @@
 import { FastifyPluginAsync } from 'fastify';
-import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
-import { enqueueInternalBacktestExecution } from '../queue/internal-backtests';
 import { getInternalBacktestDataSourceUnavailableSummary } from '../internal-backtests/observability';
+import { type CreateExecutionRequestInput } from '../internal-backtests/contracts';
 import {
-  buildExecutionInputSnapshot,
-  normalizeCreateExecutionRequest,
-  resolveExecutionInput,
-  type CreateExecutionRequestInput,
-  type NormalizedCreateExecutionRequest,
-} from '../internal-backtests/contracts';
+  createInternalBacktestExecution,
+  toInternalBacktestExecutionResponse,
+} from '../internal-backtests/create-execution';
 import { getEngineActualArtifactByExecutionId } from '../internal-backtests/artifact-store';
-import { normalizeEngineActualRuleSet } from '../internal-backtests/engine-actual-rules';
 
 export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Querystring: { window?: string } }>(
@@ -30,117 +25,14 @@ export const internalBacktestRoutes: FastifyPluginAsync = async (fastify) => {
   );
 
   fastify.post<{ Body: CreateExecutionRequestInput }>('/executions', async (request, reply) => {
-    let normalizedRequest: NormalizedCreateExecutionRequest;
-    try {
-      normalizedRequest = normalizeCreateExecutionRequest(request.body ?? {});
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'invalid request body';
-      throw new AppError(400, 'VALIDATION_ERROR', message);
-    }
-
-    const strategyVersion = await prisma.strategyRuleVersion.findUnique({
-      where: { id: normalizedRequest.strategyRuleVersionId },
+    const { execution } = await createInternalBacktestExecution({
+      body: request.body ?? {},
+      logger: request.log,
     });
-    if (!strategyVersion) {
-      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
-    }
-
-    let resolvedInput: ReturnType<typeof resolveExecutionInput>;
-    try {
-      resolvedInput = resolveExecutionInput({
-        request: normalizedRequest,
-        strategyVersion: {
-          market: strategyVersion.market,
-          timeframe: strategyVersion.timeframe,
-        },
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'invalid execution target.';
-      throw new AppError(400, 'INVALID_EXECUTION_TARGET', message);
-    }
-    const requestedSummaryMode =
-      typeof resolvedInput.engineConfig.summary_mode === 'string'
-        ? resolvedInput.engineConfig.summary_mode.trim().toLowerCase()
-        : null;
-    if (
-      (requestedSummaryMode === 'engine_estimated' || requestedSummaryMode === 'engine_actual') &&
-      normalizedRequest.executionTarget.symbol === null
-    ) {
-      throw new AppError(
-        400,
-        'INVALID_EXECUTION_TARGET',
-        `execution_target.symbol is required when engine_config.summary_mode is ${requestedSummaryMode}.`,
-      );
-    }
-    if (requestedSummaryMode === 'engine_actual') {
-      try {
-        normalizeEngineActualRuleSet(resolvedInput.engineConfig);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : 'invalid engine_config.actual_rules.';
-        throw new AppError(400, 'VALIDATION_ERROR', message);
-      }
-    }
-
-    const inputSnapshot = buildExecutionInputSnapshot({
-      strategyRuleVersionId: strategyVersion.id,
-      market: resolvedInput.market,
-      timeframe: resolvedInput.timeframe,
-      executionTarget: resolvedInput.executionTarget,
-      dataRange: resolvedInput.dataRange,
-      engineConfig: resolvedInput.engineConfig,
-      strategySnapshot: {
-        naturalLanguageRule: strategyVersion.naturalLanguageRule,
-        generatedPine: strategyVersion.generatedPine,
-        market: strategyVersion.market,
-        timeframe: strategyVersion.timeframe,
-      },
-    });
-
-    const execution = await prisma.internalBacktestExecution.create({
-      data: {
-        strategyRuleVersionId: strategyVersion.id,
-        status: 'queued',
-        inputSnapshotJson: inputSnapshot as Prisma.InputJsonValue,
-      },
-    });
-
-    try {
-      await enqueueInternalBacktestExecution(execution.id);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'failed_to_enqueue_internal_backtest_execution';
-      await prisma.internalBacktestExecution.update({
-        where: { id: execution.id },
-        data: {
-          status: 'failed',
-          finishedAt: new Date(),
-          errorCode: 'QUEUE_ENQUEUE_FAILED',
-          errorMessage,
-        },
-      });
-
-      request.log.error({
-        event: 'internal_backtest_execution_enqueue_failed',
-        execution_id: execution.id,
-        error: errorMessage,
-      });
-
-      throw new AppError(503, 'QUEUE_ENQUEUE_FAILED', 'internal backtest execution enqueue failed.', {
-        execution_id: execution.id,
-      });
-    }
 
     return reply.status(201).send(
       formatSuccess(request, {
-        execution: {
-          id: execution.id,
-          strategy_rule_version_id: execution.strategyRuleVersionId,
-          status: execution.status,
-          requested_at: execution.requestedAt,
-          engine_version: execution.engineVersion,
-          created_at: execution.createdAt,
-          updated_at: execution.updatedAt,
-        },
+        execution: toInternalBacktestExecutionResponse(execution),
       }),
     );
   });

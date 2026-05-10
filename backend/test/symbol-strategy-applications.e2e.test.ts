@@ -4,6 +4,10 @@ import { symbolRoutes } from '../src/routes/symbols';
 import { symbolStrategyApplicationRoutes } from '../src/routes/symbol-strategy-applications';
 import { errorHandler } from '../src/utils/response';
 
+const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
+  enqueueInternalBacktestExecutionMock: vi.fn(async () => ({ id: 'ibtx-job-1' })),
+}));
+
 type SymbolRow = {
   id: string;
   symbol: string;
@@ -68,6 +72,23 @@ type BacktestImportRow = {
   updatedAt: Date;
 };
 
+type InternalExecutionRow = {
+  id: string;
+  strategyRuleVersionId: string;
+  status: string;
+  requestedAt: Date;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  inputSnapshotJson: Record<string, unknown>;
+  resultSummaryJson: Record<string, unknown> | null;
+  artifactPointerJson: Record<string, unknown> | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  engineVersion: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type Runtime = {
   symbols: Map<string, SymbolRow>;
   strategies: Map<string, { id: string; title: string; status: string }>;
@@ -88,9 +109,11 @@ type Runtime = {
   runs: RunRow[];
   backtests: Map<string, BacktestRow>;
   backtestImports: Map<string, BacktestImportRow>;
+  internalExecutions: Map<string, InternalExecutionRow>;
   nextApplicationId: number;
   nextBacktestId: number;
   nextBacktestImportId: number;
+  nextInternalExecutionId: number;
   nextRunId: number;
 };
 
@@ -279,9 +302,11 @@ function createRuntime(): Runtime {
         updatedAt: new Date('2026-05-02T00:00:00.000Z'),
       }],
     ]),
+    internalExecutions: new Map(),
     nextApplicationId: 2,
     nextBacktestId: 2,
     nextBacktestImportId: 2,
+    nextInternalExecutionId: 2,
     nextRunId: 2,
   };
 }
@@ -420,6 +445,40 @@ vi.mock('../src/db', () => {
         return backtestImport;
       },
     },
+    internalBacktestExecution: {
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-06T00:00:00.000Z');
+        const execution: InternalExecutionRow = {
+          id: `internal-created-${runtime.nextInternalExecutionId++}`,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          status: data.status ?? 'queued',
+          requestedAt: now,
+          startedAt: data.startedAt ?? null,
+          finishedAt: data.finishedAt ?? null,
+          inputSnapshotJson: data.inputSnapshotJson ?? {},
+          resultSummaryJson: data.resultSummaryJson ?? null,
+          artifactPointerJson: data.artifactPointerJson ?? null,
+          errorCode: data.errorCode ?? null,
+          errorMessage: data.errorMessage ?? null,
+          engineVersion: data.engineVersion ?? 'ibtx-v0',
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.internalExecutions.set(execution.id, execution);
+        return execution;
+      },
+      update: async ({ where, data }: any) => {
+        const execution = runtime.internalExecutions.get(where.id);
+        if (!execution) throw new Error(`internal_execution_not_found:${where.id}`);
+        const updated = {
+          ...execution,
+          ...data,
+          updatedAt: new Date('2026-05-06T00:01:00.000Z'),
+        };
+        runtime.internalExecutions.set(updated.id, updated);
+        return updated;
+      },
+    },
     symbolStrategyApplicationRun: {
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:03:00.000Z');
@@ -446,6 +505,10 @@ vi.mock('../src/db', () => {
   return { prisma };
 });
 
+vi.mock('../src/queue/internal-backtests', () => ({
+  enqueueInternalBacktestExecution: enqueueInternalBacktestExecutionMock,
+}));
+
 async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);
@@ -458,6 +521,8 @@ async function createApp() {
 describe('symbol strategy applications route', () => {
   beforeEach(() => {
     runtime = createRuntime();
+    enqueueInternalBacktestExecutionMock.mockReset();
+    enqueueInternalBacktestExecutionMock.mockResolvedValue({ id: 'ibtx-job-1' });
   });
 
   it('returns empty active applications for a symbol', async () => {
@@ -867,6 +932,141 @@ describe('symbol strategy applications route', () => {
     expect(emptyFileName.json().error.code).toBe('VALIDATION_ERROR');
     expect(emptyCsvText.statusCode).toBe(400);
     expect(emptyCsvText.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('starts internal backtest for an active application and updates latest run', async () => {
+    runtime.runs = [];
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.json().data.application_id).toBe('app-1');
+    expect(res.json().data.execution).toMatchObject({
+      strategy_rule_version_id: 'version-1',
+      status: 'queued',
+    });
+    expect(res.json().data.run).toMatchObject({
+      run_type: 'internal_backtest',
+      status: 'queued',
+      backtest_id: null,
+      backtest_import_id: null,
+      internal_backtest_execution_id: res.json().data.execution.id,
+    });
+    expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledWith(res.json().data.execution.id);
+    const savedExecution = runtime.internalExecutions.get(res.json().data.execution.id);
+    expect(savedExecution?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: '2148',
+      source_kind: 'daily_ohlcv',
+    });
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+    const application = listRes.json().data.applications[0];
+    expect(application.latest_run).toMatchObject({
+      run_type: 'internal_backtest',
+      status: 'queued',
+      backtest_id: null,
+      backtest_import_id: null,
+      internal_backtest_execution_id: res.json().data.execution.id,
+    });
+    expect(application.latest_backtest_report).toBeNull();
+    expect(application.run_count).toBe(1);
+
+    await app.close();
+  });
+
+  it('forces application symbol for application-origin internal backtest', async () => {
+    runtime.runs = [];
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        execution_target: {
+          symbol: '9999',
+          source_kind: 'daily_ohlcv',
+        },
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const savedExecution = runtime.internalExecutions.get(res.json().data.execution.id);
+    expect(savedExecution?.inputSnapshotJson.execution_target).toMatchObject({
+      symbol: '2148',
+      source_kind: 'daily_ohlcv',
+    });
+
+    await app.close();
+  });
+
+  it('rejects invalid internal backtest requests', async () => {
+    const app = await createApp();
+
+    const missingApplication = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/missing-app/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+      },
+    });
+    const archivedApplication = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-archived/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+      },
+    });
+    const invalidBody = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        data_range: { from: '2025/01/01', to: '2026-01-01' },
+      },
+    });
+
+    expect(missingApplication.statusCode).toBe(404);
+    expect(missingApplication.json().error.code).toBe('NOT_FOUND');
+    expect(archivedApplication.statusCode).toBe(400);
+    expect(archivedApplication.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidBody.statusCode).toBe(400);
+    expect(invalidBody.json().error.code).toBe('VALIDATION_ERROR');
+
+    await app.close();
+  });
+
+  it('marks internal execution failed when application enqueue fails', async () => {
+    const app = await createApp();
+    enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+      },
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json().error.code).toBe('QUEUE_ENQUEUE_FAILED');
+    const failedExecution = [...runtime.internalExecutions.values()][0];
+    expect(failedExecution.status).toBe('failed');
+    expect(failedExecution.errorCode).toBe('QUEUE_ENQUEUE_FAILED');
+    expect(runtime.runs.some((run) => run.internalBacktestExecutionId === failedExecution.id)).toBe(false);
 
     await app.close();
   });
