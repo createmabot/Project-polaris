@@ -22,6 +22,7 @@ import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -422,17 +423,16 @@ function ApplicationSummaryHeader({
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
         <h4 className="text-sm font-semibold text-slate-900">{application.strategy.title}</h4>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5 text-slate-500">
-          <span>application_id: {application.id}</span>
-          <span className="inline-flex items-center gap-1">
-            status: <StatusBadge status={application.status} className="px-2 py-0.5" />
-          </span>
-          <span>source: {application.source}</span>
-          <span>{LABELS.runCount}: {application.run_count}</span>
-        </div>
-        <MetaText>
-          version_id: {application.strategy_version.id} / {application.strategy_version.market} / {application.strategy_version.timeframe} / {application.strategy_version.status}
-        </MetaText>
+        <KeyValueList className="mt-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-2">
+          <KeyValueRow label="application_id"><code>{application.id}</code></KeyValueRow>
+          <KeyValueRow label="status"><StatusBadge status={application.status} className="px-2 py-0.5" /></KeyValueRow>
+          <KeyValueRow label="source"><code>{application.source}</code></KeyValueRow>
+          <KeyValueRow label={LABELS.runCount}>{application.run_count}</KeyValueRow>
+          <KeyValueRow label="version_id"><code>{application.strategy_version.id}</code></KeyValueRow>
+          <KeyValueRow label="version">
+            {application.strategy_version.market} / {application.strategy_version.timeframe} / <StatusBadge status={application.strategy_version.status} className="px-2 py-0.5" />
+          </KeyValueRow>
+        </KeyValueList>
         {application.memo ? <p className="mt-2 text-sm text-slate-600">{application.memo}</p> : null}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -461,13 +461,14 @@ function ApplicationLatestRunCard({
       <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
       {application.latest_run ? (
         <div>
-          <MetaText>
-            <span className="inline-flex flex-wrap items-center gap-1">
-              <span>{application.latest_run.run_type} /</span>
-              <StatusBadge status={application.latest_run.status} className="px-2 py-0.5" />
-              <span>/ {formatDate(application.latest_run.updated_at)}</span>
-            </span>
-          </MetaText>
+          <KeyValueList className="mt-2 gap-1 text-xs text-slate-500">
+            <KeyValueRow label="run type"><code>{application.latest_run.run_type}</code></KeyValueRow>
+            <KeyValueRow label="run status"><StatusBadge status={application.latest_run.status} className="px-2 py-0.5" /></KeyValueRow>
+            <KeyValueRow label="updated">{formatDate(application.latest_run.updated_at)}</KeyValueRow>
+            {application.latest_run.backtest_id ? (
+              <KeyValueRow label="backtest_id"><code>{application.latest_run.backtest_id}</code></KeyValueRow>
+            ) : null}
+          </KeyValueList>
           {application.latest_run.internal_backtest_execution_id ? (
             <>
               <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
@@ -495,9 +496,14 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
       {application.latest_backtest_report ? (
         <div>
           <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
-          <MetaText>
-            {application.latest_backtest_report.execution_source} / {application.latest_backtest_report.status} / {formatDate(application.latest_backtest_report.updated_at)}
-          </MetaText>
+          <KeyValueList className="mt-2 gap-1 text-xs text-slate-500">
+            <KeyValueRow label="source"><code>{application.latest_backtest_report.execution_source}</code></KeyValueRow>
+            <KeyValueRow label="status"><StatusBadge status={application.latest_backtest_report.status} className="px-2 py-0.5" /></KeyValueRow>
+            <KeyValueRow label="market / timeframe">
+              {application.latest_backtest_report.market} / {application.latest_backtest_report.timeframe}
+            </KeyValueRow>
+            <KeyValueRow label="updated">{formatDate(application.latest_backtest_report.updated_at)}</KeyValueRow>
+          </KeyValueList>
           <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
         </div>
       ) : (
