@@ -193,4 +193,22 @@ describe('StrategyDetail', () => {
     expect(html).toContain('application: <code>application_archived</code> / status: archived');
     expect(html).toContain('復元');
   });
+
+  it('renders shared error state text for strategy and application fetch failures', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { strategyId: 'strategy_1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      if (key.includes('/symbol-applications')) {
+        return { isLoading: false, error: new Error('application failed'), data: null, mutate: vi.fn() };
+      }
+      return { isLoading: false, error: new Error('strategy failed'), data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<StrategyDetail />);
+    expect(html).toContain('ストラテジー詳細を取得できませんでした。');
+    expect(html).toContain('version 一覧を取得できませんでした。');
+    expect(html).toContain('適用済み銘柄を取得できませんでした。');
+    expect(html).toContain('関連検証レポートを取得できませんでした。');
+  });
 });
