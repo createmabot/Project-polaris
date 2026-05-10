@@ -169,6 +169,7 @@ describe('StrategyDetail', () => {
     expect(html).toContain('有効');
     expect(html).toContain('アーカイブ');
     expect(html).toContain('すべて');
+    expect((html.match(/アーカイブ/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/strategies/strategy_1/versions?page=1&limit=50&sort=updated_at&order=desc',
       expect.any(Function),
