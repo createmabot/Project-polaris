@@ -826,6 +826,28 @@ describe('symbol strategy applications route', () => {
     );
     const app = await createApp();
 
+    const symbolRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+
+    expect(symbolRes.statusCode).toBe(200);
+    const symbolApplication = symbolRes.json().data.applications.find((item: any) => item.id === 'app-internal-latest');
+    expect(symbolApplication.latest_run).toMatchObject({
+      id: 'run-internal-no-report',
+      run_type: 'internal_backtest',
+      backtest_id: null,
+      internal_backtest_execution_id: 'internal-no-report',
+    });
+    expect(symbolApplication.latest_backtest_report).toBeNull();
+    expect(symbolApplication.latest_reports_by_source).toMatchObject({
+      csv_import: {
+        backtest_id: 'backtest-csv-fallback',
+        title: 'CSV fallback report',
+      },
+      internal_backtest: null,
+    });
+
     const res = await app.inject({
       method: 'GET',
       url: '/api/strategies/strategy-1/symbol-applications?status=active',

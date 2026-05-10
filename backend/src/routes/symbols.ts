@@ -110,7 +110,6 @@ function normalizeOptionalBodyText(value: unknown, fieldName: string): string | 
 }
 
 type LatestApplicationReportRuns = {
-  latest: any | null;
   csv_import: any | null;
   internal_backtest: any | null;
 };
@@ -124,13 +123,9 @@ function buildLatestReportRunsByApplication(runs: any[]): Map<string, LatestAppl
   const sortedRuns = [...runs].sort((a, b) => getReportRunUpdatedAt(b) - getReportRunUpdatedAt(a));
   for (const run of sortedRuns) {
     const current = result.get(run.applicationId) ?? {
-      latest: null,
       csv_import: null,
       internal_backtest: null,
     };
-    if (!current.latest) {
-      current.latest = run;
-    }
     if (run.runType === 'csv_import' && !current.csv_import) {
       current.csv_import = run;
     }
@@ -144,8 +139,7 @@ function buildLatestReportRunsByApplication(runs: any[]): Map<string, LatestAppl
 
 function toSymbolApplicationView(application: any, latestReportRuns?: LatestApplicationReportRuns) {
   const latestRun = application.runs?.[0] ?? null;
-  const latestBacktestRun = latestReportRuns?.latest ?? application.runs?.find((run: any) => run.backtest) ?? null;
-  const latestBacktest = latestBacktestRun?.backtest ?? null;
+  const latestBacktest = latestRun?.backtest ?? null;
   const toReportSummary = (run: any | null) => {
     if (!run?.backtest) return null;
     return {
