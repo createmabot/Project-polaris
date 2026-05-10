@@ -10,6 +10,8 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
 import TextLink from '../components/ui/TextLink';
 
 const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
@@ -105,7 +107,7 @@ function StrategyDetail(): JSX.Element {
             {isLoading ? (
               <p className={MUTED_TEXT_CLASS}>ストラテジー詳細を読み込み中...</p>
             ) : error ? (
-              <p className="text-sm leading-7 text-red-700">ストラテジー詳細を取得できませんでした。</p>
+              <ErrorState title="ストラテジー詳細を取得できませんでした。" />
             ) : (
               <>
                 <h2 className="text-xl font-semibold text-slate-900">{strategy?.title ?? 'ストラテジー定義'}</h2>
@@ -186,9 +188,9 @@ function StrategyDetail(): JSX.Element {
           {isLoading ? (
             <p className={MUTED_TEXT_CLASS}>version を読み込み中...</p>
           ) : error ? (
-            <p className="text-sm leading-7 text-red-700">version 一覧を取得できませんでした。</p>
+            <ErrorState title="version 一覧を取得できませんでした。" className="mt-4" />
           ) : versions.length === 0 ? (
-            <p className={MUTED_TEXT_CLASS}>このストラテジーにはまだ version がありません。</p>
+            <EmptyState title="このストラテジーにはまだ version がありません。" className="mt-4" />
           ) : (
             <div className="mt-4 space-y-3">
               {versions.map((version) => (
@@ -248,9 +250,9 @@ function StrategyDetail(): JSX.Element {
           {isSymbolApplicationsLoading ? (
             <p className={MUTED_TEXT_CLASS}>適用済み銘柄を読み込み中...</p>
           ) : symbolApplicationsError ? (
-            <p className="text-sm leading-7 text-red-700">適用済み銘柄を取得できませんでした。</p>
+            <ErrorState title="適用済み銘柄を取得できませんでした。" className="mt-4" />
           ) : symbolApplications.length === 0 ? (
-            <p className={MUTED_TEXT_CLASS}>この strategy はまだ銘柄に適用されていません。</p>
+            <EmptyState title="この strategy はまだ銘柄に適用されていません。" className="mt-4" />
           ) : (
             <div className="mt-4 space-y-3">
               {symbolApplications.map((application) => (
@@ -322,9 +324,9 @@ function StrategyDetail(): JSX.Element {
           {isSymbolApplicationsLoading ? (
             <p className={MUTED_TEXT_CLASS}>関連検証レポートを読み込み中...</p>
           ) : symbolApplicationsError ? (
-            <p className="text-sm leading-7 text-red-700">関連検証レポートを取得できませんでした。</p>
+            <ErrorState title="関連検証レポートを取得できませんでした。" className="mt-4" />
           ) : relatedReports.length === 0 ? (
-            <p className={MUTED_TEXT_CLASS}>関連検証レポートはまだありません。</p>
+            <EmptyState title="関連検証レポートはまだありません。" className="mt-4" />
           ) : (
             <div className="mt-4 space-y-3">
               {relatedReports.map((application) => {
