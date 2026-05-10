@@ -5,6 +5,7 @@ import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
 
@@ -259,34 +260,41 @@ function SymbolStrategyApplicationBacklinkSection({
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
         <BacklinkInfoCard title="Application">
-          <div><strong>application ID:</strong> <code>{symbolStrategyApplication.application_id}</code></div>
-          <div><strong>status:</strong> <StatusBadge status={symbolStrategyApplication.application_status} /></div>
-          <div><strong>source:</strong> <code>{symbolStrategyApplication.application_source}</code></div>
-          <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.application_updated_at)}</div>
-          {symbolStrategyApplication.application_memo ? (
-            <div><strong>memo:</strong> {symbolStrategyApplication.application_memo}</div>
-          ) : null}
+          <KeyValueList>
+            <KeyValueRow label="application ID"><code>{symbolStrategyApplication.application_id}</code></KeyValueRow>
+            <KeyValueRow label="status"><StatusBadge status={symbolStrategyApplication.application_status} /></KeyValueRow>
+            <KeyValueRow label="source"><code>{symbolStrategyApplication.application_source}</code></KeyValueRow>
+            <KeyValueRow label="updated">{formatDateTime(symbolStrategyApplication.application_updated_at)}</KeyValueRow>
+            {symbolStrategyApplication.application_memo ? (
+              <KeyValueRow label="memo">{symbolStrategyApplication.application_memo}</KeyValueRow>
+            ) : null}
+          </KeyValueList>
         </BacklinkInfoCard>
         <BacklinkInfoCard title="Application Run">
-          <div><strong>run ID:</strong> <code>{symbolStrategyApplication.run_id}</code></div>
-          <div><strong>run type:</strong> <code>{symbolStrategyApplication.run_type}</code></div>
-          <div><strong>run status:</strong> <StatusBadge status={symbolStrategyApplication.run_status} /></div>
-          <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.run_updated_at)}</div>
+          <KeyValueList>
+            <KeyValueRow label="run ID"><code>{symbolStrategyApplication.run_id}</code></KeyValueRow>
+            <KeyValueRow label="run type"><code>{symbolStrategyApplication.run_type}</code></KeyValueRow>
+            <KeyValueRow label="run status"><StatusBadge status={symbolStrategyApplication.run_status} /></KeyValueRow>
+            <KeyValueRow label="updated">{formatDateTime(symbolStrategyApplication.run_updated_at)}</KeyValueRow>
+          </KeyValueList>
         </BacklinkInfoCard>
         <BacklinkInfoCard title="Symbol">
-          <div>{symbolStrategyApplication.symbol.display_name ?? symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol}</div>
-          <div><strong>symbol:</strong> <code>{symbolStrategyApplication.symbol.symbol}</code></div>
-          <div><strong>symbol_code:</strong> <code>{symbolStrategyApplication.symbol.symbol_code ?? '-'}</code></div>
-          <div><strong>market_code:</strong> <code>{symbolStrategyApplication.symbol.market_code ?? '-'}</code></div>
+          <KeyValueList>
+            <KeyValueRow label="display">{symbolStrategyApplication.symbol.display_name ?? symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol}</KeyValueRow>
+            <KeyValueRow label="symbol"><code>{symbolStrategyApplication.symbol.symbol}</code></KeyValueRow>
+            <KeyValueRow label="symbol_code"><code>{symbolStrategyApplication.symbol.symbol_code ?? '-'}</code></KeyValueRow>
+            <KeyValueRow label="market_code"><code>{symbolStrategyApplication.symbol.market_code ?? '-'}</code></KeyValueRow>
+          </KeyValueList>
         </BacklinkInfoCard>
         <BacklinkInfoCard title="Strategy">
-          <div>{symbolStrategyApplication.strategy.title}</div>
-          <div><strong>strategy ID:</strong> <code>{symbolStrategyApplication.strategy.id}</code></div>
-          <div><strong>version ID:</strong> <code>{symbolStrategyApplication.strategy_version.id}</code></div>
-          <div>
-            <strong>market / timeframe:</strong>{' '}
-            {symbolStrategyApplication.strategy_version.market} / {symbolStrategyApplication.strategy_version.timeframe}
-          </div>
+          <KeyValueList>
+            <KeyValueRow label="title">{symbolStrategyApplication.strategy.title}</KeyValueRow>
+            <KeyValueRow label="strategy ID"><code>{symbolStrategyApplication.strategy.id}</code></KeyValueRow>
+            <KeyValueRow label="version ID"><code>{symbolStrategyApplication.strategy_version.id}</code></KeyValueRow>
+            <KeyValueRow label="market / timeframe">
+              {symbolStrategyApplication.strategy_version.market} / {symbolStrategyApplication.strategy_version.timeframe}
+            </KeyValueRow>
+          </KeyValueList>
         </BacklinkInfoCard>
       </div>
       <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
@@ -522,13 +530,15 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>基本情報</h2>
-        <div><strong>backtest ID:</strong> <code>{data.backtest.id}</code></div>
-        <div><strong>strategy version:</strong> <code>{data.backtest.strategy_version_id}</code></div>
-        <div><strong>実行名:</strong> {data.backtest.title}</div>
-        <div><strong>実行ソース:</strong> {data.backtest.execution_source}</div>
-        <div><strong>市場:</strong> {data.backtest.market}</div>
-        <div><strong>時間軸:</strong> {data.backtest.timeframe}</div>
-        <div><strong>状態:</strong> <StatusBadge status={data.backtest.status} /></div>
+        <KeyValueList>
+          <KeyValueRow label="backtest ID"><code>{data.backtest.id}</code></KeyValueRow>
+          <KeyValueRow label="strategy version"><code>{data.backtest.strategy_version_id}</code></KeyValueRow>
+          <KeyValueRow label="実行名">{data.backtest.title}</KeyValueRow>
+          <KeyValueRow label="実行ソース">{data.backtest.execution_source}</KeyValueRow>
+          <KeyValueRow label="市場">{data.backtest.market}</KeyValueRow>
+          <KeyValueRow label="時間軸">{data.backtest.timeframe}</KeyValueRow>
+          <KeyValueRow label="状態"><StatusBadge status={data.backtest.status} /></KeyValueRow>
+        </KeyValueList>
       </section>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
