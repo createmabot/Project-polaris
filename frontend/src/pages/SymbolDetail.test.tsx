@@ -457,6 +457,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('保存済みストラテジー適用');
     expect(html).toContain('application_id: application_1');
     expect(html).toContain('アーカイブ');
+    expect((html.match(/アーカイブ/g) ?? []).length).toBeGreaterThanOrEqual(1);
     expect(html).toContain('run count: 1');
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('TradingView CSVを取り込む');
