@@ -658,7 +658,10 @@ describe('BacktestDetail', () => {
             },
             artifact_pointer: {
               kind: 'internal_backtest_result',
+              type: 'json',
               execution_id: 'exec-1',
+              path: '/internal-backtests/executions/exec-1',
+              summary_mode: 'engine_estimated',
             },
             reported_at: '2026-05-01T01:00:00.000Z',
           },
@@ -716,5 +719,79 @@ describe('BacktestDetail', () => {
     expect(html).toContain('245');
     expect(html).toContain('artifact_pointer');
     expect(html).toContain('internal_backtest_result');
+    expect(html).toContain('artifact file の実体読込は行いません。');
+    expect(html).toContain('type');
+    expect(html).toContain('json');
+    expect(html).toContain('path');
+    expect(html).toContain('/internal-backtests/executions/exec-1');
+    expect(html).toContain('summary_mode');
+    expect(html).toContain('raw artifact JSON');
+  });
+
+  it('shows a neutral message when internal backtest artifact is missing', () => {
+    mockLocation = '/backtests/bt-internal-no-artifact';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-internal-no-artifact',
+          strategy_version_id: 'ver-1',
+          title: 'internal report',
+          execution_source: 'internal_backtest',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'completed',
+          created_at: '2026-05-01T00:00:00.000Z',
+          updated_at: '2026-05-01T00:00:00.000Z',
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-1',
+            natural_language_rule: 'rule',
+            generated_pine: null,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            warnings: [],
+            assumptions: [],
+            captured_at: '2026-05-01T00:00:00.000Z',
+            execution_source: 'internal_backtest',
+            internal_backtest_execution_id: 'exec-no-artifact',
+            result_summary: {
+              summary_kind: 'engine_estimated',
+              period: {
+                from: '2025-01-01',
+                to: '2025-12-31',
+              },
+              metrics: {
+                bar_count: 245,
+              },
+            },
+            artifact_pointer: null,
+            reported_at: '2026-05-01T01:00:00.000Z',
+          },
+        },
+        latest_import: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [],
+        symbol_strategy_application: null,
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-internal-no-artifact' }} />);
+    expect(html).toContain('internal backtest report');
+    expect(html).toContain('artifact は未生成、または strategy snapshot に保存されていません。');
   });
 });
