@@ -337,6 +337,88 @@ function InternalBacktestResultPanel({ executionId }: { executionId: string }) {
   );
 }
 
+function ApplicationSummaryHeader({
+  application,
+  isArchivingApplication,
+  onArchiveApplication,
+}: {
+  application: SymbolStrategyApplicationItem;
+  isArchivingApplication: boolean;
+  onArchiveApplication: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="space-y-1">
+        <h4 className="text-sm font-semibold text-slate-900">{application.strategy.title}</h4>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5 text-slate-500">
+          <span>application_id: {application.id}</span>
+          <span>status: {application.status}</span>
+          <span>source: {application.source}</span>
+          <span>{LABELS.runCount}: {application.run_count}</span>
+        </div>
+        <MetaText>
+          version_id: {application.strategy_version.id} / {application.strategy_version.market} / {application.strategy_version.timeframe} / {application.strategy_version.status}
+        </MetaText>
+        {application.memo ? <p className="mt-2 text-sm text-slate-600">{application.memo}</p> : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
+        <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+        <button
+          type="button"
+          onClick={onArchiveApplication}
+          disabled={isArchivingApplication}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {LABELS.archiveApplication}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ApplicationLatestRunCard({ application }: { application: SymbolStrategyApplicationItem }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
+      {application.latest_run ? (
+        <div>
+          <MetaText>
+            {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
+          </MetaText>
+          {application.latest_run.internal_backtest_execution_id ? (
+            <>
+              <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
+              <InternalBacktestResultPanel executionId={application.latest_run.internal_backtest_execution_id} />
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <EmptyText>{LABELS.noLatestRun}</EmptyText>
+      )}
+    </div>
+  );
+}
+
+function ApplicationLatestReportCard({ application }: { application: SymbolStrategyApplicationItem }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+      <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
+      {application.latest_backtest_report ? (
+        <div>
+          <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
+          <MetaText>
+            {application.latest_backtest_report.execution_source} / {application.latest_backtest_report.status} / {formatDate(application.latest_backtest_report.updated_at)}
+          </MetaText>
+          <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
+        </div>
+      ) : (
+        <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
+      )}
+    </div>
+  );
+}
+
 function SavedApplicationRow({
   application,
   mutateApplications,
@@ -463,30 +545,11 @@ function SavedApplicationRow({
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h4 className="text-sm font-semibold text-slate-900">{application.strategy.title}</h4>
-          <MetaText>
-            application_id: {application.id} / status: {application.status} / source: {application.source}
-          </MetaText>
-          <MetaText>
-            version_id: {application.strategy_version.id} / {application.strategy_version.market} / {application.strategy_version.timeframe} / {application.strategy_version.status}
-          </MetaText>
-          {application.memo ? <p className="mt-2 text-sm text-slate-600">{application.memo}</p> : null}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
-          <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
-          <button
-            type="button"
-            onClick={archiveApplication}
-            disabled={isArchivingApplication}
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {LABELS.archiveApplication}
-          </button>
-        </div>
-      </div>
+      <ApplicationSummaryHeader
+        application={application}
+        isArchivingApplication={isArchivingApplication}
+        onArchiveApplication={archiveApplication}
+      />
       {archiveApplicationMessage ? (
         <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{archiveApplicationMessage}</p>
       ) : null}
@@ -495,40 +558,9 @@ function SavedApplicationRow({
       ) : null}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
-          {application.latest_run ? (
-            <div>
-              <MetaText>
-                {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
-              </MetaText>
-              {application.latest_run.internal_backtest_execution_id ? (
-                <>
-                  <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
-                  <InternalBacktestResultPanel executionId={application.latest_run.internal_backtest_execution_id} />
-                </>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyText>{LABELS.noLatestRun}</EmptyText>
-          )}
-        </div>
-        <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
-          {application.latest_backtest_report ? (
-            <div>
-              <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
-              <MetaText>
-                {application.latest_backtest_report.execution_source} / {application.latest_backtest_report.status} / {formatDate(application.latest_backtest_report.updated_at)}
-              </MetaText>
-              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
-            </div>
-          ) : (
-            <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
-          )}
-        </div>
+        <ApplicationLatestRunCard application={application} />
+        <ApplicationLatestReportCard application={application} />
       </div>
-      <MetaText>{LABELS.runCount}: {application.run_count}</MetaText>
 
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
         <h5 className="text-sm font-semibold text-slate-900">{LABELS.csvImportTitle}</h5>
