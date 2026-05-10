@@ -501,6 +501,68 @@ describe('backtest import vertical slice', () => {
     await app.close();
   });
 
+  it('returns internal backtest report snapshot fields on backtest detail', async () => {
+    const app = await createApp();
+    const now = new Date('2026-05-01T00:00:00.000Z');
+    runtime.backtests.set('bt-internal', {
+      id: 'bt-internal',
+      strategyRuleVersionId: 'ver-1',
+      strategySnapshotJson: {
+        strategy_id: 'str-1',
+        strategy_version_id: 'ver-1',
+        natural_language_rule: '25日移動平均を上抜けたら買い',
+        generated_pine: 'strategy("base")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        warnings: [],
+        assumptions: [],
+        captured_at: '2026-05-01T00:00:00.000Z',
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: 'exec-1',
+        result_summary: {
+          summary_kind: 'engine_estimated',
+          period: {
+            from: '2025-01-01',
+            to: '2025-12-31',
+          },
+          metrics: {
+            bar_count: 245,
+            price_change_percent: 12.34,
+            range_percent: 26.32,
+          },
+        },
+        artifact_pointer: {
+          kind: 'internal_backtest_result',
+          execution_id: 'exec-1',
+        },
+        reported_at: '2026-05-01T01:00:00.000Z',
+      },
+      title: 'internal report',
+      executionSource: 'internal_backtest',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'completed',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: '/api/backtests/bt-internal',
+    });
+
+    expect(detail.statusCode).toBe(200);
+    const snapshot = detail.json().data.used_strategy.snapshot;
+    expect(snapshot.internal_backtest_execution_id).toBe('exec-1');
+    expect(snapshot.execution_source).toBe('internal_backtest');
+    expect(snapshot.result_summary.metrics.bar_count).toBe(245);
+    expect(snapshot.artifact_pointer.execution_id).toBe('exec-1');
+    expect(detail.json().data.latest_import).toBeNull();
+    expect(detail.json().data.imports).toEqual([]);
+
+    await app.close();
+  });
+
   it('parses Japanese list-of-trades csv and derives summary metrics', async () => {
     const app = await createApp();
 

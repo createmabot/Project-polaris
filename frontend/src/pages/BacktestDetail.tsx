@@ -33,6 +33,25 @@ function formatDateTime(value: string | null | undefined): string {
   return date.toLocaleString('ja-JP');
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function recordText(record: Record<string, unknown> | null, key: string): string {
+  if (!record) return '-';
+  const value = record[key];
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '-';
+}
+
+function recordJson(value: Record<string, unknown> | null): string {
+  if (!value) return '-';
+  return JSON.stringify(value, null, 2);
+}
+
 function parseStatusText(status: string | null | undefined): string {
   if (status === 'parsed') return '解析成功';
   if (status === 'failed') return '解析失敗';
@@ -269,6 +288,47 @@ function SymbolStrategyApplicationBacklinkSection({
   );
 }
 
+type BacktestStrategySnapshot = NonNullable<BacktestDetailData['used_strategy']['snapshot']>;
+
+function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
+  const resultSummary = asRecord(snapshot?.result_summary ?? null);
+  const period = asRecord(resultSummary?.period ?? null);
+  const metrics = asRecord(resultSummary?.metrics ?? null);
+  const artifactPointer = asRecord(snapshot?.artifact_pointer ?? null);
+
+  return (
+    <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+      <h2 style={{ marginTop: 0 }}>internal backtest report</h2>
+      <p style={{ marginTop: 0, color: '#555', fontSize: '0.92rem' }}>
+        この report は internal backtest result から作成されています。internal_backtest report では BacktestImport は作成されません。
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+        {metricCard('execution_id', valueText(snapshot?.internal_backtest_execution_id))}
+        {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
+        {metricCard('period from', recordText(period, 'from'))}
+        {metricCard('period to', recordText(period, 'to'))}
+        {metricCard('bar_count', recordText(metrics, 'bar_count'))}
+        {metricCard('price_change_percent', recordText(metrics, 'price_change_percent'))}
+        {metricCard('range_percent', recordText(metrics, 'range_percent'))}
+        {metricCard('reported_at', formatDateTime(snapshot?.reported_at))}
+      </div>
+      {resultSummary ? null : (
+        <p style={{ marginBottom: 0, marginTop: '0.75rem', color: '#666' }}>
+          result_summary は strategy snapshot に保存されていません。
+        </p>
+      )}
+      {artifactPointer ? (
+        <div style={{ marginTop: '0.75rem' }}>
+          <strong>artifact_pointer</strong>
+          <pre style={{ margin: '0.4rem 0 0', padding: '0.75rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+            <code>{recordJson(artifactPointer)}</code>
+          </pre>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location] = useLocation();
@@ -312,6 +372,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     : [];
   const usedStrategy = data.used_strategy;
   const snapshot = usedStrategy.snapshot;
+  const isInternalBacktestReport =
+    data.backtest.execution_source === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest';
   const symbolStrategyApplication = data.symbol_strategy_application;
   const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
   const strategyVersionDetailPath =
@@ -429,10 +491,15 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         <SymbolStrategyApplicationBacklinkSection symbolStrategyApplication={symbolStrategyApplication} />
       ) : null}
 
+      {isInternalBacktestReport ? <InternalBacktestReportSection snapshot={snapshot} /> : null}
+
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>取込状態</h2>
         {!latestImport ? (
           <div style={{ color: '#666' }}>
+            {isInternalBacktestReport ? (
+              <p style={{ marginTop: 0 }}>internal_backtest report のため BacktestImport は作成されません。</p>
+            ) : null}
             <p style={{ marginTop: 0 }}>取込データはまだありません。</p>
             <p style={{ marginBottom: 0 }}>`/strategy-lab` で backtest を作成し、CSV を取り込んでください。</p>
           </div>
