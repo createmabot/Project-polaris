@@ -408,6 +408,7 @@ vi.mock('../src/db', () => {
       },
     },
     backtest: {
+      findUnique: async ({ where }: any) => runtime.backtests.get(where.id) ?? null,
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:00:00.000Z');
         const backtest: BacktestRow = {
@@ -458,6 +459,7 @@ vi.mock('../src/db', () => {
       },
     },
     internalBacktestExecution: {
+      findUnique: async ({ where }: any) => runtime.internalExecutions.get(where.id) ?? null,
       create: async ({ data }: any) => {
         const now = new Date('2026-05-06T00:00:00.000Z');
         const execution: InternalExecutionRow = {
@@ -492,6 +494,17 @@ vi.mock('../src/db', () => {
       },
     },
     symbolStrategyApplicationRun: {
+      findFirst: async ({ where }: any) => {
+        return runtime.runs.find((run) => {
+          if (where?.id && run.id !== where.id) return false;
+          if (where?.applicationId && run.applicationId !== where.applicationId) return false;
+          if (where?.runType && run.runType !== where.runType) return false;
+          if (where?.internalBacktestExecutionId && run.internalBacktestExecutionId !== where.internalBacktestExecutionId) {
+            return false;
+          }
+          return true;
+        }) ?? null;
+      },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:03:00.000Z');
         const run: RunRow = {
@@ -511,6 +524,17 @@ vi.mock('../src/db', () => {
         };
         runtime.runs.push(run);
         return run;
+      },
+      update: async ({ where, data }: any) => {
+        const index = runtime.runs.findIndex((run) => run.id === where.id);
+        if (index < 0) throw new Error(`run_not_found:${where.id}`);
+        const updated = {
+          ...runtime.runs[index],
+          ...data,
+          updatedAt: new Date('2026-05-06T00:02:00.000Z'),
+        };
+        runtime.runs[index] = updated;
+        return updated;
       },
     },
   };
@@ -1316,6 +1340,105 @@ describe('symbol strategy applications route', () => {
     });
     expect(application.latest_backtest_report).toBeNull();
     expect(application.run_count).toBe(1);
+
+    await app.close();
+  });
+
+  it('converts a succeeded internal execution to an idempotent backtest report', async () => {
+    runtime.runs = [];
+    const initialImportCount = runtime.backtestImports.size;
+    const app = await createApp();
+
+    const startRes = await app.inject({
+      method: 'POST',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      payload: {
+        data_range: { from: '2025-01-01', to: '2026-01-01' },
+        engine_config: { summary_mode: 'engine_estimated' },
+      },
+    });
+    expect(startRes.statusCode).toBe(201);
+    const executionId = startRes.json().data.execution.id;
+
+    const notReadyRes = await app.inject({
+      method: 'POST',
+      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
+    });
+    expect(notReadyRes.statusCode).toBe(409);
+    expect(notReadyRes.json().error.code).toBe('CONFLICT');
+
+    const execution = runtime.internalExecutions.get(executionId);
+    expect(execution).toBeTruthy();
+    runtime.internalExecutions.set(executionId, {
+      ...execution!,
+      status: 'succeeded',
+      finishedAt: new Date('2026-05-06T00:10:00.000Z'),
+      resultSummaryJson: {
+        total_return: 0.12,
+        trade_count: 4,
+      },
+      artifactPointerJson: {
+        equity_curve: 'artifact://equity',
+      },
+    });
+
+    const reportRes = await app.inject({
+      method: 'POST',
+      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
+      payload: {
+        title: '2148 internal report',
+      },
+    });
+    expect(reportRes.statusCode).toBe(201);
+    expect(reportRes.json().data.application_id).toBe('app-1');
+    expect(reportRes.json().data.run).toMatchObject({
+      run_type: 'internal_backtest',
+      status: 'succeeded',
+      backtest_import_id: null,
+      internal_backtest_execution_id: executionId,
+    });
+    expect(reportRes.json().data.backtest).toMatchObject({
+      title: '2148 internal report',
+      status: 'completed',
+      execution_source: 'internal_backtest',
+      market: 'TSE',
+      timeframe: 'D',
+    });
+    const backtestId = reportRes.json().data.backtest.id;
+    expect(reportRes.json().data.run.backtest_id).toBe(backtestId);
+    expect(runtime.backtestImports.size).toBe(initialImportCount);
+    expect(runtime.backtests.get(backtestId)?.strategySnapshotJson).toMatchObject({
+      execution_source: 'internal_backtest',
+      internal_backtest_execution_id: executionId,
+      result_summary: {
+        total_return: 0.12,
+        trade_count: 4,
+      },
+    });
+
+    const listRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+    const application = listRes.json().data.applications[0];
+    expect(application.latest_run).toMatchObject({
+      run_type: 'internal_backtest',
+      backtest_id: backtestId,
+      internal_backtest_execution_id: executionId,
+    });
+    expect(application.latest_backtest_report).toMatchObject({
+      id: backtestId,
+      status: 'completed',
+      execution_source: 'internal_backtest',
+    });
+
+    const secondReportRes = await app.inject({
+      method: 'POST',
+      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
+    });
+    expect(secondReportRes.statusCode).toBe(200);
+    expect(secondReportRes.json().data.backtest.id).toBe(backtestId);
+    expect([...runtime.backtests.values()].filter((backtest) => backtest.id === backtestId)).toHaveLength(1);
 
     await app.close();
   });

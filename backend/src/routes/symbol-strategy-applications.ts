@@ -16,6 +16,10 @@ type CsvImportBody = {
   title?: unknown;
 };
 
+type InternalBacktestReportBody = {
+  title?: unknown;
+};
+
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} is required`);
@@ -155,6 +159,28 @@ function toApplicationRunResponse(run: {
     internal_backtest_execution_id: run.internalBacktestExecutionId,
     created_at: run.createdAt,
     updated_at: run.updatedAt,
+  };
+}
+
+function toBacktestReportResponse(backtest: {
+  id: string;
+  title: string;
+  status: string;
+  executionSource: string;
+  market: string;
+  timeframe: string;
+  createdAt: Date;
+  updatedAt: Date;
+}) {
+  return {
+    id: backtest.id,
+    title: backtest.title,
+    status: backtest.status,
+    execution_source: backtest.executionSource,
+    market: backtest.market,
+    timeframe: backtest.timeframe,
+    created_at: backtest.createdAt,
+    updated_at: backtest.updatedAt,
   };
 }
 
@@ -514,6 +540,139 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       application_id: application.id,
       run: toApplicationRunResponse(run),
       execution: toInternalBacktestExecutionResponse(execution),
+    }));
+  });
+
+  fastify.post('/:applicationId/internal-backtests/:executionId/report', async (
+    request: FastifyRequest<{
+      Params: { applicationId: string; executionId: string };
+      Body: InternalBacktestReportBody;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { applicationId, executionId } = request.params;
+    const title = normalizeOptionalString(request.body?.title, 'title');
+
+    const application = await prisma.symbolStrategyApplication.findUnique({
+      where: { id: applicationId },
+      include: {
+        symbol: {
+          select: {
+            id: true,
+            symbol: true,
+            displayName: true,
+          },
+        },
+        strategyRule: {
+          select: {
+            id: true,
+            title: true,
+            status: true,
+          },
+        },
+        strategyRuleVersion: {
+          select: {
+            id: true,
+            strategyRuleId: true,
+            naturalLanguageRule: true,
+            generatedPine: true,
+            market: true,
+            timeframe: true,
+            warningsJson: true,
+            assumptionsJson: true,
+          },
+        },
+      },
+    });
+
+    if (!application) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol strategy application was not found.');
+    }
+
+    const run = await prisma.symbolStrategyApplicationRun.findFirst({
+      where: {
+        applicationId,
+        internalBacktestExecutionId: executionId,
+        runType: 'internal_backtest',
+      },
+    });
+    if (!run) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified internal backtest run was not found for this application.');
+    }
+
+    const execution = await prisma.internalBacktestExecution.findUnique({
+      where: { id: executionId },
+    });
+    if (!execution) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified internal backtest execution was not found.');
+    }
+    if (execution.strategyRuleVersionId !== application.strategyRuleVersionId) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'internal backtest execution does not match application strategy version.');
+    }
+    if (execution.status !== 'succeeded') {
+      throw new AppError(409, 'CONFLICT', 'only succeeded internal backtest execution can be converted to a report.');
+    }
+
+    if (run.backtestId) {
+      const existingBacktest = await prisma.backtest.findUnique({
+        where: { id: run.backtestId },
+      });
+      if (!existingBacktest) {
+        throw new AppError(404, 'NOT_FOUND', 'The linked backtest report was not found.');
+      }
+
+      return reply.status(200).send(formatSuccess(request, {
+        application_id: application.id,
+        run: toApplicationRunResponse(run),
+        execution: toInternalBacktestExecutionResponse(execution),
+        backtest: toBacktestReportResponse(existingBacktest),
+      }));
+    }
+
+    const defaultTitle = `${application.symbol.displayName || application.symbol.symbol} / ${application.strategyRule.title} / internal backtest`;
+    const reportedAt = new Date();
+    const strategySnapshotJson: Prisma.InputJsonValue = {
+      ...buildStrategySnapshot(application),
+      execution_source: 'internal_backtest',
+      internal_backtest_execution_id: execution.id,
+      input_snapshot: execution.inputSnapshotJson as Prisma.InputJsonValue,
+      result_summary: execution.resultSummaryJson as Prisma.InputJsonValue,
+      artifact_pointer: execution.artifactPointerJson as Prisma.InputJsonValue,
+      reported_at: reportedAt.toISOString(),
+    };
+
+    const result = await prisma.$transaction(async (tx) => {
+      const backtest = await tx.backtest.create({
+        data: {
+          strategyRuleVersionId: application.strategyRuleVersionId,
+          strategySnapshotJson,
+          title: title ?? defaultTitle,
+          executionSource: 'internal_backtest',
+          market: application.strategyRuleVersion.market,
+          timeframe: application.strategyRuleVersion.timeframe,
+          status: 'completed',
+        },
+      });
+
+      const updatedRun = await tx.symbolStrategyApplicationRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'succeeded',
+          backtestId: backtest.id,
+          finishedAt: execution.finishedAt ?? run.finishedAt,
+          errorCode: null,
+          errorMessage: null,
+        },
+      });
+
+      return { backtest, run: updatedRun };
+    });
+
+    return reply.status(201).send(formatSuccess(request, {
+      application_id: application.id,
+      run: toApplicationRunResponse(result.run),
+      execution: toInternalBacktestExecutionResponse(execution),
+      backtest: toBacktestReportResponse(result.backtest),
     }));
   });
 }
