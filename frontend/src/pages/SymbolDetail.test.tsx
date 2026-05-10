@@ -455,11 +455,13 @@ describe('SymbolDetail', () => {
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');
-    expect(html).toContain('application_id: application_1');
+    expect(html).toContain('application_id:</strong> <code>application_1</code>');
     expect(html).toContain('status:');
     expect(html).toContain('アーカイブ');
     expect((html.match(/アーカイブ/g) ?? []).length).toBeGreaterThanOrEqual(1);
-    expect(html).toContain('run count: 1');
+    expect(html).toContain('run count:</strong> 1');
+    expect(html).toContain('run status:</strong>');
+    expect(html).toContain('market / timeframe');
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('CSVテキスト');
