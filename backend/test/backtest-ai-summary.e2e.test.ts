@@ -223,6 +223,9 @@ vi.mock('../src/db', () => {
         return row;
       },
     },
+    symbolStrategyApplicationRun: {
+      findFirst: async () => null,
+    },
   };
 
   return { prisma };
@@ -365,6 +368,77 @@ describe('backtest ai-summary routes', () => {
     expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 良い点');
     expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 懸念点');
     expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 次に確認すべき点');
+
+    await app.close();
+  });
+
+  it('passes internal_backtest result context without requiring BacktestImport', async () => {
+    runtime.backtest = {
+      ...runtime.backtest!,
+      executionSource: 'internal_backtest',
+      status: 'completed',
+      imports: [],
+      strategySnapshotJson: {
+        strategy_id: 'str-1',
+        strategy_version_id: 'ver-1',
+        natural_language_rule: 'ma breakout',
+        generated_pine: 'strategy("x")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        warnings: [],
+        assumptions: [],
+        captured_at: '2026-04-20T10:00:00.000Z',
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: 'exec-1',
+        result_summary: {
+          summary_kind: 'engine_estimated',
+          period: {
+            from: '2025-01-01',
+            to: '2025-12-31',
+          },
+          metrics: {
+            bar_count: 245,
+            price_change_percent: 12.5,
+            range_percent: 24.8,
+          },
+        },
+        artifact_pointer: {
+          kind: 'internal_backtest_result',
+          execution_id: 'exec-1',
+        },
+        reported_at: '2026-04-21T00:00:00.000Z',
+      },
+    };
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(runtime.lastBacktestContext?.metrics).toBeNull();
+    expect(runtime.lastBacktestContext?.importParsedSummaries).toEqual([]);
+    expect(runtime.lastBacktestContext?.internalBacktestContext).toMatchObject({
+      executionSource: 'internal_backtest',
+      internalBacktestExecutionId: 'exec-1',
+      summaryKind: 'engine_estimated',
+      period: {
+        from: '2025-01-01',
+        to: '2025-12-31',
+      },
+      metrics: {
+        bar_count: 245,
+        price_change_percent: 12.5,
+        range_percent: 24.8,
+      },
+    });
+    expect(runtime.aiSummaries[0].generationContextJson).toMatchObject({
+      has_internal_backtest_context: true,
+      internal_backtest_execution_id: 'exec-1',
+      import_count: 0,
+    });
 
     await app.close();
   });

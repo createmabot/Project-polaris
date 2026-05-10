@@ -396,6 +396,7 @@ describe('HomeAiService', () => {
         importParsedSummaries: [],
         comparisonDiff: null,
         strategy: null,
+        internalBacktestContext: null,
       }),
     ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
     expect(provider.generateBacktestSummary).toHaveBeenCalledTimes(1);
@@ -437,6 +438,7 @@ describe('HomeAiService', () => {
       importParsedSummaries: [],
       comparisonDiff: null,
       strategy: null,
+      internalBacktestContext: null,
     });
 
     expect(result.output.title).toBe('stub-backtest');
