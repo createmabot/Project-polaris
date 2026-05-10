@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { type KeyedMutator } from 'swr';
 import { deleteApi, patchApi, postApi, swrFetcher } from '../../api/client';
 import type { HomeData, PositionManagementData, PositionMutateData, WatchlistItemData, WatchlistItemMutateData } from '../../api/types';
 import Modal from '../ui/Modal';
@@ -26,9 +26,16 @@ type PositionDraft = {
   average_cost: string;
 };
 
-const HOME_API_PATH = '/api/home?summary_type=latest';
+export const SIDE_RAIL_HOME_API_PATH = '/api/home?summary_type=latest';
 const WATCHLIST_API_PATH = '/api/watchlist-items';
 const POSITIONS_API_PATH = '/api/positions';
+
+type SideRailProps = {
+  homeData?: HomeData;
+  homeError?: unknown;
+  homeIsLoading?: boolean;
+  mutateHome?: KeyedMutator<HomeData>;
+};
 
 const EMPTY_WATCHLIST_DRAFT: WatchlistDraft = {
   symbol_code: '',
@@ -96,7 +103,7 @@ function toNonNegativeNumberText(value: string, fieldName: string): number {
   return parsed;
 }
 
-export default function SideRail() {
+export default function SideRail({ homeData, homeError, homeIsLoading, mutateHome: mutateProvidedHome }: SideRailProps) {
   const [tab, setTab] = useState<SideRailTab>('watchlist');
   const [collapsed, setCollapsed] = useState(false);
   const [message, setMessage] = useState<MessageState>(null);
@@ -110,7 +117,13 @@ export default function SideRail() {
   const [selectedPositionLabel, setSelectedPositionLabel] = useState<string>('不明');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const { data, error, isLoading, mutate: mutateHome } = useSWR<HomeData>(HOME_API_PATH, swrFetcher);
+  const shouldFetchHome = homeData === undefined;
+  const {
+    data: fetchedHomeData,
+    error: fetchedHomeError,
+    isLoading: fetchedHomeIsLoading,
+    mutate: mutateFetchedHome,
+  } = useSWR<HomeData>(shouldFetchHome ? SIDE_RAIL_HOME_API_PATH : null, swrFetcher);
   const {
     data: watchlistData,
     isLoading: isWatchlistLoading,
@@ -124,6 +137,9 @@ export default function SideRail() {
 
   const watchlistActionsReady = Boolean(watchlistData);
   const positionActionsReady = Boolean(positionsData);
+  const data = homeData ?? fetchedHomeData;
+  const error = homeError ?? fetchedHomeError;
+  const isLoading = homeIsLoading ?? fetchedHomeIsLoading;
 
   const watchlistDisplayNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -135,8 +151,20 @@ export default function SideRail() {
     return map;
   }, [data?.watchlist_symbols]);
 
-  const refreshSideRail = async () => {
-    await Promise.all([mutateHome(), mutateWatchlist(), mutatePositions()]);
+  const refreshHome = async () => {
+    if (mutateProvidedHome) {
+      await mutateProvidedHome();
+      return;
+    }
+    await mutateFetchedHome();
+  };
+
+  const refreshWatchlistSideRail = async () => {
+    await Promise.all([refreshHome(), mutateWatchlist()]);
+  };
+
+  const refreshPositionsSideRail = async () => {
+    await Promise.all([refreshHome(), mutatePositions()]);
   };
 
   const resetWatchlistModal = () => {
@@ -253,7 +281,7 @@ export default function SideRail() {
           priority: toNullableIntegerText(watchlistDraft.priority),
           memo: normalizeOptionalText(watchlistDraft.memo),
         });
-        await refreshSideRail();
+        await refreshWatchlistSideRail();
         setMessage({
           kind: 'success',
           text:
@@ -266,7 +294,7 @@ export default function SideRail() {
           priority: toNullableIntegerText(watchlistDraft.priority),
           memo: watchlistDraft.memo,
         });
-        await refreshSideRail();
+        await refreshWatchlistSideRail();
         setMessage({ kind: 'success', text: '監視銘柄を更新しました。' });
       }
       resetWatchlistModal();
@@ -281,7 +309,7 @@ export default function SideRail() {
     try {
       setIsSubmitting(true);
       await deleteApi<{ deleted: boolean; item_id: string }>(`${WATCHLIST_API_PATH}/${selectedWatchlistItemId}`);
-      await refreshSideRail();
+      await refreshWatchlistSideRail();
       setMessage({ kind: 'success', text: '監視銘柄を削除しました。' });
       resetWatchlistModal();
     } catch (deleteError: any) {
@@ -304,7 +332,7 @@ export default function SideRail() {
           quantity: toPositiveNumberText(positionDraft.quantity, 'quantity'),
           average_cost: toNonNegativeNumberText(positionDraft.average_cost, 'average_cost'),
         });
-        await refreshSideRail();
+        await refreshPositionsSideRail();
         const actionText =
           result.action === 'created'
             ? '追加'
@@ -317,7 +345,7 @@ export default function SideRail() {
           quantity: toPositiveNumberText(positionDraft.quantity, 'quantity'),
           average_cost: toNonNegativeNumberText(positionDraft.average_cost, 'average_cost'),
         });
-        await refreshSideRail();
+        await refreshPositionsSideRail();
         setMessage({ kind: 'success', text: '保有銘柄を更新しました。' });
       }
       resetPositionModal();
@@ -332,7 +360,7 @@ export default function SideRail() {
     try {
       setIsSubmitting(true);
       await deleteApi<{ deleted: boolean; position_id: string }>(`${POSITIONS_API_PATH}/${selectedPositionId}`);
-      await refreshSideRail();
+      await refreshPositionsSideRail();
       setMessage({ kind: 'success', text: '保有銘柄を削除しました。' });
       resetPositionModal();
     } catch (deleteError: any) {

@@ -65,6 +65,7 @@ describe('Home', () => {
     });
 
     const html = renderToStaticMarkup(<Home />);
+    expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
     expect(html).toContain('日次確認の見方');
     expect(html).toContain('監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。');
@@ -194,6 +195,7 @@ describe('Home', () => {
     });
 
     const html = renderToStaticMarkup(<Home />);
+    expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(html).toContain('指数: 日経平均 / 値: 39000 / 変化率: 1.2');
     expect(html).toContain('為替: USD/JPY / 値: 149.2 / 変化率: 0.3');
     expect(html).toContain('セクター: 半導体 / 変化率: 2.1');
@@ -305,6 +307,7 @@ describe('Home', () => {
     });
 
     const html = renderToStaticMarkup(<Home />);
+    expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(html).toContain('href="/symbols/sym_6501"');
     expect(html).toContain('価格: - / 変化率: -');
   });
