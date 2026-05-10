@@ -19,6 +19,7 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import SectionCard from '../components/ui/SectionCard';
@@ -153,9 +154,6 @@ const LABELS = {
   notFoundBody: '指定された銘柄IDは存在しないか、削除されています。',
   loadSymbol: '銘柄情報を読み込み中...',
 } as const;
-
-const PRIMARY_BUTTON_CLASS =
-  'rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-400';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -437,14 +435,12 @@ function ApplicationSummaryHeader({
       <div className="flex flex-wrap gap-2">
         <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
         <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
-        <button
-          type="button"
+        <Button
           onClick={onArchiveApplication}
           disabled={isArchivingApplication}
-          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {LABELS.archiveApplication}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -997,14 +993,14 @@ function StrategyApplySelectionPanel({
       ) : null}
 
       <div className="flex flex-wrap gap-2 border-t border-slate-200 pt-4">
-        <button
-          type="button"
+        <Button
+          variant="primary"
           disabled={!selectedStrategy || !selectedVersion || isSavingApplication}
           onClick={saveApplication}
-          className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
+          className="py-2 disabled:bg-slate-300 disabled:text-slate-600 disabled:opacity-100"
         >
           {isSavingApplication ? '保存中...' : LABELS.saveApply}
-        </button>
+        </Button>
         <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
           {LABELS.csvImportLater}
         </button>
@@ -1251,9 +1247,14 @@ export default function SymbolDetail() {
               )}
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
                 <MetaText>{LABELS.generatedAt}: {formatDate(availableSummary.generated_at)}</MetaText>
-                <button type="button" onClick={() => handleGenerateThesis(true)} disabled={isGeneratingThesis} className={PRIMARY_BUTTON_CLASS}>
+                <Button
+                  variant="primary"
+                  onClick={() => handleGenerateThesis(true)}
+                  disabled={isGeneratingThesis}
+                  className="px-4 py-2 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
+                >
                   {isGeneratingThesis ? LABELS.generating : LABELS.regenerateAi}
-                </button>
+                </Button>
               </div>
             </InfoCard>
           ) : aiSummary?.status === 'unavailable' || aiSummaryError ? (
@@ -1261,9 +1262,14 @@ export default function SymbolDetail() {
               <EmptyText>{LABELS.unavailableAi}</EmptyText>
               <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
               <div className="mt-4">
-                <button type="button" onClick={() => handleGenerateThesis(false)} disabled={isGeneratingThesis} className={PRIMARY_BUTTON_CLASS}>
+                <Button
+                  variant="primary"
+                  onClick={() => handleGenerateThesis(false)}
+                  disabled={isGeneratingThesis}
+                  className="px-4 py-2 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
+                >
                   {isGeneratingThesis ? LABELS.generating : LABELS.generateAi}
-                </button>
+                </Button>
               </div>
             </InfoCard>
           ) : (
