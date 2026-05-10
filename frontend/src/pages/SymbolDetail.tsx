@@ -164,6 +164,12 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
+function reportOriginLabel(executionSource: string | null | undefined): string {
+  if (executionSource === 'internal_backtest') return 'internal backtest report';
+  if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'CSV import report';
+  return 'report';
+}
+
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
@@ -497,6 +503,7 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
         <div>
           <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
           <KeyValueList className="mt-2 gap-1 text-xs text-slate-500">
+            <KeyValueRow label="report type">{reportOriginLabel(application.latest_backtest_report.execution_source)}</KeyValueRow>
             <KeyValueRow label="source"><code>{application.latest_backtest_report.execution_source}</code></KeyValueRow>
             <KeyValueRow label="status"><StatusBadge status={application.latest_backtest_report.status} className="px-2 py-0.5" /></KeyValueRow>
             <KeyValueRow label="market / timeframe">
