@@ -12,7 +12,8 @@ import {
 
 type JsonObject = Record<string, unknown>;
 type SymbolSummaryScope = 'thesis' | 'latest';
-type SymbolApplicationStatus = 'active' | 'archived';
+type SymbolApplicationStatus = 'active' | 'archived' | 'all';
+type SymbolApplicationReportPresence = 'with_reports' | 'without_reports';
 type SymbolApplicationSort = 'created_at' | 'updated_at';
 type SortOrder = 'asc' | 'desc';
 
@@ -47,10 +48,21 @@ function normalizeApplicationStatus(input?: string): SymbolApplicationStatus {
   if (!normalized) {
     return 'active';
   }
-  if (normalized === 'active' || normalized === 'archived') {
+  if (normalized === 'active' || normalized === 'archived' || normalized === 'all') {
     return normalized;
   }
-  throw new AppError(400, 'VALIDATION_ERROR', 'status must be one of active|archived');
+  throw new AppError(400, 'VALIDATION_ERROR', 'status must be one of active|archived|all');
+}
+
+function normalizeApplicationReportPresence(input?: string): SymbolApplicationReportPresence | null {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'with_reports' || normalized === 'without_reports') {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'report_presence must be one of with_reports|without_reports');
 }
 
 function normalizePositiveInt(input: string | undefined, fallback: number, fieldName: string): number {
@@ -550,12 +562,20 @@ export async function symbolRoutes(fastify: FastifyInstance) {
   fastify.get('/:symbolId/strategy-applications', async (
     request: FastifyRequest<{
       Params: { symbolId: string };
-      Querystring: { status?: string; page?: string; limit?: string; sort?: string; order?: string };
+      Querystring: {
+        status?: string;
+        report_presence?: string;
+        page?: string;
+        limit?: string;
+        sort?: string;
+        order?: string;
+      };
     }>,
     reply: FastifyReply,
   ) => {
     const { symbolId } = request.params;
     const status = normalizeApplicationStatus(request.query.status);
+    const reportPresence = normalizeApplicationReportPresence(request.query.report_presence);
     const page = normalizePositiveInt(request.query.page, 1, 'page');
     const limit = normalizeApplicationLimit(request.query.limit);
     const sort = normalizeApplicationSort(request.query.sort);
@@ -577,7 +597,24 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
     }
 
-    const where = { symbolId, status };
+    const where: any = { symbolId };
+    if (status !== 'all') {
+      where.status = status;
+    }
+    if (reportPresence === 'with_reports') {
+      where.runs = {
+        some: {
+          backtestId: { not: null },
+        },
+      };
+    }
+    if (reportPresence === 'without_reports') {
+      where.runs = {
+        none: {
+          backtestId: { not: null },
+        },
+      };
+    }
     const orderBy = sort === 'created_at'
       ? { createdAt: order }
       : { updatedAt: order };
@@ -670,6 +707,7 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       },
       query: {
         status,
+        report_presence: reportPresence,
         sort,
         order,
       },

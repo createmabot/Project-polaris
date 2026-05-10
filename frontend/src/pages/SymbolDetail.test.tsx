@@ -153,7 +153,7 @@ const symbolApplicationsFixture = {
   pagination: {
     page: 1,
     limit: 20,
-    total: 1,
+    total: 2,
     has_next: false,
     has_prev: false,
   },
@@ -485,6 +485,10 @@ describe('SymbolDetail', () => {
     expect(html).toContain('reportなし');
     expect(html).toContain('application 2 / 2 件を表示中');
     expect(html).toContain('CSV report: 1 / internal report: 1');
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
     expect(html).toContain('application_id:</strong> <code>application_1</code>');
     expect(html).toContain('status:');
     expect(html).toContain('アーカイブ');

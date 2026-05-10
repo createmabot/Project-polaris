@@ -324,6 +324,14 @@ function filterApplications(where: any): ApplicationRow[] {
     if (where?.strategyRuleVersionId && application.strategyRuleVersionId !== where.strategyRuleVersionId) {
       return false;
     }
+    if (where?.runs?.some?.backtestId?.not === null) {
+      const hasReport = runtime.runs.some((run) => run.applicationId === application.id && run.backtestId !== null);
+      if (!hasReport) return false;
+    }
+    if (where?.runs?.none?.backtestId?.not === null) {
+      const hasReport = runtime.runs.some((run) => run.applicationId === application.id && run.backtestId !== null);
+      if (hasReport) return false;
+    }
     return true;
   });
 }
@@ -725,6 +733,53 @@ describe('symbol strategy applications route', () => {
     await app.close();
   });
 
+  it('filters symbol applications by status all and report presence', async () => {
+    runtime.applications.push({
+      id: 'app-no-report',
+      symbolId: 'sym-1',
+      strategyRuleId: 'strategy-1',
+      strategyRuleVersionId: 'version-2',
+      status: 'active',
+      source: 'manual',
+      memo: null,
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-04T00:00:00.000Z'),
+    });
+    const app = await createApp();
+
+    const allRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=all',
+    });
+    const withReportsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_presence=with_reports',
+    });
+    const withoutReportsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_presence=without_reports',
+    });
+
+    expect(allRes.statusCode).toBe(200);
+    expect(allRes.json().data.query).toMatchObject({
+      status: 'all',
+      report_presence: null,
+    });
+    expect(allRes.json().data.applications.map((application: any) => application.id)).toEqual([
+      'app-no-report',
+      'app-1',
+      'app-archived',
+    ]);
+    expect(withReportsRes.statusCode).toBe(200);
+    expect(withReportsRes.json().data.query.report_presence).toBe('with_reports');
+    expect(withReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(withoutReportsRes.statusCode).toBe(200);
+    expect(withoutReportsRes.json().data.query.report_presence).toBe('without_reports');
+    expect(withoutReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-no-report']);
+
+    await app.close();
+  });
+
   it('returns symbol applications for a strategy with latest report summaries', async () => {
     const app = await createApp();
 
@@ -952,11 +1007,17 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?sort=title',
     });
+    const invalidReportPresence = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?report_presence=maybe',
+    });
 
     expect(invalidStatus.statusCode).toBe(400);
     expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
     expect(invalidPage.statusCode).toBe(400);
     expect(invalidSort.statusCode).toBe(400);
+    expect(invalidReportPresence.statusCode).toBe(400);
+    expect(invalidReportPresence.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });
