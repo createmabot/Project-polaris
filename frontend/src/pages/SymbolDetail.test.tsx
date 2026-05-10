@@ -479,6 +479,12 @@ describe('SymbolDetail', () => {
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');
+    expect(html).toContain('表示対象');
+    expect(html).toContain('すべて');
+    expect(html).toContain('reportあり');
+    expect(html).toContain('reportなし');
+    expect(html).toContain('application 2 / 2 件を表示中');
+    expect(html).toContain('CSV report: 1 / internal report: 1');
     expect(html).toContain('application_id:</strong> <code>application_1</code>');
     expect(html).toContain('status:');
     expect(html).toContain('アーカイブ');
