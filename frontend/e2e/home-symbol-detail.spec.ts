@@ -43,15 +43,15 @@ async function pickSeedSymbolLink(page: Page): Promise<Locator | null> {
   return (await link.count()) > 0 ? link : pickFirstSymbolLink(page);
 }
 
+async function openHomeAndWaitUntilReady(page: Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForLoadState('domcontentloaded');
+  await expect(page.getByRole('heading', { level: 2, name: '日次確認の見方' })).toBeVisible({ timeout: 15000 });
+}
+
 test.describe('Home -> SymbolDetail smoke', () => {
   test('opens Home and navigates to SymbolDetail from a symbol link', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(
-      () => !document.body.textContent?.includes('読み込み中...'),
-      undefined,
-      { timeout: 15000 },
-    );
+    await openHomeAndWaitUntilReady(page);
 
     await expect(page.getByRole('heading', { level: 1, name: '北極星' })).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('heading', { level: 2, name: 'マーケット概況' })).toBeVisible();
@@ -76,13 +76,7 @@ test.describe('Home -> SymbolDetail smoke', () => {
   });
 
   test('keeps the P3 read-only navigation path available', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('domcontentloaded');
-    await page.waitForFunction(
-      () => !document.body.textContent?.includes('隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ...'),
-      undefined,
-      { timeout: 15000 },
-    );
+    await openHomeAndWaitUntilReady(page);
 
     const symbolLink = await pickSeedSymbolLink(page);
     expect(symbolLink, 'seed data should provide a SideRail symbol link for the read-only scenario').not.toBeNull();
