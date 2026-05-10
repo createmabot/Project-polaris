@@ -73,6 +73,17 @@ type ParsedImportForAi = ParsedImportSummary & {
   createdAt: string;
 };
 
+type ReportMetricsSummary = {
+  period_from: string | null;
+  period_to: string | null;
+  trade_count: number | null;
+  total_return_percent: number | null;
+  price_change_percent: number | null;
+  max_drawdown_percent: number | null;
+  profit_factor: number | null;
+  win_rate: number | null;
+};
+
 type BacktestAiReviewView = {
   summary_id: string | null;
   title: string | null;
@@ -100,6 +111,27 @@ function parseParsedImportSummary(value: unknown): ParsedImportSummary | null {
     netProfit: typeof value.netProfit === 'number' ? value.netProfit : null,
     periodFrom: typeof value.periodFrom === 'string' ? value.periodFrom : null,
     periodTo: typeof value.periodTo === 'string' ? value.periodTo : null,
+  };
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function emptyReportMetricsSummary(): ReportMetricsSummary {
+  return {
+    period_from: null,
+    period_to: null,
+    trade_count: null,
+    total_return_percent: null,
+    price_change_percent: null,
+    max_drawdown_percent: null,
+    profit_factor: null,
+    win_rate: null,
   };
 }
 
@@ -262,6 +294,51 @@ function buildInternalBacktestContext(snapshot: BacktestStrategySnapshot | null,
   };
 }
 
+function buildCsvReportMetricsSummary(imports: Array<{ parsedSummaryJson: unknown }>): ReportMetricsSummary {
+  const parsed = parseParsedImportSummary(imports[0]?.parsedSummaryJson ?? null);
+  if (!parsed) return emptyReportMetricsSummary();
+  return {
+    period_from: parsed.periodFrom,
+    period_to: parsed.periodTo,
+    trade_count: parsed.totalTrades,
+    total_return_percent: null,
+    price_change_percent: null,
+    max_drawdown_percent: parsed.maxDrawdown,
+    profit_factor: parsed.profitFactor,
+    win_rate: parsed.winRate,
+  };
+}
+
+function buildInternalReportMetricsSummary(snapshot: BacktestStrategySnapshot | null): ReportMetricsSummary {
+  const resultSummary = snapshot?.result_summary ?? null;
+  const period = isRecord(resultSummary?.period) ? resultSummary.period : null;
+  const metrics = isRecord(resultSummary?.metrics) ? resultSummary.metrics : null;
+  if (!resultSummary || !metrics) return emptyReportMetricsSummary();
+
+  return {
+    period_from: stringOrNull(period?.from),
+    period_to: stringOrNull(period?.to),
+    trade_count: numberOrNull(metrics.trade_count),
+    total_return_percent: numberOrNull(metrics.total_return_percent ?? metrics.total_return),
+    price_change_percent: numberOrNull(metrics.price_change_percent),
+    max_drawdown_percent: numberOrNull(metrics.max_drawdown_percent ?? metrics.max_drawdown),
+    profit_factor: numberOrNull(metrics.profit_factor),
+    win_rate: numberOrNull(metrics.win_rate),
+  };
+}
+
+function buildReportMetricsSummary(backtest: {
+  executionSource: string;
+  strategySnapshotJson: unknown;
+  imports?: Array<{ parsedSummaryJson: unknown }>;
+}): ReportMetricsSummary {
+  const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
+  if (backtest.executionSource === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest') {
+    return buildInternalReportMetricsSummary(snapshot);
+  }
+  return buildCsvReportMetricsSummary(backtest.imports ?? []);
+}
+
 async function resolveLatestBacktestAiReview(backtestId: string, importIds: string[]) {
   const summary = await prisma.aiSummary.findFirst({
     where: {
@@ -297,6 +374,16 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       createdAt: 'desc',
     },
     include: {
+      backtest: {
+        include: {
+          imports: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+        },
+      },
       application: {
         include: {
           symbol: {
@@ -344,16 +431,31 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
     take: 10,
     include: {
       backtest: {
-        select: {
-          id: true,
-          title: true,
-          executionSource: true,
-          status: true,
-          updatedAt: true,
+        include: {
+          imports: {
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
         },
       },
     },
   });
+
+  const toRelatedReport = (relatedRun: (typeof relatedRuns)[number]) => {
+    if (!relatedRun.backtest) return null;
+    return {
+      backtest_id: relatedRun.backtest.id,
+      title: relatedRun.backtest.title,
+      execution_source: relatedRun.backtest.executionSource,
+      status: relatedRun.backtest.status,
+      run_type: relatedRun.runType,
+      run_status: relatedRun.status,
+      updated_at: relatedRun.backtest.updatedAt,
+      metrics: buildReportMetricsSummary(relatedRun.backtest),
+    };
+  };
 
   return {
     application_id: run.application.id,
@@ -384,17 +486,22 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       market: run.application.strategyRuleVersion.market,
       timeframe: run.application.strategyRuleVersion.timeframe,
     },
+    current_report: run.backtest
+      ? {
+          backtest_id: run.backtest.id,
+          title: run.backtest.title,
+          execution_source: run.backtest.executionSource,
+          status: run.backtest.status,
+          run_type: run.runType,
+          run_status: run.status,
+          updated_at: run.backtest.updatedAt,
+          metrics: buildReportMetricsSummary(run.backtest),
+        }
+      : null,
     related_reports: relatedRuns
       .filter((relatedRun) => relatedRun.backtest && relatedRun.backtestId !== backtestId)
-      .map((relatedRun) => ({
-        backtest_id: relatedRun.backtest!.id,
-        title: relatedRun.backtest!.title,
-        execution_source: relatedRun.backtest!.executionSource,
-        status: relatedRun.backtest!.status,
-        run_type: relatedRun.runType,
-        run_status: relatedRun.status,
-        updated_at: relatedRun.backtest!.updatedAt,
-      })),
+      .map(toRelatedReport)
+      .filter((report): report is NonNullable<ReturnType<typeof toRelatedReport>> => report !== null),
   };
 }
 

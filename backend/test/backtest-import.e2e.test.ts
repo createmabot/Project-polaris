@@ -121,6 +121,15 @@ function createRuntime(): Runtime {
 }
 
 vi.mock('../src/db', () => {
+  const withLatestImport = (backtest: BacktestRow | null) => {
+    if (!backtest) return null;
+    const imports = [...runtime.imports.values()]
+      .filter((item) => item.backtestId === backtest.id)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, 1);
+    return { ...backtest, imports };
+  };
+
   const applyWhere = (rows: BacktestRow[], where: any): BacktestRow[] => {
     let filtered = rows;
     if (where?.title?.contains) {
@@ -302,6 +311,7 @@ vi.mock('../src/db', () => {
         if (!application) return null;
         return {
           ...run,
+          backtest: withLatestImport(runtime.backtests.get(run.backtestId ?? '') ?? null),
           application: {
             ...application,
             symbol: runtime.symbols.get(application.symbolId),
@@ -321,7 +331,7 @@ vi.mock('../src/db', () => {
         rows = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, 10);
         return rows.map((run) => ({
           ...run,
-          backtest: run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null,
+          backtest: run.backtestId ? withLatestImport(runtime.backtests.get(run.backtestId) ?? null) : null,
         }));
       },
     },
@@ -473,7 +483,33 @@ describe('backtest import vertical slice', () => {
     runtime.backtests.set('bt-internal-related', {
       id: 'bt-internal-related',
       strategyRuleVersionId: 'ver-1',
-      strategySnapshotJson: null,
+      strategySnapshotJson: {
+        strategy_id: 'str-1',
+        strategy_version_id: 'ver-1',
+        natural_language_rule: '25日移動平均を上抜けたら買い',
+        generated_pine: 'strategy("base")',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        warnings: [],
+        assumptions: [],
+        captured_at: '2026-05-02T00:00:00.000Z',
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: 'exec-related',
+        result_summary: {
+          period: {
+            from: '2024-01-01',
+            to: '2025-12-31',
+          },
+          metrics: {
+            trade_count: 4,
+            total_return_percent: 12.3,
+            price_change_percent: 10.5,
+            max_drawdown_percent: -4.2,
+            profit_factor: 1.8,
+            win_rate: 55,
+          },
+        },
+      },
       title: 'internal related report',
       executionSource: 'internal_backtest',
       market: 'JP_STOCK',
@@ -481,6 +517,27 @@ describe('backtest import vertical slice', () => {
       status: 'completed',
       createdAt: new Date('2026-05-02T00:00:00.000Z'),
       updatedAt: new Date('2026-05-02T00:00:00.000Z'),
+    });
+    runtime.imports.set('imp-bt-ssa', {
+      id: 'imp-bt-ssa',
+      backtestId: 'bt-ssa',
+      fileName: 'tradingview.csv',
+      fileSize: 123,
+      contentType: 'text/csv',
+      rawCsvText: VALID_CSV,
+      parseStatus: 'parsed',
+      parseError: null,
+      parsedSummaryJson: {
+        netProfit: 100000,
+        totalTrades: 120,
+        winRate: 48.5,
+        profitFactor: 1.42,
+        maxDrawdown: -8.2,
+        periodFrom: '2024-01-01',
+        periodTo: '2025-12-31',
+      },
+      createdAt: now,
+      updatedAt: now,
     });
     runtime.applicationRuns.set('run-ssa', {
       id: 'run-ssa',
@@ -541,8 +598,29 @@ describe('backtest import vertical slice', () => {
         run_type: 'internal_backtest',
         run_status: 'succeeded',
         updated_at: '2026-05-02T00:00:00.000Z',
+        metrics: {
+          period_from: '2024-01-01',
+          period_to: '2025-12-31',
+          trade_count: 4,
+          total_return_percent: 12.3,
+          price_change_percent: 10.5,
+          max_drawdown_percent: -4.2,
+          profit_factor: 1.8,
+          win_rate: 55,
+        },
       },
     ]);
+    expect(detail.json().data.symbol_strategy_application.current_report).toMatchObject({
+      backtest_id: 'bt-ssa',
+      metrics: {
+        period_from: '2024-01-01',
+        period_to: '2025-12-31',
+        trade_count: 120,
+        max_drawdown_percent: -8.2,
+        profit_factor: 1.42,
+        win_rate: 48.5,
+      },
+    });
 
     await app.close();
   });
