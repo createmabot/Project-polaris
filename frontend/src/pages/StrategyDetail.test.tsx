@@ -161,6 +161,7 @@ describe('StrategyDetail', () => {
     expect(html).toContain('href="/strategies/strategy_1/versions"');
     expect(html).toContain('href="/strategy-versions/ver-1"');
     expect(html).toContain('JP_STOCK / D');
+    expect(html).toContain('generated');
     expect(html).toContain('適用済み銘柄');
     expect(html).toContain('この strategy はまだ銘柄に適用されていません。');
     expect(html).toContain('関連検証レポート');

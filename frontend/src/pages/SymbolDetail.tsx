@@ -23,6 +23,7 @@ import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import SectionCard from '../components/ui/SectionCard';
+import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
 
 const LABELS = {
@@ -423,7 +424,9 @@ function ApplicationSummaryHeader({
         <h4 className="text-sm font-semibold text-slate-900">{application.strategy.title}</h4>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs leading-5 text-slate-500">
           <span>application_id: {application.id}</span>
-          <span>status: {application.status}</span>
+          <span className="inline-flex items-center gap-1">
+            status: <StatusBadge status={application.status} className="px-2 py-0.5" />
+          </span>
           <span>source: {application.source}</span>
           <span>{LABELS.runCount}: {application.run_count}</span>
         </div>
@@ -459,7 +462,11 @@ function ApplicationLatestRunCard({
       {application.latest_run ? (
         <div>
           <MetaText>
-            {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
+            <span className="inline-flex flex-wrap items-center gap-1">
+              <span>{application.latest_run.run_type} /</span>
+              <StatusBadge status={application.latest_run.status} className="px-2 py-0.5" />
+              <span>/ {formatDate(application.latest_run.updated_at)}</span>
+            </span>
           </MetaText>
           {application.latest_run.internal_backtest_execution_id ? (
             <>
