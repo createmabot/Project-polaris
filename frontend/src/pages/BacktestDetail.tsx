@@ -52,6 +52,18 @@ function recordJson(value: Record<string, unknown> | null): string {
   return JSON.stringify(value, null, 2);
 }
 
+function displayUnknown(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return '-';
+  }
+}
+
 function parseStatusText(status: string | null | undefined): string {
   if (status === 'parsed') return '解析成功';
   if (status === 'failed') return '解析失敗';
@@ -290,6 +302,87 @@ function SymbolStrategyApplicationBacklinkSection({
 
 type BacktestStrategySnapshot = NonNullable<BacktestDetailData['used_strategy']['snapshot']>;
 
+const ARTIFACT_PRIMARY_KEYS = ['kind', 'type', 'execution_id', 'path', 'summary_mode'] as const;
+
+function buildArtifactRows(
+  artifactPointer: Record<string, unknown> | null,
+  resultSummary: Record<string, unknown> | null,
+) {
+  if (!artifactPointer) return [];
+  const rows = ARTIFACT_PRIMARY_KEYS.map((key) => {
+    if (key === 'summary_mode') {
+      return {
+        key,
+        value: displayUnknown(artifactPointer.summary_mode ?? resultSummary?.summary_kind),
+      };
+    }
+    return {
+      key,
+      value: displayUnknown(artifactPointer[key]),
+    };
+  }).filter((row) => row.value !== '-');
+
+  const known = new Set<string>(ARTIFACT_PRIMARY_KEYS);
+  const extraRows = Object.entries(artifactPointer)
+    .filter(([key, value]) => !known.has(key) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'))
+    .map(([key, value]) => ({ key, value: displayUnknown(value) }));
+
+  return [...rows, ...extraRows];
+}
+
+function ArtifactPointerPanel({
+  artifactPointer,
+  resultSummary,
+}: {
+  artifactPointer: Record<string, unknown> | null;
+  resultSummary: Record<string, unknown> | null;
+}) {
+  const artifactRows = buildArtifactRows(artifactPointer, resultSummary);
+
+  return (
+    <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
+      <strong>artifact_pointer</strong>
+      <p style={{ margin: '0.35rem 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
+        internal backtest の artifact pointer を概要として表示します。artifact file の実体読込は行いません。
+      </p>
+      {!artifactPointer ? (
+        <p style={{ margin: 0, color: '#666' }}>artifact は未生成、または strategy snapshot に保存されていません。</p>
+      ) : (
+        <>
+          {artifactRows.length > 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+              {artifactRows.map((row) => (
+                <div
+                  key={row.key}
+                  style={{
+                    border: '1px solid #e2e2e2',
+                    borderRadius: '8px',
+                    padding: '0.75rem',
+                    background: '#fff',
+                  }}
+                >
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>{row.key}</div>
+                  <div style={{ marginTop: '0.3rem', fontSize: '1.05rem', fontWeight: 600, wordBreak: 'break-word' }}>
+                    {row.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ margin: 0, color: '#666' }}>表示できる代表 field はありません。raw JSON を確認してください。</p>
+          )}
+          <div style={{ marginTop: '0.75rem' }}>
+            <strong>raw artifact JSON</strong>
+            <pre style={{ margin: '0.4rem 0 0', padding: '0.75rem', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
+              <code>{recordJson(artifactPointer)}</code>
+            </pre>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
   const resultSummary = asRecord(snapshot?.result_summary ?? null);
   const period = asRecord(resultSummary?.period ?? null);
@@ -317,14 +410,7 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
           result_summary は strategy snapshot に保存されていません。
         </p>
       )}
-      {artifactPointer ? (
-        <div style={{ marginTop: '0.75rem' }}>
-          <strong>artifact_pointer</strong>
-          <pre style={{ margin: '0.4rem 0 0', padding: '0.75rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-            <code>{recordJson(artifactPointer)}</code>
-          </pre>
-        </div>
-      ) : null}
+      <ArtifactPointerPanel artifactPointer={artifactPointer} resultSummary={resultSummary} />
     </section>
   );
 }
