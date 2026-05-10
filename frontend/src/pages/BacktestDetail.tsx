@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
@@ -191,6 +191,84 @@ export function buildBacktestRuleLabVersionDetailPath(strategyId: string, strate
   return `/strategy-versions/${strategyVersionId}?return=${encodeURIComponent(returnPath)}`;
 }
 
+type SymbolStrategyApplicationBacklink = NonNullable<BacktestDetailData['symbol_strategy_application']>;
+
+function BacklinkInfoCard({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
+      <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function BacklinkActions({ symbolStrategyApplication }: { symbolStrategyApplication: SymbolStrategyApplicationBacklink }) {
+  return (
+    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+      <Link href={`/symbols/${symbolStrategyApplication.symbol.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+        SymbolDetail に戻る
+      </Link>
+      <Link href={`/strategies/${symbolStrategyApplication.strategy.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+        StrategyDetail に戻る
+      </Link>
+      <Link href={`/strategy-versions/${symbolStrategyApplication.strategy_version.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+        StrategyVersionDetail に戻る
+      </Link>
+    </div>
+  );
+}
+
+function SymbolStrategyApplicationBacklinkSection({
+  symbolStrategyApplication,
+}: {
+  symbolStrategyApplication: SymbolStrategyApplicationBacklink;
+}) {
+  return (
+    <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+      <h2 style={{ marginTop: 0 }}>銘柄起点の適用情報</h2>
+      <p style={{ marginTop: 0, color: '#666', fontSize: '0.92rem' }}>
+        この検証レポートは、保存済み Symbol Strategy Application の run から作成されています。
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <BacklinkInfoCard title="Application">
+          <div><strong>application ID:</strong> <code>{symbolStrategyApplication.application_id}</code></div>
+          <div><strong>status:</strong> <code>{symbolStrategyApplication.application_status}</code></div>
+          <div><strong>source:</strong> <code>{symbolStrategyApplication.application_source}</code></div>
+          <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.application_updated_at)}</div>
+          {symbolStrategyApplication.application_memo ? (
+            <div><strong>memo:</strong> {symbolStrategyApplication.application_memo}</div>
+          ) : null}
+        </BacklinkInfoCard>
+        <BacklinkInfoCard title="Application Run">
+          <div><strong>run ID:</strong> <code>{symbolStrategyApplication.run_id}</code></div>
+          <div><strong>run type:</strong> <code>{symbolStrategyApplication.run_type}</code></div>
+          <div><strong>run status:</strong> <code>{symbolStrategyApplication.run_status}</code></div>
+          <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.run_updated_at)}</div>
+        </BacklinkInfoCard>
+        <BacklinkInfoCard title="Symbol">
+          <div>{symbolStrategyApplication.symbol.display_name ?? symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol}</div>
+          <div><strong>symbol:</strong> <code>{symbolStrategyApplication.symbol.symbol}</code></div>
+          <div><strong>symbol_code:</strong> <code>{symbolStrategyApplication.symbol.symbol_code ?? '-'}</code></div>
+          <div><strong>market_code:</strong> <code>{symbolStrategyApplication.symbol.market_code ?? '-'}</code></div>
+        </BacklinkInfoCard>
+        <BacklinkInfoCard title="Strategy">
+          <div>{symbolStrategyApplication.strategy.title}</div>
+          <div><strong>strategy ID:</strong> <code>{symbolStrategyApplication.strategy.id}</code></div>
+          <div><strong>version ID:</strong> <code>{symbolStrategyApplication.strategy_version.id}</code></div>
+          <div>
+            <strong>market / timeframe:</strong>{' '}
+            {symbolStrategyApplication.strategy_version.market} / {symbolStrategyApplication.strategy_version.timeframe}
+          </div>
+        </BacklinkInfoCard>
+      </div>
+      <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
+      <p style={{ marginBottom: 0, marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
+        BacktestDetail は検証レポート詳細として維持し、application parent への backlink だけを表示します。
+      </p>
+    </section>
+  );
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location] = useLocation();
@@ -348,62 +426,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       </section>
 
       {symbolStrategyApplication ? (
-        <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-          <h2 style={{ marginTop: 0 }}>銘柄起点の適用情報</h2>
-          <p style={{ marginTop: 0, color: '#666', fontSize: '0.92rem' }}>
-            この検証レポートは、保存済み Symbol Strategy Application の run から作成されています。
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
-            <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>Application</div>
-              <div><strong>application ID:</strong> <code>{symbolStrategyApplication.application_id}</code></div>
-              <div><strong>status:</strong> <code>{symbolStrategyApplication.application_status}</code></div>
-              <div><strong>source:</strong> <code>{symbolStrategyApplication.application_source}</code></div>
-              <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.application_updated_at)}</div>
-              {symbolStrategyApplication.application_memo ? (
-                <div><strong>memo:</strong> {symbolStrategyApplication.application_memo}</div>
-              ) : null}
-            </div>
-            <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>Application Run</div>
-              <div><strong>run ID:</strong> <code>{symbolStrategyApplication.run_id}</code></div>
-              <div><strong>run type:</strong> <code>{symbolStrategyApplication.run_type}</code></div>
-              <div><strong>run status:</strong> <code>{symbolStrategyApplication.run_status}</code></div>
-              <div><strong>updated:</strong> {formatDateTime(symbolStrategyApplication.run_updated_at)}</div>
-            </div>
-            <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>Symbol</div>
-              <div>{symbolStrategyApplication.symbol.display_name ?? symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol}</div>
-              <div><strong>symbol:</strong> <code>{symbolStrategyApplication.symbol.symbol}</code></div>
-              <div><strong>symbol_code:</strong> <code>{symbolStrategyApplication.symbol.symbol_code ?? '-'}</code></div>
-              <div><strong>market_code:</strong> <code>{symbolStrategyApplication.symbol.market_code ?? '-'}</code></div>
-            </div>
-            <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
-              <div style={{ fontWeight: 600, marginBottom: '0.4rem' }}>Strategy</div>
-              <div>{symbolStrategyApplication.strategy.title}</div>
-              <div><strong>strategy ID:</strong> <code>{symbolStrategyApplication.strategy.id}</code></div>
-              <div><strong>version ID:</strong> <code>{symbolStrategyApplication.strategy_version.id}</code></div>
-              <div>
-                <strong>market / timeframe:</strong>{' '}
-                {symbolStrategyApplication.strategy_version.market} / {symbolStrategyApplication.strategy_version.timeframe}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
-            <Link href={`/symbols/${symbolStrategyApplication.symbol.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-              SymbolDetail に戻る
-            </Link>
-            <Link href={`/strategies/${symbolStrategyApplication.strategy.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-              StrategyDetail に戻る
-            </Link>
-            <Link href={`/strategy-versions/${symbolStrategyApplication.strategy_version.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
-              StrategyVersionDetail に戻る
-            </Link>
-          </div>
-          <p style={{ marginBottom: 0, marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
-            BacktestDetail は検証レポート詳細として維持し、application parent への backlink だけを表示します。
-          </p>
-        </section>
+        <SymbolStrategyApplicationBacklinkSection symbolStrategyApplication={symbolStrategyApplication} />
       ) : null}
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
