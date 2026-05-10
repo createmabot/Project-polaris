@@ -227,6 +227,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     : [];
   const usedStrategy = data.used_strategy;
   const snapshot = usedStrategy.snapshot;
+  const symbolStrategyApplication = data.symbol_strategy_application;
   const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
   const strategyVersionDetailPath =
     usedStrategy.strategy_id && usedStrategy.strategy_version_id
@@ -338,6 +339,29 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           </div>
         </div>
       </section>
+
+      {symbolStrategyApplication ? (
+        <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
+          <h2 style={{ marginTop: 0 }}>銘柄起点の適用情報</h2>
+          <div><strong>application ID:</strong> <code>{symbolStrategyApplication.application_id}</code></div>
+          <div><strong>run ID:</strong> <code>{symbolStrategyApplication.run_id}</code></div>
+          <div><strong>run type:</strong> <code>{symbolStrategyApplication.run_type}</code></div>
+          <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+            <Link href={`/symbols/${symbolStrategyApplication.symbol.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              {symbolStrategyApplication.symbol.display_name ?? symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol}
+            </Link>
+            <Link href={`/strategies/${symbolStrategyApplication.strategy.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              {symbolStrategyApplication.strategy.title}
+            </Link>
+            <Link href={`/strategy-versions/${symbolStrategyApplication.strategy_version.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              {symbolStrategyApplication.strategy_version.id}
+            </Link>
+          </div>
+          <p style={{ marginBottom: 0, marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
+            BacktestDetail は検証レポート詳細として維持し、銘柄起点 application への参照だけを表示します。
+          </p>
+        </section>
+      ) : null}
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>取込状態</h2>

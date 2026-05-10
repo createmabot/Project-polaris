@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { symbolRoutes } from '../src/routes/symbols';
 import { symbolStrategyApplicationRoutes } from '../src/routes/symbol-strategy-applications';
+import { strategyRoutes } from '../src/routes/strategies';
 import { errorHandler } from '../src/utils/response';
 
 const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
@@ -314,6 +315,7 @@ function createRuntime(): Runtime {
 function filterApplications(where: any): ApplicationRow[] {
   return runtime.applications.filter((application) => {
     if (where?.symbolId && application.symbolId !== where.symbolId) return false;
+    if (where?.strategyRuleId && application.strategyRuleId !== where.strategyRuleId) return false;
     if (where?.status && application.status !== where.status) return false;
     if (where?.strategyRuleVersionId && application.strategyRuleVersionId !== where.strategyRuleVersionId) {
       return false;
@@ -514,6 +516,7 @@ async function createApp() {
   app.setErrorHandler(errorHandler);
   app.register(symbolRoutes, { prefix: '/api/symbols' });
   app.register(symbolStrategyApplicationRoutes, { prefix: '/api/symbol-strategy-applications' });
+  app.register(strategyRoutes, { prefix: '/api/strategies' });
   await app.ready();
   return app;
 }
@@ -594,6 +597,116 @@ describe('symbol strategy applications route', () => {
     expect(activeRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
     expect(archivedRes.statusCode).toBe(200);
     expect(archivedRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-archived']);
+
+    await app.close();
+  });
+
+  it('returns symbol applications for a strategy with latest report summaries', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=active',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.strategy).toEqual({
+      id: 'strategy-1',
+      title: 'Breakout strategy',
+      status: 'active',
+    });
+    const application = res.json().data.applications[0];
+    expect(application).toMatchObject({
+      id: 'app-1',
+      status: 'active',
+      symbol: {
+        id: 'sym-1',
+        symbol_code: '2148',
+        display_name: 'Sample Corp',
+      },
+      strategy_version: {
+        id: 'version-1',
+        market: 'TSE',
+        timeframe: 'D',
+      },
+      latest_run: {
+        id: 'run-latest',
+        run_type: 'internal_backtest',
+        backtest_id: 'backtest-1',
+      },
+      latest_backtest_report: {
+        id: 'backtest-1',
+        title: '2148 breakout report',
+      },
+      run_count: 2,
+    });
+
+    await app.close();
+  });
+
+  it('filters strategy symbol applications by status including all', async () => {
+    runtime.applications.push({
+      id: 'app-1-archived',
+      symbolId: 'sym-1',
+      strategyRuleId: 'strategy-1',
+      strategyRuleVersionId: 'version-2',
+      status: 'archived',
+      source: 'manual',
+      memo: null,
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-01T00:00:00.000Z'),
+    });
+    const app = await createApp();
+
+    const activeRes = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=active',
+    });
+    const archivedRes = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=archived',
+    });
+    const allRes = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=all',
+    });
+
+    expect(activeRes.statusCode).toBe(200);
+    expect(activeRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(archivedRes.statusCode).toBe(200);
+    expect(archivedRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1-archived']);
+    expect(allRes.statusCode).toBe(200);
+    expect(allRes.json().data.pagination.total).toBe(2);
+
+    await app.close();
+  });
+
+  it('rejects invalid strategy symbol application queries and missing strategy', async () => {
+    const app = await createApp();
+
+    const invalidStatus = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?status=deleted',
+    });
+    const invalidSort = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?sort=title',
+    });
+    const invalidPage = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/strategy-1/symbol-applications?page=0',
+    });
+    const missingStrategy = await app.inject({
+      method: 'GET',
+      url: '/api/strategies/missing-strategy/symbol-applications',
+    });
+
+    expect(invalidStatus.statusCode).toBe(400);
+    expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidSort.statusCode).toBe(400);
+    expect(invalidPage.statusCode).toBe(400);
+    expect(missingStrategy.statusCode).toBe(404);
+    expect(missingStrategy.json().error.code).toBe('NOT_FOUND');
 
     await app.close();
   });

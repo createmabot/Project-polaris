@@ -199,6 +199,39 @@ const symbolApplicationsFixture = {
       },
       run_count: 1,
     },
+    {
+      id: 'application_2',
+      status: 'active',
+      source: 'manual',
+      memo: null,
+      created_at: '2026-05-05T00:00:00.000Z',
+      updated_at: '2026-05-06T00:00:00.000Z',
+      strategy: {
+        id: 'strategy_1',
+        title: '謚ｼ縺礼岼雋ｷ縺・姶逡･',
+        status: 'active',
+      },
+      strategy_version: {
+        id: 'version_1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'generated',
+        created_at: '2026-05-01T00:00:00.000Z',
+        updated_at: '2026-05-02T00:00:00.000Z',
+      },
+      latest_run: {
+        id: 'run_2',
+        run_type: 'internal_backtest',
+        status: 'queued',
+        created_at: '2026-05-06T00:00:00.000Z',
+        updated_at: '2026-05-06T00:00:00.000Z',
+        backtest_id: null,
+        backtest_import_id: null,
+        internal_backtest_execution_id: 'execution_1',
+      },
+      latest_backtest_report: null,
+      run_count: 1,
+    },
   ],
 };
 
@@ -357,6 +390,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('CSV取込を実行');
     expect(html).toContain('内部バックテスト');
     expect(html).toContain('内部バックテストを開始');
+    expect(html).toContain('execution_id: execution_1');
     expect(html).toContain('実行結果の詳細表示は後続タスクです。');
     expect(html).toContain('検証レポートを開く');
     expect(html).toContain('既存ストラテジーを選ぶ');

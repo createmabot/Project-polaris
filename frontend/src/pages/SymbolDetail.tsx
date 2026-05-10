@@ -324,9 +324,17 @@ function SavedApplicationRow({
         <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
           <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
           {application.latest_run ? (
-            <MetaText>
-              {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
-            </MetaText>
+            <div>
+              <MetaText>
+                {application.latest_run.run_type} / {application.latest_run.status} / {formatDate(application.latest_run.updated_at)}
+              </MetaText>
+              {application.latest_run.internal_backtest_execution_id ? (
+                <>
+                  <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
+                  <EmptyText>{LABELS.internalBacktestResultPending}</EmptyText>
+                </>
+              ) : null}
+            </div>
           ) : (
             <EmptyText>{LABELS.noLatestRun}</EmptyText>
           )}
