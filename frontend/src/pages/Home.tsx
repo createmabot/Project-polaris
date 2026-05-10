@@ -5,6 +5,7 @@ import { HomeData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
 import PageHeader from '../components/layout/PageHeader';
+import SectionCard from '../components/ui/SectionCard';
 import TextLink from '../components/ui/TextLink';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
@@ -33,28 +34,6 @@ function formatDate(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('ja-JP');
-}
-
-type HomeSectionProps = {
-  title: string;
-  description?: string;
-  actions?: ReactNode;
-  children: ReactNode;
-};
-
-function HomeSection({ title, description, actions, children }: HomeSectionProps) {
-  return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-          {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
-        </div>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
-      {children}
-    </section>
-  );
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
@@ -97,16 +76,16 @@ export default function Home() {
         />
 
         <div className="grid gap-5">
-          <HomeSection title="日次確認の見方">
+          <SectionCard title="日次確認の見方">
             <InfoCard>
               <p className="text-sm leading-6 text-slate-600">
                 監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。
                 Home 本体ではマーケット概況、AIデイリーサマリー、最新アラート、注目イベントを優先表示します。
               </p>
             </InfoCard>
-          </HomeSection>
+          </SectionCard>
 
-          <HomeSection title="マーケット概況">
+          <SectionCard title="マーケット概況">
             <InfoCard>
               {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
               asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
@@ -132,9 +111,9 @@ export default function Home() {
                 </div>
               )}
             </InfoCard>
-          </HomeSection>
+          </SectionCard>
 
-          <HomeSection
+          <SectionCard
             title="AIデイリーサマリー"
             description="AIがマーケット・アラート・参照情報をもとに生成した要約です。"
             actions={
@@ -176,9 +155,9 @@ export default function Home() {
                 <EmptyText>サマリーはまだありません。</EmptyText>
               )}
             </InfoCard>
-          </HomeSection>
+          </SectionCard>
 
-          <HomeSection title="最新アラート">
+          <SectionCard title="最新アラート">
             {data.recent_alerts.length === 0 ? (
               <EmptyText>アラートはありません。</EmptyText>
             ) : (
@@ -220,9 +199,9 @@ export default function Home() {
                 ))}
               </div>
             )}
-          </HomeSection>
+          </SectionCard>
 
-          <HomeSection title="注目イベント">
+          <SectionCard title="注目イベント">
             {data.key_events.length === 0 ? (
               <EmptyText>注目イベントはまだありません。</EmptyText>
             ) : (
@@ -237,7 +216,7 @@ export default function Home() {
                 ))}
               </div>
             )}
-          </HomeSection>
+          </SectionCard>
         </div>
       </div>
     </AppLayout>

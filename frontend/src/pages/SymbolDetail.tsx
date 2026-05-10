@@ -18,6 +18,7 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import SectionCard from '../components/ui/SectionCard';
 import TextLink from '../components/ui/TextLink';
 
 const LABELS = {
@@ -146,7 +147,6 @@ const LABELS = {
 
 const PRIMARY_BUTTON_CLASS =
   'rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-800 disabled:cursor-not-allowed disabled:bg-slate-400';
-const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -196,13 +196,9 @@ type DetailSectionProps = {
 
 function DetailSection({ title, actions, children }: DetailSectionProps) {
   return (
-    <section className={PANEL_CLASS}>
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
-      </div>
+    <SectionCard title={title} actions={actions}>
       {children}
-    </section>
+    </SectionCard>
   );
 }
 
