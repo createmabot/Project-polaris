@@ -890,7 +890,14 @@ export type InternalBacktestExecutionResultData = {
   strategy_rule_version_id: string;
   status: 'succeeded' | string;
   result_summary: {
+    schema_version?: string;
     summary_kind: string;
+    market?: string;
+    timeframe?: string;
+    period?: {
+      from: string;
+      to: string;
+    };
     metrics: {
       bar_count: number;
       first_close: number;
@@ -913,6 +920,10 @@ export type InternalBacktestExecutionResultData = {
       first_trade_at?: string | null;
       last_trade_at?: string | null;
     };
+    engine?: {
+      version: string;
+    };
+    notes?: string;
   };
   input_snapshot?: {
     data_source_snapshot?: {

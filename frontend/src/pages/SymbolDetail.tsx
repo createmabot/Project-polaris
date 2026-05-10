@@ -7,6 +7,8 @@ import {
   StrategyVersionListData,
   SymbolAiSummaryData,
   SymbolDetailData,
+  InternalBacktestExecutionResultData,
+  InternalBacktestExecutionStatusData,
   SymbolStrategyApplicationCreateData,
   SymbolStrategyApplicationCsvImportData,
   SymbolStrategyApplicationItem,
@@ -64,6 +66,23 @@ const LABELS = {
   internalBacktestRefreshFailed: '内部バックテストを開始しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   internalBacktestError: '内部バックテストを開始できませんでした。',
   internalBacktestResultPending: '実行結果の詳細表示は後続タスクです。',
+  internalBacktestResultTitle: '内部バックテスト結果',
+  internalBacktestResultLoading: '内部バックテスト status を読み込み中...',
+  internalBacktestResultStatusError: '内部バックテスト status を取得できませんでした。',
+  internalBacktestResultResultLoading: '内部バックテスト result を読み込み中...',
+  internalBacktestResultResultError: '内部バックテスト result を取得できませんでした。',
+  internalBacktestResultNotReady: '実行結果はまだ準備中です。',
+  internalBacktestResultReady: '実行結果 summary を表示しています。',
+  internalBacktestResultUnavailable: '実行結果 summary はまだ利用できません。',
+  internalBacktestResultFailed: '内部バックテストは failed です。',
+  internalBacktestResultCanceled: '内部バックテストは canceled です。',
+  internalBacktestResultStatus: 'execution status',
+  resultSummaryKind: 'summary_kind',
+  resultPeriod: 'period',
+  resultBarCount: 'bar_count',
+  resultPriceChangePercent: 'price_change_percent',
+  resultRangePercent: 'range_percent',
+  resultFinishedAt: 'finished_at',
   archiveApplication: 'アーカイブ',
   archiveApplicationConfirm: 'この application をアーカイブしますか？',
   archiveApplicationSuccess: 'アーカイブしました。',
@@ -210,6 +229,117 @@ type CsvImportMessage = {
   type: 'success' | 'warning';
   text: string;
 };
+
+function InternalBacktestResultPanel({ executionId }: { executionId: string }) {
+  const {
+    data: executionStatusData,
+    error: executionStatusError,
+    isLoading: isExecutionStatusLoading,
+  } = useSWR<InternalBacktestExecutionStatusData>(
+    `/api/internal-backtests/executions/${executionId}`,
+    swrFetcher,
+    {
+      refreshInterval: (currentData) => {
+        const status = currentData?.execution?.status;
+        return status === 'queued' || status === 'running' ? 3000 : 0;
+      },
+    },
+  );
+  const executionStatus = executionStatusData?.execution?.status ?? null;
+  const resultApiPath =
+    executionStatus === 'succeeded'
+      ? `/api/internal-backtests/executions/${executionId}/result`
+      : null;
+  const {
+    data: executionResultData,
+    error: executionResultError,
+    isLoading: isExecutionResultLoading,
+  } = useSWR<InternalBacktestExecutionResultData>(resultApiPath, swrFetcher);
+
+  const metrics = executionResultData?.result_summary?.metrics ?? null;
+  const period = executionResultData?.result_summary?.period ?? null;
+  const statusTone =
+    executionStatus === 'failed' || executionStatus === 'canceled'
+      ? 'border-rose-200 bg-rose-50 text-rose-800'
+      : executionStatus === 'succeeded'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : 'border-sky-200 bg-sky-50 text-sky-800';
+
+  return (
+    <div className={`mt-3 rounded-lg border p-3 text-sm ${statusTone}`}>
+      <h6 className="font-semibold">{LABELS.internalBacktestResultTitle}</h6>
+      <div className="mt-1 text-xs leading-5">
+        {LABELS.executionId}: {executionId}
+      </div>
+      {isExecutionStatusLoading ? (
+        <p className="mt-2">{LABELS.internalBacktestResultLoading}</p>
+      ) : executionStatusError ? (
+        <p className="mt-2">{LABELS.internalBacktestResultStatusError}</p>
+      ) : (
+        <>
+          <div className="mt-2 text-xs leading-5">
+            {LABELS.internalBacktestResultStatus}: {executionStatus ?? '-'}
+          </div>
+          {executionStatus === 'queued' || executionStatus === 'running' ? (
+            <p className="mt-2">{LABELS.internalBacktestResultNotReady}</p>
+          ) : null}
+          {executionStatus === 'failed' ? (
+            <p className="mt-2">
+              {LABELS.internalBacktestResultFailed}
+              {executionStatusData?.execution?.error_message
+                ? ` ${executionStatusData.execution.error_message}`
+                : ''}
+            </p>
+          ) : null}
+          {executionStatus === 'canceled' ? (
+            <p className="mt-2">{LABELS.internalBacktestResultCanceled}</p>
+          ) : null}
+          {executionStatus === 'succeeded' ? (
+            <div className="mt-2">
+              {isExecutionResultLoading ? (
+                <p>{LABELS.internalBacktestResultResultLoading}</p>
+              ) : executionResultError ? (
+                <p>{LABELS.internalBacktestResultResultError}</p>
+              ) : metrics ? (
+                <div>
+                  <p>{LABELS.internalBacktestResultReady}</p>
+                  <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultSummaryKind}</dt>
+                      <dd>{executionResultData?.result_summary?.summary_kind ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultPeriod}</dt>
+                      <dd>{period ? `${period.from} - ${period.to}` : '-'}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultBarCount}</dt>
+                      <dd>{formatNumber(metrics.bar_count, 0)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultPriceChangePercent}</dt>
+                      <dd>{formatNumber(metrics.price_change_percent, 2)}%</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultRangePercent}</dt>
+                      <dd>{formatNumber(metrics.range_percent, 2)}%</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold">{LABELS.resultFinishedAt}</dt>
+                      <dd>{formatDate(executionResultData?.finished_at ?? null)}</dd>
+                    </div>
+                  </dl>
+                </div>
+              ) : (
+                <p>{LABELS.internalBacktestResultUnavailable}</p>
+              )}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
 
 function SavedApplicationRow({
   application,
@@ -379,7 +509,7 @@ function SavedApplicationRow({
               {application.latest_run.internal_backtest_execution_id ? (
                 <>
                   <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
-                  <EmptyText>{LABELS.internalBacktestResultPending}</EmptyText>
+                  <InternalBacktestResultPanel executionId={application.latest_run.internal_backtest_execution_id} />
                 </>
               ) : null}
             </div>

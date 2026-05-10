@@ -236,6 +236,55 @@ const symbolApplicationsFixture = {
   ],
 };
 
+const internalExecutionStatusFixture = {
+  execution: {
+    id: 'execution_1',
+    strategy_rule_version_id: 'version_1',
+    status: 'succeeded',
+    requested_at: '2026-05-06T00:00:00.000Z',
+    started_at: '2026-05-06T00:01:00.000Z',
+    finished_at: '2026-05-06T00:10:00.000Z',
+    error_code: null,
+    error_message: null,
+    engine_version: 'ibtx-v0',
+    created_at: '2026-05-06T00:00:00.000Z',
+    updated_at: '2026-05-06T00:10:00.000Z',
+  },
+};
+
+const internalExecutionResultFixture = {
+  execution_id: 'execution_1',
+  strategy_rule_version_id: 'version_1',
+  status: 'succeeded',
+  result_summary: {
+    schema_version: '1.0',
+    summary_kind: 'engine_estimated',
+    market: 'JP_STOCK',
+    timeframe: 'D',
+    period: { from: '2025-01-01', to: '2026-01-01' },
+    metrics: {
+      bar_count: 245,
+      first_close: 100,
+      last_close: 112,
+      price_change: 12,
+      price_change_percent: 12,
+      period_high: 120,
+      period_low: 95,
+      range_percent: 26.32,
+    },
+    engine: { version: 'ibtx-v0' },
+    notes: 'sample internal result',
+  },
+  input_snapshot: {
+    data_source_snapshot: {
+      bar_count: 245,
+    },
+  },
+  artifact_pointer: null,
+  engine_version: 'ibtx-v0',
+  finished_at: '2026-05-06T00:10:00.000Z',
+};
+
 function getCommonSWRResult(key: string | null) {
   if (key === '/api/home?summary_type=latest') {
     return { isLoading: false, error: null, data: sideRailHomeFixture };
@@ -254,6 +303,12 @@ function getCommonSWRResult(key: string | null) {
   }
   if (key === '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc') {
     return { isLoading: false, error: null, mutate: vi.fn(), data: symbolApplicationsFixture };
+  }
+  if (key === '/api/internal-backtests/executions/execution_1') {
+    return { isLoading: false, error: null, data: internalExecutionStatusFixture };
+  }
+  if (key === '/api/internal-backtests/executions/execution_1/result') {
+    return { isLoading: false, error: null, data: internalExecutionResultFixture };
   }
   return null;
 }
@@ -393,7 +448,13 @@ describe('SymbolDetail', () => {
     expect(html).toContain('内部バックテスト');
     expect(html).toContain('内部バックテストを開始');
     expect(html).toContain('execution_id: execution_1');
-    expect(html).toContain('実行結果の詳細表示は後続タスクです。');
+    expect(html).toContain('内部バックテスト結果');
+    expect(html).toContain('execution status: succeeded');
+    expect(html).toContain('実行結果 summary を表示しています。');
+    expect(html).toContain('engine_estimated');
+    expect(html).toContain('bar_count');
+    expect(html).toContain('245');
+    expect(html).toContain('price_change_percent');
     expect(html).toContain('検証レポートを開く');
     expect(html).toContain('既存ストラテジーを選ぶ');
     expect(html).toContain('保存すると、この銘柄のストラテジー適用として記録されます。');
