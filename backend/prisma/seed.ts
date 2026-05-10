@@ -838,7 +838,14 @@ async function main() {
       } as Prisma.InputJsonValue,
       resultSummaryJson: {
         summary_kind: 'engine_actual',
+        period: {
+          from: '2026-01-01',
+          to: '2026-03-09',
+        },
         metrics: {
+          bar_count: 48,
+          price_change_percent: 3.2,
+          range_percent: 5.4,
           trade_count: 2,
           win_rate: 50,
           total_return_percent: 3.2,
@@ -848,9 +855,11 @@ async function main() {
         },
       } as Prisma.InputJsonValue,
       artifactPointerJson: {
+        kind: 'internal_backtest_result',
         type: 'engine_actual_artifact',
         execution_id: '00000000-0000-4000-8000-000000000501',
         path: '/api/internal-backtests/executions/00000000-0000-4000-8000-000000000501/artifacts/engine_actual/trades-and-equity',
+        summary_mode: 'engine_actual',
       } as Prisma.InputJsonValue,
     },
     create: {
@@ -869,7 +878,14 @@ async function main() {
       } as Prisma.InputJsonValue,
       resultSummaryJson: {
         summary_kind: 'engine_actual',
+        period: {
+          from: '2026-01-01',
+          to: '2026-03-09',
+        },
         metrics: {
+          bar_count: 48,
+          price_change_percent: 3.2,
+          range_percent: 5.4,
           trade_count: 2,
           win_rate: 50,
           total_return_percent: 3.2,
@@ -879,9 +895,11 @@ async function main() {
         },
       } as Prisma.InputJsonValue,
       artifactPointerJson: {
+        kind: 'internal_backtest_result',
         type: 'engine_actual_artifact',
         execution_id: '00000000-0000-4000-8000-000000000501',
         path: '/api/internal-backtests/executions/00000000-0000-4000-8000-000000000501/artifacts/engine_actual/trades-and-equity',
+        summary_mode: 'engine_actual',
       } as Prisma.InputJsonValue,
     },
   });
@@ -937,6 +955,121 @@ async function main() {
     },
   });
 
+  const internalBacktestReport = await prisma.backtest.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000405' },
+    update: {
+      strategyRuleVersionId: strategyVersion.id,
+      title: 'seed internal backtest report',
+      executionSource: 'internal_backtest',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'completed',
+      strategySnapshotJson: {
+        strategy_id: strategy.id,
+        strategy_version_id: strategyVersion.id,
+        natural_language_rule: strategyVersion.naturalLanguageRule,
+        generated_pine: strategyVersion.generatedPine,
+        market: strategyVersion.market,
+        timeframe: strategyVersion.timeframe,
+        warnings: [],
+        assumptions: ['seed internal backtest report'],
+        captured_at: new Date('2026-03-09T18:27:00+09:00').toISOString(),
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: '00000000-0000-4000-8000-000000000501',
+        input_snapshot: {
+          strategy_rule_version_id: strategyVersion.id,
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: { symbol: '7203', market: 'JP_STOCK' },
+          data_range: { from: '2026-01-01', to: '2026-03-09' },
+          engine_config: { summary_mode: 'engine_actual', preset: 'default_previous_close' },
+        },
+        result_summary: {
+          summary_kind: 'engine_actual',
+          period: {
+            from: '2026-01-01',
+            to: '2026-03-09',
+          },
+          metrics: {
+            bar_count: 48,
+            price_change_percent: 3.2,
+            range_percent: 5.4,
+            trade_count: 2,
+            win_rate: 50,
+            total_return_percent: 3.2,
+            max_drawdown_percent: -1.1,
+            average_trade_return_percent: 1.6,
+            profit_factor: 1.4,
+          },
+        },
+        artifact_pointer: {
+          kind: 'internal_backtest_result',
+          type: 'engine_actual_artifact',
+          execution_id: '00000000-0000-4000-8000-000000000501',
+          path: '/api/internal-backtests/executions/00000000-0000-4000-8000-000000000501/artifacts/engine_actual/trades-and-equity',
+          summary_mode: 'engine_actual',
+        },
+        reported_at: new Date('2026-03-09T18:27:00+09:00').toISOString(),
+      } as Prisma.InputJsonValue,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000405',
+      strategyRuleVersionId: strategyVersion.id,
+      title: 'seed internal backtest report',
+      executionSource: 'internal_backtest',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'completed',
+      strategySnapshotJson: {
+        strategy_id: strategy.id,
+        strategy_version_id: strategyVersion.id,
+        natural_language_rule: strategyVersion.naturalLanguageRule,
+        generated_pine: strategyVersion.generatedPine,
+        market: strategyVersion.market,
+        timeframe: strategyVersion.timeframe,
+        warnings: [],
+        assumptions: ['seed internal backtest report'],
+        captured_at: new Date('2026-03-09T18:27:00+09:00').toISOString(),
+        execution_source: 'internal_backtest',
+        internal_backtest_execution_id: '00000000-0000-4000-8000-000000000501',
+        input_snapshot: {
+          strategy_rule_version_id: strategyVersion.id,
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          execution_target: { symbol: '7203', market: 'JP_STOCK' },
+          data_range: { from: '2026-01-01', to: '2026-03-09' },
+          engine_config: { summary_mode: 'engine_actual', preset: 'default_previous_close' },
+        },
+        result_summary: {
+          summary_kind: 'engine_actual',
+          period: {
+            from: '2026-01-01',
+            to: '2026-03-09',
+          },
+          metrics: {
+            bar_count: 48,
+            price_change_percent: 3.2,
+            range_percent: 5.4,
+            trade_count: 2,
+            win_rate: 50,
+            total_return_percent: 3.2,
+            max_drawdown_percent: -1.1,
+            average_trade_return_percent: 1.6,
+            profit_factor: 1.4,
+          },
+        },
+        artifact_pointer: {
+          kind: 'internal_backtest_result',
+          type: 'engine_actual_artifact',
+          execution_id: '00000000-0000-4000-8000-000000000501',
+          path: '/api/internal-backtests/executions/00000000-0000-4000-8000-000000000501/artifacts/engine_actual/trades-and-equity',
+          summary_mode: 'engine_actual',
+        },
+        reported_at: new Date('2026-03-09T18:27:00+09:00').toISOString(),
+      } as Prisma.InputJsonValue,
+    },
+  });
+
   const symbolStrategyApplication = await prisma.symbolStrategyApplication.upsert({
     where: { id: '00000000-0000-4000-8000-000000000601' },
     update: {
@@ -987,11 +1120,41 @@ async function main() {
     },
   });
 
+  await prisma.symbolStrategyApplicationRun.upsert({
+    where: { id: '00000000-0000-4000-8000-000000000603' },
+    update: {
+      applicationId: symbolStrategyApplication.id,
+      runType: 'internal_backtest',
+      status: 'succeeded',
+      backtestId: internalBacktestReport.id,
+      backtestImportId: null,
+      internalBacktestExecutionId: '00000000-0000-4000-8000-000000000501',
+      startedAt: new Date('2026-03-09T18:25:00+09:00'),
+      finishedAt: new Date('2026-03-09T18:26:00+09:00'),
+      errorCode: null,
+      errorMessage: null,
+    },
+    create: {
+      id: '00000000-0000-4000-8000-000000000603',
+      applicationId: symbolStrategyApplication.id,
+      runType: 'internal_backtest',
+      status: 'succeeded',
+      backtestId: internalBacktestReport.id,
+      backtestImportId: null,
+      internalBacktestExecutionId: '00000000-0000-4000-8000-000000000501',
+      startedAt: new Date('2026-03-09T18:25:00+09:00'),
+      finishedAt: new Date('2026-03-09T18:26:00+09:00'),
+      errorCode: null,
+      errorMessage: null,
+    },
+  });
+
   console.log(`Seeded user: ${user.email}`);
   console.log(`Seeded symbols: ${Array.from(upsertedSymbols.values()).map((s) => `${s.symbolCode}:${s.id}`).join(', ')}`);
   console.log(`Seeded note: ${note.id}`);
   console.log(`Seeded comparison: ${comparisonSession.id}`);
   console.log(`Seeded backtest/import: ${backtest.id} / ${backtestImport.id}`);
+  console.log(`Seeded internal backtest report: ${internalBacktestReport.id}`);
   console.log(`Seeded backtest comparison: 00000000-0000-4000-8000-000000000404`);
   console.log(`Seeded symbol strategy application: ${symbolStrategyApplication.id}`);
   console.log('Seed completed for UI walkthrough dataset.');
