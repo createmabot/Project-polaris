@@ -563,6 +563,26 @@ export type SymbolStrategyApplicationItem = {
     created_at: string;
     updated_at: string;
   } | null;
+  latest_reports_by_source?: {
+    csv_import: {
+      backtest_id: string;
+      title: string;
+      execution_source: string;
+      status: string;
+      run_type: string;
+      run_status: string;
+      updated_at: string;
+    } | null;
+    internal_backtest: {
+      backtest_id: string;
+      title: string;
+      execution_source: string;
+      status: string;
+      run_type: string;
+      run_status: string;
+      updated_at: string;
+    } | null;
+  };
   run_count: number;
 };
 

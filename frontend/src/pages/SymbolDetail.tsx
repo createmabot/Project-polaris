@@ -48,6 +48,9 @@ const LABELS = {
   noSavedApplications: '保存済み application はまだありません。',
   latestRun: '最新run',
   latestBacktestReport: '最新検証レポート',
+  reportPair: 'CSV / internal reports',
+  csvImportReport: 'CSV import report',
+  internalBacktestReport: 'internal backtest report',
   noLatestRun: '最新run はまだありません。',
   noLatestBacktestReport: '最新検証レポートはまだありません。',
   runCount: 'run count',
@@ -496,6 +499,13 @@ function ApplicationLatestRunCard({
 }
 
 function ApplicationLatestReportCard({ application }: { application: SymbolStrategyApplicationItem }) {
+  const reportPair = application.latest_reports_by_source;
+  const reportPairItems = [
+    { key: 'csv_import', label: LABELS.csvImportReport, report: reportPair?.csv_import ?? null },
+    { key: 'internal_backtest', label: LABELS.internalBacktestReport, report: reportPair?.internal_backtest ?? null },
+  ];
+  const hasReportPair = reportPairItems.some((item) => item.report);
+
   return (
     <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
       <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
@@ -516,6 +526,27 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
       ) : (
         <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
       )}
+      {hasReportPair ? (
+        <div className="mt-3 border-t border-slate-200 pt-3">
+          <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportPair}</h6>
+          <div className="mt-2 grid gap-2">
+            {reportPairItems.map((item) => (
+              item.report ? (
+                <div key={item.key} className="rounded-md border border-slate-200 bg-white p-2">
+                  <KeyValueList className="gap-1 text-xs text-slate-500">
+                    <KeyValueRow label="report type">{item.label}</KeyValueRow>
+                    <KeyValueRow label="source"><code>{item.report.execution_source}</code></KeyValueRow>
+                    <KeyValueRow label="status"><StatusBadge status={item.report.status} className="px-2 py-0.5" /></KeyValueRow>
+                    <KeyValueRow label="run status"><StatusBadge status={item.report.run_status} className="px-2 py-0.5" /></KeyValueRow>
+                    <KeyValueRow label="updated">{formatDate(item.report.updated_at)}</KeyValueRow>
+                  </KeyValueList>
+                  <TextLink href={`/backtests/${item.report.backtest_id}`}>{item.report.title}</TextLink>
+                </div>
+              ) : null
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

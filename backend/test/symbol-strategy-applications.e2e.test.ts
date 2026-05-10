@@ -547,6 +547,21 @@ vi.mock('../src/db', () => {
           return true;
         }) ?? null;
       },
+      findMany: async ({ where }: any) => {
+        return runtime.runs
+          .filter((run) => {
+            if (where?.applicationId?.in && !where.applicationId.in.includes(run.applicationId)) return false;
+            if (where?.applicationId && !where.applicationId.in && run.applicationId !== where.applicationId) return false;
+            if (where?.runType?.in && !where.runType.in.includes(run.runType)) return false;
+            if (where?.runType && !where.runType.in && run.runType !== where.runType) return false;
+            if (where?.backtestId?.not === null && run.backtestId === null) return false;
+            return true;
+          })
+          .map((run) => ({
+            ...run,
+            backtest: run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null,
+          }));
+      },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:03:00.000Z');
         const run: RunRow = {
@@ -668,6 +683,22 @@ describe('symbol strategy applications route', () => {
       id: 'backtest-1',
       title: '2148 breakout report',
       execution_source: 'internal',
+    });
+    expect(application.latest_reports_by_source).toMatchObject({
+      csv_import: {
+        backtest_id: 'backtest-old',
+        title: 'old report',
+        execution_source: 'tradingview',
+        run_type: 'csv_import',
+        run_status: 'succeeded',
+      },
+      internal_backtest: {
+        backtest_id: 'backtest-1',
+        title: '2148 breakout report',
+        execution_source: 'internal',
+        run_type: 'internal_backtest',
+        run_status: 'succeeded',
+      },
     });
     expect(application.run_count).toBe(2);
 
@@ -794,6 +825,28 @@ describe('symbol strategy applications route', () => {
       },
     );
     const app = await createApp();
+
+    const symbolRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?status=active',
+    });
+
+    expect(symbolRes.statusCode).toBe(200);
+    const symbolApplication = symbolRes.json().data.applications.find((item: any) => item.id === 'app-internal-latest');
+    expect(symbolApplication.latest_run).toMatchObject({
+      id: 'run-internal-no-report',
+      run_type: 'internal_backtest',
+      backtest_id: null,
+      internal_backtest_execution_id: 'internal-no-report',
+    });
+    expect(symbolApplication.latest_backtest_report).toBeNull();
+    expect(symbolApplication.latest_reports_by_source).toMatchObject({
+      csv_import: {
+        backtest_id: 'backtest-csv-fallback',
+        title: 'CSV fallback report',
+      },
+      internal_backtest: null,
+    });
 
     const res = await app.inject({
       method: 'GET',
