@@ -46,6 +46,13 @@ const LABELS = {
   savedApplicationsLoading: '保存済み application を読み込み中...',
   savedApplicationsError: '保存済み application を取得できませんでした。',
   noSavedApplications: '保存済み application はまだありません。',
+  savedApplicationsFilter: '表示対象',
+  savedApplicationsFilterAll: 'すべて',
+  savedApplicationsFilterWithReports: 'reportあり',
+  savedApplicationsFilterWithoutReports: 'reportなし',
+  savedApplicationsSummary: 'application {shown} / {total} 件を表示中',
+  savedApplicationsReportSummary: 'CSV report: {csv} / internal report: {internal}',
+  noFilteredApplications: '条件に一致する application はありません。',
   latestRun: '最新run',
   latestBacktestReport: '最新検証レポート',
   reportPair: 'CSV / internal reports',
@@ -171,6 +178,18 @@ function reportOriginLabel(executionSource: string | null | undefined): string {
   if (executionSource === 'internal_backtest') return 'internal backtest report';
   if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'CSV import report';
   return 'report';
+}
+
+function hasCsvReport(application: SymbolStrategyApplicationItem): boolean {
+  return Boolean(application.latest_reports_by_source?.csv_import);
+}
+
+function hasInternalReport(application: SymbolStrategyApplicationItem): boolean {
+  return Boolean(application.latest_reports_by_source?.internal_backtest);
+}
+
+function hasAnyApplicationReport(application: SymbolStrategyApplicationItem): boolean {
+  return Boolean(application.latest_backtest_report) || hasCsvReport(application) || hasInternalReport(application);
 }
 
 function formatNumber(value: number | null | undefined, digits = 2): string {
@@ -806,6 +825,26 @@ function SavedStrategyApplicationsPanel({
   error: unknown;
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
+  const [applicationFilter, setApplicationFilter] = useState<'all' | 'with_reports' | 'without_reports'>('all');
+  const reportCounts = applications.reduce(
+    (acc, application) => {
+      if (hasCsvReport(application)) acc.csv += 1;
+      if (hasInternalReport(application)) acc.internal += 1;
+      return acc;
+    },
+    { csv: 0, internal: 0 },
+  );
+  const filteredApplications = applications.filter((application) => {
+    if (applicationFilter === 'with_reports') return hasAnyApplicationReport(application);
+    if (applicationFilter === 'without_reports') return !hasAnyApplicationReport(application);
+    return true;
+  });
+  const filterOptions = [
+    { value: 'all' as const, label: LABELS.savedApplicationsFilterAll },
+    { value: 'with_reports' as const, label: LABELS.savedApplicationsFilterWithReports },
+    { value: 'without_reports' as const, label: LABELS.savedApplicationsFilterWithoutReports },
+  ];
+
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
       <h3 className="text-base font-semibold text-slate-900">{LABELS.savedApplicationsTitle}</h3>
@@ -817,11 +856,44 @@ function SavedStrategyApplicationsPanel({
       ) : applications.length === 0 ? (
         <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
       ) : (
-        <div className="mt-3 grid gap-3">
-          {applications.map((application) => (
-            <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
-          ))}
-        </div>
+        <>
+          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsFilter}</span>
+              {filterOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={applicationFilter === option.value ? 'primary' : 'secondary'}
+                  onClick={() => setApplicationFilter(option.value)}
+                  className="py-1 text-xs"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+              <span>
+                {LABELS.savedApplicationsSummary
+                  .replace('{shown}', String(filteredApplications.length))
+                  .replace('{total}', String(applications.length))}
+              </span>
+              <span>
+                {LABELS.savedApplicationsReportSummary
+                  .replace('{csv}', String(reportCounts.csv))
+                  .replace('{internal}', String(reportCounts.internal))}
+              </span>
+            </div>
+          </div>
+          {filteredApplications.length === 0 ? (
+            <EmptyState title={LABELS.noFilteredApplications} className="mt-3" />
+          ) : (
+            <div className="mt-3 grid gap-3">
+              {filteredApplications.map((application) => (
+                <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
