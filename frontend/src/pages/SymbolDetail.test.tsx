@@ -198,6 +198,26 @@ const symbolApplicationsFixture = {
         created_at: '2026-05-04T00:00:00.000Z',
         updated_at: '2026-05-04T00:00:00.000Z',
       },
+      latest_reports_by_source: {
+        csv_import: {
+          backtest_id: 'backtest_1',
+          title: '7203 strategy report',
+          execution_source: 'tradingview',
+          status: 'ready',
+          run_type: 'csv_import',
+          run_status: 'succeeded',
+          updated_at: '2026-05-04T00:00:00.000Z',
+        },
+        internal_backtest: {
+          backtest_id: 'backtest_internal_1',
+          title: '7203 internal report',
+          execution_source: 'internal_backtest',
+          status: 'completed',
+          run_type: 'internal_backtest',
+          run_status: 'succeeded',
+          updated_at: '2026-05-07T00:00:00.000Z',
+        },
+      },
       run_count: 1,
     },
     {
@@ -231,6 +251,10 @@ const symbolApplicationsFixture = {
         internal_backtest_execution_id: 'execution_1',
       },
       latest_backtest_report: null,
+      latest_reports_by_source: {
+        csv_import: null,
+        internal_backtest: null,
+      },
       run_count: 1,
     },
   ],
@@ -465,6 +489,11 @@ describe('SymbolDetail', () => {
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('report type:</strong> CSV import report');
     expect(html).toContain('source:</strong> <code>tradingview</code>');
+    expect(html).toContain('CSV / internal reports');
+    expect(html).toContain('CSV import report');
+    expect(html).toContain('internal backtest report');
+    expect(html).toContain('7203 internal report');
+    expect(html).toContain('href="/backtests/backtest_internal_1"');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('CSVテキスト');
     expect(html).toContain('CSV取込を実行');

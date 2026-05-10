@@ -109,9 +109,61 @@ function normalizeOptionalBodyText(value: unknown, fieldName: string): string | 
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function toSymbolApplicationView(application: any) {
+type LatestApplicationReportRuns = {
+  latest: any | null;
+  csv_import: any | null;
+  internal_backtest: any | null;
+};
+
+function getReportRunUpdatedAt(run: any): number {
+  return new Date(run.backtest?.updatedAt ?? run.updatedAt).getTime();
+}
+
+function buildLatestReportRunsByApplication(runs: any[]): Map<string, LatestApplicationReportRuns> {
+  const result = new Map<string, LatestApplicationReportRuns>();
+  const sortedRuns = [...runs].sort((a, b) => getReportRunUpdatedAt(b) - getReportRunUpdatedAt(a));
+  for (const run of sortedRuns) {
+    const current = result.get(run.applicationId) ?? {
+      latest: null,
+      csv_import: null,
+      internal_backtest: null,
+    };
+    if (!current.latest) {
+      current.latest = run;
+    }
+    if (run.runType === 'csv_import' && !current.csv_import) {
+      current.csv_import = run;
+    }
+    if (run.runType === 'internal_backtest' && !current.internal_backtest) {
+      current.internal_backtest = run;
+    }
+    result.set(run.applicationId, current);
+  }
+  return result;
+}
+
+function toSymbolApplicationView(application: any, latestReportRuns?: LatestApplicationReportRuns) {
   const latestRun = application.runs?.[0] ?? null;
-  const latestBacktest = latestRun?.backtest ?? null;
+  const latestBacktestRun = latestReportRuns?.latest ?? application.runs?.find((run: any) => run.backtest) ?? null;
+  const latestBacktest = latestBacktestRun?.backtest ?? null;
+  const toReportSummary = (run: any | null) => {
+    if (!run?.backtest) return null;
+    return {
+      backtest_id: run.backtest.id,
+      title: run.backtest.title,
+      execution_source: run.backtest.executionSource,
+      status: run.backtest.status,
+      run_type: run.runType,
+      run_status: run.status,
+      updated_at: run.backtest.updatedAt,
+    };
+  };
+  const latestCsvReportRun = latestReportRuns?.csv_import
+    ?? application.runs?.find((run: any) => run.runType === 'csv_import' && run.backtest)
+    ?? null;
+  const latestInternalReportRun = latestReportRuns?.internal_backtest
+    ?? application.runs?.find((run: any) => run.runType === 'internal_backtest' && run.backtest)
+    ?? null;
   return {
     id: application.id,
     status: application.status,
@@ -154,8 +206,12 @@ function toSymbolApplicationView(application: any) {
           timeframe: latestBacktest.timeframe,
           created_at: latestBacktest.createdAt,
           updated_at: latestBacktest.updatedAt,
-        }
+      }
       : null,
+    latest_reports_by_source: {
+      csv_import: toReportSummary(latestCsvReportRun),
+      internal_backtest: toReportSummary(latestInternalReportRun),
+    },
     run_count: application._count.runs,
   };
 }
@@ -583,6 +639,31 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         },
       }),
     ]);
+    const applicationIds = applications.map((application) => application.id);
+    const reportRuns = applicationIds.length > 0
+      ? await prisma.symbolStrategyApplicationRun.findMany({
+          where: {
+            applicationId: { in: applicationIds },
+            runType: { in: ['csv_import', 'internal_backtest'] },
+            backtestId: { not: null },
+          },
+          include: {
+            backtest: {
+              select: {
+                id: true,
+                title: true,
+                status: true,
+                executionSource: true,
+                market: true,
+                timeframe: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
+        })
+      : [];
+    const latestReportRunsByApplication = buildLatestReportRunsByApplication(reportRuns);
 
     return reply.status(200).send(formatSuccess(request, {
       symbol: {
@@ -605,7 +686,9 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         has_next: skip + applications.length < total,
         has_prev: page > 1,
       },
-      applications: applications.map(toSymbolApplicationView),
+      applications: applications.map((application) => (
+        toSymbolApplicationView(application, latestReportRunsByApplication.get(application.id))
+      )),
     }));
   });
 
