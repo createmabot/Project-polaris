@@ -14,6 +14,7 @@ import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import LoadingState from '../components/ui/LoadingState';
+import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
 
 const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
@@ -116,7 +117,9 @@ function StrategyDetail(): JSX.Element {
                 <dl className="grid gap-2 text-sm text-slate-700 md:grid-cols-3">
                   <div>
                     <dt className="text-xs font-medium text-slate-500">status</dt>
-                    <dd>{strategy?.status ?? '-'}</dd>
+                    <dd>
+                      <StatusBadge status={strategy?.status} />
+                    </dd>
                   </div>
                   <div>
                     <dt className="text-xs font-medium text-slate-500">created</dt>
@@ -202,9 +205,7 @@ function StrategyDetail(): JSX.Element {
                         {version.market} / {version.timeframe}
                       </p>
                     </div>
-                    <span className="w-fit rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200">
-                      {version.status}
-                    </span>
+                    <StatusBadge status={version.status} />
                   </div>
                   <dl className="mt-3 grid gap-2 text-sm text-slate-700 md:grid-cols-2">
                     <div>
