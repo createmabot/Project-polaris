@@ -832,6 +832,15 @@ export type BacktestDetailData = {
       market: string;
       timeframe: string;
     };
+    related_reports?: Array<{
+      backtest_id: string;
+      title: string;
+      execution_source: string;
+      status: string;
+      run_type: string;
+      run_status: string;
+      updated_at: string;
+    }>;
   } | null;
 };
 

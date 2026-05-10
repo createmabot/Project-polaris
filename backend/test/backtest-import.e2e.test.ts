@@ -310,6 +310,20 @@ vi.mock('../src/db', () => {
           },
         };
       },
+      findMany: async ({ where }: any) => {
+        let rows = [...runtime.applicationRuns.values()];
+        if (where?.applicationId) {
+          rows = rows.filter((run) => run.applicationId === where.applicationId);
+        }
+        if (where?.backtestId?.not === null) {
+          rows = rows.filter((run) => run.backtestId !== null);
+        }
+        rows = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()).slice(0, 10);
+        return rows.map((run) => ({
+          ...run,
+          backtest: run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null,
+        }));
+      },
     },
   };
 
@@ -456,6 +470,18 @@ describe('backtest import vertical slice', () => {
       createdAt: now,
       updatedAt: now,
     });
+    runtime.backtests.set('bt-internal-related', {
+      id: 'bt-internal-related',
+      strategyRuleVersionId: 'ver-1',
+      strategySnapshotJson: null,
+      title: 'internal related report',
+      executionSource: 'internal_backtest',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'completed',
+      createdAt: new Date('2026-05-02T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-02T00:00:00.000Z'),
+    });
     runtime.applicationRuns.set('run-ssa', {
       id: 'run-ssa',
       applicationId: 'app-1',
@@ -464,6 +490,15 @@ describe('backtest import vertical slice', () => {
       backtestId: 'bt-ssa',
       createdAt: now,
       updatedAt: now,
+    });
+    runtime.applicationRuns.set('run-internal-related', {
+      id: 'run-internal-related',
+      applicationId: 'app-1',
+      runType: 'internal_backtest',
+      status: 'succeeded',
+      backtestId: 'bt-internal-related',
+      createdAt: new Date('2026-05-02T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-02T00:00:00.000Z'),
     });
 
     const detail = await app.inject({
@@ -497,6 +532,17 @@ describe('backtest import vertical slice', () => {
         timeframe: 'D',
       },
     });
+    expect(detail.json().data.symbol_strategy_application.related_reports).toEqual([
+      {
+        backtest_id: 'bt-internal-related',
+        title: 'internal related report',
+        execution_source: 'internal_backtest',
+        status: 'completed',
+        run_type: 'internal_backtest',
+        run_status: 'succeeded',
+        updated_at: '2026-05-02T00:00:00.000Z',
+      },
+    ]);
 
     await app.close();
   });
@@ -545,7 +591,6 @@ describe('backtest import vertical slice', () => {
       createdAt: now,
       updatedAt: now,
     });
-
     const detail = await app.inject({
       method: 'GET',
       url: '/api/backtests/bt-internal',
