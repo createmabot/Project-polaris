@@ -3,6 +3,8 @@ import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
 
 type BacktestDetailProps = {
   params: { backtestId: string };
@@ -437,7 +439,13 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   } = useSWR<BacktestComparisonData>(comparisonApiPath, swrFetcher);
 
   if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
-  if (error) return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
+  if (error) {
+    return (
+      <div style={{ padding: '2rem' }}>
+        <ErrorState title={`エラー: ${error.message}`} />
+      </div>
+    );
+  }
   if (!data) return null;
 
   const latestImport = data.latest_import;
@@ -582,13 +590,12 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>取込状態</h2>
         {!latestImport ? (
-          <div style={{ color: '#666' }}>
+          <EmptyState title="取込データはまだありません。">
             {isInternalBacktestReport ? (
               <p style={{ marginTop: 0 }}>internal_backtest report のため BacktestImport は作成されません。</p>
             ) : null}
-            <p style={{ marginTop: 0 }}>取込データはまだありません。</p>
             <p style={{ marginBottom: 0 }}>`/strategy-lab` で backtest を作成し、CSV を取り込んでください。</p>
-          </div>
+          </EmptyState>
         ) : (
           <>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -652,7 +659,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>主要指標</h2>
         {!summary ? (
-          <p style={{ margin: 0, color: '#666' }}>解析済みサマリーはまだありません。</p>
+          <EmptyState title="解析済みサマリーはまだありません。" />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
             {metricCard('総取引数', formatNumber(summary.totalTrades, 0))}
@@ -822,8 +829,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             </div>
           </>
         ) : (
-          <div style={{ color: '#666' }}>
-            <p style={{ marginTop: 0, marginBottom: '0.35rem' }}>AI総評は未生成です。</p>
+          <EmptyState title="AI総評は未生成です。">
             <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
               loading / unavailable / empty の最小状態で表示しています。
             </p>
@@ -844,7 +850,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             {generateAiReviewError && (
               <div style={{ marginTop: '0.5rem', color: '#a10000' }}>{generateAiReviewError}</div>
             )}
-          </div>
+          </EmptyState>
         )}
       </section>
 
