@@ -331,6 +331,30 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
     return null;
   }
 
+  const relatedRuns = await prisma.symbolStrategyApplicationRun.findMany({
+    where: {
+      applicationId: run.applicationId,
+      backtestId: {
+        not: null,
+      },
+    },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+    take: 10,
+    include: {
+      backtest: {
+        select: {
+          id: true,
+          title: true,
+          executionSource: true,
+          status: true,
+          updatedAt: true,
+        },
+      },
+    },
+  });
+
   return {
     application_id: run.application.id,
     application_status: run.application.status,
@@ -360,6 +384,17 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       market: run.application.strategyRuleVersion.market,
       timeframe: run.application.strategyRuleVersion.timeframe,
     },
+    related_reports: relatedRuns
+      .filter((relatedRun) => relatedRun.backtest && relatedRun.backtestId !== backtestId)
+      .map((relatedRun) => ({
+        backtest_id: relatedRun.backtest!.id,
+        title: relatedRun.backtest!.title,
+        execution_source: relatedRun.backtest!.executionSource,
+        status: relatedRun.backtest!.status,
+        run_type: relatedRun.runType,
+        run_status: relatedRun.status,
+        updated_at: relatedRun.backtest!.updatedAt,
+      })),
   };
 }
 

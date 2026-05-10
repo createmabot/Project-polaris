@@ -38,6 +38,12 @@ function formatDateTime(value: string | null | undefined): string {
   return date.toLocaleString('ja-JP');
 }
 
+function reportOriginLabel(executionSource: string | null | undefined): string {
+  if (executionSource === 'internal_backtest') return 'internal backtest report';
+  if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'CSV import report';
+  return 'report';
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -247,6 +253,33 @@ function BacklinkActions({ symbolStrategyApplication }: { symbolStrategyApplicat
   );
 }
 
+function RelatedApplicationReports({ relatedReports }: { relatedReports: NonNullable<SymbolStrategyApplicationBacklink['related_reports']> }) {
+  if (relatedReports.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: '1rem' }}>
+      <h3 style={{ margin: '0 0 0.5rem' }}>同じ application の関連レポート</h3>
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        {relatedReports.map((report) => (
+          <div key={report.backtest_id} style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
+            <Link href={`/backtests/${report.backtest_id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
+              {report.title}
+            </Link>
+            <KeyValueList className="mt-2 gap-1 text-sm">
+              <KeyValueRow label="report type">{reportOriginLabel(report.execution_source)}</KeyValueRow>
+              <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+              <KeyValueRow label="status"><StatusBadge status={report.status} /></KeyValueRow>
+              <KeyValueRow label="run type"><code>{report.run_type}</code></KeyValueRow>
+              <KeyValueRow label="run status"><StatusBadge status={report.run_status} /></KeyValueRow>
+              <KeyValueRow label="updated">{formatDateTime(report.updated_at)}</KeyValueRow>
+            </KeyValueList>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SymbolStrategyApplicationBacklinkSection({
   symbolStrategyApplication,
 }: {
@@ -298,6 +331,7 @@ function SymbolStrategyApplicationBacklinkSection({
         </BacklinkInfoCard>
       </div>
       <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
+      <RelatedApplicationReports relatedReports={symbolStrategyApplication.related_reports ?? []} />
       <p style={{ marginBottom: 0, marginTop: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
         BacktestDetail は検証レポート詳細として維持し、application parent への backlink だけを表示します。
       </p>

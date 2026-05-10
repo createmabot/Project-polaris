@@ -614,6 +614,17 @@ describe('BacktestDetail', () => {
             market: 'JP_STOCK',
             timeframe: 'D',
           },
+          related_reports: [
+            {
+              backtest_id: 'bt-internal',
+              title: 'internal related report',
+              execution_source: 'internal_backtest',
+              status: 'completed',
+              run_type: 'internal_backtest',
+              run_status: 'succeeded',
+              updated_at: '2026-01-03T00:00:00.000Z',
+            },
+          ],
         },
       },
     });
@@ -638,6 +649,11 @@ describe('BacktestDetail', () => {
     expect(html).toContain('StrategyDetail に戻る');
     expect(html).toContain('href="/strategy-versions/ver-1"');
     expect(html).toContain('StrategyVersionDetail に戻る');
+    expect(html).toContain('同じ application の関連レポート');
+    expect(html).toContain('internal related report');
+    expect(html).toContain('href="/backtests/bt-internal"');
+    expect(html).toContain('report type:</strong> internal backtest report');
+    expect(html).toContain('source:</strong> <code>internal_backtest</code>');
   });
 
   it('renders internal backtest report without imports', () => {
