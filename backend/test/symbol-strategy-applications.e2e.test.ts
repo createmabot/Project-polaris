@@ -797,6 +797,22 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?report_presence=without_reports&report_source=csv_import',
     });
+    const latestInternalRunRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_type=internal_backtest',
+    });
+    const latestCsvRunRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_type=csv_import',
+    });
+    const latestSucceededRunRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_status=succeeded',
+    });
+    const combinedRunAndReportRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_type=internal_backtest&report_source=csv_import',
+    });
 
     expect(allRes.statusCode).toBe(200);
     expect(allRes.json().data.query).toMatchObject({
@@ -828,6 +844,20 @@ describe('symbol strategy applications route', () => {
     expect(withCsvReportsRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
     expect(conflictingReportFiltersRes.statusCode).toBe(200);
     expect(conflictingReportFiltersRes.json().data.applications).toEqual([]);
+    expect(latestInternalRunRes.statusCode).toBe(200);
+    expect(latestInternalRunRes.json().data.query.run_type).toBe('internal_backtest');
+    expect(latestInternalRunRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(latestCsvRunRes.statusCode).toBe(200);
+    expect(latestCsvRunRes.json().data.applications).toEqual([]);
+    expect(latestSucceededRunRes.statusCode).toBe(200);
+    expect(latestSucceededRunRes.json().data.query.run_status).toBe('succeeded');
+    expect(latestSucceededRunRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(combinedRunAndReportRes.statusCode).toBe(200);
+    expect(combinedRunAndReportRes.json().data.query).toMatchObject({
+      report_source: 'csv_import',
+      run_type: 'internal_backtest',
+    });
+    expect(combinedRunAndReportRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
 
     await app.close();
   });
@@ -1067,6 +1097,14 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?report_source=manual',
     });
+    const invalidRunType = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_type=manual',
+    });
+    const invalidRunStatus = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?run_status=done',
+    });
 
     expect(invalidStatus.statusCode).toBe(400);
     expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
@@ -1076,6 +1114,10 @@ describe('symbol strategy applications route', () => {
     expect(invalidReportPresence.json().error.code).toBe('VALIDATION_ERROR');
     expect(invalidReportSource.statusCode).toBe(400);
     expect(invalidReportSource.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidRunType.statusCode).toBe(400);
+    expect(invalidRunType.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidRunStatus.statusCode).toBe(400);
+    expect(invalidRunStatus.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });

@@ -111,7 +111,7 @@ test.describe('Home -> SymbolDetail smoke', () => {
     await page.goto('/backtests/00000000-0000-4000-8000-000000000405');
 
     await expect(page.getByRole('heading', { level: 1, name: '検証レポート（詳細）' })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('seed internal backtest report')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'seed internal backtest report' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'internal backtest report' })).toBeVisible();
     await expect(page.getByText('internal_backtest report では BacktestImport は作成されません。')).toBeVisible();
     await expect(page.getByText('00000000-0000-4000-8000-000000000501').first()).toBeVisible();

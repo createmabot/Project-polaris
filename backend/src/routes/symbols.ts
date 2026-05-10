@@ -15,6 +15,8 @@ type SymbolSummaryScope = 'thesis' | 'latest';
 type SymbolApplicationStatus = 'active' | 'archived' | 'all';
 type SymbolApplicationReportPresence = 'with_reports' | 'without_reports';
 type SymbolApplicationReportSource = 'csv_import' | 'internal_backtest';
+type SymbolApplicationRunType = 'csv_import' | 'internal_backtest';
+type SymbolApplicationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 type SymbolApplicationSort = 'created_at' | 'updated_at';
 type SortOrder = 'asc' | 'desc';
 
@@ -82,6 +84,34 @@ function buildApplicationReportRunWhere(reportSource: SymbolApplicationReportSou
     backtestId: { not: null },
     ...(reportSource ? { runType: reportSource } : {}),
   };
+}
+
+function normalizeApplicationRunType(input?: string): SymbolApplicationRunType | null {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'csv_import' || normalized === 'internal_backtest') {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'run_type must be one of csv_import|internal_backtest');
+}
+
+function normalizeApplicationRunStatus(input?: string): SymbolApplicationRunStatus | null {
+  const normalized = (input ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized === 'queued'
+    || normalized === 'running'
+    || normalized === 'succeeded'
+    || normalized === 'failed'
+    || normalized === 'canceled'
+  ) {
+    return normalized;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'run_status must be one of queued|running|succeeded|failed|canceled');
 }
 
 function normalizePositiveInt(input: string | undefined, fallback: number, fieldName: string): number {
@@ -585,6 +615,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         status?: string;
         report_presence?: string;
         report_source?: string;
+        run_type?: string;
+        run_status?: string;
         page?: string;
         limit?: string;
         sort?: string;
@@ -597,6 +629,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     const status = normalizeApplicationStatus(request.query.status);
     const reportPresence = normalizeApplicationReportPresence(request.query.report_presence);
     const reportSource = normalizeApplicationReportSource(request.query.report_source);
+    const runType = normalizeApplicationRunType(request.query.run_type);
+    const runStatus = normalizeApplicationRunStatus(request.query.run_status);
     const page = normalizePositiveInt(request.query.page, 1, 'page');
     const limit = normalizeApplicationLimit(request.query.limit);
     const sort = normalizeApplicationSort(request.query.sort);
@@ -650,58 +684,79 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     const orderBy = sort === 'created_at'
       ? { createdAt: order }
       : { updatedAt: order };
-
-    const [total, applications] = await Promise.all([
-      prisma.symbolStrategyApplication.count({ where }),
-      prisma.symbolStrategyApplication.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limit,
+    const applicationInclude = {
+      strategyRule: {
+        select: {
+          id: true,
+          title: true,
+          status: true,
+        },
+      },
+      strategyRuleVersion: {
+        select: {
+          id: true,
+          market: true,
+          timeframe: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
+      _count: {
+        select: {
+          runs: true,
+        },
+      },
+      runs: {
+        orderBy: { createdAt: 'desc' as const },
+        take: 1,
         include: {
-          strategyRule: {
+          backtest: {
             select: {
               id: true,
               title: true,
               status: true,
-            },
-          },
-          strategyRuleVersion: {
-            select: {
-              id: true,
+              executionSource: true,
               market: true,
               timeframe: true,
-              status: true,
               createdAt: true,
               updatedAt: true,
             },
           },
-          _count: {
-            select: {
-              runs: true,
-            },
-          },
-          runs: {
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            include: {
-              backtest: {
-                select: {
-                  id: true,
-                  title: true,
-                  status: true,
-                  executionSource: true,
-                  market: true,
-                  timeframe: true,
-                  createdAt: true,
-                  updatedAt: true,
-                },
-              },
-            },
-          },
         },
-      }),
-    ]);
+      },
+    };
+    const hasLatestRunFilter = Boolean(runType || runStatus);
+
+    let total: number;
+    let applications;
+    if (hasLatestRunFilter) {
+      const candidates = await prisma.symbolStrategyApplication.findMany({
+        where,
+        orderBy,
+        include: applicationInclude,
+      });
+      const filtered = candidates.filter((application) => {
+        const latestRun = application.runs[0] ?? null;
+        if (!latestRun) return false;
+        if (runType && latestRun.runType !== runType) return false;
+        if (runStatus && latestRun.status !== runStatus) return false;
+        return true;
+      });
+      total = filtered.length;
+      applications = filtered.slice(skip, skip + limit);
+    } else {
+      [total, applications] = await Promise.all([
+        prisma.symbolStrategyApplication.count({ where }),
+        prisma.symbolStrategyApplication.findMany({
+          where,
+          orderBy,
+          skip,
+          take: limit,
+          include: applicationInclude,
+        }),
+      ]);
+    }
     const applicationIds = applications.map((application) => application.id);
     const reportRuns = applicationIds.length > 0
       ? await prisma.symbolStrategyApplicationRun.findMany({
@@ -741,6 +796,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         status,
         report_presence: reportPresence,
         report_source: reportSource,
+        run_type: runType,
+        run_status: runStatus,
         sort,
         order,
       },
