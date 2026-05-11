@@ -549,3 +549,9 @@ pnpm exec prisma db seed
 - Application Detail run history now supports read-only `run_type` and `run_status` filtering through the existing runs endpoint.
 - Run history pagination uses a minimal previous / next UI backed by the existing pagination response.
 - Reports history remains unchanged in this pass.
+
+### Application Detail reports usability pass
+
+- Application Detail report history now supports read-only `execution_source` and report `status` filtering through the existing reports endpoint.
+- Report history pagination uses a minimal previous / next UI backed by the existing pagination response.
+- The reports section explains why some metrics may be shown as unavailable when source summaries are missing.

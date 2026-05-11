@@ -41,6 +41,21 @@ const LABELS = {
   runsFailed: 'failed',
   runsCanceled: 'canceled',
   runsSummary: 'run {shown} / {total} 件を表示中',
+  reportsFilter: 'report履歴 filter',
+  reportsSourceFilter: 'execution source',
+  reportsStatusFilter: 'report status',
+  reportsAll: 'すべて',
+  reportsTradingView: 'TradingView',
+  reportsInternalBacktest: 'internal',
+  reportsImported: 'imported',
+  reportsCompleted: 'completed',
+  reportsImportFailed: 'import_failed',
+  reportsFailed: 'failed',
+  reportsSummary: 'report {shown} / {total} 件を表示中',
+  metricsMissingNote:
+    'metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。',
+  metricsMissingDetail:
+    'CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。',
   previousPage: '前へ',
   nextPage: '次へ',
   pageSummary: 'page {page}',
@@ -54,6 +69,8 @@ const LABELS = {
 
 type RunTypeFilter = 'all' | 'csv_import' | 'internal_backtest';
 type RunStatusFilter = 'all' | 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+type ReportExecutionSourceFilter = 'all' | 'tradingview' | 'internal_backtest';
+type ReportStatusFilter = 'all' | 'imported' | 'completed' | 'import_failed' | 'failed';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -88,17 +105,41 @@ function buildRunsPath(applicationId: string, page: number, runType: RunTypeFilt
   return `/api/symbol-strategy-applications/${applicationId}/runs?${params.toString()}`;
 }
 
+function buildReportsPath(
+  applicationId: string,
+  page: number,
+  executionSource: ReportExecutionSourceFilter,
+  reportStatus: ReportStatusFilter,
+): string {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: '20',
+    sort: 'created_at',
+    order: 'desc',
+  });
+  if (executionSource !== 'all') {
+    params.set('execution_source', executionSource);
+  }
+  if (reportStatus !== 'all') {
+    params.set('status', reportStatus);
+  }
+  return `/api/symbol-strategy-applications/${applicationId}/reports?${params.toString()}`;
+}
+
 export default function ApplicationDetail() {
   const [, params] = useRoute('/symbol-strategy-applications/:applicationId');
   const applicationId = params?.applicationId;
   const [runsPage, setRunsPage] = useState(1);
   const [runTypeFilter, setRunTypeFilter] = useState<RunTypeFilter>('all');
   const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>('all');
+  const [reportsPage, setReportsPage] = useState(1);
+  const [reportExecutionSourceFilter, setReportExecutionSourceFilter] = useState<ReportExecutionSourceFilter>('all');
+  const [reportStatusFilter, setReportStatusFilter] = useState<ReportStatusFilter>('all');
   const runsPath = applicationId
     ? buildRunsPath(applicationId, runsPage, runTypeFilter, runStatusFilter)
     : null;
   const reportsPath = applicationId
-    ? `/api/symbol-strategy-applications/${applicationId}/reports?page=1&limit=20&sort=created_at&order=desc`
+    ? buildReportsPath(applicationId, reportsPage, reportExecutionSourceFilter, reportStatusFilter)
     : null;
   const {
     data: runsData,
@@ -146,6 +187,18 @@ export default function ApplicationDetail() {
     { value: 'failed' as const, label: LABELS.runsFailed },
     { value: 'canceled' as const, label: LABELS.runsCanceled },
   ];
+  const reportExecutionSourceOptions = [
+    { value: 'all' as const, label: LABELS.reportsAll },
+    { value: 'tradingview' as const, label: LABELS.reportsTradingView },
+    { value: 'internal_backtest' as const, label: LABELS.reportsInternalBacktest },
+  ];
+  const reportStatusOptions = [
+    { value: 'all' as const, label: LABELS.reportsAll },
+    { value: 'imported' as const, label: LABELS.reportsImported },
+    { value: 'completed' as const, label: LABELS.reportsCompleted },
+    { value: 'import_failed' as const, label: LABELS.reportsImportFailed },
+    { value: 'failed' as const, label: LABELS.reportsFailed },
+  ];
 
   function updateRunTypeFilter(nextFilter: RunTypeFilter) {
     setRunTypeFilter(nextFilter);
@@ -155,6 +208,16 @@ export default function ApplicationDetail() {
   function updateRunStatusFilter(nextFilter: RunStatusFilter) {
     setRunStatusFilter(nextFilter);
     setRunsPage(1);
+  }
+
+  function updateReportExecutionSourceFilter(nextFilter: ReportExecutionSourceFilter) {
+    setReportExecutionSourceFilter(nextFilter);
+    setReportsPage(1);
+  }
+
+  function updateReportStatusFilter(nextFilter: ReportStatusFilter) {
+    setReportStatusFilter(nextFilter);
+    setReportsPage(1);
   }
 
   return (
@@ -314,6 +377,46 @@ export default function ApplicationDetail() {
 
         <div id="reports">
           <SectionCard title={LABELS.reports}>
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsFilter}</h3>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsSourceFilter}</span>
+                {reportExecutionSourceOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={reportExecutionSourceFilter === option.value ? 'primary' : 'secondary'}
+                    onClick={() => updateReportExecutionSourceFilter(option.value)}
+                    className="py-1 text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsStatusFilter}</span>
+                {reportStatusOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={reportStatusFilter === option.value ? 'primary' : 'secondary'}
+                    onClick={() => updateReportStatusFilter(option.value)}
+                    className="py-1 text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                {reportsData
+                  ? LABELS.reportsSummary
+                    .replace('{shown}', String(reportsData.reports.length))
+                    .replace('{total}', String(reportsData.pagination.total))
+                  : LABELS.reportsSummary.replace('{shown}', '-').replace('{total}', '-')}
+              </div>
+            </div>
+            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+              <p>{LABELS.metricsMissingNote}</p>
+              <p>{LABELS.metricsMissingDetail}</p>
+            </div>
             {isReportsLoading ? (
               <LoadingState title={LABELS.applicationLoading} />
             ) : reportsError ? (
@@ -355,6 +458,31 @@ export default function ApplicationDetail() {
               ))}
               </div>
             )}
+            {reportsData ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+                <div className="text-xs text-slate-500">
+                  {LABELS.pageSummary.replace('{page}', String(reportsData.pagination.page))}
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setReportsPage((page) => Math.max(1, page - 1))}
+                    disabled={!reportsData.pagination.has_prev}
+                    className="py-1 text-xs"
+                  >
+                    {LABELS.previousPage}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setReportsPage((page) => page + 1)}
+                    disabled={!reportsData.pagination.has_next}
+                    className="py-1 text-xs"
+                  >
+                    {LABELS.nextPage}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </SectionCard>
         </div>
       </div>
