@@ -1,7 +1,14 @@
 import { FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { Link, useLocation } from 'wouter';
+import { useLocation } from 'wouter';
 import { ApiError, postApi, swrFetcher } from '../api/client';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import SectionCard from '../components/ui/SectionCard';
+import StatusBadge from '../components/ui/StatusBadge';
+import TextLink from '../components/ui/TextLink';
 import {
   BacktestCreateData,
   BacktestImportData,
@@ -204,9 +211,9 @@ export default function StrategyLab() {
   return (
     <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
       <div style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
-          <Link href='/backtests' style={{ color: '#666', textDecoration: 'none' }}>履歴一覧を見る</Link>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <TextLink href='/' className='text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
+          <TextLink href='/backtests' className='text-slate-600 no-underline hover:underline'>履歴一覧を見る</TextLink>
         </div>
       </div>
 
@@ -215,27 +222,32 @@ export default function StrategyLab() {
         自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
       </p>
 
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem', marginTop: '1.2rem' }}>
-        <label style={{ display: 'grid', gap: '0.4rem' }}>
-          <span>戦略タイトル</span>
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
-          />
-        </label>
+      <SectionCard
+        title='ルール入力'
+        description='自然言語ルール、対象市場、時間足を指定して Pine 生成まで実行します。'
+        className='mt-5'
+      >
+        <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem' }}>
+          <label style={{ display: 'grid', gap: '0.4rem' }}>
+            <span>戦略タイトル</span>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
+            />
+          </label>
 
-        <label style={{ display: 'grid', gap: '0.4rem' }}>
-          <span>自然言語ルール</span>
-          <textarea
-            value={naturalLanguageRule}
-            onChange={(event) => setNaturalLanguageRule(event.target.value)}
-            rows={7}
-            style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px', resize: 'vertical' }}
-          />
-        </label>
+          <label style={{ display: 'grid', gap: '0.4rem' }}>
+            <span>自然言語ルール</span>
+            <textarea
+              value={naturalLanguageRule}
+              onChange={(event) => setNaturalLanguageRule(event.target.value)}
+              rows={7}
+              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px', resize: 'vertical' }}
+            />
+          </label>
 
-        <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
           <label style={{ display: 'grid', gap: '0.4rem' }}>
             <span>市場</span>
             <select
@@ -261,60 +273,49 @@ export default function StrategyLab() {
               ))}
             </select>
           </label>
-        </div>
-
-        <div style={{ fontSize: '0.9rem', color: '#666' }}>
-          MVP制約: 日本語入力中心 / 日足(D)中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
-        </div>
-
-        {error && (
-          <div style={{ padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
-            {error}
           </div>
-        )}
 
-        <button
-          type='submit'
-          disabled={submitting}
-          style={{
-            width: 'fit-content',
-            padding: '0.6rem 1rem',
-            border: 'none',
-            borderRadius: '4px',
-            background: submitting ? '#9cbbe0' : '#0a5bb5',
-            color: '#fff',
-            cursor: submitting ? 'default' : 'pointer',
-          }}
-        >
-          {submitting ? '生成中...' : '保存してPine生成'}
-        </button>
-      </form>
+          <div style={{ fontSize: '0.9rem', color: '#666' }}>
+            MVP制約: 日本語入力中心 / 日足(D)中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
+          </div>
+
+          {error && (
+            <ErrorState title='ルール生成に失敗しました'>
+              {error}
+            </ErrorState>
+          )}
+
+          <Button type='submit' variant='primary' disabled={submitting} className='w-fit'>
+            {submitting ? '生成中...' : '保存してPine生成'}
+          </Button>
+        </form>
+      </SectionCard>
 
       {result && (
-        <section style={{ marginTop: '2rem', display: 'grid', gap: '1rem' }}>
-          <h2>生成結果</h2>
-          <div style={{ fontSize: '0.95rem', color: '#333' }}>
-            <div><strong>strategy_id:</strong> <code>{strategyId ?? '-'}</code></div>
-            <div><strong>version_id:</strong> <code>{result.id}</code></div>
-            <div><strong>status:</strong> <code>{result.status}</code></div>
-            <div><strong>backtest_id:</strong> <code>{backtest?.id ?? '-'}</code></div>
-          </div>
+        <SectionCard title='生成結果' className='mt-8'>
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            <KeyValueList>
+              <KeyValueRow label='strategy_id'><code>{strategyId ?? '-'}</code></KeyValueRow>
+              <KeyValueRow label='version_id'><code>{result.id}</code></KeyValueRow>
+              <KeyValueRow label='status'><StatusBadge status={result.status}><code>{result.status}</code></StatusBadge></KeyValueRow>
+              <KeyValueRow label='backtest_id'><code>{backtest?.id ?? '-'}</code></KeyValueRow>
+            </KeyValueList>
 
           <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
             {strategyId && (
-              <Link
+              <TextLink
                 href={`/strategies/${strategyId}/versions`}
-                style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
+                className='font-semibold text-sky-700 no-underline hover:underline'
               >
                 version 一覧を開く
-              </Link>
+              </TextLink>
             )}
-            <Link
+            <TextLink
               href={`/strategy-versions/${result.id}`}
-              style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
+              className='font-semibold text-sky-700 no-underline hover:underline'
             >
               この version 詳細を開く
-            </Link>
+            </TextLink>
           </div>
 
           <div>
@@ -324,7 +325,7 @@ export default function StrategyLab() {
                 {result.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
               </ul>
             ) : (
-              <p style={{ color: '#666' }}>なし</p>
+              <EmptyState title='なし' />
             )}
           </div>
 
@@ -335,29 +336,20 @@ export default function StrategyLab() {
                 {result.assumptions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
               </ul>
             ) : (
-              <p style={{ color: '#666' }}>なし</p>
+              <EmptyState title='なし' />
             )}
           </div>
 
           <div>
             <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0 }}>generated pine</h3>
-              <button
-                type='button'
+              <Button
                 data-testid='strategy-lab-copy-pine-button'
                 onClick={onCopyGeneratedPine}
                 disabled={!result.generated_pine}
-                style={{
-                  padding: '0.35rem 0.7rem',
-                  borderRadius: '4px',
-                  border: '1px solid #0a5bb5',
-                  background: result.generated_pine ? '#fff' : '#f2f2f2',
-                  color: result.generated_pine ? '#0a5bb5' : '#888',
-                  cursor: result.generated_pine ? 'pointer' : 'default',
-                }}
               >
                 コピー
-              </button>
+              </Button>
             </div>
             {pineCopyFeedback && (
               <div
@@ -375,28 +367,30 @@ export default function StrategyLab() {
                 <code>{result.generated_pine}</code>
               </pre>
             ) : (
-              <p style={{ color: '#666' }}>生成に失敗しました。warnings を確認してください。</p>
+              <EmptyState title='生成に失敗しました'>
+                warnings を確認してください。
+              </EmptyState>
             )}
           </div>
-        </section>
+          </div>
+        </SectionCard>
       )}
 
       {latestVersion && (
-        <section style={{ marginTop: '1.5rem', border: '1px solid #ddd', borderRadius: '6px', padding: '1rem' }}>
-          <h2 style={{ marginTop: 0 }}>保存済み version（最新）</h2>
-          <div style={{ fontSize: '0.95rem', display: 'flex', flexWrap: 'wrap', gap: '0.8rem' }}>
-            <span><strong>id:</strong> <code>{latestVersion.id}</code></span>
-            <span><strong>市場:</strong> {latestVersion.market}</span>
-            <span><strong>時間足:</strong> {latestVersion.timeframe}</span>
-            <span><strong>状態:</strong> <code>{latestVersion.status}</code></span>
-            <span><strong>warnings:</strong> {latestVersion.has_warnings ? 'あり' : 'なし'}</span>
-          </div>
-        </section>
+        <SectionCard title='保存済み version（最新）' className='mt-6'>
+          <KeyValueList className='sm:grid-cols-2'>
+            <KeyValueRow label='id'><code>{latestVersion.id}</code></KeyValueRow>
+            <KeyValueRow label='市場'>{latestVersion.market}</KeyValueRow>
+            <KeyValueRow label='時間足'>{latestVersion.timeframe}</KeyValueRow>
+            <KeyValueRow label='状態'><StatusBadge status={latestVersion.status}><code>{latestVersion.status}</code></StatusBadge></KeyValueRow>
+            <KeyValueRow label='warnings'>{latestVersion.has_warnings ? 'あり' : 'なし'}</KeyValueRow>
+          </KeyValueList>
+        </SectionCard>
       )}
 
       {backtest && (
-        <section style={{ marginTop: '2rem', display: 'grid', gap: '0.8rem' }}>
-          <h2>CSV取込（MVP）</h2>
+        <SectionCard title='CSV取込（MVP）' className='mt-8'>
+          <div style={{ display: 'grid', gap: '0.8rem' }}>
           <p style={{ margin: 0, color: '#666' }}>
             対応CSV: Performance Summary（英語・日本語ヘッダー）/ List of Trades（英語・日本語ヘッダー）。
           </p>
@@ -408,50 +402,33 @@ export default function StrategyLab() {
           />
 
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <button
-              type='button'
+            <Button
               onClick={onImportCsv}
               disabled={importing}
-              style={{
-                width: 'fit-content',
-                padding: '0.6rem 1rem',
-                border: 'none',
-                borderRadius: '4px',
-                background: importing ? '#9cbbe0' : '#0a5bb5',
-                color: '#fff',
-                cursor: importing ? 'default' : 'pointer',
-              }}
+              variant='primary'
             >
               {importing ? '取込中...' : 'CSVを取込'}
-            </button>
+            </Button>
 
-            <button
-              type='button'
+            <Button
               onClick={() => setLocation(`/backtests/${backtest.id}`)}
-              style={{
-                width: 'fit-content',
-                padding: '0.6rem 1rem',
-                border: '1px solid #0a5bb5',
-                borderRadius: '4px',
-                background: '#fff',
-                color: '#0a5bb5',
-                cursor: 'pointer',
-              }}
             >
               検証レポートを開く
-            </button>
+            </Button>
           </div>
 
           {importError && (
-            <div style={{ padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
+            <ErrorState title='CSV取込に失敗しました'>
               {importError}
-            </div>
+            </ErrorState>
           )}
 
           {importState && (
             <div style={{ padding: '1rem', background: '#f7f7f7', border: '1px solid #ddd', borderRadius: '4px' }}>
-              <div><strong>import_id:</strong> <code>{importState.id}</code></div>
-              <div><strong>parse_status:</strong> <code>{importState.parse_status}</code></div>
+              <KeyValueList>
+                <KeyValueRow label='import_id'><code>{importState.id}</code></KeyValueRow>
+                <KeyValueRow label='parse_status'><StatusBadge status={importState.parse_status}><code>{importState.parse_status}</code></StatusBadge></KeyValueRow>
+              </KeyValueList>
               {importState.parse_error && (
                 <div style={{ color: '#a10000' }}><strong>parse_error:</strong> {importState.parse_error}</div>
               )}
@@ -474,18 +451,21 @@ export default function StrategyLab() {
               )}
               {importState.parsed_summary && (
                 <div style={{ marginTop: '0.6rem' }}>
-                  <div><strong>totalTrades:</strong> {String(importState.parsed_summary.totalTrades)}</div>
-                  <div><strong>winRate:</strong> {String(importState.parsed_summary.winRate)}</div>
-                  <div><strong>profitFactor:</strong> {String(importState.parsed_summary.profitFactor)}</div>
-                  <div><strong>maxDrawdown:</strong> {String(importState.parsed_summary.maxDrawdown)}</div>
-                  <div><strong>netProfit:</strong> {String(importState.parsed_summary.netProfit)}</div>
-                  <div><strong>periodFrom:</strong> {importState.parsed_summary.periodFrom ?? '-'}</div>
-                  <div><strong>periodTo:</strong> {importState.parsed_summary.periodTo ?? '-'}</div>
+                  <KeyValueList>
+                    <KeyValueRow label='totalTrades'>{String(importState.parsed_summary.totalTrades)}</KeyValueRow>
+                    <KeyValueRow label='winRate'>{String(importState.parsed_summary.winRate)}</KeyValueRow>
+                    <KeyValueRow label='profitFactor'>{String(importState.parsed_summary.profitFactor)}</KeyValueRow>
+                    <KeyValueRow label='maxDrawdown'>{String(importState.parsed_summary.maxDrawdown)}</KeyValueRow>
+                    <KeyValueRow label='netProfit'>{String(importState.parsed_summary.netProfit)}</KeyValueRow>
+                    <KeyValueRow label='periodFrom'>{importState.parsed_summary.periodFrom ?? '-'}</KeyValueRow>
+                    <KeyValueRow label='periodTo'>{importState.parsed_summary.periodTo ?? '-'}</KeyValueRow>
+                  </KeyValueList>
                 </div>
               )}
             </div>
           )}
-        </section>
+          </div>
+        </SectionCard>
       )}
     </div>
   );
