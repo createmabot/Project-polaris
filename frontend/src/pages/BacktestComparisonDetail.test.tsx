@@ -16,6 +16,37 @@ vi.mock('wouter', () => ({
 import BacktestComparisonDetail from './BacktestComparisonDetail';
 
 describe('BacktestComparisonDetail', () => {
+  it('renders shared loading, error, and empty states', () => {
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: true,
+      error: null,
+      data: null,
+    });
+
+    const loadingHtml = renderToStaticMarkup(<BacktestComparisonDetail />);
+    expect(loadingHtml).toContain('比較結果を読み込み中...');
+
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: { message: 'network failed' },
+      data: null,
+    });
+
+    const errorHtml = renderToStaticMarkup(<BacktestComparisonDetail />);
+    expect(errorHtml).toContain('比較結果の取得に失敗しました');
+    expect(errorHtml).toContain('エラー: network failed');
+
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+    });
+
+    const emptyHtml = renderToStaticMarkup(<BacktestComparisonDetail />);
+    expect(emptyHtml).toContain('比較結果が見つかりません');
+  });
+
   it('renders saved comparison detail', () => {
     mockUseSWR.mockReset();
     mockUseSWR.mockReturnValue({

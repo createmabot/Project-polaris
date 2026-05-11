@@ -572,3 +572,8 @@ pnpm exec prisma db seed
 
 - StrategyVersionDetail now uses the shared UI components for selected loading, error, empty, status, section, key-value, link, and button presentation.
 - The pass is display-only and keeps Pine generation, validation, backtest, application behavior, API shape, DB, and Prisma schema unchanged.
+
+### StrategyLab and comparison cleanup pass
+
+- StrategyLab and BacktestComparisonDetail now use shared UI components for selected section, state, status, key-value, link, and button presentation.
+- The pass keeps StrategyLab generation, save, validation, CSV import behavior, Backtest comparison API shape, backend, DB, and Prisma schema unchanged.

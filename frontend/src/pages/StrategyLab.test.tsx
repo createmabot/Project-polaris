@@ -172,7 +172,8 @@ describe('StrategyLab', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyLab />);
-    expect(html).toContain('生成に失敗しました。warnings を確認してください。');
+    expect(html).toContain('生成に失敗しました');
+    expect(html).toContain('warnings を確認してください。');
     expect(html).toContain('parse_status:');
     expect(html).toContain('parse_error:');
     expect(html).toContain('対応形式: Performance Summary または List of Trades（英語ヘッダー / 日本語ヘッダー対応）。');
