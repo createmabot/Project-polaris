@@ -693,6 +693,125 @@ export type SymbolStrategyApplicationMutateData = {
   };
 };
 
+export type SymbolStrategyApplicationSummary = {
+  id: string;
+  status: string;
+  source: string;
+  memo: string | null;
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+  };
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  strategy_version: {
+    id: string;
+    market: string;
+    timeframe: string;
+    status: string;
+  };
+  created_at: string;
+  updated_at: string;
+};
+
+export type SymbolStrategyApplicationRunHistoryData = {
+  application: SymbolStrategyApplicationSummary & {
+    run_count: number;
+  };
+  query: {
+    run_type: string | null;
+    run_status: string | null;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+  };
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    has_next: boolean;
+    has_prev: boolean;
+  };
+  runs: Array<{
+    id: string;
+    run_type: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+    error_code: string | null;
+    error_message: string | null;
+    linked_backtest: BacktestCreateData['backtest'] | null;
+    linked_backtest_import: {
+      id: string;
+      backtest_id: string;
+      file_name: string;
+      parse_status: string;
+      parse_error: string | null;
+      created_at: string;
+      updated_at: string;
+    } | null;
+    linked_internal_backtest_execution: {
+      id: string;
+      status: string;
+      requested_at: string;
+      started_at: string | null;
+      finished_at: string | null;
+      engine_version: string;
+      error_code: string | null;
+    } | null;
+  }>;
+};
+
+export type SymbolStrategyApplicationReportHistoryData = {
+  application: SymbolStrategyApplicationSummary & {
+    report_count: number;
+  };
+  query: {
+    execution_source: string | null;
+    run_type: string | null;
+    status: string | null;
+    with_metrics: boolean;
+    sort: string;
+    order: 'asc' | 'desc' | string;
+  };
+  pagination: SymbolStrategyApplicationRunHistoryData['pagination'];
+  reports: Array<{
+    id: string;
+    title: string;
+    status: string;
+    execution_source: string;
+    report_origin: string;
+    market: string;
+    timeframe: string;
+    created_at: string;
+    updated_at: string;
+    linked_run: {
+      id: string;
+      run_type: string;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      started_at: string | null;
+      finished_at: string | null;
+    };
+    linked_internal_backtest_execution: SymbolStrategyApplicationRunHistoryData['runs'][number]['linked_internal_backtest_execution'];
+    metrics: (BacktestRelatedReportMetrics & {
+      source: string;
+    }) | null;
+    importless_report: boolean;
+    backtest_detail_link: {
+      path: string;
+      label: string;
+    };
+  }>;
+};
+
 export type SymbolStrategyApplicationCsvImportData = {
   application_id: string;
   run: {

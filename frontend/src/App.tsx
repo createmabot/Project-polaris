@@ -2,6 +2,7 @@ import { Route, Switch } from "wouter";
 import Home from "./pages/Home";
 import AlertDetail from "./pages/AlertDetail";
 import SymbolDetail from "./pages/SymbolDetail";
+import ApplicationDetail from "./pages/ApplicationDetail";
 import NoteDetail from "./pages/NoteDetail";
 import CompareCreate from "./pages/CompareCreate";
 import ComparisonDetail from "./pages/ComparisonDetail";
@@ -23,6 +24,7 @@ function App() {
       <Route path="/home" component={Home} />
       <Route path="/alerts/:alertId" component={AlertDetail} />
       <Route path="/symbols/:symbolId" component={SymbolDetail} />
+      <Route path="/symbol-strategy-applications/:applicationId" component={ApplicationDetail} />
       <Route path="/notes/:noteId" component={NoteDetail} />
       <Route path="/symbols/:symbolId/note/new" component={NoteDetail} />
       <Route path="/compare" component={CompareCreate} />

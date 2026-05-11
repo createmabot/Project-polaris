@@ -90,6 +90,8 @@ const LABELS = {
   csvImportParseFailed: '解析失敗',
   csvImportError: 'CSV取込に失敗しました。',
   openBacktestDetail: '検証レポートを開く',
+  openApplicationRuns: 'run履歴を見る',
+  openApplicationReports: 'report履歴を見る',
   internalBacktest: '内部バックテスト',
   internalBacktestDescription: '保存済み application 起点で internal backtest execution を作成します。succeeded execution は Backtest report 化できます。',
   internalBacktestFrom: '開始日',
@@ -539,6 +541,8 @@ function ApplicationSummaryHeader({
       <div className="flex flex-wrap gap-2">
         <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
         <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+        <TextLink href={`/symbol-strategy-applications/${application.id}#runs`}>{LABELS.openApplicationRuns}</TextLink>
+        <TextLink href={`/symbol-strategy-applications/${application.id}#reports`}>{LABELS.openApplicationReports}</TextLink>
         <Button
           onClick={() => onApplicationStatusAction(nextStatusAction)}
           disabled={isMutatingApplicationStatus}
