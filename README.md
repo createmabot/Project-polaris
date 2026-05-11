@@ -567,3 +567,8 @@ pnpm exec prisma db seed
 - Application Detail / History foundation and usability pass are complete through read-only runs and reports history.
 - SymbolDetail owns application overview and latest summaries; Application Detail owns application-scoped run and report history.
 - Remaining candidates include Tailwind and state cleanup for uncovered screens, deeper report comparison UX, further application history UX, and visual regression evaluation.
+
+### StrategyVersionDetail cleanup pass
+
+- StrategyVersionDetail now uses the shared UI components for selected loading, error, empty, status, section, key-value, link, and button presentation.
+- The pass is display-only and keeps Pine generation, validation, backtest, application behavior, API shape, DB, and Prisma schema unchanged.
