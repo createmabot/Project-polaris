@@ -1,4 +1,4 @@
-﻿# Project Polaris（北極星）
+# Project Polaris（北極星）
 
 株価評価AIツール「北極星」の開発リポジトリです。  
 仕様の正本は `docs/` 配下のドキュメントです。
@@ -528,3 +528,10 @@ pnpm exec prisma db seed
 - seed では主要セクター（3〜5件）の snapshot を投入するため、`/home` で sectors を確認できます。
 - `positions` は `portfolios / transactions` から導出した read model を利用します。
 - seed では default portfolio + transactions（buy / buy / partial sell）を投入するため、`/home` で保有一覧を確認できます。
+
+### Symbol Strategy Application（保存済み strategy 適用）
+- `GET /api/symbols/:symbolId/strategy-applications` は未指定時に active application list を返す。
+- optional query として `status`、`report_presence`、`report_source`、latest run 基準の `run_type` / `run_status` を扱う。
+- `strategy_id` / `strategy_version_id` は UUID query として application の strategy / version 固定値で絞り込み、同時指定時は AND 条件で扱う。
+- `SymbolDetail` の saved application filter UI から strategy / version ID を指定して再取得できる。
+- latest run、latest backtest report、CSV / internal latest pair、pagination meta は維持する。

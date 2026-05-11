@@ -756,11 +756,52 @@ describe('symbol strategy applications route', () => {
   });
 
   it('filters symbol applications by status all and report presence', async () => {
+    const strategyFilterId = '00000000-0000-4000-8000-000000009001';
+    const mismatchedStrategyFilterId = '00000000-0000-4000-8000-000000009002';
+    const versionFilterReportId = '00000000-0000-4000-8000-000000009101';
+    const versionFilterNoReportId = '00000000-0000-4000-8000-000000009102';
+    runtime.strategies.set(strategyFilterId, { id: strategyFilterId, title: 'Filter strategy', status: 'active' });
+    runtime.strategies.set(mismatchedStrategyFilterId, { id: mismatchedStrategyFilterId, title: 'Mismatched strategy', status: 'active' });
+    runtime.versions.set(versionFilterReportId, {
+      id: versionFilterReportId,
+      strategyRuleId: strategyFilterId,
+      naturalLanguageRule: 'Filter report setup.',
+      generatedPine: null,
+      warningsJson: [],
+      assumptionsJson: [],
+      market: 'TSE',
+      timeframe: 'D',
+      status: 'generated',
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-02T00:00:00.000Z'),
+    });
+    runtime.versions.set(versionFilterNoReportId, {
+      id: versionFilterNoReportId,
+      strategyRuleId: strategyFilterId,
+      naturalLanguageRule: 'Filter no report setup.',
+      generatedPine: null,
+      warningsJson: [],
+      assumptionsJson: [],
+      market: 'TSE',
+      timeframe: 'W',
+      status: 'generated',
+      createdAt: new Date('2026-05-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-02T00:00:00.000Z'),
+    });
+    runtime.applications = runtime.applications.map((application) => (
+      application.id === 'app-1'
+        ? {
+            ...application,
+            strategyRuleId: strategyFilterId,
+            strategyRuleVersionId: versionFilterReportId,
+          }
+        : application
+    ));
     runtime.applications.push({
       id: 'app-no-report',
       symbolId: 'sym-1',
-      strategyRuleId: 'strategy-1',
-      strategyRuleVersionId: 'version-2',
+      strategyRuleId: strategyFilterId,
+      strategyRuleVersionId: versionFilterNoReportId,
       status: 'active',
       source: 'manual',
       memo: null,
@@ -813,6 +854,26 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?run_type=internal_backtest&report_source=csv_import',
     });
+    const strategyRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_id=${strategyFilterId}`,
+    });
+    const versionRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_version_id=${versionFilterNoReportId}`,
+    });
+    const strategyAndVersionRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_id=${strategyFilterId}&strategy_version_id=${versionFilterNoReportId}`,
+    });
+    const mismatchedStrategyAndVersionRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_id=${mismatchedStrategyFilterId}&strategy_version_id=${versionFilterNoReportId}`,
+    });
+    const combinedStrategyReportRunRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_id=${strategyFilterId}&strategy_version_id=${versionFilterReportId}&report_source=csv_import&run_status=succeeded`,
+    });
 
     expect(allRes.statusCode).toBe(200);
     expect(allRes.json().data.query).toMatchObject({
@@ -858,6 +919,31 @@ describe('symbol strategy applications route', () => {
       run_type: 'internal_backtest',
     });
     expect(combinedRunAndReportRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
+    expect(strategyRes.statusCode).toBe(200);
+    expect(strategyRes.json().data.query.strategy_id).toBe(strategyFilterId);
+    expect(strategyRes.json().data.applications.map((application: any) => application.id)).toEqual([
+      'app-no-report',
+      'app-1',
+    ]);
+    expect(versionRes.statusCode).toBe(200);
+    expect(versionRes.json().data.query.strategy_version_id).toBe(versionFilterNoReportId);
+    expect(versionRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-no-report']);
+    expect(strategyAndVersionRes.statusCode).toBe(200);
+    expect(strategyAndVersionRes.json().data.query).toMatchObject({
+      strategy_id: strategyFilterId,
+      strategy_version_id: versionFilterNoReportId,
+    });
+    expect(strategyAndVersionRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-no-report']);
+    expect(mismatchedStrategyAndVersionRes.statusCode).toBe(200);
+    expect(mismatchedStrategyAndVersionRes.json().data.applications).toEqual([]);
+    expect(combinedStrategyReportRunRes.statusCode).toBe(200);
+    expect(combinedStrategyReportRunRes.json().data.query).toMatchObject({
+      strategy_id: strategyFilterId,
+      strategy_version_id: versionFilterReportId,
+      report_source: 'csv_import',
+      run_status: 'succeeded',
+    });
+    expect(combinedStrategyReportRunRes.json().data.applications.map((application: any) => application.id)).toEqual(['app-1']);
 
     await app.close();
   });
@@ -1105,6 +1191,18 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: '/api/symbols/sym-1/strategy-applications?run_status=done',
     });
+    const invalidStrategyId = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?strategy_id=not-a-uuid',
+    });
+    const emptyStrategyId = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?strategy_id=',
+    });
+    const emptyStrategyVersionId = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/strategy-applications?strategy_version_id=%20%20',
+    });
 
     expect(invalidStatus.statusCode).toBe(400);
     expect(invalidStatus.json().error.code).toBe('VALIDATION_ERROR');
@@ -1118,6 +1216,12 @@ describe('symbol strategy applications route', () => {
     expect(invalidRunType.json().error.code).toBe('VALIDATION_ERROR');
     expect(invalidRunStatus.statusCode).toBe(400);
     expect(invalidRunStatus.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidStrategyId.statusCode).toBe(400);
+    expect(invalidStrategyId.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyStrategyId.statusCode).toBe(400);
+    expect(emptyStrategyId.json().error.code).toBe('VALIDATION_ERROR');
+    expect(emptyStrategyVersionId.statusCode).toBe(400);
+    expect(emptyStrategyVersionId.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });

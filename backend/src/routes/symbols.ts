@@ -114,6 +114,20 @@ function normalizeApplicationRunStatus(input?: string): SymbolApplicationRunStat
   throw new AppError(400, 'VALIDATION_ERROR', 'run_status must be one of queued|running|succeeded|failed|canceled');
 }
 
+function normalizeOptionalQueryId(input: string | undefined, fieldName: string): string | null {
+  if (input === undefined) {
+    return null;
+  }
+  const normalized = input.trim();
+  if (!normalized) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must not be empty`);
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid UUID`);
+  }
+  return normalized;
+}
+
 function normalizePositiveInt(input: string | undefined, fallback: number, fieldName: string): number {
   const value = Number(input ?? fallback);
   if (!Number.isInteger(value) || value <= 0) {
@@ -617,6 +631,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         report_source?: string;
         run_type?: string;
         run_status?: string;
+        strategy_id?: string;
+        strategy_version_id?: string;
         page?: string;
         limit?: string;
         sort?: string;
@@ -631,6 +647,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     const reportSource = normalizeApplicationReportSource(request.query.report_source);
     const runType = normalizeApplicationRunType(request.query.run_type);
     const runStatus = normalizeApplicationRunStatus(request.query.run_status);
+    const strategyId = normalizeOptionalQueryId(request.query.strategy_id, 'strategy_id');
+    const strategyVersionId = normalizeOptionalQueryId(request.query.strategy_version_id, 'strategy_version_id');
     const page = normalizePositiveInt(request.query.page, 1, 'page');
     const limit = normalizeApplicationLimit(request.query.limit);
     const sort = normalizeApplicationSort(request.query.sort);
@@ -655,6 +673,12 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     const where: any = { symbolId };
     if (status !== 'all') {
       where.status = status;
+    }
+    if (strategyId) {
+      where.strategyRuleId = strategyId;
+    }
+    if (strategyVersionId) {
+      where.strategyRuleVersionId = strategyVersionId;
     }
     const reportFilters: any[] = [];
     if (reportPresence === 'with_reports') {
@@ -798,6 +822,8 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         report_source: reportSource,
         run_type: runType,
         run_status: runStatus,
+        strategy_id: strategyId,
+        strategy_version_id: strategyVersionId,
         sort,
         order,
       },
