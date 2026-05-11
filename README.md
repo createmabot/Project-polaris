@@ -561,3 +561,9 @@ pnpm exec prisma db seed
 - Browser smoke covers the read-only path from SymbolDetail to Application Detail.
 - The smoke checks application summary, run history, report history, and representative filter labels without executing imports, internal backtests, or report conversion.
 - The Application Detail / History usability pass is complete through runs filters, reports filters, pagination, and metrics missing-value explanation.
+
+### Application Detail / History completion
+
+- Application Detail / History foundation and usability pass are complete through read-only runs and reports history.
+- SymbolDetail owns application overview and latest summaries; Application Detail owns application-scoped run and report history.
+- Remaining candidates include Tailwind and state cleanup for uncovered screens, deeper report comparison UX, further application history UX, and visual regression evaluation.
