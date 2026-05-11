@@ -125,7 +125,7 @@ function normalizeOptionalQueryId(input: string | undefined, fieldName: string):
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized)) {
     throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid UUID`);
   }
-  return normalized;
+  return normalized.toLowerCase();
 }
 
 function normalizePositiveInt(input: string | undefined, fallback: number, fieldName: string): number {

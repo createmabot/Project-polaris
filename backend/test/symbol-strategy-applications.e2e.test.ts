@@ -858,6 +858,10 @@ describe('symbol strategy applications route', () => {
       method: 'GET',
       url: `/api/symbols/sym-1/strategy-applications?strategy_id=${strategyFilterId}`,
     });
+    const uppercaseStrategyRes = await app.inject({
+      method: 'GET',
+      url: `/api/symbols/sym-1/strategy-applications?strategy_id=${strategyFilterId.toUpperCase()}`,
+    });
     const versionRes = await app.inject({
       method: 'GET',
       url: `/api/symbols/sym-1/strategy-applications?strategy_version_id=${versionFilterNoReportId}`,
@@ -922,6 +926,12 @@ describe('symbol strategy applications route', () => {
     expect(strategyRes.statusCode).toBe(200);
     expect(strategyRes.json().data.query.strategy_id).toBe(strategyFilterId);
     expect(strategyRes.json().data.applications.map((application: any) => application.id)).toEqual([
+      'app-no-report',
+      'app-1',
+    ]);
+    expect(uppercaseStrategyRes.statusCode).toBe(200);
+    expect(uppercaseStrategyRes.json().data.query.strategy_id).toBe(strategyFilterId);
+    expect(uppercaseStrategyRes.json().data.applications.map((application: any) => application.id)).toEqual([
       'app-no-report',
       'app-1',
     ]);
