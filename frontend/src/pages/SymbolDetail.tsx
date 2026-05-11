@@ -46,6 +46,10 @@ const LABELS = {
   savedApplicationsLoading: '保存済み application を読み込み中...',
   savedApplicationsError: '保存済み application を取得できませんでした。',
   noSavedApplications: '保存済み application はまだありません。',
+  savedApplicationsStatusFilter: 'status',
+  savedApplicationsStatusActive: 'active',
+  savedApplicationsStatusArchived: 'archived',
+  savedApplicationsStatusAll: 'all',
   savedApplicationsFilter: '表示対象',
   savedApplicationsFilterAll: 'すべて',
   savedApplicationsFilterWithReports: 'reportあり',
@@ -60,7 +64,7 @@ const LABELS = {
   savedApplicationsRunRunning: 'running',
   savedApplicationsRunSucceeded: 'succeeded',
   savedApplicationsRunFailed: 'failed',
-  savedApplicationsSummary: 'application {shown} / {total} 件を表示中',
+  savedApplicationsSummary: '{status} application {shown} / {total} 件を表示中',
   savedApplicationsReportSummary: 'CSV report: {csv} / internal report: {internal}',
   noFilteredApplications: '条件に一致する application はありません。',
   latestRun: '最新run',
@@ -121,6 +125,11 @@ const LABELS = {
   archiveApplicationSuccess: 'アーカイブしました。',
   archiveApplicationRefreshFailed: 'アーカイブしました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   archiveApplicationError: 'アーカイブに失敗しました。',
+  restoreApplication: '復元',
+  restoreApplicationConfirm: 'この application を復元しますか？',
+  restoreApplicationSuccess: '復元しました。',
+  restoreApplicationRefreshFailed: '復元しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
+  restoreApplicationError: '復元に失敗しました。',
   executionId: 'execution_id',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
@@ -269,10 +278,17 @@ type CsvImportMessage = {
   text: string;
 };
 
+type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 type ApplicationReportFilter = 'all' | 'with_reports' | 'without_reports';
 type ApplicationReportSourceFilter = 'all' | 'csv_import' | 'internal_backtest';
 type ApplicationRunTypeFilter = 'all' | 'csv_import' | 'internal_backtest';
 type ApplicationRunStatusFilter = 'all' | 'running' | 'succeeded' | 'failed';
+
+function getApplicationStatusLabel(filter: ApplicationStatusFilter): string {
+  if (filter === 'archived') return LABELS.savedApplicationsStatusArchived;
+  if (filter === 'all') return LABELS.savedApplicationsStatusAll;
+  return LABELS.savedApplicationsStatusActive;
+}
 
 function getApplicationReportPresenceQuery(filter: ApplicationReportFilter): string {
   if (filter === 'with_reports') return '&report_presence=with_reports';
@@ -476,13 +492,16 @@ function InternalBacktestResultPanel({
 
 function ApplicationSummaryHeader({
   application,
-  isArchivingApplication,
-  onArchiveApplication,
+  isMutatingApplicationStatus,
+  onApplicationStatusAction,
 }: {
   application: SymbolStrategyApplicationItem;
-  isArchivingApplication: boolean;
-  onArchiveApplication: () => void;
+  isMutatingApplicationStatus: boolean;
+  onApplicationStatusAction: (nextAction: 'archive' | 'restore') => void;
 }) {
+  const nextStatusAction = application.status === 'archived' ? 'restore' : 'archive';
+  const nextStatusLabel = nextStatusAction === 'restore' ? LABELS.restoreApplication : LABELS.archiveApplication;
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
@@ -503,10 +522,10 @@ function ApplicationSummaryHeader({
         <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
         <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
         <Button
-          onClick={onArchiveApplication}
-          disabled={isArchivingApplication}
+          onClick={() => onApplicationStatusAction(nextStatusAction)}
+          disabled={isMutatingApplicationStatus}
         >
-          {LABELS.archiveApplication}
+          {nextStatusLabel}
         </Button>
       </div>
     </div>
@@ -625,9 +644,9 @@ function SavedApplicationRow({
   const [internalBacktestMessage, setInternalBacktestMessage] = useState<string | null>(null);
   const [internalBacktestError, setInternalBacktestError] = useState<string | null>(null);
   const [internalExecutionId, setInternalExecutionId] = useState<string | null>(null);
-  const [isArchivingApplication, setIsArchivingApplication] = useState(false);
-  const [archiveApplicationMessage, setArchiveApplicationMessage] = useState<string | null>(null);
-  const [archiveApplicationError, setArchiveApplicationError] = useState<string | null>(null);
+  const [isMutatingApplicationStatus, setIsMutatingApplicationStatus] = useState(false);
+  const [applicationStatusMessage, setApplicationStatusMessage] = useState<string | null>(null);
+  const [applicationStatusError, setApplicationStatusError] = useState<string | null>(null);
 
   const importCsv = async () => {
     const normalizedFileName = fileName.trim();
@@ -670,28 +689,40 @@ function SavedApplicationRow({
     }
   };
 
-  const archiveApplication = async () => {
-    if (typeof window !== 'undefined' && !window.confirm(LABELS.archiveApplicationConfirm)) {
+  const mutateApplicationStatus = async (nextAction: 'archive' | 'restore') => {
+    const confirmMessage = nextAction === 'archive'
+      ? LABELS.archiveApplicationConfirm
+      : LABELS.restoreApplicationConfirm;
+    if (typeof window !== 'undefined' && !window.confirm(confirmMessage)) {
       return;
     }
-    setIsArchivingApplication(true);
-    setArchiveApplicationMessage(null);
-    setArchiveApplicationError(null);
+    setIsMutatingApplicationStatus(true);
+    setApplicationStatusMessage(null);
+    setApplicationStatusError(null);
     try {
       await patchApi<SymbolStrategyApplicationMutateData>(
-        `/api/symbol-strategy-applications/${application.id}/archive`,
+        `/api/symbol-strategy-applications/${application.id}/${nextAction}`,
         {},
       );
-      setArchiveApplicationMessage(LABELS.archiveApplicationSuccess);
+      setApplicationStatusMessage(
+        nextAction === 'archive' ? LABELS.archiveApplicationSuccess : LABELS.restoreApplicationSuccess,
+      );
       try {
         await mutateApplications();
       } catch {
-        setArchiveApplicationMessage(LABELS.archiveApplicationRefreshFailed);
+        setApplicationStatusMessage(
+          nextAction === 'archive' ? LABELS.archiveApplicationRefreshFailed : LABELS.restoreApplicationRefreshFailed,
+        );
       }
     } catch (error) {
-      setArchiveApplicationError(getErrorMessage(error, LABELS.archiveApplicationError));
+      setApplicationStatusError(
+        getErrorMessage(
+          error,
+          nextAction === 'archive' ? LABELS.archiveApplicationError : LABELS.restoreApplicationError,
+        ),
+      );
     } finally {
-      setIsArchivingApplication(false);
+      setIsMutatingApplicationStatus(false);
     }
   };
 
@@ -734,14 +765,14 @@ function SavedApplicationRow({
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <ApplicationSummaryHeader
         application={application}
-        isArchivingApplication={isArchivingApplication}
-        onArchiveApplication={archiveApplication}
+        isMutatingApplicationStatus={isMutatingApplicationStatus}
+        onApplicationStatusAction={mutateApplicationStatus}
       />
-      {archiveApplicationMessage ? (
-        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{archiveApplicationMessage}</p>
+      {applicationStatusMessage ? (
+        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{applicationStatusMessage}</p>
       ) : null}
-      {archiveApplicationError ? (
-        <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{archiveApplicationError}</p>
+      {applicationStatusError ? (
+        <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{applicationStatusError}</p>
       ) : null}
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -853,10 +884,12 @@ function SavedApplicationRow({
 function SavedStrategyApplicationsPanel({
   applications,
   totalApplications,
+  applicationStatusFilter,
   applicationFilter,
   applicationSourceFilter,
   applicationRunTypeFilter,
   applicationRunStatusFilter,
+  onApplicationStatusFilterChange,
   onApplicationFilterChange,
   onApplicationSourceFilterChange,
   onApplicationRunTypeFilterChange,
@@ -867,10 +900,12 @@ function SavedStrategyApplicationsPanel({
 }: {
   applications: SymbolStrategyApplicationItem[];
   totalApplications: number;
+  applicationStatusFilter: ApplicationStatusFilter;
   applicationFilter: ApplicationReportFilter;
   applicationSourceFilter: ApplicationReportSourceFilter;
   applicationRunTypeFilter: ApplicationRunTypeFilter;
   applicationRunStatusFilter: ApplicationRunStatusFilter;
+  onApplicationStatusFilterChange: (filter: ApplicationStatusFilter) => void;
   onApplicationFilterChange: (filter: ApplicationReportFilter) => void;
   onApplicationSourceFilterChange: (filter: ApplicationReportSourceFilter) => void;
   onApplicationRunTypeFilterChange: (filter: ApplicationRunTypeFilter) => void;
@@ -887,6 +922,11 @@ function SavedStrategyApplicationsPanel({
     },
     { csv: 0, internal: 0 },
   );
+  const statusFilterOptions = [
+    { value: 'active' as const, label: LABELS.savedApplicationsStatusActive },
+    { value: 'archived' as const, label: LABELS.savedApplicationsStatusArchived },
+    { value: 'all' as const, label: LABELS.savedApplicationsStatusAll },
+  ];
   const filterOptions = [
     { value: 'all' as const, label: LABELS.savedApplicationsFilterAll },
     { value: 'with_reports' as const, label: LABELS.savedApplicationsFilterWithReports },
@@ -918,6 +958,7 @@ function SavedStrategyApplicationsPanel({
       ) : error ? (
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
       ) : applications.length === 0
+        && applicationStatusFilter === 'active'
         && applicationFilter === 'all'
         && applicationSourceFilter === 'all'
         && applicationRunTypeFilter === 'all'
@@ -927,6 +968,19 @@ function SavedStrategyApplicationsPanel({
         <>
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsStatusFilter}</span>
+              {statusFilterOptions.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={applicationStatusFilter === option.value ? 'primary' : 'secondary'}
+                  onClick={() => onApplicationStatusFilterChange(option.value)}
+                  className="py-1 text-xs"
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsFilter}</span>
               {filterOptions.map((option) => (
                 <Button
@@ -981,6 +1035,7 @@ function SavedStrategyApplicationsPanel({
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
               <span>
                 {LABELS.savedApplicationsSummary
+                  .replace('{status}', getApplicationStatusLabel(applicationStatusFilter))
                   .replace('{shown}', String(applications.length))
                   .replace('{total}', String(totalApplications))}
               </span>
@@ -1248,6 +1303,7 @@ export default function SymbolDetail() {
   const tvContainerRef = useRef<HTMLDivElement>(null);
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
+  const [applicationStatusFilter, setApplicationStatusFilter] = useState<ApplicationStatusFilter>('active');
   const [applicationFilter, setApplicationFilter] = useState<ApplicationReportFilter>('all');
   const [applicationSourceFilter, setApplicationSourceFilter] = useState<ApplicationReportSourceFilter>('all');
   const [applicationRunTypeFilter, setApplicationRunTypeFilter] = useState<ApplicationRunTypeFilter>('all');
@@ -1273,7 +1329,7 @@ export default function SymbolDetail() {
     mutate: mutateApplicationList,
   } = useSWR<SymbolStrategyApplicationListData>(
     symbolId
-      ? `/api/symbols/${symbolId}/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}${getApplicationReportSourceQuery(applicationSourceFilter)}${getApplicationRunTypeQuery(applicationRunTypeFilter)}${getApplicationRunStatusQuery(applicationRunStatusFilter)}`
+      ? `/api/symbols/${symbolId}/strategy-applications?status=${applicationStatusFilter}&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}${getApplicationReportSourceQuery(applicationSourceFilter)}${getApplicationRunTypeQuery(applicationRunTypeFilter)}${getApplicationRunStatusQuery(applicationRunStatusFilter)}`
       : null,
     swrFetcher,
   );
@@ -1545,10 +1601,12 @@ export default function SymbolDetail() {
             <SavedStrategyApplicationsPanel
               applications={applicationListData?.applications ?? []}
               totalApplications={applicationListData?.pagination.total ?? applicationListData?.applications.length ?? 0}
+              applicationStatusFilter={applicationStatusFilter}
               applicationFilter={applicationFilter}
               applicationSourceFilter={applicationSourceFilter}
               applicationRunTypeFilter={applicationRunTypeFilter}
               applicationRunStatusFilter={applicationRunStatusFilter}
+              onApplicationStatusFilterChange={setApplicationStatusFilter}
               onApplicationFilterChange={setApplicationFilter}
               onApplicationSourceFilterChange={setApplicationSourceFilter}
               onApplicationRunTypeFilterChange={setApplicationRunTypeFilter}
