@@ -287,6 +287,15 @@ const archivedSymbolApplicationsFixture = {
   ],
 };
 
+const emptyActiveSymbolApplicationsFixture = {
+  ...symbolApplicationsFixture,
+  pagination: {
+    ...symbolApplicationsFixture.pagination,
+    total: 0,
+  },
+  applications: [],
+};
+
 const internalExecutionStatusFixture = {
   execution: {
     id: 'execution_1',
@@ -598,6 +607,35 @@ describe('SymbolDetail', () => {
     expect(html).not.toContain('アーカイブ</button>');
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('CSV / internal reports');
+  });
+
+  it('keeps status filter controls visible when default active applications are empty', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common?.data === symbolApplicationsFixture) {
+        return { ...common, data: emptyActiveSymbolApplicationsFixture };
+      }
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: baseSymbolData };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('保存済み application はまだありません。');
+    expect(html).toContain('status');
+    expect(html).toContain('active');
+    expect(html).toContain('archived');
+    expect(html).toContain('all');
+    expect(html).toContain('active application 0 / 0 件を表示中');
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
   });
 
   it('shows reference breakdown and shortage note when no references exist', () => {

@@ -948,6 +948,12 @@ function SavedStrategyApplicationsPanel({
     { value: 'succeeded' as const, label: LABELS.savedApplicationsRunSucceeded },
     { value: 'failed' as const, label: LABELS.savedApplicationsRunFailed },
   ];
+  const isDefaultEmptyState = applications.length === 0
+    && applicationStatusFilter === 'active'
+    && applicationFilter === 'all'
+    && applicationSourceFilter === 'all'
+    && applicationRunTypeFilter === 'all'
+    && applicationRunStatusFilter === 'all';
 
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
@@ -957,13 +963,6 @@ function SavedStrategyApplicationsPanel({
         <EmptyText>{LABELS.savedApplicationsLoading}</EmptyText>
       ) : error ? (
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
-      ) : applications.length === 0
-        && applicationStatusFilter === 'active'
-        && applicationFilter === 'all'
-        && applicationSourceFilter === 'all'
-        && applicationRunTypeFilter === 'all'
-        && applicationRunStatusFilter === 'all' ? (
-        <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
       ) : (
         <>
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -1046,7 +1045,9 @@ function SavedStrategyApplicationsPanel({
               </span>
             </div>
           </div>
-          {applications.length === 0 ? (
+          {isDefaultEmptyState ? (
+            <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
+          ) : applications.length === 0 ? (
             <EmptyState title={LABELS.noFilteredApplications} className="mt-3" />
           ) : (
             <div className="mt-3 grid gap-3">
