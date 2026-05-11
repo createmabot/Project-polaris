@@ -82,7 +82,7 @@ const runsFixture = {
     page: 1,
     limit: 20,
     total: 2,
-    has_next: false,
+    has_next: true,
     has_prev: false,
   },
   runs: [
@@ -256,6 +256,18 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('application_id:</strong> <code>application_1</code>');
     expect(html).toContain('run count:</strong> 2');
     expect(html).toContain('run履歴');
+    expect(html).toContain('run履歴 filter');
+    expect(html).toContain('run type');
+    expect(html).toContain('run status');
+    expect(html).toContain('queued');
+    expect(html).toContain('running');
+    expect(html).toContain('succeeded');
+    expect(html).toContain('failed');
+    expect(html).toContain('canceled');
+    expect(html).toContain('run 2 / 2 件を表示中');
+    expect(html).toContain('page 1');
+    expect(html).toContain('前へ');
+    expect(html).toContain('次へ');
     expect(html).toContain('run_internal_1');
     expect(html).toContain('linked execution');
     expect(html).toContain('execution_1');
@@ -268,6 +280,10 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('backtest.strategy_snapshot_json.result_summary');
     expect(html).toContain('href="/backtests/backtest_internal_1"');
     expect(html).toContain('href="/symbols/sym-1"');
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbol-strategy-applications/application_1/runs?page=1&limit=20&sort=created_at&order=desc',
+      expect.any(Function),
+    );
   });
 
   it('renders not found error state', () => {
