@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 
 type StatusBadgeTone = 'positive' | 'neutral' | 'info' | 'danger';
 
@@ -7,7 +7,7 @@ type StatusBadgeProps = {
   status?: string | null;
   tone?: StatusBadgeTone;
   className?: string;
-};
+} & HTMLAttributes<HTMLSpanElement>;
 
 const TONE_CLASSES: Record<StatusBadgeTone, string> = {
   positive: 'border-emerald-200 bg-emerald-50 text-emerald-800',
@@ -30,12 +30,12 @@ function inferTone(status: string | null | undefined): StatusBadgeTone {
   return 'neutral';
 }
 
-function StatusBadge({ children, status, tone, className = '' }: StatusBadgeProps): JSX.Element {
+function StatusBadge({ children, status, tone, className = '', ...spanProps }: StatusBadgeProps): JSX.Element {
   const displayValue = children ?? status ?? '-';
   const badgeTone = tone ?? inferTone(status ?? (typeof children === 'string' ? children : null));
   const badgeClassName = `inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-medium ${TONE_CLASSES[badgeTone]} ${className}`.trim();
 
-  return <span className={badgeClassName}>{displayValue}</span>;
+  return <span className={badgeClassName} {...spanProps}>{displayValue}</span>;
 }
 
 export default StatusBadge;

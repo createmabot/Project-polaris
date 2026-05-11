@@ -383,6 +383,47 @@ describe('StrategyVersionDetail', () => {
     expect(findNextPriorityVersionId('v1', [versions[0]])).toBeNull();
   });
 
+  it('renders shared loading and error states for detail fetch', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSWR.mockReturnValue({
+      isLoading: true,
+      error: null,
+      mutate: vi.fn(),
+      data: null,
+    });
+
+    const loadingHtml = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(loadingHtml).toContain('rule version を読み込み中...');
+
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: { message: 'network failed' },
+      mutate: vi.fn(),
+      data: null,
+    });
+
+    const errorHtml = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(errorHtml).toContain('rule version の取得に失敗しました');
+    expect(errorHtml).toContain('エラー: network failed');
+  });
+
+  it('renders shared empty state when detail payload is missing', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+      data: null,
+    });
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('rule version が見つかりません');
+  });
+
   it('shows minimal diff and next priority link when compare base exists', () => {
     mockUseSWR.mockReset();
     mockPostApi.mockReset();
@@ -417,7 +458,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('次の最優先確認へ');
     expect(html).toContain('/strategy-versions/ver-next?return=');
     expect(html).toContain('次の検証ノート');
-    expect(html).toContain('現在のノート: 次回は RSI 55 以上で再検証');
+    expect(html).toContain('<strong>現在のノート:</strong> 次回は RSI 55 以上で再検証');
     expect(html).toContain('ノート更新目安:');
     expect(html).toContain('内製バックテスト（最小）');
     expect(html).toContain('内製バックテストを開始');
@@ -449,8 +490,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較元の version はありません。');
     expect(html).toContain('href="/strategies/str-1/versions"');
-    expect(html).toContain('現在のノート: 未設定');
-    expect(html).toContain('ノート更新目安: -');
+    expect(html).toContain('<strong>現在のノート:</strong> 未設定');
+    expect(html).toContain('<strong>ノート更新目安:</strong> -');
   });
 
   it('renders forward validation note editor controls', () => {
@@ -1102,9 +1143,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('data-testid="pine-regenerate-button"');
     expect(html).toContain('data-testid="pine-lineage-summary"');
     expect(html).toContain('source_pine_script_id: <code>pine-2</code>');
-    expect(html).toContain('parent_pine_script_id: <code>pine-1</code>');
-    expect(html).toContain('latest_revision_input_id: <code>rev-1</code>');
-    expect(html).toContain('latest_revision_request: sma -&gt; ta.sma');
+    expect(html).toContain('<strong>parent_pine_script_id:</strong> <code>pine-1</code>');
+    expect(html).toContain('<strong>latest_revision_input_id:</strong> <code>rev-1</code>');
+    expect(html).toContain('<strong>latest_revision_request:</strong> sma -&gt; ta.sma');
   });
 });
 

@@ -1,7 +1,15 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { Link, useLocation } from 'wouter';
+import { useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
+import Button from '../components/ui/Button';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import LoadingState from '../components/ui/LoadingState';
+import SectionCard from '../components/ui/SectionCard';
+import StatusBadge from '../components/ui/StatusBadge';
+import TextLink from '../components/ui/TextLink';
 import {
   BacktestCreateData,
   InternalBacktestEngineActualArtifactData,
@@ -1005,47 +1013,74 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   };
 
   if (isLoading) {
-    return <div style={{ padding: '2rem' }}>読み込み中...</div>;
+    return (
+      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+        <LoadingState title='rule version を読み込み中...' />
+      </div>
+    );
   }
 
   if (error) {
-    return <div style={{ padding: '2rem', color: '#a10000' }}>エラー: {error.message}</div>;
+    return (
+      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+        <ErrorState title='rule version の取得に失敗しました'>
+          エラー: {error.message}
+        </ErrorState>
+      </div>
+    );
   }
 
   if (!version) {
-    return null;
+    return (
+      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+        <EmptyState title='rule version が見つかりません' />
+      </div>
+    );
   }
   const resolvedReturnPath = returnPath ?? buildDefaultVersionsReturnPath(version.strategy_id);
 
   return (
     <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
-        <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
-        <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href={resolvedReturnPath} style={{ color: '#666', textDecoration: 'none' }}>
+      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+        <TextLink href='/' className='text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
+        <TextLink href='/strategy-lab' className='text-slate-600 no-underline hover:underline'>ルール検証ラボへ戻る</TextLink>
+        <TextLink href={resolvedReturnPath} className='text-slate-600 no-underline hover:underline'>
           version 一覧へ
-        </Link>
+        </TextLink>
         {nextPriorityDetailUrl && (
-          <Link href={nextPriorityDetailUrl} style={{ color: '#8a1212', textDecoration: 'none', fontWeight: 600 }}>
+          <TextLink href={nextPriorityDetailUrl} className='font-semibold text-rose-800 no-underline hover:underline'>
             次の最優先確認へ
-          </Link>
+          </TextLink>
         )}
       </div>
 
       <h1>rule version 詳細</h1>
-      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.4rem', fontSize: '0.95rem' }}>
-        <div><strong>version_id:</strong> <code>{version.id}</code></div>
-        <div><strong>strategy_id:</strong> <code>{version.strategy_id}</code></div>
-        <div><strong>clone元 version:</strong> <code>{version.cloned_from_version_id ?? '-'}</code></div>
-        <div><strong>市場:</strong> {version.market}</div>
-        <div><strong>時間足:</strong> {version.timeframe}</div>
-        <div><strong>status:</strong> <code>{version.status}</code></div>
-        <div><strong>作成:</strong> {new Date(version.created_at).toLocaleString('ja-JP')}</div>
-        <div><strong>更新:</strong> {new Date(version.updated_at).toLocaleString('ja-JP')}</div>
-      </div>
+      <SectionCard
+        title='基本情報'
+        description='strategy version の ID、対象、状態、更新時刻を確認します。'
+        className='mt-4'
+      >
+        <KeyValueList>
+          <KeyValueRow label='version_id'><code>{version.id}</code></KeyValueRow>
+          <KeyValueRow label='strategy_id'><code>{version.strategy_id}</code></KeyValueRow>
+          <KeyValueRow label='clone元 version'><code>{version.cloned_from_version_id ?? '-'}</code></KeyValueRow>
+          <KeyValueRow label='市場'>{version.market}</KeyValueRow>
+          <KeyValueRow label='時間足'>{version.timeframe}</KeyValueRow>
+          <KeyValueRow label='status'>
+            <StatusBadge status={version.status}>
+              <code>{version.status}</code>
+            </StatusBadge>
+          </KeyValueRow>
+          <KeyValueRow label='作成'>{new Date(version.created_at).toLocaleString('ja-JP')}</KeyValueRow>
+          <KeyValueRow label='更新'>{new Date(version.updated_at).toLocaleString('ja-JP')}</KeyValueRow>
+        </KeyValueList>
+      </SectionCard>
 
-      <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>自然言語ルール（編集）</h2>
+      <SectionCard
+        title='自然言語ルール（編集）'
+        description='保存、Pine 再生成、修正再生成の導線は既存のまま維持します。'
+        className='mt-5'
+      >
         <textarea
           value={editingNaturalLanguageRule}
           onChange={(event) => setEditingNaturalLanguageRule(event.target.value)}
@@ -1054,82 +1089,34 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         />
 
         <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <span
+          <StatusBadge
             data-testid='pine-generation-state'
-            style={{
-              display: 'inline-block',
-              padding: '0.3rem 0.55rem',
-              borderRadius: '999px',
-              fontSize: '0.82rem',
-              fontWeight: 600,
-              border: '1px solid #d6d6d6',
-              background:
-                pineState === 'failed'
-                  ? '#fff4f4'
-                  : pineState === 'warning'
-                    ? '#fff9e8'
-                    : pineState === 'generating'
-                      ? '#eef4ff'
-                      : '#eef8ee',
-              color:
-                pineState === 'failed'
-                  ? '#a10000'
-                  : pineState === 'warning'
-                    ? '#9a5a00'
-                    : pineState === 'generating'
-                      ? '#0a4a99'
-                      : '#1f6a1f',
-            }}
+            status={pineState === 'failed' ? 'failed' : pineState === 'generating' ? 'running' : pineState === 'warning' ? 'warning' : 'available'}
           >
             Pine 状態: {pineStateText}
-          </span>
-          <button
-            type='button'
+          </StatusBadge>
+          <Button
+            variant='primary'
             onClick={onSaveRule}
             disabled={savingRule}
-            style={{
-              padding: '0.55rem 0.95rem',
-              border: 'none',
-              borderRadius: '4px',
-              background: savingRule ? '#9cbbe0' : '#0a5bb5',
-              color: '#fff',
-              cursor: savingRule ? 'default' : 'pointer',
-            }}
           >
             {savingRule ? '保存中...' : '保存'}
-          </button>
+          </Button>
 
-          <button
-            type='button'
+          <Button
+            variant='primary'
             onClick={onGeneratePine}
             disabled={regenerating}
-            style={{
-              padding: '0.55rem 0.95rem',
-              border: 'none',
-              borderRadius: '4px',
-              background: regenerating ? '#9cbbe0' : '#0a5bb5',
-              color: '#fff',
-              cursor: regenerating ? 'default' : 'pointer',
-            }}
           >
             {regenerating ? '再生成中...' : 'Pine を再生成'}
-          </button>
+          </Button>
 
-          <button
-            type='button'
+          <Button
             onClick={onCloneAsNewVersion}
             disabled={cloning}
-            style={{
-              padding: '0.55rem 0.95rem',
-              border: '1px solid #0a5bb5',
-              borderRadius: '4px',
-              background: '#fff',
-              color: '#0a5bb5',
-              cursor: cloning ? 'default' : 'pointer',
-            }}
           >
             {cloning ? '作成中...' : '新しい version を作る'}
-          </button>
+          </Button>
         </div>
 
         <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
@@ -1169,22 +1156,14 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               />
             </label>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <button
-                type='button'
+              <Button
+                variant='primary'
                 data-testid='pine-regenerate-button'
                 onClick={onRegenerateWithRevision}
                 disabled={regenerating || !pineData?.pine_script_id}
-                style={{
-                  padding: '0.55rem 0.95rem',
-                  border: 'none',
-                  borderRadius: '4px',
-                  background: regenerating || !pineData?.pine_script_id ? '#9cbbe0' : '#0a5bb5',
-                  color: '#fff',
-                  cursor: regenerating || !pineData?.pine_script_id ? 'default' : 'pointer',
-                }}
               >
                 {regenerating ? '再生成中...' : 'Pine 修正再生成'}
-              </button>
+              </Button>
               <span style={{ fontSize: '0.85rem', color: '#555' }}>
                 source_pine_script_id: <code>{pineData?.pine_script_id ?? '-'}</code>
               </span>
@@ -1192,17 +1171,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </div>
           {(pineData?.parent_pine_script_id || pineData?.latest_revision_input) && (
             <div data-testid='pine-lineage-summary' style={{ marginTop: '0.65rem', fontSize: '0.86rem', color: '#333' }}>
-              <div>parent_pine_script_id: <code>{pineData?.parent_pine_script_id ?? '-'}</code></div>
+              <KeyValueList>
+                <KeyValueRow label='parent_pine_script_id'><code>{pineData?.parent_pine_script_id ?? '-'}</code></KeyValueRow>
               {pineData?.latest_revision_input && (
                 <>
-                  <div>latest_revision_input_id: <code>{pineData.latest_revision_input.id}</code></div>
-                  <div>latest_revision_request: {pineData.latest_revision_input.revision_request}</div>
+                    <KeyValueRow label='latest_revision_input_id'><code>{pineData.latest_revision_input.id}</code></KeyValueRow>
+                    <KeyValueRow label='latest_revision_request'>{pineData.latest_revision_input.revision_request}</KeyValueRow>
                 </>
               )}
+              </KeyValueList>
             </div>
           )}
         </div>
-      </section>
+      </SectionCard>
 
       {saveRuleError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
@@ -1245,18 +1226,23 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         </div>
       )}
 
-      <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>次の検証ノート</h2>
-        <div style={{ marginBottom: '0.6rem', color: '#444', fontSize: '0.92rem' }}>
-          現在のノート: {version.forward_validation_note && version.forward_validation_note.trim() ? version.forward_validation_note : '未設定'}
-        </div>
-        <div style={{ marginBottom: '0.6rem', color: '#444', fontSize: '0.88rem' }}>
-          ノート更新目安: {version.forward_validation_note && version.forward_validation_note.trim()
-            ? (version.forward_validation_note_updated_at
-                ? new Date(version.forward_validation_note_updated_at).toLocaleString('ja-JP')
-                : '-')
-            : '-'}
-        </div>
+      <SectionCard
+        title='次の検証ノート'
+        description='forward validation の確認内容を version 単位で記録します。'
+        className='mt-5'
+      >
+        <KeyValueList className='mb-3'>
+          <KeyValueRow label='現在のノート'>
+            {version.forward_validation_note && version.forward_validation_note.trim() ? version.forward_validation_note : '未設定'}
+          </KeyValueRow>
+          <KeyValueRow label='ノート更新目安'>
+            {version.forward_validation_note && version.forward_validation_note.trim()
+              ? (version.forward_validation_note_updated_at
+                  ? new Date(version.forward_validation_note_updated_at).toLocaleString('ja-JP')
+                  : '-')
+              : '-'}
+          </KeyValueRow>
+        </KeyValueList>
         <textarea
           value={editingForwardValidationNote}
           onChange={(event) => setEditingForwardValidationNote(event.target.value)}
@@ -1265,21 +1251,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           style={{ width: '100%', padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
         />
         <div style={{ marginTop: '0.7rem' }}>
-          <button
-            type='button'
+          <Button
+            variant='primary'
             onClick={onSaveForwardValidationNote}
             disabled={savingForwardNote}
-            style={{
-              padding: '0.55rem 0.95rem',
-              border: 'none',
-              borderRadius: '4px',
-              background: savingForwardNote ? '#9cbbe0' : '#0a5bb5',
-              color: '#fff',
-              cursor: savingForwardNote ? 'default' : 'pointer',
-            }}
           >
             {savingForwardNote ? '保存中...' : 'ノートを保存'}
-          </button>
+          </Button>
         </div>
         {saveForwardNoteError && (
           <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
@@ -1291,7 +1269,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             {saveForwardNoteMessage}
           </div>
         )}
-      </section>
+      </SectionCard>
 
       <section style={{ marginTop: '1.2rem', border: '1px solid #ddd', borderRadius: '6px', padding: '0.85rem', background: '#eef8ee' }}>
         <h2 style={{ marginTop: 0, marginBottom: '0.6rem' }}>TradingView 検証用バックテスト</h2>
@@ -2229,10 +2207,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         )}
       </section>
 
-      <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>warnings</h2>
+      <SectionCard title='warnings' className='mt-5'>
         {warnings.length === 0 ? (
-          <p style={{ color: '#666' }}>なし</p>
+          <EmptyState title='なし' />
         ) : (
           <ul style={{ color: '#8a5b00' }}>
             {warnings.map((item, index) => (
@@ -2240,12 +2217,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
-      <section style={{ marginTop: '1.2rem' }}>
-        <h2 style={{ marginBottom: '0.5rem' }}>assumptions</h2>
+      <SectionCard title='assumptions' className='mt-5'>
         {assumptions.length === 0 ? (
-          <p style={{ color: '#666' }}>なし</p>
+          <EmptyState title='なし' />
         ) : (
           <ul>
             {assumptions.map((item, index) => (
@@ -2253,28 +2229,21 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             ))}
           </ul>
         )}
-      </section>
+      </SectionCard>
 
-      <section style={{ marginTop: '1.2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-          <h2 style={{ margin: 0 }}>generated pine</h2>
-          <button
-            type='button'
+      <SectionCard
+        title='generated pine'
+        className='mt-5'
+        actions={(
+          <Button
             data-testid='strategy-version-copy-pine-button'
             onClick={onCopyPine}
             disabled={!canCopyPine}
-            style={{
-              padding: '0.35rem 0.75rem',
-              borderRadius: '4px',
-              border: '1px solid #0a5bb5',
-              background: canCopyPine ? '#fff' : '#f2f2f2',
-              color: canCopyPine ? '#0a5bb5' : '#888',
-              cursor: canCopyPine ? 'pointer' : 'default',
-            }}
           >
             コピー
-          </button>
-        </div>
+          </Button>
+        )}
+      >
         {pineCopyFeedback && (
           <div
             data-testid='strategy-version-copy-pine-feedback'
@@ -2292,9 +2261,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             <code>{displayedPineScriptRaw}</code>
           </pre>
         ) : (
-          <p style={{ color: '#666' }}>まだ生成されていません。ルールを確認後に再生成してください。</p>
+          <EmptyState title='まだ生成されていません'>
+            ルールを確認後に再生成してください。
+          </EmptyState>
         )}
-      </section>
+      </SectionCard>
     </div>
   );
 }
