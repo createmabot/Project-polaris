@@ -111,6 +111,31 @@ test.describe('Home -> SymbolDetail smoke', () => {
     await expect(page.locator('a[href^="/strategy-versions/"]').first()).toBeVisible();
   });
 
+  test('opens Application Detail history as a read-only view from SymbolDetail', async ({ page }) => {
+    await openHomeAndWaitUntilReady(page);
+
+    const symbolLink = await pickSeedSymbolLink(page);
+    expect(symbolLink, 'seed data should provide a SideRail symbol link for the application history scenario').not.toBeNull();
+    if (!symbolLink) return;
+
+    await symbolLink.click();
+
+    await expect(page).toHaveURL(/\/symbols\/.+/);
+    await expect(page.getByRole('heading', { level: 2, name: 'ストラテジー / 検証結果' })).toBeVisible({ timeout: 15000 });
+
+    const runHistoryLink = page.getByRole('link', { name: 'run履歴を見る' }).first();
+    await expect(runHistoryLink).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('link', { name: 'report履歴を見る' }).first()).toBeVisible();
+    await runHistoryLink.click();
+
+    await expect(page).toHaveURL(/\/symbol-strategy-applications\/.+/);
+    await expect(page.getByRole('heading', { level: 2, name: 'application summary' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 2, name: 'run履歴' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'report履歴' })).toBeVisible();
+    await expect(page.getByText('run type', { exact: true })).toBeVisible();
+    await expect(page.getByText('execution source', { exact: true })).toBeVisible();
+  });
+
   test('shows the seeded internal backtest report as a read-only importless report', async ({ page }) => {
     await page.goto('/backtests/00000000-0000-4000-8000-000000000405');
 

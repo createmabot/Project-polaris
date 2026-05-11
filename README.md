@@ -555,3 +555,9 @@ pnpm exec prisma db seed
 - Application Detail report history now supports read-only `execution_source` and report `status` filtering through the existing reports endpoint.
 - Report history pagination uses a minimal previous / next UI backed by the existing pagination response.
 - The reports section explains why some metrics may be shown as unavailable when source summaries are missing.
+
+### Application Detail history browser smoke
+
+- Browser smoke covers the read-only path from SymbolDetail to Application Detail.
+- The smoke checks application summary, run history, report history, and representative filter labels without executing imports, internal backtests, or report conversion.
+- The Application Detail / History usability pass is complete through runs filters, reports filters, pagination, and metrics missing-value explanation.
