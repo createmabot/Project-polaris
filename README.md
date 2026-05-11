@@ -582,3 +582,10 @@ pnpm exec prisma db seed
 
 - Home and SideRail now use shared UI components for selected loading, error, empty, key-value, and button presentation.
 - The pass keeps Home and SideRail refresh behavior, latest home data sharing, watchlist and positions CRUD behavior, API shape, backend, DB, and Prisma schema unchanged.
+
+### UI cleanup second pass completion
+
+- UI cleanup second pass is complete for StrategyVersionDetail, StrategyLab, BacktestComparisonDetail, Home, and SideRail.
+- The pass focused on selected section, state, status, key-value, empty, loading, error, and button presentation.
+- It did not change refresh behavior, CRUD behavior, API shape, backend, DB, or Prisma schema.
+- Form, modal, table, JSON viewer consolidation and visual regression remain future decisions.
