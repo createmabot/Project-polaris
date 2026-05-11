@@ -565,6 +565,23 @@ vi.mock('../src/db', () => {
       },
     },
     symbolStrategyApplicationRun: {
+      count: async ({ where }: any) => {
+        return runtime.runs.filter((run) => {
+          if (where?.applicationId && run.applicationId !== where.applicationId) return false;
+          if (where?.runType && run.runType !== where.runType) return false;
+          if (where?.status && run.status !== where.status) return false;
+          if (where?.backtestId?.not === null && run.backtestId === null) return false;
+          if (where?.backtest?.is?.executionSource) {
+            const backtest = run.backtestId ? runtime.backtests.get(run.backtestId) : null;
+            if (backtest?.executionSource !== where.backtest.is.executionSource) return false;
+          }
+          if (where?.backtest?.is?.status) {
+            const backtest = run.backtestId ? runtime.backtests.get(run.backtestId) : null;
+            if (backtest?.status !== where.backtest.is.status) return false;
+          }
+          return true;
+        }).length;
+      },
       findFirst: async ({ where }: any) => {
         return runtime.runs.find((run) => {
           if (where?.id && run.id !== where.id) return false;
@@ -577,20 +594,53 @@ vi.mock('../src/db', () => {
           return true;
         }) ?? null;
       },
-      findMany: async ({ where }: any) => {
-        return runtime.runs
+      findMany: async ({ where, orderBy, skip, take }: any) => {
+        let rows = runtime.runs
           .filter((run) => {
             if (where?.applicationId?.in && !where.applicationId.in.includes(run.applicationId)) return false;
             if (where?.applicationId && !where.applicationId.in && run.applicationId !== where.applicationId) return false;
             if (where?.runType?.in && !where.runType.in.includes(run.runType)) return false;
             if (where?.runType && !where.runType.in && run.runType !== where.runType) return false;
+            if (where?.status && run.status !== where.status) return false;
             if (where?.backtestId?.not === null && run.backtestId === null) return false;
+            if (where?.backtest?.is?.executionSource) {
+              const backtest = run.backtestId ? runtime.backtests.get(run.backtestId) : null;
+              if (backtest?.executionSource !== where.backtest.is.executionSource) return false;
+            }
+            if (where?.backtest?.is?.status) {
+              const backtest = run.backtestId ? runtime.backtests.get(run.backtestId) : null;
+              if (backtest?.status !== where.backtest.is.status) return false;
+            }
             return true;
-          })
-          .map((run) => ({
-            ...run,
-            backtest: run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null,
-          }));
+          });
+        if (orderBy?.createdAt === 'asc') {
+          rows = rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        } else if (orderBy?.createdAt === 'desc') {
+          rows = rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        } else if (orderBy?.updatedAt === 'asc') {
+          rows = rows.sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime());
+        } else if (orderBy?.updatedAt === 'desc') {
+          rows = rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+        }
+        const offset = Number.isInteger(skip) ? skip : 0;
+        const limit = Number.isInteger(take) ? take : rows.length;
+        return rows.slice(offset, offset + limit)
+          .map((run) => {
+            const backtest = run.backtestId ? runtime.backtests.get(run.backtestId) ?? null : null;
+            return {
+              ...run,
+              backtest: backtest
+                ? {
+                    ...backtest,
+                    imports: [...runtime.backtestImports.values()].filter((item) => item.backtestId === run.backtestId),
+                  }
+                : null,
+              backtestImport: run.backtestImportId ? runtime.backtestImports.get(run.backtestImportId) ?? null : null,
+              internalBacktestExecution: run.internalBacktestExecutionId
+                ? runtime.internalExecutions.get(run.internalBacktestExecutionId) ?? null
+                : null,
+            };
+          });
       },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:03:00.000Z');
@@ -1543,6 +1593,201 @@ describe('symbol strategy applications route', () => {
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error.code).toBe('NOT_FOUND');
+
+    await app.close();
+  });
+
+  it('lists application-specific run history with linked summaries and any-run filters', async () => {
+    runtime.internalExecutions.set('internal-1', {
+      id: 'internal-1',
+      strategyRuleVersionId: 'version-1',
+      status: 'succeeded',
+      requestedAt: new Date('2026-05-03T00:00:00.000Z'),
+      startedAt: new Date('2026-05-03T00:01:00.000Z'),
+      finishedAt: new Date('2026-05-03T00:10:00.000Z'),
+      inputSnapshotJson: {},
+      resultSummaryJson: null,
+      artifactPointerJson: null,
+      errorCode: null,
+      errorMessage: null,
+      engineVersion: 'ibtx-v0',
+      createdAt: new Date('2026-05-03T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-03T00:10:00.000Z'),
+    });
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/runs?page=1&limit=10&sort=created_at&order=desc',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.application).toMatchObject({
+      id: 'app-1',
+      run_count: 2,
+      symbol: { id: 'sym-1' },
+      strategy: { id: 'strategy-1' },
+      strategy_version: { id: 'version-1' },
+    });
+    expect(res.json().data.pagination).toMatchObject({ page: 1, limit: 10, total: 2 });
+    expect(res.json().data.runs.map((run: any) => run.id)).toEqual(['run-latest', 'run-old']);
+    expect(res.json().data.runs[0]).toMatchObject({
+      run_type: 'internal_backtest',
+      status: 'succeeded',
+      linked_backtest: { id: 'backtest-1' },
+      linked_backtest_import: null,
+      linked_internal_backtest_execution: {
+        id: 'internal-1',
+        status: 'succeeded',
+        engine_version: 'ibtx-v0',
+      },
+    });
+
+    const csvRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/runs?run_type=csv_import&run_status=succeeded',
+    });
+    expect(csvRes.statusCode).toBe(200);
+    expect(csvRes.json().data.pagination.total).toBe(1);
+    expect(csvRes.json().data.runs[0]).toMatchObject({
+      id: 'run-old',
+      run_type: 'csv_import',
+      linked_backtest: { id: 'backtest-old', execution_source: 'tradingview' },
+      linked_backtest_import: {
+        id: 'import-old',
+        file_name: 'old.csv',
+        parse_status: 'parsed',
+      },
+      linked_internal_backtest_execution: null,
+    });
+
+    await app.close();
+  });
+
+  it('lists application-specific reports with source filters and optional metrics', async () => {
+    runtime.backtestImports.set('import-old', {
+      ...runtime.backtestImports.get('import-old')!,
+      parsedSummaryJson: {
+        totalTrades: 12,
+        winRate: 58.3,
+        profitFactor: 1.7,
+        maxDrawdown: -12.5,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-02-01',
+      },
+    });
+    runtime.backtests.set('backtest-1', {
+      ...runtime.backtests.get('backtest-1')!,
+      executionSource: 'internal_backtest',
+      strategySnapshotJson: {
+        execution_source: 'internal_backtest',
+        result_summary: {
+          period: { from: '2026-03-01', to: '2026-04-01' },
+          metrics: {
+            trade_count: 4,
+            total_return_percent: 8.9,
+            price_change_percent: 5.1,
+            max_drawdown_percent: 10.2,
+            profit_factor: 1.42,
+            win_rate: 55,
+          },
+        },
+      },
+    });
+    runtime.internalExecutions.set('internal-1', {
+      id: 'internal-1',
+      strategyRuleVersionId: 'version-1',
+      status: 'succeeded',
+      requestedAt: new Date('2026-05-03T00:00:00.000Z'),
+      startedAt: new Date('2026-05-03T00:01:00.000Z'),
+      finishedAt: new Date('2026-05-03T00:10:00.000Z'),
+      inputSnapshotJson: {},
+      resultSummaryJson: null,
+      artifactPointerJson: null,
+      errorCode: null,
+      errorMessage: null,
+      engineVersion: 'ibtx-v0',
+      createdAt: new Date('2026-05-03T00:00:00.000Z'),
+      updatedAt: new Date('2026-05-03T00:10:00.000Z'),
+    });
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/reports?page=1&limit=10&sort=created_at&order=desc',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.application).toMatchObject({
+      id: 'app-1',
+      report_count: 2,
+    });
+    expect(res.json().data.pagination).toMatchObject({ page: 1, limit: 10, total: 2 });
+    expect(res.json().data.reports.map((report: any) => report.id)).toEqual(['backtest-1', 'backtest-old']);
+    expect(res.json().data.reports[0]).toMatchObject({
+      id: 'backtest-1',
+      execution_source: 'internal_backtest',
+      report_origin: 'internal_backtest',
+      importless_report: true,
+      linked_run: { id: 'run-latest', run_type: 'internal_backtest' },
+      linked_internal_backtest_execution: { id: 'internal-1' },
+      metrics: {
+        period_from: '2026-03-01',
+        trade_count: 4,
+        total_return_percent: 8.9,
+        source: 'backtest.strategy_snapshot_json.result_summary',
+      },
+      backtest_detail_link: { path: '/backtests/backtest-1' },
+    });
+    expect(res.json().data.reports[1]).toMatchObject({
+      id: 'backtest-old',
+      execution_source: 'tradingview',
+      report_origin: 'csv_import',
+      importless_report: false,
+      metrics: {
+        period_from: '2026-01-01',
+        trade_count: 12,
+        profit_factor: 1.7,
+        source: 'backtest_import.parsed_summary_json',
+      },
+    });
+
+    const csvOnly = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/reports?execution_source=tradingview&with_metrics=false',
+    });
+    expect(csvOnly.statusCode).toBe(200);
+    expect(csvOnly.json().data.pagination.total).toBe(1);
+    expect(csvOnly.json().data.reports[0]).toMatchObject({
+      id: 'backtest-old',
+      metrics: null,
+    });
+
+    await app.close();
+  });
+
+  it('validates application-specific history query values', async () => {
+    const app = await createApp();
+
+    const missingApplication = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/missing-app/runs',
+    });
+    const invalidRunsQuery = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/runs?run_type=all_runs',
+    });
+    const invalidReportsQuery = await app.inject({
+      method: 'GET',
+      url: '/api/symbol-strategy-applications/app-1/reports?with_metrics=yes',
+    });
+
+    expect(missingApplication.statusCode).toBe(404);
+    expect(missingApplication.json().error.code).toBe('NOT_FOUND');
+    expect(invalidRunsQuery.statusCode).toBe(400);
+    expect(invalidRunsQuery.json().error.code).toBe('VALIDATION_ERROR');
+    expect(invalidReportsQuery.statusCode).toBe(400);
+    expect(invalidReportsQuery.json().error.code).toBe('VALIDATION_ERROR');
 
     await app.close();
   });

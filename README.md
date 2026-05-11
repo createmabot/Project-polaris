@@ -535,3 +535,11 @@ pnpm exec prisma db seed
 - `strategy_id` / `strategy_version_id` は UUID query として application の strategy / version 固定値で絞り込み、同時指定時は AND 条件で扱う。
 - `SymbolDetail` の saved application filter UI から strategy / version ID を指定して再取得できる。
 - latest run、latest backtest report、CSV / internal latest pair、pagination meta は維持する。
+
+### Application Detail / History foundation
+
+- `GET /api/symbol-strategy-applications/:applicationId/runs` で application 単位の run 履歴を read-only に取得できる。
+- `GET /api/symbol-strategy-applications/:applicationId/reports` で application 単位の report 履歴を read-only に取得できる。
+- `SymbolDetail` から `/symbol-strategy-applications/:applicationId` へ遷移し、run / report 履歴を確認できる。
+- 既存 SymbolDetail list endpoint の latest summary / latest-run filter と、application-specific any-run history は役割を分離する。
+- DB migration / Prisma schema change は行わない。

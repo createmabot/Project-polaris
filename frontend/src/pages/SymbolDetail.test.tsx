@@ -556,6 +556,10 @@ describe('SymbolDetail', () => {
     expect(html).toContain('internal backtest report');
     expect(html).toContain('7203 internal report');
     expect(html).toContain('href="/backtests/backtest_internal_1"');
+    expect(html).toContain('run履歴を見る');
+    expect(html).toContain('report履歴を見る');
+    expect(html).toContain('href="/symbol-strategy-applications/application_1#runs"');
+    expect(html).toContain('href="/symbol-strategy-applications/application_1#reports"');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('CSVテキスト');
     expect(html).toContain('CSV取込を実行');
