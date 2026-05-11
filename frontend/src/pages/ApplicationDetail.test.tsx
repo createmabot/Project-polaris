@@ -168,7 +168,7 @@ const reportsFixture = {
     page: 1,
     limit: 20,
     total: 2,
-    has_next: false,
+    has_next: true,
     has_prev: false,
   },
   reports: [
@@ -274,6 +274,16 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('linked import');
     expect(html).toContain('summary.csv');
     expect(html).toContain('report履歴');
+    expect(html).toContain('report履歴 filter');
+    expect(html).toContain('execution source');
+    expect(html).toContain('report status');
+    expect(html).toContain('TradingView');
+    expect(html).toContain('imported');
+    expect(html).toContain('completed');
+    expect(html).toContain('import_failed');
+    expect(html).toContain('report 1 / 2 件を表示中');
+    expect(html).toContain('metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。');
+    expect(html).toContain('CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。');
     expect(html).toContain('report count: 2');
     expect(html).toContain('7203 internal report');
     expect(html).toContain('total_return_percent');
@@ -282,6 +292,10 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('href="/symbols/sym-1"');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/symbol-strategy-applications/application_1/runs?page=1&limit=20&sort=created_at&order=desc',
+      expect.any(Function),
+    );
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbol-strategy-applications/application_1/reports?page=1&limit=20&sort=created_at&order=desc',
       expect.any(Function),
     );
   });
