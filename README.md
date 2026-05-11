@@ -543,3 +543,9 @@ pnpm exec prisma db seed
 - `SymbolDetail` から `/symbol-strategy-applications/:applicationId` へ遷移し、run / report 履歴を確認できる。
 - 既存 SymbolDetail list endpoint の latest summary / latest-run filter と、application-specific any-run history は役割を分離する。
 - DB migration / Prisma schema change は行わない。
+
+### Application Detail runs usability pass
+
+- Application Detail run history now supports read-only `run_type` and `run_status` filtering through the existing runs endpoint.
+- Run history pagination uses a minimal previous / next UI backed by the existing pagination response.
+- Reports history remains unchanged in this pass.

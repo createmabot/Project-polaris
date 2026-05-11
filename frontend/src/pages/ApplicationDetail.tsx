@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { swrFetcher } from '../api/client';
@@ -7,6 +8,7 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
+import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
@@ -27,6 +29,21 @@ const LABELS = {
   reports: 'report履歴',
   noRuns: 'run履歴はまだありません。',
   noReports: 'report履歴はまだありません。',
+  runsFilter: 'run履歴 filter',
+  runsTypeFilter: 'run type',
+  runsStatusFilter: 'run status',
+  runsAll: 'すべて',
+  runsCsvImport: 'CSV',
+  runsInternalBacktest: 'internal',
+  runsQueued: 'queued',
+  runsRunning: 'running',
+  runsSucceeded: 'succeeded',
+  runsFailed: 'failed',
+  runsCanceled: 'canceled',
+  runsSummary: 'run {shown} / {total} 件を表示中',
+  previousPage: '前へ',
+  nextPage: '次へ',
+  pageSummary: 'page {page}',
   openBacktest: 'BacktestDetail を開く',
   openStrategy: 'StrategyDetail を開く',
   openVersion: 'StrategyVersionDetail を開く',
@@ -34,6 +51,9 @@ const LABELS = {
   reportCount: 'report count',
   latestReadOnly: 'read-only foundation として application 単位の run / report 履歴を表示しています。',
 } as const;
+
+type RunTypeFilter = 'all' | 'csv_import' | 'internal_backtest';
+type RunStatusFilter = 'all' | 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 
 function formatDate(value: string | null): string {
   if (!value) return '-';
@@ -52,11 +72,30 @@ function getApplicationTitle(data?: SymbolStrategyApplicationRunHistoryData | nu
   return `${data.application.symbol.display_name || data.application.symbol.symbol} / ${data.application.strategy.title}`;
 }
 
+function buildRunsPath(applicationId: string, page: number, runType: RunTypeFilter, runStatus: RunStatusFilter): string {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: '20',
+    sort: 'created_at',
+    order: 'desc',
+  });
+  if (runType !== 'all') {
+    params.set('run_type', runType);
+  }
+  if (runStatus !== 'all') {
+    params.set('run_status', runStatus);
+  }
+  return `/api/symbol-strategy-applications/${applicationId}/runs?${params.toString()}`;
+}
+
 export default function ApplicationDetail() {
   const [, params] = useRoute('/symbol-strategy-applications/:applicationId');
   const applicationId = params?.applicationId;
+  const [runsPage, setRunsPage] = useState(1);
+  const [runTypeFilter, setRunTypeFilter] = useState<RunTypeFilter>('all');
+  const [runStatusFilter, setRunStatusFilter] = useState<RunStatusFilter>('all');
   const runsPath = applicationId
-    ? `/api/symbol-strategy-applications/${applicationId}/runs?page=1&limit=20&sort=created_at&order=desc`
+    ? buildRunsPath(applicationId, runsPage, runTypeFilter, runStatusFilter)
     : null;
   const reportsPath = applicationId
     ? `/api/symbol-strategy-applications/${applicationId}/reports?page=1&limit=20&sort=created_at&order=desc`
@@ -94,6 +133,29 @@ export default function ApplicationDetail() {
   if (!runsData) return null;
 
   const application = runsData.application;
+  const runTypeOptions = [
+    { value: 'all' as const, label: LABELS.runsAll },
+    { value: 'csv_import' as const, label: LABELS.runsCsvImport },
+    { value: 'internal_backtest' as const, label: LABELS.runsInternalBacktest },
+  ];
+  const runStatusOptions = [
+    { value: 'all' as const, label: LABELS.runsAll },
+    { value: 'queued' as const, label: LABELS.runsQueued },
+    { value: 'running' as const, label: LABELS.runsRunning },
+    { value: 'succeeded' as const, label: LABELS.runsSucceeded },
+    { value: 'failed' as const, label: LABELS.runsFailed },
+    { value: 'canceled' as const, label: LABELS.runsCanceled },
+  ];
+
+  function updateRunTypeFilter(nextFilter: RunTypeFilter) {
+    setRunTypeFilter(nextFilter);
+    setRunsPage(1);
+  }
+
+  function updateRunStatusFilter(nextFilter: RunStatusFilter) {
+    setRunStatusFilter(nextFilter);
+    setRunsPage(1);
+  }
 
   return (
     <AppLayout showSideRail>
@@ -128,6 +190,40 @@ export default function ApplicationDetail() {
 
         <div id="runs">
           <SectionCard title={LABELS.runs}>
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsFilter}</h3>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsTypeFilter}</span>
+                {runTypeOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={runTypeFilter === option.value ? 'primary' : 'secondary'}
+                    onClick={() => updateRunTypeFilter(option.value)}
+                    className="py-1 text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsStatusFilter}</span>
+                {runStatusOptions.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={runStatusFilter === option.value ? 'primary' : 'secondary'}
+                    onClick={() => updateRunStatusFilter(option.value)}
+                    className="py-1 text-xs"
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                {LABELS.runsSummary
+                  .replace('{shown}', String(runsData.runs.length))
+                  .replace('{total}', String(runsData.pagination.total))}
+              </div>
+            </div>
             {runsData.runs.length === 0 ? (
               <EmptyState title={LABELS.noRuns} />
             ) : (
@@ -190,6 +286,29 @@ export default function ApplicationDetail() {
               ))}
               </div>
             )}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
+              <div className="text-xs text-slate-500">
+                {LABELS.pageSummary.replace('{page}', String(runsData.pagination.page))}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => setRunsPage((page) => Math.max(1, page - 1))}
+                  disabled={!runsData.pagination.has_prev}
+                  className="py-1 text-xs"
+                >
+                  {LABELS.previousPage}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setRunsPage((page) => page + 1)}
+                  disabled={!runsData.pagination.has_next}
+                  className="py-1 text-xs"
+                >
+                  {LABELS.nextPage}
+                </Button>
+              </div>
+            </div>
           </SectionCard>
         </div>
 
