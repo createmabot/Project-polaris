@@ -2,6 +2,10 @@ import { type FormEvent, useMemo, useState } from 'react';
 import useSWR, { type KeyedMutator } from 'swr';
 import { deleteApi, patchApi, postApi, swrFetcher } from '../../api/client';
 import type { HomeData, PositionManagementData, PositionMutateData, WatchlistItemData, WatchlistItemMutateData } from '../../api/types';
+import Button from '../ui/Button';
+import EmptyState from '../ui/EmptyState';
+import ErrorState from '../ui/ErrorState';
+import LoadingState from '../ui/LoadingState';
 import Modal from '../ui/Modal';
 import TextLink from '../ui/TextLink';
 
@@ -372,7 +376,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
   const renderWatchlistRows = () => {
     if (!data) return null;
     if (data.watchlist_symbols.length === 0) {
-      return <p className="text-sm text-slate-500">監視銘柄はまだありません。</p>;
+      return <EmptyState title="監視銘柄はまだありません。" />;
     }
     return (
       <div className="space-y-2">
@@ -386,22 +390,21 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 {symbol.display_name ?? symbol.symbol_id ?? '不明'}
               </TextLink>
               <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
+                <Button
                   onClick={() => openEditWatchlistModal(symbol)}
                   disabled={!watchlistActionsReady}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="px-2 py-1 text-xs"
                 >
                   編集
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="danger"
                   onClick={() => openDeleteWatchlistModal(symbol)}
                   disabled={!watchlistActionsReady}
-                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="px-2 py-1 text-xs"
                 >
                   削除
-                </button>
+                </Button>
               </div>
             </div>
             <div className="mt-1 text-xs text-slate-500">
@@ -411,7 +414,9 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 : `${formatNumber(symbol.change_rate, 2)}%`}
             </div>
             {!watchlistActionsReady && isWatchlistLoading ? (
-              <p className="mt-2 text-[11px] text-slate-400">???????????????? / ???????????</p>
+              <div className="mt-2">
+                <LoadingState title="監視銘柄の操作情報を読み込み中..." className="p-2 text-xs shadow-none" />
+              </div>
             ) : null}
           </div>
         ))}
@@ -422,7 +427,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
   const renderPositionRows = () => {
     if (!data) return null;
     if (data.positions.length === 0) {
-      return <p className="text-sm text-slate-500">保有銘柄はまだありません。</p>;
+      return <EmptyState title="保有銘柄はまだありません。" />;
     }
     return (
       <div className="space-y-2">
@@ -436,22 +441,21 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 {buildPositionDisplayName(position, watchlistDisplayNameById)}
               </TextLink>
               <div className="flex shrink-0 gap-2">
-                <button
-                  type="button"
+                <Button
                   onClick={() => openEditPositionModal(position)}
                   disabled={!positionActionsReady}
-                  className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="px-2 py-1 text-xs"
                 >
                   編集
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="danger"
                   onClick={() => openDeletePositionModal(position)}
                   disabled={!positionActionsReady}
-                  className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+                  className="px-2 py-1 text-xs"
                 >
                   削除
-                </button>
+                </Button>
               </div>
             </div>
             <div className="mt-1 text-xs text-slate-500">
@@ -459,7 +463,9 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
             </div>
             <div className="mt-1 text-xs text-slate-500">評価損益: {formatNumber(position.unrealized_pnl, 2)}</div>
             {!positionActionsReady && isPositionsLoading ? (
-              <p className="mt-2 text-[11px] text-slate-400">???????????????? / ???????????</p>
+              <div className="mt-2">
+                <LoadingState title="保有銘柄の操作情報を読み込み中..." className="p-2 text-xs shadow-none" />
+              </div>
             ) : null}
           </div>
         ))}
@@ -469,12 +475,12 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
 
   const renderContent = () => {
     if (isLoading) {
-      return <p className="text-sm text-slate-500">読み込み中...</p>;
+      return <LoadingState title="読み込み中..." className="shadow-none" />;
     }
     if (error) {
-      return <p className="text-sm text-red-600">SideRail の取得に失敗しました。</p>;
+      return <ErrorState title="SideRail の取得に失敗しました。" />;
     }
-    if (!data) return null;
+    if (!data) return <EmptyState title="SideRail データが見つかりません。" />;
     return tab === 'watchlist' ? renderWatchlistRows() : renderPositionRows();
   };
 
@@ -491,13 +497,12 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
           <div className="border-b border-slate-200 p-4">
             <div className="flex items-center justify-between gap-2">
               {!collapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
-              <button
-                type="button"
+              <Button
                 onClick={() => setCollapsed((value) => !value)}
-                className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
+                className="px-2 py-1 text-xs"
               >
                 {collapsed ? '開く' : '折りたたむ'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -562,13 +567,11 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
               <div className="mb-3">
                 {tab === 'watchlist' ? (
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
+                    <Button
                       onClick={openCreateWatchlistModal}
-                      className="inline-flex rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                     >
                       監視銘柄を追加
-                    </button>
+                    </Button>
                     <TextLink
                       href="/watchlist"
                       className="text-xs text-slate-500 no-underline hover:underline"
@@ -578,13 +581,11 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
+                    <Button
                       onClick={openCreatePositionModal}
-                      className="inline-flex rounded border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
                     >
                       保有銘柄を追加
-                    </button>
+                    </Button>
                     <TextLink
                       href="/positions"
                       className="text-xs text-slate-500 no-underline hover:underline"
