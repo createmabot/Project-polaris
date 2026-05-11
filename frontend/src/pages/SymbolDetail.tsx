@@ -60,6 +60,10 @@ const LABELS = {
   savedApplicationsSourceInternal: 'internal',
   savedApplicationsRunTypeFilter: 'latest run type',
   savedApplicationsRunStatusFilter: 'latest run status',
+  savedApplicationsStrategyFilter: 'strategy_id',
+  savedApplicationsVersionFilter: 'strategy_version_id',
+  savedApplicationsStrategyPlaceholder: 'strategy id',
+  savedApplicationsVersionPlaceholder: 'version id',
   savedApplicationsRunAll: 'すべて',
   savedApplicationsRunRunning: 'running',
   savedApplicationsRunSucceeded: 'succeeded',
@@ -313,6 +317,20 @@ function getApplicationRunStatusQuery(filter: ApplicationRunStatusFilter): strin
   if (filter === 'succeeded') return '&run_status=succeeded';
   if (filter === 'failed') return '&run_status=failed';
   return '';
+}
+
+function getApplicationIdQuery(strategyId: string, strategyVersionId: string): string {
+  const params = new URLSearchParams();
+  const trimmedStrategyId = strategyId.trim();
+  const trimmedStrategyVersionId = strategyVersionId.trim();
+  if (trimmedStrategyId) {
+    params.set('strategy_id', trimmedStrategyId);
+  }
+  if (trimmedStrategyVersionId) {
+    params.set('strategy_version_id', trimmedStrategyVersionId);
+  }
+  const query = params.toString();
+  return query ? `&${query}` : '';
 }
 
 function InternalBacktestResultPanel({
@@ -889,11 +907,15 @@ function SavedStrategyApplicationsPanel({
   applicationSourceFilter,
   applicationRunTypeFilter,
   applicationRunStatusFilter,
+  applicationStrategyIdFilter,
+  applicationStrategyVersionIdFilter,
   onApplicationStatusFilterChange,
   onApplicationFilterChange,
   onApplicationSourceFilterChange,
   onApplicationRunTypeFilterChange,
   onApplicationRunStatusFilterChange,
+  onApplicationStrategyIdFilterChange,
+  onApplicationStrategyVersionIdFilterChange,
   isLoading,
   error,
   mutateApplications,
@@ -905,11 +927,15 @@ function SavedStrategyApplicationsPanel({
   applicationSourceFilter: ApplicationReportSourceFilter;
   applicationRunTypeFilter: ApplicationRunTypeFilter;
   applicationRunStatusFilter: ApplicationRunStatusFilter;
+  applicationStrategyIdFilter: string;
+  applicationStrategyVersionIdFilter: string;
   onApplicationStatusFilterChange: (filter: ApplicationStatusFilter) => void;
   onApplicationFilterChange: (filter: ApplicationReportFilter) => void;
   onApplicationSourceFilterChange: (filter: ApplicationReportSourceFilter) => void;
   onApplicationRunTypeFilterChange: (filter: ApplicationRunTypeFilter) => void;
   onApplicationRunStatusFilterChange: (filter: ApplicationRunStatusFilter) => void;
+  onApplicationStrategyIdFilterChange: (value: string) => void;
+  onApplicationStrategyVersionIdFilterChange: (value: string) => void;
   isLoading: boolean;
   error: unknown;
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
@@ -953,7 +979,9 @@ function SavedStrategyApplicationsPanel({
     && applicationFilter === 'all'
     && applicationSourceFilter === 'all'
     && applicationRunTypeFilter === 'all'
-    && applicationRunStatusFilter === 'all';
+    && applicationRunStatusFilter === 'all'
+    && applicationStrategyIdFilter.trim() === ''
+    && applicationStrategyVersionIdFilter.trim() === '';
 
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
@@ -1030,6 +1058,30 @@ function SavedStrategyApplicationsPanel({
                   {option.label}
                 </Button>
               ))}
+            </div>
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {LABELS.savedApplicationsStrategyFilter}
+                <input
+                  type="text"
+                  value={applicationStrategyIdFilter}
+                  onChange={(event) => onApplicationStrategyIdFilterChange(event.target.value)}
+                  onBlur={(event) => onApplicationStrategyIdFilterChange(event.target.value.trim())}
+                  placeholder={LABELS.savedApplicationsStrategyPlaceholder}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
+                />
+              </label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {LABELS.savedApplicationsVersionFilter}
+                <input
+                  type="text"
+                  value={applicationStrategyVersionIdFilter}
+                  onChange={(event) => onApplicationStrategyVersionIdFilterChange(event.target.value)}
+                  onBlur={(event) => onApplicationStrategyVersionIdFilterChange(event.target.value.trim())}
+                  placeholder={LABELS.savedApplicationsVersionPlaceholder}
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
+                />
+              </label>
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
               <span>
@@ -1309,6 +1361,8 @@ export default function SymbolDetail() {
   const [applicationSourceFilter, setApplicationSourceFilter] = useState<ApplicationReportSourceFilter>('all');
   const [applicationRunTypeFilter, setApplicationRunTypeFilter] = useState<ApplicationRunTypeFilter>('all');
   const [applicationRunStatusFilter, setApplicationRunStatusFilter] = useState<ApplicationRunStatusFilter>('all');
+  const [applicationStrategyIdFilter, setApplicationStrategyIdFilter] = useState('');
+  const [applicationStrategyVersionIdFilter, setApplicationStrategyVersionIdFilter] = useState('');
 
   const { data, error, isLoading } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
@@ -1330,7 +1384,7 @@ export default function SymbolDetail() {
     mutate: mutateApplicationList,
   } = useSWR<SymbolStrategyApplicationListData>(
     symbolId
-      ? `/api/symbols/${symbolId}/strategy-applications?status=${applicationStatusFilter}&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}${getApplicationReportSourceQuery(applicationSourceFilter)}${getApplicationRunTypeQuery(applicationRunTypeFilter)}${getApplicationRunStatusQuery(applicationRunStatusFilter)}`
+      ? `/api/symbols/${symbolId}/strategy-applications?status=${applicationStatusFilter}&page=1&limit=20&sort=updated_at&order=desc${getApplicationReportPresenceQuery(applicationFilter)}${getApplicationReportSourceQuery(applicationSourceFilter)}${getApplicationRunTypeQuery(applicationRunTypeFilter)}${getApplicationRunStatusQuery(applicationRunStatusFilter)}${getApplicationIdQuery(applicationStrategyIdFilter, applicationStrategyVersionIdFilter)}`
       : null,
     swrFetcher,
   );
@@ -1607,11 +1661,15 @@ export default function SymbolDetail() {
               applicationSourceFilter={applicationSourceFilter}
               applicationRunTypeFilter={applicationRunTypeFilter}
               applicationRunStatusFilter={applicationRunStatusFilter}
+              applicationStrategyIdFilter={applicationStrategyIdFilter}
+              applicationStrategyVersionIdFilter={applicationStrategyVersionIdFilter}
               onApplicationStatusFilterChange={setApplicationStatusFilter}
               onApplicationFilterChange={setApplicationFilter}
               onApplicationSourceFilterChange={setApplicationSourceFilter}
               onApplicationRunTypeFilterChange={setApplicationRunTypeFilter}
               onApplicationRunStatusFilterChange={setApplicationRunStatusFilter}
+              onApplicationStrategyIdFilterChange={setApplicationStrategyIdFilter}
+              onApplicationStrategyVersionIdFilterChange={setApplicationStrategyVersionIdFilter}
               isLoading={isApplicationListLoading}
               error={applicationListError}
               mutateApplications={mutateApplicationList}

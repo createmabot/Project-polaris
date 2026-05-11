@@ -527,6 +527,10 @@ describe('SymbolDetail', () => {
     expect(html).toContain('internal');
     expect(html).toContain('latest run type');
     expect(html).toContain('latest run status');
+    expect(html).toContain('strategy_id');
+    expect(html).toContain('strategy_version_id');
+    expect(html).toContain('placeholder="strategy id"');
+    expect(html).toContain('placeholder="version id"');
     expect(html).toContain('running');
     expect(html).toContain('succeeded');
     expect(html).toContain('failed');
