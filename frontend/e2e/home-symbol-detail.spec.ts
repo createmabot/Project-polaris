@@ -86,6 +86,10 @@ test.describe('Home -> SymbolDetail smoke', () => {
 
     await expect(page).toHaveURL(/\/symbols\/.+/);
     await expect(page.getByRole('heading', { level: 2, name: 'ストラテジー / 検証結果' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('status', { exact: true })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: 'active', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'archived', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'all', exact: true })).toBeVisible();
 
     const strategyDetailLink = page.getByRole('link', { name: 'StrategyDetail を開く' }).first();
     await expect(strategyDetailLink).toBeVisible({ timeout: 15000 });

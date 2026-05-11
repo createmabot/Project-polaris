@@ -268,6 +268,34 @@ const symbolApplicationsFixture = {
   ],
 };
 
+const archivedSymbolApplicationsFixture = {
+  ...symbolApplicationsFixture,
+  query: {
+    ...symbolApplicationsFixture.query,
+    status: 'archived',
+  },
+  pagination: {
+    ...symbolApplicationsFixture.pagination,
+    total: 1,
+  },
+  applications: [
+    {
+      ...symbolApplicationsFixture.applications[0],
+      id: 'application_archived_1',
+      status: 'archived',
+    },
+  ],
+};
+
+const emptyActiveSymbolApplicationsFixture = {
+  ...symbolApplicationsFixture,
+  pagination: {
+    ...symbolApplicationsFixture.pagination,
+    total: 0,
+  },
+  applications: [],
+};
+
 const internalExecutionStatusFixture = {
   execution: {
     id: 'execution_1',
@@ -487,6 +515,9 @@ describe('SymbolDetail', () => {
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');
+    expect(html).toContain('status');
+    expect(html).toContain('active');
+    expect(html).toContain('archived');
     expect(html).toContain('表示対象');
     expect(html).toContain('すべて');
     expect(html).toContain('reportあり');
@@ -499,7 +530,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('running');
     expect(html).toContain('succeeded');
     expect(html).toContain('failed');
-    expect(html).toContain('application 2 / 2 件を表示中');
+    expect(html).toContain('active application 2 / 2 件を表示中');
     expect(html).toContain('CSV report: 1 / internal report: 1');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
@@ -509,6 +540,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('status:');
     expect(html).toContain('アーカイブ');
     expect((html.match(/アーカイブ/g) ?? []).length).toBeGreaterThanOrEqual(1);
+    expect(html).not.toContain('復元');
     expect(html).toContain('run count:</strong> 1');
     expect(html).toContain('run status:</strong>');
     expect(html).toContain('market / timeframe');
@@ -548,6 +580,60 @@ describe('SymbolDetail', () => {
     expect(html).toContain('検証レポート一覧を開く');
     expect(mockUseSWR).not.toHaveBeenCalledWith(
       '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
+  });
+
+  it('renders restore action without breaking archived application rows', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common?.data === symbolApplicationsFixture) {
+        return { ...common, data: archivedSymbolApplicationsFixture };
+      }
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: baseSymbolData };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('application_archived_1');
+    expect(html).toContain('archived');
+    expect(html).toContain('復元');
+    expect(html).not.toContain('アーカイブ</button>');
+    expect(html).toContain('7203 strategy report');
+    expect(html).toContain('CSV / internal reports');
+  });
+
+  it('keeps status filter controls visible when default active applications are empty', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common?.data === symbolApplicationsFixture) {
+        return { ...common, data: emptyActiveSymbolApplicationsFixture };
+      }
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: baseSymbolData };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('保存済み application はまだありません。');
+    expect(html).toContain('status');
+    expect(html).toContain('active');
+    expect(html).toContain('archived');
+    expect(html).toContain('all');
+    expect(html).toContain('active application 0 / 0 件を表示中');
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
       expect.any(Function),
     );
   });
