@@ -577,3 +577,8 @@ pnpm exec prisma db seed
 
 - StrategyLab and BacktestComparisonDetail now use shared UI components for selected section, state, status, key-value, link, and button presentation.
 - The pass keeps StrategyLab generation, save, validation, CSV import behavior, Backtest comparison API shape, backend, DB, and Prisma schema unchanged.
+
+### Home and SideRail light cleanup pass
+
+- Home and SideRail now use shared UI components for selected loading, error, empty, key-value, and button presentation.
+- The pass keeps Home and SideRail refresh behavior, latest home data sharing, watchlist and positions CRUD behavior, API shape, backend, DB, and Prisma schema unchanged.

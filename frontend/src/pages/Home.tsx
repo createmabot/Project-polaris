@@ -5,6 +5,10 @@ import { HomeData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
 import PageHeader from '../components/layout/PageHeader';
+import EmptyState from '../components/ui/EmptyState';
+import ErrorState from '../components/ui/ErrorState';
+import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
 import TextLink from '../components/ui/TextLink';
 
@@ -36,10 +40,6 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
-function EmptyText({ children }: { children: ReactNode }) {
-  return <p className="text-sm text-slate-500">{children}</p>;
-}
-
 function InfoCard({ children }: { children: ReactNode }) {
   return <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">{children}</div>;
 }
@@ -51,9 +51,29 @@ export default function Home() {
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
 
-  if (isLoading) return <div style={{ padding: '2rem' }}>読み込み中...</div>;
-  if (error) return <div style={{ padding: '2rem', color: 'red' }}>エラー: {error.message}</div>;
-  if (!data) return null;
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <LoadingState title="読み込み中..." />
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <ErrorState title="Home の取得に失敗しました">
+          エラー: {error.message}
+        </ErrorState>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        <EmptyState title="Home データが見つかりません" />
+      </div>
+    );
+  }
 
   return (
     <AppLayout
@@ -90,23 +110,34 @@ export default function Home() {
               {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
               asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
               asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
-                <EmptyText>マーケット概況データはまだありません。</EmptyText>
+                <EmptyState title="マーケット概況データはまだありません。" />
               ) : (
                 <div className="grid gap-3">
                   {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
-                    <div key={`index-${index}`} className="text-sm text-slate-700">
-                      指数: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                    </div>
+                    <InfoCard key={`index-${index}`}>
+                      <KeyValueList>
+                        <KeyValueRow label="指数">{item.display_name ?? '-'}</KeyValueRow>
+                        <KeyValueRow label="値">{item.price ?? '-'}</KeyValueRow>
+                        <KeyValueRow label="変化率">{item.change_rate ?? '-'}</KeyValueRow>
+                      </KeyValueList>
+                    </InfoCard>
                   ))}
                   {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).map((item, index) => (
-                    <div key={`fx-${index}`} className="text-sm text-slate-700">
-                      為替: {item.display_name ?? '-'} / 値: {item.price ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                    </div>
+                    <InfoCard key={`fx-${index}`}>
+                      <KeyValueList>
+                        <KeyValueRow label="為替">{item.display_name ?? '-'}</KeyValueRow>
+                        <KeyValueRow label="値">{item.price ?? '-'}</KeyValueRow>
+                        <KeyValueRow label="変化率">{item.change_rate ?? '-'}</KeyValueRow>
+                      </KeyValueList>
+                    </InfoCard>
                   ))}
                   {asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).map((item, index) => (
-                    <div key={`sector-${index}`} className="text-sm text-slate-700">
-                      セクター: {item.display_name ?? '-'} / 変化率: {item.change_rate ?? '-'}
-                    </div>
+                    <InfoCard key={`sector-${index}`}>
+                      <KeyValueList>
+                        <KeyValueRow label="セクター">{item.display_name ?? '-'}</KeyValueRow>
+                        <KeyValueRow label="変化率">{item.change_rate ?? '-'}</KeyValueRow>
+                      </KeyValueList>
+                    </InfoCard>
                   ))}
                 </div>
               )}
@@ -152,14 +183,14 @@ export default function Home() {
                   ) : null}
                 </div>
               ) : (
-                <EmptyText>サマリーはまだありません。</EmptyText>
+                <EmptyState title="サマリーはまだありません。" />
               )}
             </InfoCard>
           </SectionCard>
 
           <SectionCard title="最新アラート">
             {data.recent_alerts.length === 0 ? (
-              <EmptyText>アラートはありません。</EmptyText>
+              <EmptyState title="アラートはありません。" />
             ) : (
               <div className="grid gap-3">
                 {data.recent_alerts.map((alert) => (
@@ -203,7 +234,7 @@ export default function Home() {
 
           <SectionCard title="注目イベント">
             {data.key_events.length === 0 ? (
-              <EmptyText>注目イベントはまだありません。</EmptyText>
+              <EmptyState title="注目イベントはまだありません。" />
             ) : (
               <div className="grid gap-3">
                 {data.key_events.map((event: any, index: number) => (

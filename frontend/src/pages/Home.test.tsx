@@ -196,9 +196,13 @@ describe('Home', () => {
 
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
-    expect(html).toContain('指数: 日経平均 / 値: 39000 / 変化率: 1.2');
-    expect(html).toContain('為替: USD/JPY / 値: 149.2 / 変化率: 0.3');
-    expect(html).toContain('セクター: 半導体 / 変化率: 2.1');
+    expect(html).toContain('<strong>指数:</strong> 日経平均');
+    expect(html).toContain('<strong>為替:</strong> USD/JPY');
+    expect(html).toContain('<strong>セクター:</strong> 半導体');
+    expect(html).toContain('<strong>値:</strong> 39000');
+    expect(html).toContain('<strong>変化率:</strong> 1.2');
+    expect(html).toContain('<strong>変化率:</strong> 0.3');
+    expect(html).toContain('<strong>変化率:</strong> 2.1');
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
