@@ -646,3 +646,10 @@ pnpm exec prisma db seed
 - AI summary / artifact operations の運用境界は `docs/53.北極星 P3現在地と残課題整理（P3）.md` を正本とする。
 - CSV import report と internal backtest report では AI summary input と artifact の扱いが異なる。
 - artifact download / diff、AI summary 自動生成、AI summary 同士の比較は後続判断とする。
+
+### AI summary / artifact operations completion
+
+- AI summary / artifact operations phase is complete as a docs-first cleanup in `docs/53`.
+- `BacktestDetail` owns source-aware AI summary input notes and artifact metadata checks.
+- `ApplicationDetail` remains the report history entry point, and `BacktestComparisonDetail` remains the saved pairwise comparison revisit screen.
+- No API, backend, DB, Prisma schema, or test changes are part of this completion pass.
