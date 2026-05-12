@@ -45,6 +45,12 @@ function reportOriginLabel(executionSource: string | null | undefined): string {
   return 'report';
 }
 
+function reportMetricsRootLabel(executionSource: string | null | undefined): string {
+  if (executionSource === 'internal_backtest') return 'strategySnapshotJson.result_summary';
+  if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'BacktestImport parsed summary';
+  return 'source summary';
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -306,6 +312,7 @@ function ReportMetricCard({
       <KeyValueList className="mt-2 gap-1 text-sm">
         <KeyValueRow label="report type">{reportOriginLabel(report.execution_source)}</KeyValueRow>
         <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+        <KeyValueRow label="metrics root">{reportMetricsRootLabel(report.execution_source)}</KeyValueRow>
         <KeyValueRow label="status"><StatusBadge status={report.status} /></KeyValueRow>
         {METRIC_COMPARISON_ROWS.map((row) => (
           <KeyValueRow key={row.key} label={row.label}>{valueText(metrics?.[row.key])}</KeyValueRow>
@@ -331,6 +338,8 @@ function ApplicationReportMetricsComparison({
       <h3 style={{ margin: '0 0 0.5rem' }}>metrics 横並び比較</h3>
       <p style={{ margin: '0 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
         同じ application 配下の current report と related report を、既存 response で取得できる主要 metrics だけで比較します。
+        CSV import report は BacktestImport parsed summary、internal backtest report は strategySnapshotJson.result_summary 由来です。
+        `-` は取得元に該当 metric がないことを示します。
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
         <ReportMetricCard title="current report" report={currentReport} />

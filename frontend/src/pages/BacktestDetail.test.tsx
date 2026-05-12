@@ -684,8 +684,12 @@ describe('BacktestDetail', () => {
     expect(html).toContain('report type:</strong> internal backtest report');
     expect(html).toContain('source:</strong> <code>internal_backtest</code>');
     expect(html).toContain('metrics 横並び比較');
+    expect(html).toContain('CSV import report は BacktestImport parsed summary、internal backtest report は strategySnapshotJson.result_summary 由来です。');
+    expect(html).toContain('`-` は取得元に該当 metric がないことを示します。');
     expect(html).toContain('current report');
     expect(html).toContain('related report');
+    expect(html).toContain('metrics root:</strong> BacktestImport parsed summary');
+    expect(html).toContain('metrics root:</strong> strategySnapshotJson.result_summary');
     expect(html).toContain('trade_count');
     expect(html).toContain('120');
     expect(html).toContain('total_return_percent');
