@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { enqueueCsvImportBacktestSummary } from '../backtests/ai-summary';
 import { parseTradingViewSummaryCsv } from '../backtests/csv';
 import { prisma } from '../db';
 import {
@@ -981,6 +982,20 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
 
       return { run, backtest: updatedBacktest, backtestImport };
     });
+
+    if (parseResult.ok) {
+      void enqueueCsvImportBacktestSummary(result.backtest.id, result.backtestImport.id).catch((error) => {
+        request.log.warn(
+          {
+            err: error instanceof Error ? { name: error.name } : { name: 'UnknownError' },
+            backtest_id: result.backtest.id,
+            import_id: result.backtestImport.id,
+            application_id: application.id,
+          },
+          'application_csv_import_ai_summary_enqueue_failed',
+        );
+      });
+    }
 
     return reply.status(201).send(formatSuccess(request, toCsvImportResponse({
       applicationId: application.id,

@@ -72,6 +72,7 @@ pnpm run dev
    - `POST /api/backtests`
 2. CSV を取込む。
    - `POST /api/backtests/:backtestId/imports`
+   - `parse_status=parsed` の場合、CSV import report 系に限り Backtest AI 総評生成が自動起動される。
 3. 受け入れ形式を確認する。
    - Performance Summary（英語ヘッダー）
    - List of Trades（日本語ヘッダー）
@@ -95,9 +96,10 @@ pnpm run dev
 
 ## 9. Backtest AI 総評生成
 
-1. `BacktestDetail` から AI 総評生成を実行する。
-2. `POST /api/backtests/:backtestId/summary/generate` が成功し、`ai_jobs` が `queued -> running -> succeeded|failed` で遷移することを確認する。
-3. `GET /api/backtests/:backtestId` の `ai_review` を確認する。
+1. CSV import 成功直後の自動生成結果がある場合は、`GET /api/backtests/:backtestId` の `ai_review` で確認する。
+2. 未生成または再生成したい場合は、`BacktestDetail` から AI 総評生成を実行する。
+3. `POST /api/backtests/:backtestId/summary/generate` が成功し、`ai_jobs` が `queued -> running -> succeeded|failed` で遷移することを確認する。
+4. `GET /api/backtests/:backtestId` の `ai_review` を確認する。
    - `status=available|unavailable`
    - `title`
    - `body_markdown`

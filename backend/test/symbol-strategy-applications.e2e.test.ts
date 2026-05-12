@@ -90,6 +90,36 @@ type InternalExecutionRow = {
   updatedAt: Date;
 };
 
+type AiJobRow = {
+  id: string;
+  jobType: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  requestPayload: any;
+  responsePayload?: any;
+  status: string;
+  errorMessage?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type AiSummaryRow = {
+  id: string;
+  aiJobId?: string | null;
+  summaryScope: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  title: string | null;
+  bodyMarkdown: string;
+  structuredJson?: any;
+  inputSnapshotHash?: string | null;
+  modelName?: string | null;
+  promptVersion?: string | null;
+  generationContextJson?: any;
+  generatedAt: Date | null;
+  createdAt: Date;
+};
+
 type Runtime = {
   symbols: Map<string, SymbolRow>;
   strategies: Map<string, { id: string; title: string; status: string }>;
@@ -111,6 +141,8 @@ type Runtime = {
   backtests: Map<string, BacktestRow>;
   backtestImports: Map<string, BacktestImportRow>;
   internalExecutions: Map<string, InternalExecutionRow>;
+  aiJobs: Map<string, AiJobRow>;
+  aiSummaries: Map<string, AiSummaryRow>;
   nextApplicationId: number;
   nextBacktestId: number;
   nextBacktestImportId: number;
@@ -305,6 +337,8 @@ function createRuntime(): Runtime {
       }],
     ]),
     internalExecutions: new Map(),
+    aiJobs: new Map(),
+    aiSummaries: new Map(),
     nextApplicationId: 2,
     nextBacktestId: 2,
     nextBacktestImportId: 2,
@@ -479,7 +513,21 @@ vi.mock('../src/db', () => {
       },
     },
     backtest: {
-      findUnique: async ({ where }: any) => runtime.backtests.get(where.id) ?? null,
+      findUnique: async ({ where, include }: any) => {
+        const backtest = runtime.backtests.get(where.id) ?? null;
+        if (!backtest) return null;
+        return {
+          ...backtest,
+          strategyRuleVersion: include?.strategyRuleVersion
+            ? runtime.versions.get(backtest.strategyRuleVersionId) ?? null
+            : undefined,
+          imports: include?.imports
+            ? [...runtime.backtestImports.values()]
+                .filter((item) => item.backtestId === backtest.id)
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            : undefined,
+        };
+      },
       create: async ({ data }: any) => {
         const now = new Date('2026-05-05T00:00:00.000Z');
         const backtest: BacktestRow = {
@@ -527,6 +575,85 @@ vi.mock('../src/db', () => {
         };
         runtime.backtestImports.set(backtestImport.id, backtestImport);
         return backtestImport;
+      },
+    },
+    aiJob: {
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-05T00:04:00.000Z');
+        const aiJob: AiJobRow = {
+          id: `job-created-${runtime.aiJobs.size + 1}`,
+          jobType: data.jobType,
+          targetEntityType: data.targetEntityType,
+          targetEntityId: data.targetEntityId,
+          requestPayload: data.requestPayload ?? null,
+          responsePayload: data.responsePayload ?? null,
+          status: data.status ?? 'queued',
+          errorMessage: data.errorMessage ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.aiJobs.set(aiJob.id, aiJob);
+        return aiJob;
+      },
+      findFirst: async ({ where }: any) => {
+        const rows = [...runtime.aiJobs.values()]
+          .filter((row) => {
+            if (where?.jobType && row.jobType !== where.jobType) return false;
+            if (where?.targetEntityType && row.targetEntityType !== where.targetEntityType) return false;
+            if (where?.targetEntityId && row.targetEntityId !== where.targetEntityId) return false;
+            if (where?.status?.in && !where.status.in.includes(row.status)) return false;
+            const expectedHash = where?.requestPayload?.equals;
+            if (expectedHash && row.requestPayload?.input_snapshot_hash !== expectedHash) return false;
+            return true;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return rows[0] ?? null;
+      },
+      update: async ({ where, data }: any) => {
+        const row = runtime.aiJobs.get(where.id);
+        if (!row) throw new Error(`ai_job_not_found:${where.id}`);
+        const updated = {
+          ...row,
+          ...data,
+          updatedAt: new Date('2026-05-05T00:05:00.000Z'),
+        };
+        runtime.aiJobs.set(updated.id, updated);
+        return updated;
+      },
+    },
+    aiSummary: {
+      findFirst: async ({ where }: any) => {
+        const rows = [...runtime.aiSummaries.values()]
+          .filter((row) => {
+            if (where?.summaryScope && row.summaryScope !== where.summaryScope) return false;
+            if (where?.targetEntityType && row.targetEntityType !== where.targetEntityType) return false;
+            if (where?.targetEntityId && row.targetEntityId !== where.targetEntityId) return false;
+            if (where?.inputSnapshotHash && row.inputSnapshotHash !== where.inputSnapshotHash) return false;
+            return true;
+          })
+          .sort((a, b) => (b.generatedAt?.getTime() ?? 0) - (a.generatedAt?.getTime() ?? 0));
+        return rows[0] ?? null;
+      },
+      create: async ({ data }: any) => {
+        const now = new Date('2026-05-05T00:06:00.000Z');
+        const aiSummary: AiSummaryRow = {
+          id: `summary-created-${runtime.aiSummaries.size + 1}`,
+          aiJobId: data.aiJobId ?? null,
+          summaryScope: data.summaryScope,
+          targetEntityType: data.targetEntityType,
+          targetEntityId: data.targetEntityId,
+          title: data.title ?? null,
+          bodyMarkdown: data.bodyMarkdown,
+          structuredJson: data.structuredJson ?? null,
+          inputSnapshotHash: data.inputSnapshotHash ?? null,
+          modelName: data.modelName ?? null,
+          promptVersion: data.promptVersion ?? null,
+          generationContextJson: data.generationContextJson ?? null,
+          generatedAt: data.generatedAt ?? null,
+          createdAt: now,
+        };
+        runtime.aiSummaries.set(aiSummary.id, aiSummary);
+        return aiSummary;
       },
     },
     internalBacktestExecution: {
@@ -695,6 +822,40 @@ vi.mock('../src/db', () => {
   return { prisma };
 });
 
+vi.mock('../src/ai/home-ai-service', () => ({
+  HomeAiService: class {
+    async generateBacktestSummary() {
+      return {
+        output: {
+          title: 'application csv auto summary',
+          bodyMarkdown: '## application csv auto summary',
+          structuredJson: {
+            schema_name: 'backtest_review_summary',
+            schema_version: '1.0',
+            confidence: 'medium',
+            insufficient_context: false,
+            payload: {},
+          },
+          modelName: 'stub-backtest-v1',
+          promptVersion: 'v1.0.0-backtest-stub',
+        },
+        log: {
+          initialModel: 'stub-backtest-v1',
+          finalModel: 'stub-backtest-v1',
+          escalated: false,
+          escalationReason: null,
+          retryCount: 0,
+          durationMs: 1,
+          estimatedTokens: 1,
+          estimatedCostUsd: 0,
+          provider: 'stub',
+          fallbackToStub: false,
+        },
+      };
+    }
+  },
+}));
+
 vi.mock('../src/queue/internal-backtests', () => ({
   enqueueInternalBacktestExecution: enqueueInternalBacktestExecutionMock,
 }));
@@ -707,6 +868,11 @@ async function createApp() {
   app.register(strategyRoutes, { prefix: '/api/strategies' });
   await app.ready();
   return app;
+}
+
+async function waitForBackgroundJobs() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 describe('symbol strategy applications route', () => {
@@ -1828,6 +1994,25 @@ describe('symbol strategy applications route', () => {
       parse_status: 'parsed',
       parse_error: null,
     });
+    await waitForBackgroundJobs();
+    expect([...runtime.aiJobs.values()]).toHaveLength(1);
+    expect([...runtime.aiJobs.values()][0]).toMatchObject({
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: res.json().data.backtest.id,
+      status: 'succeeded',
+    });
+    expect([...runtime.aiJobs.values()][0].requestPayload).toMatchObject({
+      trigger: 'csv_import_auto',
+      source_import_id: res.json().data.import.id,
+    });
+    expect([...runtime.aiSummaries.values()]).toHaveLength(1);
+    expect([...runtime.aiSummaries.values()][0]).toMatchObject({
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest',
+      targetEntityId: res.json().data.backtest.id,
+      title: 'application csv auto summary',
+    });
 
     const listRes = await app.inject({
       method: 'GET',
@@ -1873,6 +2058,9 @@ describe('symbol strategy applications route', () => {
       parse_status: 'failed',
     });
     expect(res.json().data.import.parse_error).toBeTruthy();
+    await waitForBackgroundJobs();
+    expect(runtime.aiJobs.size).toBe(0);
+    expect(runtime.aiSummaries.size).toBe(0);
 
     await app.close();
   });
