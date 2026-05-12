@@ -607,3 +607,9 @@ pnpm exec prisma db seed
 - A minimal JsonBlock now standardizes one selected read-only JSON display in BacktestDetail.
 - The pass keeps raw JSON content, artifact context, links, API calls, AI summary, comparison behavior, filters, and pagination unchanged.
 - RecordList, SimpleTable, DataTable, JSON diff, artifact diff, and visual regression remain future decisions.
+
+### UI foundation third pass completion
+
+- UI foundation third pass is complete through minimal FormFields, ModalShell, and JsonBlock adoption.
+- The scope stays limited to selected StrategyLab, StrategyVersionDetail, SideRail, and BacktestDetail areas.
+- DataList, SimpleTable, DataTable, JSON diff, artifact diff, and visual regression remain future decisions.
