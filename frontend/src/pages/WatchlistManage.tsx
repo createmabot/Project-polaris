@@ -121,7 +121,7 @@ export default function WatchlistManage() {
       </div>
       <h1>監視銘柄管理</h1>
       <p style={{ color: '#666' }}>
-        Home の watchlist_symbols で使う監視銘柄を管理します。
+        主要操作は共通サイドメニューの SideRail に移行済みです。この画面は移行期の詳細管理用として残しています。
       </p>
 
       {message && (

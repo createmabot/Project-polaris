@@ -519,6 +519,8 @@ pnpm exec prisma db seed
 5. `/backtests` → `/backtests/:backtestId`
 6. `/strategies/:strategyId/versions` → `/strategy-versions/:versionId`
 
+監視銘柄 / 保有銘柄の主要導線は Home / SymbolDetail の共通 SideRail です。`/watchlist` と `/positions` は移行期の詳細管理用 route として残していますが、header の主要ナビゲーションからは外しています。
+
 詳細チェック観点は `docs/walkthrough.md` の「UI確認用 seed walkthrough（最小）」を参照。
 
 補足:

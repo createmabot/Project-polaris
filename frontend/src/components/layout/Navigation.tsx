@@ -5,8 +5,6 @@ const NAV_ITEMS = [
   { href: '/strategies', label: 'ストラテジー' },
   { href: '/strategy-lab', label: 'ストラテジー作成' },
   { href: '/backtests', label: '検証レポート' },
-  { href: '/watchlist', label: '監視銘柄管理' },
-  { href: '/positions', label: '保有銘柄管理' },
 ];
 
 export default function Navigation() {
