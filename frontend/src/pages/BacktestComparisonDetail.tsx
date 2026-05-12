@@ -65,6 +65,9 @@ export default function BacktestComparisonDetail() {
       <p style={{ color: '#666' }}>
         比較ID: <code>{data.comparison.comparison_id}</code>
       </p>
+      <p style={{ color: '#666', lineHeight: 1.6 }}>
+        保存済み pairwise comparison の再訪画面です。本格比較画面候補として、既存の比較 summary / metrics / AI summary を確認できます。
+      </p>
 
       <SectionCard title='比較対象' className='mt-4'>
         <KeyValueList>

@@ -56,10 +56,13 @@ const LABELS = {
     'metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。',
   metricsMissingDetail:
     'CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。',
+  reportComparisonHelperNote:
+    'BacktestDetail で同一 application の関連 report と metrics を確認できます。',
   previousPage: '前へ',
   nextPage: '次へ',
   pageSummary: 'page {page}',
   openBacktest: 'BacktestDetail を開く',
+  openBacktestComparisonHelper: 'BacktestDetail を開く（関連 report 確認）',
   openStrategy: 'StrategyDetail を開く',
   openVersion: 'StrategyVersionDetail を開く',
   runCount: 'run count',
@@ -440,7 +443,10 @@ export default function ApplicationDetail() {
                         <KeyValueRow label="updated">{formatDate(report.updated_at)}</KeyValueRow>
                       </KeyValueList>
                     </div>
-                    <TextLink href={report.backtest_detail_link.path}>{LABELS.openBacktest}</TextLink>
+                    <div className="max-w-xs text-right text-xs leading-5 text-slate-500">
+                      <p>{LABELS.reportComparisonHelperNote}</p>
+                      <TextLink href={report.backtest_detail_link.path}>{LABELS.openBacktestComparisonHelper}</TextLink>
+                    </div>
                   </div>
                   {report.metrics ? (
                     <KeyValueList className="mt-3 gap-x-4 gap-y-1 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3">

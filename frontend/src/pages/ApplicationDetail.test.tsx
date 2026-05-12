@@ -286,6 +286,8 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。');
     expect(html).toContain('report count: 2');
     expect(html).toContain('7203 internal report');
+    expect(html).toContain('BacktestDetail で同一 application の関連 report と metrics を確認できます。');
+    expect(html).toContain('BacktestDetail を開く（関連 report 確認）');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('backtest.strategy_snapshot_json.result_summary');
     expect(html).toContain('href="/backtests/backtest_internal_1"');
