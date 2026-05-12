@@ -56,6 +56,10 @@ const LABELS = {
     'metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。',
   metricsMissingDetail:
     'CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。',
+  aiArtifactDetailNote:
+    'AI summary 本文、artifact pointer、raw artifact JSON の詳細確認は BacktestDetail で行います。この画面は report history の入口です。',
+  importlessReportNote:
+    'importless_report は internal backtest 由来で BacktestImport を持たない report を示します。',
   reportComparisonHelperNote:
     'BacktestDetail で同一 application の関連 report と metrics を確認できます。',
   previousPage: '前へ',
@@ -419,6 +423,8 @@ export default function ApplicationDetail() {
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
               <p>{LABELS.metricsMissingNote}</p>
               <p>{LABELS.metricsMissingDetail}</p>
+              <p>{LABELS.aiArtifactDetailNote}</p>
+              <p>{LABELS.importlessReportNote}</p>
             </div>
             {isReportsLoading ? (
               <LoadingState title={LABELS.applicationLoading} />
@@ -438,6 +444,7 @@ export default function ApplicationDetail() {
                         <KeyValueRow label="report_id"><code>{report.id}</code></KeyValueRow>
                         <KeyValueRow label="origin"><code>{report.report_origin}</code></KeyValueRow>
                         <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+                        <KeyValueRow label="importless_report">{report.importless_report ? 'true' : 'false'}</KeyValueRow>
                         <KeyValueRow label="status"><StatusBadge status={report.status} className="px-2 py-0.5" /></KeyValueRow>
                         <KeyValueRow label="run status"><StatusBadge status={report.linked_run.status} className="px-2 py-0.5" /></KeyValueRow>
                         <KeyValueRow label="updated">{formatDate(report.updated_at)}</KeyValueRow>

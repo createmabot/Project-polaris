@@ -284,10 +284,13 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('report 1 / 2 件を表示中');
     expect(html).toContain('metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。');
     expect(html).toContain('CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。');
+    expect(html).toContain('AI summary 本文、artifact pointer、raw artifact JSON の詳細確認は BacktestDetail で行います。');
+    expect(html).toContain('importless_report は internal backtest 由来で BacktestImport を持たない report を示します。');
     expect(html).toContain('report count: 2');
     expect(html).toContain('7203 internal report');
     expect(html).toContain('BacktestDetail で同一 application の関連 report と metrics を確認できます。');
     expect(html).toContain('BacktestDetail を開く（関連 report 確認）');
+    expect(html).toContain('importless_report:</strong> true');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('backtest.strategy_snapshot_json.result_summary');
     expect(html).toContain('href="/backtests/backtest_internal_1"');

@@ -82,6 +82,7 @@ describe('BacktestComparisonDetail', () => {
     expect(html).toContain('主要差分');
     expect(html).toContain('tradeoff 要約');
     expect(html).toContain('AI比較総評');
+    expect(html).toContain('個別 report の AI summary 同士の自動比較や artifact diff は後続判断です。');
     expect(html).toContain('href="/backtests/bt-1?comparisonId=cmp-1"');
   });
 });
