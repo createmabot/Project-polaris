@@ -5,6 +5,7 @@ import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import JsonBlock from '../components/ui/JsonBlock';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -56,11 +57,6 @@ function recordText(record: Record<string, unknown> | null, key: string): string
     return String(value);
   }
   return '-';
-}
-
-function recordJson(value: Record<string, unknown> | null): string {
-  if (!value) return '-';
-  return JSON.stringify(value, null, 2);
 }
 
 function displayUnknown(value: unknown): string {
@@ -478,12 +474,7 @@ function ArtifactPointerPanel({
           ) : (
             <p style={{ margin: 0, color: '#666' }}>表示できる代表 field はありません。raw JSON を確認してください。</p>
           )}
-          <div style={{ marginTop: '0.75rem' }}>
-            <strong>raw artifact JSON</strong>
-            <pre style={{ margin: '0.4rem 0 0', padding: '0.75rem', background: '#fff', border: '1px solid #ddd', borderRadius: '4px', whiteSpace: 'pre-wrap' }}>
-              <code>{recordJson(artifactPointer)}</code>
-            </pre>
-          </div>
+          <JsonBlock value={artifactPointer} title="raw artifact JSON" className="mt-3" />
         </>
       )}
     </div>
