@@ -653,3 +653,9 @@ pnpm exec prisma db seed
 - `BacktestDetail` owns source-aware AI summary input notes and artifact metadata checks.
 - `ApplicationDetail` remains the report history entry point, and `BacktestComparisonDetail` remains the saved pairwise comparison revisit screen.
 - No API, backend, DB, Prisma schema, or test changes are part of this completion pass.
+
+### UI foundation completion pass PR1
+
+- UI foundation completion pass PR1 is a docs-only inventory in docs/53.
+- The next implementation candidates are limited to minimal FilterGroup / PaginationControls, InlineNotice, and focused BacktestDetail section cleanup.
+- DataTable, virtual scroll, column resize, form framework, and full visual regression adoption remain out of scope.
