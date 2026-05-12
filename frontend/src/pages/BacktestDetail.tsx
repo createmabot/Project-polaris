@@ -3,13 +3,16 @@ import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
+import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import InlineNotice from '../components/ui/InlineNotice';
 import JsonBlock from '../components/ui/JsonBlock';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
+import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import TextLink from '../components/ui/TextLink';
 
 type BacktestDetailProps = {
   params: { backtestId: string };
@@ -342,14 +345,14 @@ function ApplicationReportMetricsComparison({
   if (!currentReport || !relatedReport) return null;
 
   return (
-    <div style={{ marginTop: '1rem' }}>
-      <h3 style={{ margin: '0 0 0.5rem' }}>metrics 横並び比較</h3>
-      <p style={{ margin: '0 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
+    <div className="mt-4">
+      <h3 className="mb-2 text-base font-semibold text-slate-900">metrics 横並び比較</h3>
+      <InlineNotice tone="info" className="mb-3">
         同じ application 配下の current report と related report を、既存 response で取得できる主要 metrics だけで比較します。
         CSV import report は BacktestImport parsed summary、internal backtest report は strategySnapshotJson.result_summary 由来です。
         `-` は取得元に該当 metric がないことを示します。
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+      </InlineNotice>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
         <ReportMetricCard title="current report" report={currentReport} />
         <ReportMetricCard title="related report" report={relatedReport} />
       </div>
@@ -460,38 +463,33 @@ function ArtifactPointerPanel({
   const artifactRows = buildArtifactRows(artifactPointer, resultSummary);
 
   return (
-    <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
-      <strong>artifact_pointer</strong>
+    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <strong className="text-sm text-slate-900">artifact_pointer</strong>
       <InlineNotice tone="info" className="my-3">
         internal backtest の artifact pointer を metadata として表示します。artifact file の実体読込、download、diff は行いません。
       </InlineNotice>
       {!artifactPointer ? (
-        <p style={{ margin: 0, color: '#666' }}>artifact は未生成、または strategy snapshot に保存されていません。</p>
+        <p className="m-0 text-sm text-slate-600">artifact は未生成、または strategy snapshot に保存されていません。</p>
       ) : (
         <>
           {artifactRows.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
               {artifactRows.map((row) => (
                 <div
                   key={row.key}
-                  style={{
-                    border: '1px solid #e2e2e2',
-                    borderRadius: '8px',
-                    padding: '0.75rem',
-                    background: '#fff',
-                  }}
+                  className="rounded-lg border border-slate-200 bg-white p-3"
                 >
-                  <div style={{ fontSize: '0.85rem', color: '#666' }}>{row.key}</div>
-                  <div style={{ marginTop: '0.3rem', fontSize: '1.05rem', fontWeight: 600, wordBreak: 'break-word' }}>
+                  <div className="text-xs text-slate-500">{row.key}</div>
+                  <div className="mt-1 break-words text-base font-semibold text-slate-900">
                     {row.value}
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <p style={{ margin: 0, color: '#666' }}>表示できる代表 field はありません。raw JSON を確認してください。</p>
+            <p className="m-0 text-sm text-slate-600">表示できる代表 field はありません。raw JSON を確認してください。</p>
           )}
-          <p style={{ margin: '0.75rem 0 0', color: '#666', fontSize: '0.88rem' }}>
+          <p className="mb-0 mt-3 text-sm text-slate-600">
             raw artifact JSON は保存済み pointer metadata の確認用です。file 内容の読み込み、download、JSON diff は後続判断です。
           </p>
           <JsonBlock value={artifactPointer} title="raw artifact JSON" className="mt-3" />
@@ -508,12 +506,12 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
   const artifactPointer = asRecord(snapshot?.artifact_pointer ?? null);
 
   return (
-    <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-      <h2 style={{ marginTop: 0 }}>internal backtest report</h2>
-      <p style={{ marginTop: 0, color: '#555', fontSize: '0.92rem' }}>
-        この report は internal backtest result から作成されています。internal_backtest report では BacktestImport は作成されません。
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '0.75rem' }}>
+    <SectionCard
+      title="internal backtest report"
+      description="この report は internal backtest result から作成されています。internal_backtest report では BacktestImport は作成されません。"
+      className="mt-4"
+    >
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         {metricCard('execution_id', valueText(snapshot?.internal_backtest_execution_id))}
         {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
         {metricCard('period from', recordText(period, 'from'))}
@@ -524,12 +522,12 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
         {metricCard('reported_at', formatDateTime(snapshot?.reported_at))}
       </div>
       {resultSummary ? null : (
-        <p style={{ marginBottom: 0, marginTop: '0.75rem', color: '#666' }}>
+        <p className="mb-0 mt-3 text-sm text-slate-600">
           result_summary は strategy snapshot に保存されていません。
         </p>
       )}
       <ArtifactPointerPanel artifactPointer={artifactPointer} resultSummary={resultSummary} />
-    </section>
+    </SectionCard>
   );
 }
 
@@ -784,11 +782,11 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         )}
       </section>
 
-      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-        <h2 style={{ marginTop: 0 }}>バックテスト比較 inline</h2>
-        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: '#666', fontSize: '0.92rem' }}>
-          比較元 run と比較対象 run の parsed summary を同一画面で確認できます（read-only）。
-        </p>
+      <SectionCard
+        title="バックテスト比較 inline"
+        description="比較元 run と比較対象 run の parsed summary を同一画面で確認できます（read-only）。"
+        className="mt-4"
+      >
         {!baseImport || comparisonCandidates.length === 0 ? (
           <p style={{ margin: 0, color: '#666' }}>
             比較可能な run が不足しています。解析済み import が2件以上あると比較できます。
@@ -822,28 +820,20 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             ) : (
               <>
                 <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-                  <button
-                    type='button'
+                  <Button
                     onClick={onSaveComparison}
                     disabled={isSavingComparison}
-                    style={{
-                      padding: '0.45rem 0.85rem',
-                      border: '1px solid #ccc',
-                      borderRadius: '4px',
-                      background: isSavingComparison ? '#f3f3f3' : '#fff',
-                      cursor: isSavingComparison ? 'default' : 'pointer',
-                    }}
                   >
                     {isSavingComparison ? '比較保存中...' : 'この2件で比較を保存する'}
-                  </button>
+                  </Button>
                   {effectiveComparisonId && (
-                    <Link href={`/backtest-comparisons/${effectiveComparisonId}`} style={{ color: '#0a5bb5', textDecoration: 'none' }}>
+                    <TextLink href={`/backtest-comparisons/${effectiveComparisonId}`}>
                       保存済み比較を見る
-                    </Link>
+                    </TextLink>
                   )}
                 </div>
                 {saveComparisonError && (
-                  <div style={{ marginBottom: '0.75rem', color: '#a10000' }}>{saveComparisonError}</div>
+                  <InlineNotice tone="danger" className="mb-3">{saveComparisonError}</InlineNotice>
                 )}
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
@@ -912,33 +902,23 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             )}
           </>
         )}
-      </section>
+      </SectionCard>
 
-      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-        <h2 style={{ marginTop: 0 }}>AI 総評</h2>
+      <SectionCard title="AI 総評" className="mt-4">
         <InlineNotice tone="info" className="mb-3">
           {aiReviewInputDescription(isInternalBacktestReport)}
         </InlineNotice>
         {data.ai_review.status === 'available' ? (
           <>
             {data.ai_review.title && (
-              <div style={{ marginBottom: '0.5rem', fontWeight: 600 }}>{data.ai_review.title}</div>
+              <div className="mb-2 font-semibold text-slate-900">{data.ai_review.title}</div>
             )}
             {data.ai_review.generated_at && (
-              <div style={{ marginBottom: '0.6rem', color: '#666', fontSize: '0.9rem' }}>
+              <div className="mb-3 text-sm text-slate-600">
                 生成日時: {data.ai_review.generated_at}
               </div>
             )}
-            <div
-              style={{
-                whiteSpace: 'pre-wrap',
-                lineHeight: 1.6,
-                background: '#fafafa',
-                border: '1px solid #e6e6e6',
-                borderRadius: '6px',
-                padding: '0.75rem',
-              }}
-            >
+            <div className="whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 leading-7 text-slate-800">
               {data.ai_review.body_markdown}
             </div>
           </>
@@ -947,26 +927,18 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
               現時点では自動生成せず、必要なときに手動生成します。この section は report source ごとの入力文脈を確認し、生成済み AI summary を read-only で表示するための領域です。
             </p>
-            <button
-              type='button'
+            <Button
               onClick={onGenerateAiReview}
               disabled={isGeneratingAiReview}
-              style={{
-                padding: '0.45rem 0.85rem',
-                border: '1px solid #ccc',
-                borderRadius: '4px',
-                background: isGeneratingAiReview ? '#f3f3f3' : '#fff',
-                cursor: isGeneratingAiReview ? 'default' : 'pointer',
-              }}
             >
               {isGeneratingAiReview ? '生成中...' : 'AI総評を生成'}
-            </button>
+            </Button>
             {generateAiReviewError && (
-              <div style={{ marginTop: '0.5rem', color: '#a10000' }}>{generateAiReviewError}</div>
+              <InlineNotice tone="danger" className="mt-3">{generateAiReviewError}</InlineNotice>
             )}
           </EmptyState>
         )}
-      </section>
+      </SectionCard>
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>import 履歴</h2>
