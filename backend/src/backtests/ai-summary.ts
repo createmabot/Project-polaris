@@ -66,7 +66,7 @@ type BacktestAiReviewView = {
   insufficient_context: boolean;
 };
 
-type BacktestSummaryJobTrigger = 'manual' | 'csv_import_auto';
+type BacktestSummaryJobTrigger = 'manual' | 'csv_import_auto' | 'internal_backtest_report_auto';
 
 type BacktestSummaryInput = {
   backtest: any;
@@ -368,7 +368,11 @@ async function findExistingBacktestSummaryJob(input: BacktestSummaryInput, statu
 
 export async function generateBacktestSummaryWithJob(
   backtestId: string,
-  options: { trigger?: BacktestSummaryJobTrigger; sourceImportId?: string | null } = {},
+  options: {
+    trigger?: BacktestSummaryJobTrigger;
+    sourceImportId?: string | null;
+    sourceInternalBacktestExecutionId?: string | null;
+  } = {},
 ): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
   const trigger = options.trigger ?? 'manual';
   const input = await buildBacktestSummaryInput(backtestId);
@@ -395,6 +399,7 @@ export async function generateBacktestSummaryWithJob(
         backtest_id: backtestId,
         latest_import_id: latestImport?.id ?? null,
         source_import_id: options.sourceImportId ?? null,
+        source_internal_backtest_execution_id: options.sourceInternalBacktestExecutionId ?? null,
         trigger,
         input_snapshot_hash: inputSnapshotHash,
       } as any,
@@ -532,5 +537,29 @@ export async function enqueueCsvImportBacktestSummary(backtestId: string, import
   await generateBacktestSummaryWithJob(backtestId, {
     trigger: 'csv_import_auto',
     sourceImportId: importId,
+  });
+}
+
+export async function enqueueInternalBacktestReportSummary(
+  backtestId: string,
+  internalBacktestExecutionId: string,
+): Promise<void> {
+  const input = await buildBacktestSummaryInput(backtestId);
+  if (input.backtest.executionSource !== 'internal_backtest') return;
+  if (input.latestImport) return;
+  if (input.internalBacktestContext?.internalBacktestExecutionId !== internalBacktestExecutionId) return;
+
+  const existingSummary = await findExistingBacktestSummary(input);
+  if (existingSummary) return;
+
+  const existingActiveJob = await findExistingBacktestSummaryJob(input, ['queued', 'running']);
+  if (existingActiveJob) return;
+
+  const existingFailedJob = await findExistingBacktestSummaryJob(input, ['failed']);
+  if (existingFailedJob) return;
+
+  await generateBacktestSummaryWithJob(backtestId, {
+    trigger: 'internal_backtest_report_auto',
+    sourceInternalBacktestExecutionId: internalBacktestExecutionId,
   });
 }

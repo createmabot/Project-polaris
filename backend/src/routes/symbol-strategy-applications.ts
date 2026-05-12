@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { enqueueCsvImportBacktestSummary } from '../backtests/ai-summary';
+import { enqueueCsvImportBacktestSummary, enqueueInternalBacktestReportSummary } from '../backtests/ai-summary';
 import { parseTradingViewSummaryCsv } from '../backtests/csv';
 import { prisma } from '../db';
 import {
@@ -1224,6 +1224,17 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       }
       throw error;
     }
+
+    void enqueueInternalBacktestReportSummary(result.backtest.id, execution.id).catch((error) => {
+      request.log.warn(
+        {
+          err: error instanceof Error ? { name: error.name } : { name: 'UnknownError' },
+          backtest_id: result.backtest.id,
+          internal_backtest_execution_id: execution.id,
+        },
+        'internal_backtest_report_ai_summary_enqueue_failed',
+      );
+    });
 
     return reply.status(201).send(formatSuccess(request, {
       application_id: application.id,
