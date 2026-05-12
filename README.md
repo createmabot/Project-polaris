@@ -619,3 +619,9 @@ pnpm exec prisma db seed
 - `BacktestDetail` の同一 application 内 current / related report metrics 横並び比較補助に、CSV import report と internal backtest report の source 差、metrics root、`-` の意味説明を追加する。
 - `BacktestDetail` は個別 report detail + 近接比較補助、`ApplicationDetail` は application 単位の run / report 履歴探索、`BacktestComparisonDetail` は保存済み pairwise comparison / 本格比較画面候補として責務を分ける。
 - API shape、backend、DB migration、Prisma schema は変更しない。
+
+### Report comparison UX phase 2 PR2
+
+- `ApplicationDetail` の report履歴 row から、既存 `BacktestDetail` link が同一 application 関連 report / metrics の comparison helper 入口だと分かるように短い説明を追加する。
+- `BacktestComparisonDetail` は保存済み pairwise comparison の再訪画面として、summary / metrics / AI summary を確認する本格比較画面候補であることだけを補足する。
+- 新規比較画面、comparison entity、backend / API / DB / Prisma schema 変更、実行系操作は行わない。

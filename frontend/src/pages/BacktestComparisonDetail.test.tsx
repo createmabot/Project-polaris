@@ -76,6 +76,8 @@ describe('BacktestComparisonDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestComparisonDetail />);
     expect(html).toContain('保存済みバックテスト比較');
+    expect(html).toContain('保存済み pairwise comparison の再訪画面です。');
+    expect(html).toContain('本格比較画面候補として、既存の比較 summary / metrics / AI summary を確認できます。');
     expect(html).toContain('比較対象');
     expect(html).toContain('主要差分');
     expect(html).toContain('tradeoff 要約');
