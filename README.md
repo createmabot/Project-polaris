@@ -613,3 +613,9 @@ pnpm exec prisma db seed
 - UI foundation third pass is complete through minimal FormFields, ModalShell, and JsonBlock adoption.
 - The scope stays limited to selected StrategyLab, StrategyVersionDetail, SideRail, and BacktestDetail areas.
 - DataList, SimpleTable, DataTable, JSON diff, artifact diff, and visual regression remain future decisions.
+
+### Report comparison UX phase 2 PR1
+
+- `BacktestDetail` の同一 application 内 current / related report metrics 横並び比較補助に、CSV import report と internal backtest report の source 差、metrics root、`-` の意味説明を追加する。
+- `BacktestDetail` は個別 report detail + 近接比較補助、`ApplicationDetail` は application 単位の run / report 履歴探索、`BacktestComparisonDetail` は保存済み pairwise comparison / 本格比較画面候補として責務を分ける。
+- API shape、backend、DB migration、Prisma schema は変更しない。
