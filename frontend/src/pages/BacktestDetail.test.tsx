@@ -144,6 +144,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('AI 総評');
+    expect(html).toContain('CSV import / TradingView report の AI summary input は BacktestImport parsed summary、comparison diff、TradingView report 文脈が中心です。');
     expect(html).toContain('### 結論');
     expect(html).toContain('### 良い点');
     expect(html).toContain('### 懸念点');
@@ -217,6 +218,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析エラー');
     expect(html).toContain('Missing required columns');
     expect(html).toContain('AI総評は未生成です。');
+    expect(html).toContain('現時点では自動生成せず、必要なときに手動生成します。');
     expect(html).toContain('AI総評を生成');
   });
 
@@ -804,13 +806,15 @@ describe('BacktestDetail', () => {
     expect(html).toContain('245');
     expect(html).toContain('artifact_pointer');
     expect(html).toContain('internal_backtest_result');
-    expect(html).toContain('artifact file の実体読込は行いません。');
+    expect(html).toContain('artifact file の実体読込、download、diff は行いません。');
     expect(html).toContain('type');
     expect(html).toContain('json');
     expect(html).toContain('path');
     expect(html).toContain('/internal-backtests/executions/exec-1');
     expect(html).toContain('summary_mode');
+    expect(html).toContain('raw artifact JSON は保存済み pointer metadata の確認用です。');
     expect(html).toContain('raw artifact JSON');
+    expect(html).toContain('internal_backtest report の AI summary input は strategySnapshotJson.result_summary / artifact_pointer / internal_backtest_execution_id が中心です。');
   });
 
   it('shows a neutral message when internal backtest artifact is missing', () => {

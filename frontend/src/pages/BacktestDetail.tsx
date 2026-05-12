@@ -51,6 +51,13 @@ function reportMetricsRootLabel(executionSource: string | null | undefined): str
   return 'source summary';
 }
 
+function aiReviewInputDescription(isInternalBacktestReport: boolean): string {
+  if (isInternalBacktestReport) {
+    return 'internal_backtest report の AI summary input は strategySnapshotJson.result_summary / artifact_pointer / internal_backtest_execution_id が中心です。BacktestImport は作成されません。';
+  }
+  return 'CSV import / TradingView report の AI summary input は BacktestImport parsed summary、comparison diff、TradingView report 文脈が中心です。';
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -455,7 +462,7 @@ function ArtifactPointerPanel({
     <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
       <strong>artifact_pointer</strong>
       <p style={{ margin: '0.35rem 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
-        internal backtest の artifact pointer を概要として表示します。artifact file の実体読込は行いません。
+        internal backtest の artifact pointer を metadata として表示します。artifact file の実体読込、download、diff は行いません。
       </p>
       {!artifactPointer ? (
         <p style={{ margin: 0, color: '#666' }}>artifact は未生成、または strategy snapshot に保存されていません。</p>
@@ -483,6 +490,9 @@ function ArtifactPointerPanel({
           ) : (
             <p style={{ margin: 0, color: '#666' }}>表示できる代表 field はありません。raw JSON を確認してください。</p>
           )}
+          <p style={{ margin: '0.75rem 0 0', color: '#666', fontSize: '0.88rem' }}>
+            raw artifact JSON は保存済み pointer metadata の確認用です。file 内容の読み込み、download、JSON diff は後続判断です。
+          </p>
           <JsonBlock value={artifactPointer} title="raw artifact JSON" className="mt-3" />
         </>
       )}
@@ -905,6 +915,9 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>AI 総評</h2>
+        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: '#666', fontSize: '0.9rem' }}>
+          {aiReviewInputDescription(isInternalBacktestReport)}
+        </p>
         {data.ai_review.status === 'available' ? (
           <>
             {data.ai_review.title && (
@@ -931,7 +944,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         ) : (
           <EmptyState title="AI総評は未生成です。">
             <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
-              loading / unavailable / empty の最小状態で表示しています。
+              現時点では自動生成せず、必要なときに手動生成します。この section は report source ごとの入力文脈を確認し、生成済み AI summary を read-only で表示するための領域です。
             </p>
             <button
               type='button'

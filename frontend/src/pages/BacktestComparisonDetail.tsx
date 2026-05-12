@@ -91,6 +91,9 @@ export default function BacktestComparisonDetail() {
       </SectionCard>
 
       <SectionCard title='AI比較総評' className='mt-4'>
+        <p style={{ marginTop: 0, color: '#666', fontSize: '0.9rem', lineHeight: 1.6 }}>
+          ここに表示するのは保存済み pairwise comparison の AI summary です。個別 report の AI summary 同士の自動比較や artifact diff は後続判断です。
+        </p>
         {data.comparison.ai_summary ? (
           <div style={{ whiteSpace: 'pre-wrap' }}>{data.comparison.ai_summary}</div>
         ) : (
