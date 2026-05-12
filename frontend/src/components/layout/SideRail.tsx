@@ -6,7 +6,7 @@ import Button from '../ui/Button';
 import EmptyState from '../ui/EmptyState';
 import ErrorState from '../ui/ErrorState';
 import LoadingState from '../ui/LoadingState';
-import Modal from '../ui/Modal';
+import ModalShell from '../ui/ModalShell';
 import TextLink from '../ui/TextLink';
 
 type SideRailTab = 'watchlist' | 'positions';
@@ -486,6 +486,18 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
 
   const watchlistModalOpen = watchlistModalMode !== null;
   const positionModalOpen = positionModalMode !== null;
+  const watchlistModalTitle =
+    watchlistModalMode === 'create'
+      ? '監視銘柄を追加'
+      : watchlistModalMode === 'edit'
+        ? '監視銘柄を編集'
+        : '監視銘柄を削除';
+  const positionModalTitle =
+    positionModalMode === 'create'
+      ? '保有銘柄を追加'
+      : positionModalMode === 'edit'
+        ? '保有銘柄を編集'
+        : '保有銘柄を削除';
 
   return (
     <>
@@ -605,19 +617,13 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
         </div>
       </aside>
 
-      <Modal
-        title={
-          watchlistModalMode === 'create'
-            ? '監視銘柄を追加'
-            : watchlistModalMode === 'edit'
-              ? '監視銘柄を編集'
-              : '監視銘柄を削除'
-        }
+      <ModalShell
+        title={watchlistModalTitle}
         open={watchlistModalOpen}
         onClose={resetWatchlistModal}
-        footer={
+        actions={
           watchlistModalMode === 'delete' ? (
-            <div className="flex justify-end gap-2">
+            <>
               <button
                 type="button"
                 onClick={resetWatchlistModal}
@@ -633,7 +639,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
               >
                 {isSubmitting ? '削除中...' : '削除する'}
               </button>
-            </div>
+            </>
           ) : undefined
         }
       >
@@ -722,21 +728,15 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
             </div>
           </form>
         )}
-      </Modal>
+      </ModalShell>
 
-      <Modal
-        title={
-          positionModalMode === 'create'
-            ? '保有銘柄を追加'
-            : positionModalMode === 'edit'
-              ? '保有銘柄を編集'
-              : '保有銘柄を削除'
-        }
+      <ModalShell
+        title={positionModalTitle}
         open={positionModalOpen}
         onClose={resetPositionModal}
-        footer={
+        actions={
           positionModalMode === 'delete' ? (
-            <div className="flex justify-end gap-2">
+            <>
               <button
                 type="button"
                 onClick={resetPositionModal}
@@ -752,7 +752,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
               >
                 {isSubmitting ? '削除中...' : '削除する'}
               </button>
-            </div>
+            </>
           ) : undefined
         }
       >
@@ -843,7 +843,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
             </div>
           </form>
         )}
-      </Modal>
+      </ModalShell>
     </>
   );
 }

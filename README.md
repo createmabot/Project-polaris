@@ -595,3 +595,9 @@ pnpm exec prisma db seed
 - Shared form field components now cover selected text input, textarea, and select usage in StrategyLab and StrategyVersionDetail.
 - The pass keeps field-specific copy, validation, API calls, generation, save, and Pine workflows in the calling pages.
 - It does not add a form framework and does not change backend, DB, or Prisma schema.
+
+### UI foundation third pass PR2
+
+- A minimal ModalShell now wraps the existing Modal for selected SideRail watchlist and positions CRUD dialogs.
+- The pass keeps dialog copy, destructive confirm text, open and close state, submit and delete handlers, refresh scope, and API calls in SideRail.
+- It does not change backend, DB, Prisma schema, keyboard trap behavior, tables, JSON viewers, or visual regression setup.
