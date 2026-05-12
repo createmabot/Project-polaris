@@ -2235,6 +2235,26 @@ describe('symbol strategy applications route', () => {
         trade_count: 4,
       },
     });
+    await waitForBackgroundJobs();
+    expect([...runtime.aiJobs.values()]).toHaveLength(1);
+    expect([...runtime.aiJobs.values()][0]).toMatchObject({
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: backtestId,
+      status: 'succeeded',
+    });
+    expect([...runtime.aiJobs.values()][0].requestPayload).toMatchObject({
+      latest_import_id: null,
+      source_import_id: null,
+      source_internal_backtest_execution_id: executionId,
+      trigger: 'internal_backtest_report_auto',
+    });
+    expect([...runtime.aiSummaries.values()]).toHaveLength(1);
+    expect([...runtime.aiSummaries.values()][0]).toMatchObject({
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest',
+      targetEntityId: backtestId,
+    });
 
     const listRes = await app.inject({
       method: 'GET',
@@ -2259,6 +2279,8 @@ describe('symbol strategy applications route', () => {
     expect(secondReportRes.statusCode).toBe(200);
     expect(secondReportRes.json().data.backtest.id).toBe(backtestId);
     expect([...runtime.backtests.values()].filter((backtest) => backtest.id === backtestId)).toHaveLength(1);
+    await waitForBackgroundJobs();
+    expect([...runtime.aiJobs.values()]).toHaveLength(1);
 
     await app.close();
   });
@@ -2327,6 +2349,8 @@ describe('symbol strategy applications route', () => {
       execution_source: 'internal_backtest',
     });
     expect([...runtime.backtests.values()].some((backtest) => backtest.title === 'losing internal report')).toBe(false);
+    await waitForBackgroundJobs();
+    expect(runtime.aiJobs.size).toBe(0);
 
     await app.close();
   });
