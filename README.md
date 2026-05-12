@@ -601,3 +601,9 @@ pnpm exec prisma db seed
 - A minimal ModalShell now wraps the existing Modal for selected SideRail watchlist and positions CRUD dialogs.
 - The pass keeps dialog copy, destructive confirm text, open and close state, submit and delete handlers, refresh scope, and API calls in SideRail.
 - It does not change backend, DB, Prisma schema, keyboard trap behavior, tables, JSON viewers, or visual regression setup.
+
+### UI foundation third pass PR3
+
+- A minimal JsonBlock now standardizes one selected read-only JSON display in BacktestDetail.
+- The pass keeps raw JSON content, artifact context, links, API calls, AI summary, comparison behavior, filters, and pagination unchanged.
+- RecordList, SimpleTable, DataTable, JSON diff, artifact diff, and visual regression remain future decisions.
