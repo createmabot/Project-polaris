@@ -11,6 +11,7 @@ import PageHeader from '../components/layout/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import FilterGroup from '../components/ui/FilterGroup';
+import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
@@ -384,12 +385,12 @@ export default function ApplicationDetail() {
                   : LABELS.reportsSummary.replace('{shown}', '-').replace('{total}', '-')}
               </div>
             </div>
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900">
+            <InlineNotice tone="warning" className="mb-3 text-xs leading-5">
               <p>{LABELS.metricsMissingNote}</p>
               <p>{LABELS.metricsMissingDetail}</p>
               <p>{LABELS.aiArtifactDetailNote}</p>
               <p>{LABELS.importlessReportNote}</p>
-            </div>
+            </InlineNotice>
             {isReportsLoading ? (
               <LoadingState title={LABELS.applicationLoading} />
             ) : reportsError ? (
