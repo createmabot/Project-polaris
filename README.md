@@ -625,3 +625,11 @@ pnpm exec prisma db seed
 - `ApplicationDetail` の report履歴 row から、既存 `BacktestDetail` link が同一 application 関連 report / metrics の comparison helper 入口だと分かるように短い説明を追加する。
 - `BacktestComparisonDetail` は保存済み pairwise comparison の再訪画面として、summary / metrics / AI summary を確認する本格比較画面候補であることだけを補足する。
 - 新規比較画面、comparison entity、backend / API / DB / Prisma schema 変更、実行系操作は行わない。
+
+### Report comparison UX phase 2 completion
+
+- Report comparison UX phase 2 is documented as complete in `docs/53`.
+- `BacktestDetail` owns the per-report detail view and same-application metrics comparison helper.
+- `ApplicationDetail` owns application-scoped run and report history.
+- `BacktestComparisonDetail` remains the saved pairwise comparison revisit screen and a candidate for a future full comparison view.
+- No API, backend, frontend behavior, DB migration, Prisma schema, or test changes are included in this docs-only completion pass.
