@@ -5,6 +5,7 @@ import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import InlineNotice from '../components/ui/InlineNotice';
 import JsonBlock from '../components/ui/JsonBlock';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
@@ -461,9 +462,9 @@ function ArtifactPointerPanel({
   return (
     <div style={{ marginTop: '0.75rem', padding: '0.85rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
       <strong>artifact_pointer</strong>
-      <p style={{ margin: '0.35rem 0 0.75rem', color: '#666', fontSize: '0.9rem' }}>
+      <InlineNotice tone="info" className="my-3">
         internal backtest の artifact pointer を metadata として表示します。artifact file の実体読込、download、diff は行いません。
-      </p>
+      </InlineNotice>
       {!artifactPointer ? (
         <p style={{ margin: 0, color: '#666' }}>artifact は未生成、または strategy snapshot に保存されていません。</p>
       ) : (
@@ -915,9 +916,9 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>AI 総評</h2>
-        <p style={{ marginTop: 0, marginBottom: '0.75rem', color: '#666', fontSize: '0.9rem' }}>
+        <InlineNotice tone="info" className="mb-3">
           {aiReviewInputDescription(isInternalBacktestReport)}
-        </p>
+        </InlineNotice>
         {data.ai_review.status === 'available' ? (
           <>
             {data.ai_review.title && (

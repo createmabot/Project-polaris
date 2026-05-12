@@ -91,6 +91,7 @@ pnpm run dev
    - `latest_import`
    - `imports`
    - parse 成功時の `parsed_summary`
+3. AI summary input 説明と artifact pointer metadata 説明が補足表示として読め、生成・取込・download・diff の挙動が変わっていないことを確認する。
 
 ## 9. Backtest AI 総評生成
 
@@ -105,6 +106,12 @@ pnpm run dev
 
 1. 同一 backtest 内で parsed import が2件以上ある状態にする。
 2. `BacktestDetail` の inline 比較で差分が表示されることを確認する。
+
+## 10-1. Application report helper 表示
+
+1. `SymbolDetail` から application reports へ遷移する。
+2. metrics 欠損、AI summary / artifact 詳細確認先、importless report の補足が report 履歴の helper として表示されることを確認する。
+3. report 一覧、BacktestDetail へのリンク、filter、pagination の挙動が変わっていないことを確認する。
 
 ## 11. saved pairwise comparison
 
