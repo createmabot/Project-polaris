@@ -5,6 +5,7 @@ import { ApiError, postApi, swrFetcher } from '../api/client';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import { SelectField, TextArea, TextInput } from '../components/ui/FormFields';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -228,51 +229,39 @@ export default function StrategyLab() {
         className='mt-5'
       >
         <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem' }}>
-          <label style={{ display: 'grid', gap: '0.4rem' }}>
-            <span>戦略タイトル</span>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
-            />
-          </label>
+          <TextInput
+            label='戦略タイトル'
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
 
-          <label style={{ display: 'grid', gap: '0.4rem' }}>
-            <span>自然言語ルール</span>
-            <textarea
-              value={naturalLanguageRule}
-              onChange={(event) => setNaturalLanguageRule(event.target.value)}
-              rows={7}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px', resize: 'vertical' }}
-            />
-          </label>
+          <TextArea
+            label='自然言語ルール'
+            value={naturalLanguageRule}
+            onChange={(event) => setNaturalLanguageRule(event.target.value)}
+            rows={7}
+          />
 
           <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
-          <label style={{ display: 'grid', gap: '0.4rem' }}>
-            <span>市場</span>
-            <select
+            <SelectField
+              label='市場'
               value={market}
               onChange={(event) => setMarket(event.target.value)}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
             >
               {MARKET_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
-            </select>
-          </label>
+            </SelectField>
 
-          <label style={{ display: 'grid', gap: '0.4rem' }}>
-            <span>時間足</span>
-            <select
+            <SelectField
+              label='時間足'
               value={timeframe}
               onChange={(event) => setTimeframe(event.target.value)}
-              style={{ padding: '0.6rem', border: '1px solid #ccc', borderRadius: '4px' }}
             >
               {TIMEFRAME_OPTIONS.map((option) => (
                 <option key={option} value={option}>{option}</option>
               ))}
-            </select>
-          </label>
+            </SelectField>
           </div>
 
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
