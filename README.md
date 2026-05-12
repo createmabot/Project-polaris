@@ -659,3 +659,10 @@ pnpm exec prisma db seed
 - UI foundation completion pass PR1 is a docs-only inventory in docs/53.
 - The next implementation candidates are limited to minimal FilterGroup / PaginationControls, InlineNotice, and focused BacktestDetail section cleanup.
 - DataTable, virtual scroll, column resize, form framework, and full visual regression adoption remain out of scope.
+
+### UI foundation completion pass
+
+- PR #312〜#315 の UI foundation completion pass は docs 上で完了扱いです。
+- 完了範囲は `FilterGroup` / `PaginationControls` の Application Detail runs / reports 限定適用、`InlineNotice` の helper 表示限定適用、Backtest Detail 高頻度 section cleanup です。
+- API / backend / DB / Prisma schema / test は変更していません。
+- 次候補は StrategyVersionDetail、StrategyLab、SymbolDetail filter の慎重な部分適用、補助画面整理、Visual regression pilot です。
