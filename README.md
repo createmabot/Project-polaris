@@ -123,6 +123,8 @@ pnpm run down
   - 状態: `ai_jobs`（`queued -> running -> succeeded|failed`）
   - 生成物: `ai_summaries`（`summary_scope=backtest_review`, `target_entity_type=backtest`）
   - `GET /api/backtests/:backtestId` の `ai_review` は `status=available|unavailable` を返す。
+- CSV import が `parse_status=parsed` になった場合は、CSV import report 系に限り Backtest AI総評生成を自動起動する。
+- 同一 input の succeeded summary、queued / running job、failed job がある場合、自動起動は重複作成や自動 retry を行わない。手動生成 API / button は維持する。
 - provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
 - `local_llm` / `openai_api` 失敗時は既定で `ai_jobs=failed` を返す（必要時のみ `AI_ENABLE_STUB_FALLBACK=true`）。
 

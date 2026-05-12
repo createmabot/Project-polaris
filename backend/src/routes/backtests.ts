@@ -94,6 +94,28 @@ type BacktestAiReviewView = {
   insufficient_context: boolean;
 };
 
+type BacktestSummaryJobTrigger = 'manual' | 'csv_import_auto';
+
+type BacktestSummaryInput = {
+  backtest: any;
+  latestImport: any | null;
+  metrics: ParsedImportSummary | null;
+  parsedImportsForAi: ParsedImportForAi[];
+  tradeSummary: BacktestTradeSummaryInput | null;
+  comparisonDiff: BacktestComparisonDiffInput | null;
+  snapshot: BacktestStrategySnapshot | null;
+  internalBacktestContext: ReturnType<typeof buildInternalBacktestContext>;
+  strategyVersion: any | null;
+  importFiles: Array<{
+    id: string;
+    fileName: string;
+    parseStatus: string;
+    parseError: string | null;
+    createdAt: string;
+  }>;
+  inputSnapshotHash: string;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -505,7 +527,7 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
   };
 }
 
-async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
+async function buildBacktestSummaryInput(backtestId: string): Promise<BacktestSummaryInput> {
   const backtest = await prisma.backtest.findUnique({
     where: { id: backtestId },
     include: {
@@ -535,6 +557,105 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
     createdAt: item.createdAt.toISOString(),
   }));
 
+  const inputSnapshot = JSON.stringify({
+    backtest_id: backtest.id,
+    title: backtest.title,
+    market: backtest.market,
+    timeframe: backtest.timeframe,
+    execution_source: backtest.executionSource,
+    status: backtest.status,
+    metrics,
+    trade_summary: tradeSummary,
+    import_files: importFiles.map((item) => ({
+      id: item.id,
+      file_name: item.fileName,
+      parse_status: item.parseStatus,
+    })),
+    import_parsed_summaries: parsedImportsForAi,
+    comparison_diff: comparisonDiff,
+    report_context_type: internalBacktestContext ? 'internal_backtest' : 'csv_import',
+    internal_backtest_context: internalBacktestContext
+      ? {
+          execution_source: internalBacktestContext.executionSource,
+          internal_backtest_execution_id: internalBacktestContext.internalBacktestExecutionId,
+          summary_kind: internalBacktestContext.summaryKind,
+          period: internalBacktestContext.period,
+          metrics: internalBacktestContext.metrics,
+          artifact_pointer: internalBacktestContext.artifactPointer,
+        }
+      : null,
+    strategy: {
+      strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
+      strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
+      natural_language_rule: strategyVersion?.naturalLanguageRule ?? snapshot?.natural_language_rule ?? null,
+      generated_pine: strategyVersion?.generatedPine ?? snapshot?.generated_pine ?? null,
+    },
+  });
+  const inputSnapshotHash = crypto.createHash('sha256').update(inputSnapshot).digest('hex');
+
+  return {
+    backtest,
+    latestImport,
+    metrics,
+    parsedImportsForAi,
+    tradeSummary,
+    comparisonDiff,
+    snapshot,
+    internalBacktestContext,
+    strategyVersion,
+    importFiles,
+    inputSnapshotHash,
+  };
+}
+
+async function findExistingBacktestSummary(input: BacktestSummaryInput) {
+  return prisma.aiSummary.findFirst({
+    where: {
+      targetEntityType: 'backtest',
+      targetEntityId: input.backtest.id,
+      summaryScope: 'backtest_review',
+      inputSnapshotHash: input.inputSnapshotHash,
+    },
+    orderBy: { generatedAt: 'desc' },
+  });
+}
+
+async function findExistingBacktestSummaryJob(input: BacktestSummaryInput, statuses: string[]) {
+  return prisma.aiJob.findFirst({
+    where: {
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: input.backtest.id,
+      status: { in: statuses },
+      requestPayload: {
+        path: ['input_snapshot_hash'],
+        equals: input.inputSnapshotHash,
+      } as any,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+async function generateBacktestSummaryWithJob(
+  backtestId: string,
+  options: { trigger?: BacktestSummaryJobTrigger; sourceImportId?: string | null } = {},
+): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
+  const trigger = options.trigger ?? 'manual';
+  const input = await buildBacktestSummaryInput(backtestId);
+  const {
+    backtest,
+    latestImport,
+    metrics,
+    parsedImportsForAi,
+    tradeSummary,
+    comparisonDiff,
+    snapshot,
+    internalBacktestContext,
+    strategyVersion,
+    importFiles,
+    inputSnapshotHash,
+  } = input;
+
   const job = await prisma.aiJob.create({
     data: {
       jobType: 'generate_backtest_review_summary',
@@ -543,6 +664,9 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
       requestPayload: {
         backtest_id: backtestId,
         latest_import_id: latestImport?.id ?? null,
+        source_import_id: options.sourceImportId ?? null,
+        trigger,
+        input_snapshot_hash: inputSnapshotHash,
       } as any,
       status: 'queued',
     },
@@ -557,51 +681,7 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
   });
 
   try {
-    const inputSnapshot = JSON.stringify({
-      backtest_id: backtest.id,
-      title: backtest.title,
-      market: backtest.market,
-      timeframe: backtest.timeframe,
-      execution_source: backtest.executionSource,
-      status: backtest.status,
-      metrics,
-      trade_summary: tradeSummary,
-      import_files: importFiles.map((item) => ({
-        id: item.id,
-        file_name: item.fileName,
-        parse_status: item.parseStatus,
-      })),
-      import_parsed_summaries: parsedImportsForAi,
-      comparison_diff: comparisonDiff,
-      report_context_type: internalBacktestContext ? 'internal_backtest' : 'csv_import',
-      internal_backtest_context: internalBacktestContext
-        ? {
-            execution_source: internalBacktestContext.executionSource,
-            internal_backtest_execution_id: internalBacktestContext.internalBacktestExecutionId,
-            summary_kind: internalBacktestContext.summaryKind,
-            period: internalBacktestContext.period,
-            metrics: internalBacktestContext.metrics,
-            artifact_pointer: internalBacktestContext.artifactPointer,
-          }
-        : null,
-      strategy: {
-        strategy_id: strategyVersion?.strategyRuleId ?? snapshot?.strategy_id ?? null,
-        strategy_version_id: strategyVersion?.id ?? snapshot?.strategy_version_id ?? null,
-        natural_language_rule: strategyVersion?.naturalLanguageRule ?? snapshot?.natural_language_rule ?? null,
-        generated_pine: strategyVersion?.generatedPine ?? snapshot?.generated_pine ?? null,
-      },
-    });
-    const inputSnapshotHash = crypto.createHash('sha256').update(inputSnapshot).digest('hex');
-
-    const existing = await prisma.aiSummary.findFirst({
-      where: {
-        targetEntityType: 'backtest',
-        targetEntityId: backtestId,
-        summaryScope: 'backtest_review',
-        inputSnapshotHash,
-      },
-      orderBy: { generatedAt: 'desc' },
-    });
+    const existing = await findExistingBacktestSummary(input);
     if (existing) {
       await prisma.aiJob.update({
         where: { id: job.id },
@@ -703,6 +783,26 @@ async function generateBacktestSummaryWithJob(backtestId: string): Promise<{ job
     }
     throw error;
   }
+}
+
+async function enqueueCsvImportBacktestSummary(backtestId: string, importId: string): Promise<void> {
+  const input = await buildBacktestSummaryInput(backtestId);
+  if (input.latestImport?.id !== importId) return;
+  if (!input.metrics) return;
+
+  const existingSummary = await findExistingBacktestSummary(input);
+  if (existingSummary) return;
+
+  const existingActiveJob = await findExistingBacktestSummaryJob(input, ['queued', 'running']);
+  if (existingActiveJob) return;
+
+  const existingFailedJob = await findExistingBacktestSummaryJob(input, ['failed']);
+  if (existingFailedJob) return;
+
+  await generateBacktestSummaryWithJob(backtestId, {
+    trigger: 'csv_import_auto',
+    sourceImportId: importId,
+  });
 }
 
 export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
@@ -924,6 +1024,19 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
       where: { id: backtest.id },
       data: { status: nextBacktestStatus },
     });
+
+    if (parseStatus === 'parsed') {
+      void enqueueCsvImportBacktestSummary(backtest.id, createdImport.id).catch((error) => {
+        request.log.warn(
+          {
+            err: error instanceof Error ? { name: error.name } : { name: 'UnknownError' },
+            backtest_id: backtest.id,
+            import_id: createdImport.id,
+          },
+          'csv_import_ai_summary_enqueue_failed',
+        );
+      });
+    }
 
     return reply.status(201).send(formatSuccess(request, {
       import: {
