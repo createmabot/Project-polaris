@@ -668,3 +668,10 @@ pnpm exec prisma db seed
 - 完了範囲は `FilterGroup` / `PaginationControls` の Application Detail runs / reports 限定適用、`InlineNotice` の helper 表示限定適用、Backtest Detail 高頻度 section cleanup です。
 - API / backend / DB / Prisma schema / test は変更していません。
 - 次候補は StrategyVersionDetail、StrategyLab、SymbolDetail filter の慎重な部分適用、補助画面整理、Visual regression pilot です。
+
+### AI summary auto-generation operations design
+
+- AI summary 自動生成の運用設計は `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md` を正本とする。
+- 今回は docs-only で、自動生成の本格実装、DB migration、Prisma schema 変更、API / backend 仕様変更は行わない。
+- 初回実装候補は「CSV import parsed report 作成直後」または「internal backtest report conversion 完了直後」のどちらか 1 系統に限定する。
+- 既存 BacktestDetail の手動生成ボタンは維持し、duplicate enqueue は `summary_scope + target + inputSnapshotHash` を基準に防止する方針とする。
