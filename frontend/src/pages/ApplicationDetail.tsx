@@ -8,11 +8,12 @@ import {
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
-import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import FilterGroup from '../components/ui/FilterGroup';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
+import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -262,32 +263,20 @@ export default function ApplicationDetail() {
           <SectionCard title={LABELS.runs}>
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsFilter}</h3>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsTypeFilter}</span>
-                {runTypeOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={runTypeFilter === option.value ? 'primary' : 'secondary'}
-                    onClick={() => updateRunTypeFilter(option.value)}
-                    className="py-1 text-xs"
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsStatusFilter}</span>
-                {runStatusOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={runStatusFilter === option.value ? 'primary' : 'secondary'}
-                    onClick={() => updateRunStatusFilter(option.value)}
-                    className="py-1 text-xs"
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
+              <FilterGroup
+                label={LABELS.runsTypeFilter}
+                options={runTypeOptions}
+                value={runTypeFilter}
+                onChange={updateRunTypeFilter}
+                className="mt-2"
+              />
+              <FilterGroup
+                label={LABELS.runsStatusFilter}
+                options={runStatusOptions}
+                value={runStatusFilter}
+                onChange={updateRunStatusFilter}
+                className="mt-2"
+              />
               <div className="mt-2 text-xs text-slate-500">
                 {LABELS.runsSummary
                   .replace('{shown}', String(runsData.runs.length))
@@ -356,29 +345,16 @@ export default function ApplicationDetail() {
               ))}
               </div>
             )}
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
-              <div className="text-xs text-slate-500">
-                {LABELS.pageSummary.replace('{page}', String(runsData.pagination.page))}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => setRunsPage((page) => Math.max(1, page - 1))}
-                  disabled={!runsData.pagination.has_prev}
-                  className="py-1 text-xs"
-                >
-                  {LABELS.previousPage}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => setRunsPage((page) => page + 1)}
-                  disabled={!runsData.pagination.has_next}
-                  className="py-1 text-xs"
-                >
-                  {LABELS.nextPage}
-                </Button>
-              </div>
-            </div>
+            <PaginationControls
+              page={runsData.pagination.page}
+              hasPrev={runsData.pagination.has_prev}
+              hasNext={runsData.pagination.has_next}
+              onPrev={() => setRunsPage((page) => Math.max(1, page - 1))}
+              onNext={() => setRunsPage((page) => page + 1)}
+              summaryLabel={LABELS.pageSummary}
+              previousLabel={LABELS.previousPage}
+              nextLabel={LABELS.nextPage}
+            />
           </SectionCard>
         </div>
 
@@ -386,32 +362,20 @@ export default function ApplicationDetail() {
           <SectionCard title={LABELS.reports}>
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsFilter}</h3>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsSourceFilter}</span>
-                {reportExecutionSourceOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={reportExecutionSourceFilter === option.value ? 'primary' : 'secondary'}
-                    onClick={() => updateReportExecutionSourceFilter(option.value)}
-                    className="py-1 text-xs"
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsStatusFilter}</span>
-                {reportStatusOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    variant={reportStatusFilter === option.value ? 'primary' : 'secondary'}
-                    onClick={() => updateReportStatusFilter(option.value)}
-                    className="py-1 text-xs"
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
+              <FilterGroup
+                label={LABELS.reportsSourceFilter}
+                options={reportExecutionSourceOptions}
+                value={reportExecutionSourceFilter}
+                onChange={updateReportExecutionSourceFilter}
+                className="mt-2"
+              />
+              <FilterGroup
+                label={LABELS.reportsStatusFilter}
+                options={reportStatusOptions}
+                value={reportStatusFilter}
+                onChange={updateReportStatusFilter}
+                className="mt-2"
+              />
               <div className="mt-2 text-xs text-slate-500">
                 {reportsData
                   ? LABELS.reportsSummary
@@ -472,29 +436,16 @@ export default function ApplicationDetail() {
               </div>
             )}
             {reportsData ? (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-3">
-                <div className="text-xs text-slate-500">
-                  {LABELS.pageSummary.replace('{page}', String(reportsData.pagination.page))}
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setReportsPage((page) => Math.max(1, page - 1))}
-                    disabled={!reportsData.pagination.has_prev}
-                    className="py-1 text-xs"
-                  >
-                    {LABELS.previousPage}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setReportsPage((page) => page + 1)}
-                    disabled={!reportsData.pagination.has_next}
-                    className="py-1 text-xs"
-                  >
-                    {LABELS.nextPage}
-                  </Button>
-                </div>
-              </div>
+              <PaginationControls
+                page={reportsData.pagination.page}
+                hasPrev={reportsData.pagination.has_prev}
+                hasNext={reportsData.pagination.has_next}
+                onPrev={() => setReportsPage((page) => Math.max(1, page - 1))}
+                onNext={() => setReportsPage((page) => page + 1)}
+                summaryLabel={LABELS.pageSummary}
+                previousLabel={LABELS.previousPage}
+                nextLabel={LABELS.nextPage}
+              />
             ) : null}
           </SectionCard>
         </div>
