@@ -607,7 +607,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                   </div>
                 )}
                 <p className="mt-2 text-xs leading-5 text-slate-500">
-                  SideRail CRUD 後の再取得は `/api/home` 単位です。最適化は後続で行います。
+                  詳細管理は移行期の補助画面です。通常の追加・編集・削除はこの SideRail で行います。
                 </p>
               </div>
 

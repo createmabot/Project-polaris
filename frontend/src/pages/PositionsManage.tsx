@@ -127,7 +127,9 @@ export default function PositionsManage() {
         </Link>
       </div>
       <h1>保有銘柄管理</h1>
-      <p style={{ color: '#666' }}>Home の positions で使う保有銘柄を管理します。</p>
+      <p style={{ color: '#666' }}>
+        主要操作は共通サイドメニューの SideRail に移行済みです。この画面は移行期の詳細管理用として残しています。
+      </p>
 
       {message && (
         <div
