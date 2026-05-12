@@ -640,3 +640,9 @@ pnpm exec prisma db seed
 - Future pilot candidates should stay limited to 1-3 stable containers, with ApplicationDetail and SymbolDetail as the preferred starting point.
 - Dynamic timestamp / locale, seed ordering, raw JSON, long pages, external rendering, AI-derived text, viewport, browser, and CI runtime must be stabilized or masked before adoption.
 - If introduced later, use a separate optional visual command instead of mixing it into `pnpm test:e2e:browser`, and document the small snapshot update flow here.
+
+### AI summary / artifact operations design
+
+- AI summary / artifact operations の運用境界は `docs/53.北極星 P3現在地と残課題整理（P3）.md` を正本とする。
+- CSV import report と internal backtest report では AI summary input と artifact の扱いが異なる。
+- artifact download / diff、AI summary 自動生成、AI summary 同士の比較は後続判断とする。
