@@ -633,3 +633,10 @@ pnpm exec prisma db seed
 - `ApplicationDetail` owns application-scoped run and report history.
 - `BacktestComparisonDetail` remains the saved pairwise comparison revisit screen and a candidate for a future full comparison view.
 - No API, backend, frontend behavior, DB migration, Prisma schema, or test changes are included in this docs-only completion pass.
+
+### Visual regression readiness
+
+- Visual regression / screenshot comparison is documented as readiness only; no spec, script, snapshot, or CI required check is added in this pass.
+- Future pilot candidates should stay limited to 1-3 stable containers, with ApplicationDetail and SymbolDetail as the preferred starting point.
+- Dynamic timestamp / locale, seed ordering, raw JSON, long pages, external rendering, AI-derived text, viewport, browser, and CI runtime must be stabilized or masked before adoption.
+- If introduced later, use a separate optional visual command instead of mixing it into `pnpm test:e2e:browser`, and document the small snapshot update flow here.
