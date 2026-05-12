@@ -589,3 +589,9 @@ pnpm exec prisma db seed
 - The pass focused on selected section, state, status, key-value, empty, loading, error, and button presentation.
 - It did not change refresh behavior, CRUD behavior, API shape, backend, DB, or Prisma schema.
 - Form, modal, table, JSON viewer consolidation and visual regression remain future decisions.
+
+### UI foundation third pass PR1
+
+- Shared form field components now cover selected text input, textarea, and select usage in StrategyLab and StrategyVersionDetail.
+- The pass keeps field-specific copy, validation, API calls, generation, save, and Pine workflows in the calling pages.
+- It does not add a form framework and does not change backend, DB, or Prisma schema.

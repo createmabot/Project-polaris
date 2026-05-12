@@ -5,6 +5,7 @@ import { patchApi, postApi, swrFetcher } from '../api/client';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import { TextArea } from '../components/ui/FormFields';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
@@ -1081,11 +1082,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         description='保存、Pine 再生成、修正再生成の導線は既存のまま維持します。'
         className='mt-5'
       >
-        <textarea
+        <TextArea
+          label='自然言語ルール'
           value={editingNaturalLanguageRule}
           onChange={(event) => setEditingNaturalLanguageRule(event.target.value)}
           rows={7}
-          style={{ width: '100%', padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
         />
 
         <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -1125,36 +1126,27 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
           <div style={{ display: 'grid', gap: '0.55rem' }}>
-            <label style={{ display: 'grid', gap: '0.25rem' }}>
-              <span style={{ fontSize: '0.88rem', color: '#444' }}>compile_error_text（任意）</span>
-              <textarea
-                value={compileErrorText}
-                onChange={(event) => setCompileErrorText(event.target.value)}
-                rows={2}
-                placeholder='例: Undeclared identifier "sma"'
-                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
-              />
-            </label>
-            <label style={{ display: 'grid', gap: '0.25rem' }}>
-              <span style={{ fontSize: '0.88rem', color: '#444' }}>validation_note（任意）</span>
-              <textarea
-                value={validationNote}
-                onChange={(event) => setValidationNote(event.target.value)}
-                rows={2}
-                placeholder='例: シグナルが遅い'
-                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
-              />
-            </label>
-            <label style={{ display: 'grid', gap: '0.25rem' }}>
-              <span style={{ fontSize: '0.88rem', color: '#444' }}>revision_request（必須）</span>
-              <textarea
-                value={revisionRequest}
-                onChange={(event) => setRevisionRequest(event.target.value)}
-                rows={3}
-                placeholder='修正したい内容を入力してください'
-                style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
-              />
-            </label>
+            <TextArea
+              label='compile_error_text（任意）'
+              value={compileErrorText}
+              onChange={(event) => setCompileErrorText(event.target.value)}
+              rows={2}
+              placeholder='例: Undeclared identifier "sma"'
+            />
+            <TextArea
+              label='validation_note（任意）'
+              value={validationNote}
+              onChange={(event) => setValidationNote(event.target.value)}
+              rows={2}
+              placeholder='例: シグナルが遅い'
+            />
+            <TextArea
+              label='revision_request（必須）'
+              value={revisionRequest}
+              onChange={(event) => setRevisionRequest(event.target.value)}
+              rows={3}
+              placeholder='修正したい内容を入力してください'
+            />
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <Button
                 variant='primary'
@@ -1243,12 +1235,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               : '-'}
           </KeyValueRow>
         </KeyValueList>
-        <textarea
+        <TextArea
+          label='検証ノート'
           value={editingForwardValidationNote}
           onChange={(event) => setEditingForwardValidationNote(event.target.value)}
           rows={4}
           placeholder='次に検証したい条件や見直し方針を記録します'
-          style={{ width: '100%', padding: '0.7rem', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical' }}
         />
         <div style={{ marginTop: '0.7rem' }}>
           <Button
