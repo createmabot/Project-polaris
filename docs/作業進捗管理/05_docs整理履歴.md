@@ -53,15 +53,32 @@
 
 - `docs/作業進捗管理/06_番号付きdocs削除整理.md`
 
-## 6. 今回やらないこと
+## 6. legacy numbered docs cleanup PR 2
 
-- 既存番号 docs の削除。
+今回の cleanup PR 2 では、data / API / sample 系のうち移管済みでリンク影響が小さい MVP初期 API sample docs と DB migration 順序案を削除した。
+
+移管先:
+
+- API response / sample 判断: `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests。
+- DB / migration 判断: `docs/仕様書/02_データモデル.md`、Prisma schema、migrations。
+- 削除理由と保留理由: `docs/作業進捗管理/06_番号付きdocs削除整理.md`。
+
+削除保留:
+
+- `docs/2`
+- `docs/3`
+
+保留理由は、README や複数履歴資料からの参照影響が大きく、data / API 現行正本への要点移管確認をもう一段行う必要があるため。
+
+## 7. 今回やらないこと
+
+- `docs/2` / `docs/3` の削除。
 - 既存番号 docs の bulk rename。
 - 実装コード、API、backend、frontend、DB、Prisma schema、tests の変更。
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 7. 今後の docs 更新ルール
+## 8. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -70,7 +87,7 @@
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 8. 関連 docs
+## 9. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
