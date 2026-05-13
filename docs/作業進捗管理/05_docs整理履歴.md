@@ -105,7 +105,37 @@
 
 保留理由は、MVP受入記録としての履歴価値、または現行 progress 詳細正本としての役割が残るため。
 
-## 9. 今回やらないこと
+## 9. legacy numbered docs cleanup 完了整理
+
+PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは完了扱いにする。
+
+削除済み:
+
+- PR #328: `docs/16`, `docs/21`
+- PR #329: `docs/17`, `docs/20`, `docs/22`, `docs/26`, `docs/27`
+- PR #330: `docs/15`, `docs/19`, `docs/31`
+
+移管先:
+
+- data / API / sample 系: `docs/仕様書/02_データモデル.md`, `docs/仕様書/03_API仕様.md`, `docs/仕様書/10_テスト仕様.md`, Prisma schema / migrations, implementation routes / tests。
+- screen / UI / task 系: `docs/仕様書/04_画面導線_IA.md`, `docs/仕様書/05_画面仕様.md`, `docs/仕様書/06_UIコンポーネント仕様.md`, `docs/walkthrough.md`, frontend tests, `docs/作業進捗管理/03_残課題_Backlog.md`。
+- progress 系: `docs/作業進捗管理/01_ロードマップ.md`, `02_完了フェーズ.md`, `03_残課題_Backlog.md`, `04_設計判断ログ.md`, `docs/仕様書/03_API仕様.md`, `docs/仕様書/10_テスト仕様.md`。
+
+保留中:
+
+- `docs/2` / `docs/3`: data / API 初期設計。参照が多く、現行正本への移管十分性を追加確認してから判断する。
+- `docs/29` / `docs/30`: Rule Lab MVP fixed docs。Rule Lab 仕様を `docs/仕様書/` 側へ抽出後に再判断する。
+- `docs/36`〜`docs/38`: MVP受入記録。履歴価値があるため保持する。
+- `docs/39` / `docs/44` / `docs/53`: current / progress detailed canonical docs。現時点では保持する。
+
+後続判断:
+
+- data / API 系残件 `docs/2` / `docs/3` の再確認。
+- Rule Lab 系 `docs/29` / `docs/30` の正本抽出。
+- MVP受入記録 `docs/36`〜`docs/38` の移管 / 保持判断。
+- progress 詳細 docs `docs/39` / `docs/44` / `docs/53` の統合可否。
+
+## 10. 今回やらないこと
 
 - `docs/2` / `docs/3` の削除。
 - 既存番号 docs の bulk rename。
@@ -113,7 +143,7 @@
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 10. 今後の docs 更新ルール
+## 11. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -122,7 +152,7 @@
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 11. 関連 docs
+## 12. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`

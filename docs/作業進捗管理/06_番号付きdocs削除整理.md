@@ -5,19 +5,19 @@
 
 ## 1. 目的
 
-本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録した。PR 3 では screen / UI / task 系のうち、現行正本へ移管済みの docs を削除した。PR 4 では progress 系のうち、現行 `docs/作業進捗管理/` または現行 API 仕様 / tests へ移管済みの docs を削除した。
+本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR #327 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR #328 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録した。PR #329 では screen / UI / task 系のうち、現行正本へ移管済みの docs を削除した。PR #330 では progress 系のうち、現行 `docs/作業進捗管理/` または現行 API 仕様 / tests へ移管済みの docs を削除した。
 
 現行仕様判断では `docs/仕様書/`、運用判断では `docs/運用ドキュメント/`、進捗判断では `docs/作業進捗管理/` を優先する。
 
-## 2. PR 1 の判断
+## 2. PR #327 の判断
 
 - 番号付き docs は削除しない。
 - 番号付き docs の rename / archive 移動もしない。
 - 削除候補は分類だけ行う。
 - 削除前に、内容が現行 docs へ移管済みか、履歴資料として残す価値があるかを確認する。
-- 実削除は PR 2 以降で、分類単位に小さく分けて行う。
+- 実削除は PR #328 以降で、分類単位に小さく分けて行う。
 
-## 2-1. PR 2 の判断
+## 2-1. PR #328 の判断
 
 削除済み:
 
@@ -41,7 +41,7 @@
 - data / API 現行正本への要点移管確認をもう一段行う必要がある。
 - 現時点では冒頭注意書きにより、現行判断では `docs/仕様書/02_データモデル.md`、`docs/仕様書/03_API仕様.md`、Prisma schema、実装 routes / tests を優先する運用に留める。
 
-PR 2 で更新した参照:
+PR #328 で更新した参照:
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
@@ -49,7 +49,7 @@ PR 2 で更新した参照:
 - `docs/42.北極星 docs文字化け棚卸し範囲整理（MVP後P1）.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
-## 2-2. PR 3 の判断
+## 2-2. PR #329 の判断
 
 削除済み:
 
@@ -70,7 +70,7 @@ PR 2 で更新した参照:
 
 - なし。
 
-PR 3 で更新した参照:
+PR #329 で更新した参照:
 
 - `README.md`
 - `docs/0.目次.md`
@@ -84,7 +84,7 @@ PR 3 で更新した参照:
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
-## 2-3. PR 4 の判断
+## 2-3. PR #330 の判断
 
 削除済み:
 
@@ -111,7 +111,7 @@ PR 3 で更新した参照:
 - `docs/36`〜`docs/38` は walkthrough / `docs/39` / `docs/40` / `docs/42` から参照が残り、MVP受入記録としての履歴価値がある。
 - `docs/39` / `docs/44` / `docs/53` は現行 progress の詳細正本として扱う。
 
-PR 4 で更新した参照:
+PR #330 で更新した参照:
 
 - `docs/10.北極星 AI出力 JSON schema 詳細設計（MVP）.md`
 - `docs/18.北極星 実装チケット化用 粒度分解（MVP）.md`
@@ -122,6 +122,40 @@ PR 4 で更新した参照:
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
+## 2-4. 完了整理
+
+PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは完了扱いにする。今回以降、Codex / sub-agent は旧番号 docs を初期入口にせず、`docs/仕様書/`、`docs/運用ドキュメント/`、`docs/作業進捗管理/` を優先して読む。
+
+削除済み一覧:
+
+- PR #328: `docs/16`, `docs/21`
+- PR #329: `docs/17`, `docs/20`, `docs/22`, `docs/26`, `docs/27`
+- PR #330: `docs/15`, `docs/19`, `docs/31`
+
+削除済み docs の移管先:
+
+- `docs/16`: `docs/仕様書/03_API仕様.md`, `docs/仕様書/10_テスト仕様.md`, implementation routes / tests。
+- `docs/21`: `docs/仕様書/02_データモデル.md`, Prisma schema / migrations。
+- `docs/17`: `docs/仕様書/04_画面導線_IA.md`, `docs/仕様書/05_画面仕様.md`, `docs/walkthrough.md`, frontend tests。
+- `docs/20`: `docs/運用ドキュメント/02_起動と確認手順.md`, `docs/walkthrough.md`。
+- `docs/22` / `docs/26`: `docs/仕様書/06_UIコンポーネント仕様.md`, `docs/46`, `docs/53`。
+- `docs/27`: `docs/作業進捗管理/00_現在地.md`, `docs/作業進捗管理/03_残課題_Backlog.md`, `docs/53`。
+- `docs/15` / `docs/19`: `docs/作業進捗管理/01_ロードマップ.md`, `02_完了フェーズ.md`, `03_残課題_Backlog.md`, `04_設計判断ログ.md`。
+- `docs/31`: `docs/仕様書/03_API仕様.md`, `docs/仕様書/10_テスト仕様.md`, implementation routes / tests。
+
+保留一覧と理由:
+
+- `docs/2` / `docs/3`: data / API 初期設計。README や複数履歴資料からの参照があり、現行正本への移管十分性を追加確認してから判断する。
+- `docs/29` / `docs/30`: Rule Lab MVP fixed docs。Rule Lab 仕様を `docs/仕様書/` 側へ抽出してから再判断する。
+- `docs/36`〜`docs/38`: MVP acceptance records。受入確認・結果・完了報告として履歴価値がある。
+- `docs/39` / `docs/44` / `docs/53`: current / progress detailed canonical docs。現時点では保持する。
+
+後続判断:
+
+- data / API 系残件 `docs/2` / `docs/3` の再確認。
+- Rule Lab 系 `docs/29` / `docs/30` の正本抽出。
+- MVP受入記録 `docs/36`〜`docs/38` の移管 / 保持判断。
+- progress 詳細 docs `docs/39` / `docs/44` / `docs/53` の統合可否。
 ## 3. 削除前確認 checklist
 
 各 docs を削除候補にする前に、次を確認する。
@@ -163,10 +197,10 @@ PR 4 で更新した参照:
 
 ## 7. PR 分割方針
 
-- PR 1: 本資料を追加し、削除判断 checklist と候補分類を固定する。実削除はしない。
-- PR 2: data / API / sample 系の候補を確認し、移管済みなら削除または保留理由を記録する。
-- PR 3: screen / UI / task 系の候補を確認し、移管済みなら削除または保留理由を記録する。
-- PR 4: progress 系の候補を確認し、現行 `docs/作業進捗管理/` へ集約できるものだけ削除する。
+- PR #327: 本資料を追加し、削除判断 checklist と候補分類を固定する。実削除はしない。
+- PR #328: data / API / sample 系の候補を確認し、移管済みなら削除または保留理由を記録する。
+- PR #329: screen / UI / task 系の候補を確認し、移管済みなら削除または保留理由を記録する。
+- PR #330: progress 系の候補を確認し、現行 `docs/作業進捗管理/` へ集約できるものだけ削除する。
 - PR 5 以降: 運用補助、webhook、snapshot、walkthrough 分割など、影響範囲が異なるものを必要に応じて扱う。
 
 ## 8. 初期確認候補一覧
@@ -190,7 +224,7 @@ PR 4 で更新した参照:
 | `docs/44.北極星 MVP後P2完了整理とP3着手判断.md` | progress系 | 保留 | P2完了 / P3着手判断の履歴正本として残す。 |
 | `docs/53.北極星 P3現在地と残課題整理（P3）.md` | progress系 | 保留 | P3以降の現在地と残課題の詳細正本として残す。 |
 
-## 9. PR 2 以降の候補分類
+## 9. PR #328 以降の候補分類
 
 ### data / API / sample 系
 
@@ -198,25 +232,25 @@ PR 4 で更新した参照:
 - `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`
 - `docs/9.北極星 バックテストCSVパース仕様（MVP）.md`
 - `docs/13.北極星 バックテスト結果比較ロジック設計（MVP）.md`
-- `docs/16`（PR 2 で削除済み）
-- `docs/21`（PR 2 で削除済み）
+- `docs/16`（PR #328 で削除済み）
+- `docs/21`（PR #328 で削除済み）
 - `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md`
 - `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md`
 
 ### screen / UI / task 系
 
-- `docs/17`（PR 3 で削除済み）
+- `docs/17`（PR #329 で削除済み）
 - `docs/18.北極星 実装チケット化用 粒度分解（MVP）.md`
-- `docs/20`（PR 3 で削除済み）
-- `docs/22`（PR 3 で削除済み）
-- `docs/26`（PR 3 で削除済み）
-- `docs/27`（PR 3 で削除済み）
+- `docs/20`（PR #329 で削除済み）
+- `docs/22`（PR #329 で削除済み）
+- `docs/26`（PR #329 で削除済み）
+- `docs/27`（PR #329 で削除済み）
 
 ### progress 系
 
-- `docs/15`（PR 4 で削除済み）
-- `docs/19`（PR 4 で削除済み）
-- `docs/31`（PR 4 で削除済み）
+- `docs/15`（PR #330 で削除済み）
+- `docs/19`（PR #330 で削除済み）
+- `docs/31`（PR #330 で削除済み）
 - `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md`
 - `docs/37.北極星 MVP受入確認結果（MVP）.md`
 - `docs/38.北極星 MVP完了報告（MVP）.md`
@@ -241,7 +275,7 @@ PR 4 で更新した参照:
 
 ## 11. 次回作業メモ
 
-- PR 4 では progress 系から着手する。
-- 削除対象は一度に広げず、移管先が明確なものだけ扱う。
-- 保留した docs は本資料の記録欄を更新する。
-- 削除 PR でも docs-only を維持し、実装コードや tests は変更しない。
+- 次回は旧番号 docs を初期入口にせず、`docs/仕様書/`、`docs/運用ドキュメント/`、`docs/作業進捗管理/` を優先して読む。
+- 削除済み docs の情報が必要な場合は、本資料の移管先を確認する。
+- 残件は `docs/2` / `docs/3`、`docs/29` / `docs/30`、`docs/36`〜`docs/38`、`docs/39` / `docs/44` / `docs/53` の順に、移管十分性と履歴価値を確認する。
+- 削除や統合を行う場合も docs-only を維持し、実装コードや tests は変更しない。
