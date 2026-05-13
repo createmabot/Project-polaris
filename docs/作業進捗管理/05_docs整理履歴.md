@@ -1,6 +1,6 @@
 # 北極星 docs 整理履歴
 
-更新日: 2026-05-13
+更新日: 2026-05-14
 分類: 作業進捗管理
 
 ## 1. 目的
@@ -45,7 +45,15 @@
 - `docs/作業進捗管理/04_設計判断ログ.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
-## 5. 今回やらないこと
+## 5. legacy numbered docs cleanup PR 1
+
+今回の cleanup PR 1 では、番号付き docs の実削除は行わず、削除判断 checklist と候補分類を `docs/作業進捗管理/06_番号付きdocs削除整理.md` に追加した。削除可否は PR 2 以降で分類単位に確認する。
+
+追加した進捗 docs:
+
+- `docs/作業進捗管理/06_番号付きdocs削除整理.md`
+
+## 6. 今回やらないこと
 
 - 既存番号 docs の削除。
 - 既存番号 docs の bulk rename。
@@ -53,7 +61,7 @@
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 6. 今後の docs 更新ルール
+## 7. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -62,9 +70,10 @@
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 7. 関連 docs
+## 8. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/作業進捗管理/00_現在地.md`
 - `docs/作業進捗管理/01_ロードマップ.md`
+- `docs/作業進捗管理/06_番号付きdocs削除整理.md`
