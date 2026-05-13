@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録した。PR 3 では screen / UI / task 系のうち、現行正本へ移管済みの docs を削除する。
+本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録した。PR 3 では screen / UI / task 系のうち、現行正本へ移管済みの docs を削除した。PR 4 では progress 系のうち、現行 `docs/作業進捗管理/` または現行 API 仕様 / tests へ移管済みの docs を削除した。
 
 現行仕様判断では `docs/仕様書/`、運用判断では `docs/運用ドキュメント/`、進捗判断では `docs/作業進捗管理/` を優先する。
 
@@ -84,6 +84,44 @@ PR 3 で更新した参照:
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
+## 2-3. PR 4 の判断
+
+削除済み:
+
+- `docs/15.北極星 MVPタスク分解.md`
+- `docs/19.北極星 スプリント計画案（MVP）.md`
+- `docs/31.北極星 APIレスポンス差分棚卸しと次タスク候補.md`
+
+削除理由:
+
+- `docs/15` / `docs/19` は MVP初期の実装計画・スプリント案であり、現行の roadmap / 完了フェーズ / backlog / decision log は `docs/作業進捗管理/01_ロードマップ.md`、`02_完了フェーズ.md`、`03_残課題_Backlog.md`、`04_設計判断ログ.md` へ移管済みである。
+- `docs/31` は API response 差分棚卸し履歴であり、現行 API 判断は `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests を優先する運用へ移管済みである。
+
+削除保留:
+
+- `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md`
+- `docs/37.北極星 MVP受入確認結果（MVP）.md`
+- `docs/38.北極星 MVP完了報告（MVP）.md`
+- `docs/39.北極星 MVP後ロードマップ・バックログ整理.md`
+- `docs/44.北極星 MVP後P2完了整理とP3着手判断.md`
+- `docs/53.北極星 P3現在地と残課題整理（P3）.md`
+
+保留理由:
+
+- `docs/36`〜`docs/38` は walkthrough / `docs/39` / `docs/40` / `docs/42` から参照が残り、MVP受入記録としての履歴価値がある。
+- `docs/39` / `docs/44` / `docs/53` は現行 progress の詳細正本として扱う。
+
+PR 4 で更新した参照:
+
+- `docs/10.北極星 AI出力 JSON schema 詳細設計（MVP）.md`
+- `docs/18.北極星 実装チケット化用 粒度分解（MVP）.md`
+- `docs/23.北極星 GitHub Projects 用カラム設計案（MVP）.md`
+- `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md`
+- `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md`
+- `docs/42.北極星 docs文字化け棚卸し範囲整理（MVP後P1）.md`
+- `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- `docs/作業進捗管理/05_docs整理履歴.md`
+
 ## 3. 削除前確認 checklist
 
 各 docs を削除候補にする前に、次を確認する。
@@ -137,9 +175,10 @@ PR 3 で更新した参照:
 |---|---|---|---|
 | `docs/2.北極星 データモデル設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行データモデルが `docs/仕様書/02_データモデル.md` と Prisma schema に移管済みか確認する。 |
 | `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行 API が `docs/仕様書/03_API仕様.md`、routes、tests に移管済みか確認する。 |
+| `docs/15` | progress系 | 削除済み | MVP初期タスク分解。現行 progress docs へ移管済み。 |
 | `docs/16` | data/API/sample系 | 削除済み | MVP初期の API sample。現行 API 仕様、テスト仕様、実装 routes / tests へ移管済み。 |
 | `docs/17` | screen/UI/task系 | 削除済み | MVP初期の画面 sample。現行画面仕様、walkthrough、frontend tests へ移管済み。 |
-| `docs/19.北極星 スプリント計画案（MVP）.md` | progress系 | 削除候補 | 作業計画履歴として残す価値が低いか確認する。 |
+| `docs/19` | progress系 | 削除済み | MVP初期スプリント計画。現行 progress docs へ移管済み。 |
 | `docs/20` | screen/UI/task系 | 削除済み | MVP初期 checklist。現行起動確認 / 受け入れ確認へ移管済み。 |
 | `docs/21` | data/API/sample系 | 削除済み | MVP初期の migration 順序案。現行 migration 判断は Prisma schema / migrations を優先する。 |
 | `docs/22` | screen/UI/task系 | 削除済み | MVP初期 component split。現行 UI component 仕様へ移管済み。 |
@@ -175,9 +214,9 @@ PR 3 で更新した参照:
 
 ### progress 系
 
-- `docs/15.北極星 MVPタスク分解.md`
-- `docs/19.北極星 スプリント計画案（MVP）.md`
-- `docs/31.北極星 APIレスポンス差分棚卸しと次タスク候補.md`
+- `docs/15`（PR 4 で削除済み）
+- `docs/19`（PR 4 で削除済み）
+- `docs/31`（PR 4 で削除済み）
 - `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md`
 - `docs/37.北極星 MVP受入確認結果（MVP）.md`
 - `docs/38.北極星 MVP完了報告（MVP）.md`
@@ -193,6 +232,9 @@ PR 3 で更新した参照:
 | `docs/3` | README や複数の履歴資料から参照されており、API 現行正本への要点移管確認をもう一段行う必要がある。 | `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests への移管十分性を確認して再判断する。 |
 | `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md` | Rule Lab MVP の詳細正本として参照される。 | `docs/仕様書/` 側へ十分に抽出できた後に再判断する。 |
 | `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md` | 実装後固定資料として、Rule Lab の差分確認に使う。 | Rule Lab 仕様の正本化後に再判断する。 |
+| `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md` | walkthrough / `docs/39` / `docs/40` / `docs/42` から参照が残り、MVP受入記録としての履歴価値がある。 | 受入記録の移管要否を別PRで確認する。 |
+| `docs/37.北極星 MVP受入確認結果（MVP）.md` | MVP受入結果の履歴資料として残す。 | 受入記録の移管要否を別PRで確認する。 |
+| `docs/38.北極星 MVP完了報告（MVP）.md` | MVP完了報告の履歴資料として残す。 | 完了フェーズ docs への要約十分性を確認して再判断する。 |
 | `docs/39.北極星 MVP後ロードマップ・バックログ整理.md` | roadmap / backlog の履歴正本。 | `docs/作業進捗管理/01_ロードマップ.md` への集約完了後に再判断する。 |
 | `docs/44.北極星 MVP後P2完了整理とP3着手判断.md` | P2完了 / P3着手判断の履歴正本。 | 完了フェーズ docs への要約十分性を確認して再判断する。 |
 | `docs/53.北極星 P3現在地と残課題整理（P3）.md` | P3以降の詳細な現在地と残課題の正本。 | `docs/作業進捗管理/03_残課題_Backlog.md` への移管範囲を確認して再判断する。 |
