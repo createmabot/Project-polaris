@@ -5,17 +5,49 @@
 
 ## 1. 目的
 
-本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。今回の PR では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定する。
+本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録する。
 
 現行仕様判断では `docs/仕様書/`、運用判断では `docs/運用ドキュメント/`、進捗判断では `docs/作業進捗管理/` を優先する。
 
-## 2. 今回 PR の判断
+## 2. PR 1 の判断
 
 - 番号付き docs は削除しない。
 - 番号付き docs の rename / archive 移動もしない。
 - 削除候補は分類だけ行う。
 - 削除前に、内容が現行 docs へ移管済みか、履歴資料として残す価値があるかを確認する。
 - 実削除は PR 2 以降で、分類単位に小さく分けて行う。
+
+## 2-1. PR 2 の判断
+
+削除済み:
+
+- `docs/16`
+- `docs/21`
+
+削除理由:
+
+- `docs/16` は MVP初期の API JSON サンプル集であり、現行 API response shape の判断は `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests へ移管済みである。
+- `docs/21` は MVP初期の DB migration 順序案であり、現行 DB / migration 判断は Prisma schema / migrations と `docs/仕様書/02_データモデル.md` を優先する。
+- どちらも現行 `docs/0.目次.md` と `docs/57.北極星 docs正本整理・読む順番（現行）.md` から削除済み扱いへ更新でき、直接参照の影響が小さい。
+
+削除保留:
+
+- `docs/2`
+- `docs/3`
+
+保留理由:
+
+- README や複数の履歴資料から参照されており、リンク影響が大きい。
+- data / API 現行正本への要点移管確認をもう一段行う必要がある。
+- 現時点では冒頭注意書きにより、現行判断では `docs/仕様書/02_データモデル.md`、`docs/仕様書/03_API仕様.md`、Prisma schema、実装 routes / tests を優先する運用に留める。
+
+PR 2 で更新した参照:
+
+- `docs/0.目次.md`
+- `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- `docs/31.北極星 APIレスポンス差分棚卸しと次タスク候補.md`
+- `docs/42.北極星 docs文字化け棚卸し範囲整理（MVP後P1）.md`
+- `docs/作業進捗管理/05_docs整理履歴.md`
 
 ## 3. 削除前確認 checklist
 
@@ -70,11 +102,11 @@
 |---|---|---|---|
 | `docs/2.北極星 データモデル設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行データモデルが `docs/仕様書/02_データモデル.md` と Prisma schema に移管済みか確認する。 |
 | `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行 API が `docs/仕様書/03_API仕様.md`、routes、tests に移管済みか確認する。 |
-| `docs/16.北極星 APIごとの JSON サンプル集（MVP）.md` | data/API/sample系 | 削除候補 | サンプルが古い場合は削除優先。必要な例だけ現行 API 仕様へ移す。 |
+| `docs/16` | data/API/sample系 | 削除済み | MVP初期の API sample。現行 API 仕様、テスト仕様、実装 routes / tests へ移管済み。 |
 | `docs/17.北極星 画面別の入力 出力サンプル（MVP）.md` | screen/UI/task系 | 削除候補 | 現行画面仕様、walkthrough、frontend tests へ移管済みか確認する。 |
 | `docs/19.北極星 スプリント計画案（MVP）.md` | progress系 | 削除候補 | 作業計画履歴として残す価値が低いか確認する。 |
 | `docs/20.北極星 初期開発チェックリスト（MVP）.md` | screen/UI/task系 | 削除候補 | 現行運用 checklist と重複しているか確認する。 |
-| `docs/21.北極星 DBマイグレーション順序案（MVP）.md` | data/API/sample系 | 削除候補 | 現行 migration 判断は Prisma migrations を正本にできるか確認する。 |
+| `docs/21` | data/API/sample系 | 削除済み | MVP初期の migration 順序案。現行 migration 判断は Prisma schema / migrations を優先する。 |
 | `docs/22.北極星 コンポーネント分割案（MVP）.md` | screen/UI/task系 | 削除候補 | 現行 UI component 仕様へ移管済みか確認する。 |
 | `docs/26. 補助資料_2 北極星 コンポーネント分割案のMVP範囲整理.md` | screen/UI/task系 | 削除候補 | `docs/22` と合わせて UI 仕様へ移管済みか確認する。 |
 | `docs/27. 補助資料_3 北極星 フロント実装タスク再分解案.md` | screen/UI/task系 | 削除候補 | 実装タスク履歴として残す価値が低いか確認する。 |
@@ -92,8 +124,8 @@
 - `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md`
 - `docs/9.北極星 バックテストCSVパース仕様（MVP）.md`
 - `docs/13.北極星 バックテスト結果比較ロジック設計（MVP）.md`
-- `docs/16.北極星 APIごとの JSON サンプル集（MVP）.md`
-- `docs/21.北極星 DBマイグレーション順序案（MVP）.md`
+- `docs/16`（PR 2 で削除済み）
+- `docs/21`（PR 2 で削除済み）
 - `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md`
 - `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md`
 
@@ -122,6 +154,8 @@
 
 | docs | 保留理由 | 次回確認 |
 |---|---|---|
+| `docs/2` | README や複数の履歴資料から参照されており、data 現行正本への要点移管確認をもう一段行う必要がある。 | `docs/仕様書/02_データモデル.md`、Prisma schema、migrations への移管十分性を確認して再判断する。 |
+| `docs/3` | README や複数の履歴資料から参照されており、API 現行正本への要点移管確認をもう一段行う必要がある。 | `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests への移管十分性を確認して再判断する。 |
 | `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md` | Rule Lab MVP の詳細正本として参照される。 | `docs/仕様書/` 側へ十分に抽出できた後に再判断する。 |
 | `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md` | 実装後固定資料として、Rule Lab の差分確認に使う。 | Rule Lab 仕様の正本化後に再判断する。 |
 | `docs/39.北極星 MVP後ロードマップ・バックログ整理.md` | roadmap / backlog の履歴正本。 | `docs/作業進捗管理/01_ロードマップ.md` への集約完了後に再判断する。 |
