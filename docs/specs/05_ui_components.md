@@ -1,0 +1,40 @@
+# 北極星 UI component 現行仕様
+
+更新日: 2026-05-13
+分類: specs
+
+## 1. 目的
+
+本資料は、現行の共通UI componentの責務を整理する仕様書である。実装経緯や未対応画面の履歴は `docs/53` を参照する。
+
+## 2. 現行 component
+
+| component | 責務 | 注意 |
+|---|---|---|
+| `SectionCard` | section wrapper。画面固有文言は呼び出し側に残す。 | 全面カード化には使わない。 |
+| `EmptyState` | 空状態の表示。 | 操作や retry 仕様は持たない。 |
+| `ErrorState` | 取得失敗や表示不能の説明。 | backend error 契約は持たない。 |
+| `LoadingState` | loading 表示。 | polling / skeleton の本格化はしない。 |
+| `Button` | 操作 button の最小 variant。 | Link 表現は `TextLink`。 |
+| `TextLink` | 画面間遷移 link。 | button 操作とは分ける。 |
+| `StatusBadge` | status 文字列の badge 表示。 | status enum の正規化はしない。 |
+| `KeyValueList` / `KeyValueRow` | key-value 表示。 | JSON dump や table 代替にはしない。 |
+| `TextInput` / `TextArea` / `SelectField` | 最小 form field。 | form framework は導入しない。 |
+| `ModalShell` | selected modal の薄い wrapper。 | keyboard trap の本格実装は対象外。 |
+| `JsonBlock` | read-only JSON 表示。 | JSON diff / collapsible / copy button は対象外。 |
+| `FilterGroup` | filter UI の小さな grouping。 | query semantics は画面側に残す。 |
+| `PaginationControls` | prev / next pagination。 | DataTable / infinite scroll は対象外。 |
+| `InlineNotice` | helper / note / source差の補足。 | toast / validation / alert system ではない。 |
+
+## 3. 共通化しない方針
+
+- DataTable 高機能化、virtual scroll、column resize は行わない。
+- form framework は導入しない。
+- Modal accessibility framework は導入しない。
+- Visual regression 本導入は別フェーズ判断にする。
+- 画面固有文言、API呼び出し、業務ロジックは component に閉じ込めない。
+
+## 4. 参照
+
+- UI構造方針: `docs/46.北極星 Tailwind化・UI構造安定化方針（P3）.md`
+- UI foundation 完了整理: `docs/53.北極星 P3現在地と残課題整理（P3）.md`

@@ -1,0 +1,36 @@
+# 北極星 screen / IA 現行仕様
+
+更新日: 2026-05-13
+分類: specs
+
+## 1. 目的
+
+本資料は、現行の主要画面責務と導線を整理する仕様書である。画面実装の経緯は `docs/53`、IA方針の履歴は `docs/47` を参照する。
+
+## 2. 主要画面責務
+
+| 画面 | 現行責務 |
+|---|---|
+| Home | 日次確認、watchlist / positions / market overview / latest summary の入口。 |
+| SideRail | 監視銘柄 / 保有銘柄の主要導線と CRUD modal。旧 `/watchlist` / `/positions` は補助 route。 |
+| SymbolDetail | 銘柄単位の概要、latest run / latest report、Symbol Strategy Application の概要と filter、Application Detail 入口。 |
+| StrategyDetail | strategy の説明、version / applied symbols / related reports の read-only 確認。 |
+| StrategyVersionDetail | strategy version、Pine、validation、internal backtest、application 起点の確認。 |
+| StrategyLab | natural language strategy 作成、Pine生成、保存、検証の作業画面。 |
+| ApplicationDetail | Symbol Strategy Application 単位の run / report history、filter / pagination。 |
+| BacktestDetail | 個別 Backtest report detail、同一 application 関連 report、metrics comparison helper、AI summary / artifact 表示。 |
+| BacktestComparisonDetail | 保存済み pairwise comparison の再訪画面。本格 comparison route 候補。 |
+
+## 3. 導線方針
+
+- 監視銘柄 / 保有銘柄の主要導線は SideRail に寄せる。
+- SymbolDetail は application の概要と入口に留め、run / report history は ApplicationDetail へ分離する。
+- BacktestDetail は個別 report detail と近接比較補助に留める。
+- ApplicationDetail は application-scoped history の受け皿とする。
+- BacktestComparisonDetail は保存済み comparison の再訪画面として維持し、本格比較画面化は後続判断とする。
+
+## 4. 参照
+
+- IA方針: `docs/47.北極星 画面導線・IA再整理（P3）.md`
+- UI現在地: `docs/46.北極星 Tailwind化・UI構造安定化方針（P3）.md`
+- P3後続現在地: `docs/53.北極星 P3現在地と残課題整理（P3）.md`

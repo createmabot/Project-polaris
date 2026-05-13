@@ -5,9 +5,11 @@
 
 docs の読み順:
 - docs入口: `docs/0.目次.md`
-- docs分類と正本整理: `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- docs体系と分類: `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- 現行仕様: `docs/specs/00_overview.md`
+- 開発・確認・運用: `docs/operations/00_developer_guide.md`
+- 作業進捗と残課題: `docs/progress/00_current_status.md`
 - 動作確認・受け入れ確認: `docs/walkthrough.md`
-- 現在地と残課題: `docs/53.北極星 P3現在地と残課題整理（P3）.md`
 
 ## 技術スタック
 - Node.js 22
