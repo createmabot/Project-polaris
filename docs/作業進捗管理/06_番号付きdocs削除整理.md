@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録する。
+本資料は、MVP初期から残っている平置き番号付き docs の削除 / 保留 / 移管判断を記録するための作業台帳である。PR 1 では実削除を行わず、削除前確認 checklist、移管先判断、候補分類、保留理由を固定した。PR 2 では data / API / sample 系のうち、移管済みでリンク影響が小さい docs を削除し、保留対象を記録した。PR 3 では screen / UI / task 系のうち、現行正本へ移管済みの docs を削除する。
 
 現行仕様判断では `docs/仕様書/`、運用判断では `docs/運用ドキュメント/`、進捗判断では `docs/作業進捗管理/` を優先する。
 
@@ -47,6 +47,41 @@ PR 2 で更新した参照:
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/31.北極星 APIレスポンス差分棚卸しと次タスク候補.md`
 - `docs/42.北極星 docs文字化け棚卸し範囲整理（MVP後P1）.md`
+- `docs/作業進捗管理/05_docs整理履歴.md`
+
+## 2-2. PR 3 の判断
+
+削除済み:
+
+- `docs/17`
+- `docs/20`
+- `docs/22`
+- `docs/26`
+- `docs/27`
+
+削除理由:
+
+- `docs/17` は MVP初期の画面別入力 / 出力 sample であり、現行画面判断は `docs/仕様書/04_画面導線_IA.md`、`docs/仕様書/05_画面仕様.md`、`docs/walkthrough.md`、frontend tests へ移管済みである。
+- `docs/20` は MVP初期の開発 checklist であり、現行の起動確認は `docs/運用ドキュメント/02_起動と確認手順.md`、受け入れ確認は `docs/walkthrough.md` へ移管済みである。README の直接リンクも置換済みである。
+- `docs/22` / `docs/26` は MVP初期の component split / MVP範囲整理であり、現行 UI component 判断は `docs/仕様書/06_UIコンポーネント仕様.md`、`docs/46`、`docs/53` へ移管済みである。
+- `docs/27` は MVP初期の frontend 実装 task 分解であり、現行 task / 残課題判断は `docs/作業進捗管理/00_現在地.md`、`docs/作業進捗管理/03_残課題_Backlog.md`、`docs/53` へ移管済みである。
+
+削除保留:
+
+- なし。
+
+PR 3 で更新した参照:
+
+- `README.md`
+- `docs/0.目次.md`
+- `docs/24.北極星 開発着手用 README セットアップ手順書（MVP）.md`
+- `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md`
+- `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md`
+- `docs/36.北極星 MVP受入確認チェックリスト（MVP）.md`
+- `docs/39.北極星 MVP後ロードマップ・バックログ整理.md`
+- `docs/42.北極星 docs文字化け棚卸し範囲整理（MVP後P1）.md`
+- `docs/53.北極星 P3現在地と残課題整理（P3）.md`
+- `docs/57.北極星 docs正本整理・読む順番（現行）.md`
 - `docs/作業進捗管理/05_docs整理履歴.md`
 
 ## 3. 削除前確認 checklist
@@ -103,13 +138,13 @@ PR 2 で更新した参照:
 | `docs/2.北極星 データモデル設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行データモデルが `docs/仕様書/02_データモデル.md` と Prisma schema に移管済みか確認する。 |
 | `docs/3.北極星 API ユースケース単位の入出力設計（MVP）.md` | data/API/sample系 | 削除候補 | 現行 API が `docs/仕様書/03_API仕様.md`、routes、tests に移管済みか確認する。 |
 | `docs/16` | data/API/sample系 | 削除済み | MVP初期の API sample。現行 API 仕様、テスト仕様、実装 routes / tests へ移管済み。 |
-| `docs/17.北極星 画面別の入力 出力サンプル（MVP）.md` | screen/UI/task系 | 削除候補 | 現行画面仕様、walkthrough、frontend tests へ移管済みか確認する。 |
+| `docs/17` | screen/UI/task系 | 削除済み | MVP初期の画面 sample。現行画面仕様、walkthrough、frontend tests へ移管済み。 |
 | `docs/19.北極星 スプリント計画案（MVP）.md` | progress系 | 削除候補 | 作業計画履歴として残す価値が低いか確認する。 |
-| `docs/20.北極星 初期開発チェックリスト（MVP）.md` | screen/UI/task系 | 削除候補 | 現行運用 checklist と重複しているか確認する。 |
+| `docs/20` | screen/UI/task系 | 削除済み | MVP初期 checklist。現行起動確認 / 受け入れ確認へ移管済み。 |
 | `docs/21` | data/API/sample系 | 削除済み | MVP初期の migration 順序案。現行 migration 判断は Prisma schema / migrations を優先する。 |
-| `docs/22.北極星 コンポーネント分割案（MVP）.md` | screen/UI/task系 | 削除候補 | 現行 UI component 仕様へ移管済みか確認する。 |
-| `docs/26. 補助資料_2 北極星 コンポーネント分割案のMVP範囲整理.md` | screen/UI/task系 | 削除候補 | `docs/22` と合わせて UI 仕様へ移管済みか確認する。 |
-| `docs/27. 補助資料_3 北極星 フロント実装タスク再分解案.md` | screen/UI/task系 | 削除候補 | 実装タスク履歴として残す価値が低いか確認する。 |
+| `docs/22` | screen/UI/task系 | 削除済み | MVP初期 component split。現行 UI component 仕様へ移管済み。 |
+| `docs/26` | screen/UI/task系 | 削除済み | MVP初期 component split 補助。現行 UI component 仕様へ移管済み。 |
+| `docs/27` | screen/UI/task系 | 削除済み | MVP初期 frontend task 分解。現行 progress / backlog docs へ移管済み。 |
 | `docs/29. 北極星 ルール検証ラボMVP 画面 API 保存設計 再整理（実装前固定）.md` | data/API/sample系 | 保留 | Rule Lab MVP の詳細正本として現行 docs から参照されるため、削除しない。 |
 | `docs/30. 北極星 ルール検証ラボMVP 実装反映差分（実装後固定）.md` | data/API/sample系 | 保留 | Rule Lab MVP の実装後固定資料として現行 docs から参照されるため、削除しない。 |
 | `docs/39.北極星 MVP後ロードマップ・バックログ整理.md` | progress系 | 保留 | roadmap / backlog の履歴正本として残す。将来は要約移管後に再判断する。 |
@@ -131,12 +166,12 @@ PR 2 で更新した参照:
 
 ### screen / UI / task 系
 
-- `docs/17.北極星 画面別の入力 出力サンプル（MVP）.md`
+- `docs/17`（PR 3 で削除済み）
 - `docs/18.北極星 実装チケット化用 粒度分解（MVP）.md`
-- `docs/20.北極星 初期開発チェックリスト（MVP）.md`
-- `docs/22.北極星 コンポーネント分割案（MVP）.md`
-- `docs/26. 補助資料_2 北極星 コンポーネント分割案のMVP範囲整理.md`
-- `docs/27. 補助資料_3 北極星 フロント実装タスク再分解案.md`
+- `docs/20`（PR 3 で削除済み）
+- `docs/22`（PR 3 で削除済み）
+- `docs/26`（PR 3 で削除済み）
+- `docs/27`（PR 3 で削除済み）
 
 ### progress 系
 
@@ -164,7 +199,7 @@ PR 2 で更新した参照:
 
 ## 11. 次回作業メモ
 
-- PR 2 では data / API / sample 系から着手する。
+- PR 4 では progress 系から着手する。
 - 削除対象は一度に広げず、移管先が明確なものだけ扱う。
 - 保留した docs は本資料の記録欄を更新する。
 - 削除 PR でも docs-only を維持し、実装コードや tests は変更しない。
