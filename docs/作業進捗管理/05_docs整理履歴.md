@@ -86,7 +86,26 @@
 
 - なし。
 
-## 8. 今回やらないこと
+## 8. legacy numbered docs cleanup PR 4
+
+今回の cleanup PR 4 では、progress 系のうち現行 progress docs または現行 API 仕様 / tests へ移管済みの MVP初期タスク分解、スプリント計画案、API response 差分棚卸し docs を削除した。
+
+移管先:
+
+- roadmap / 完了フェーズ / backlog / decision log: `docs/作業進捗管理/01_ロードマップ.md`、`02_完了フェーズ.md`、`03_残課題_Backlog.md`、`04_設計判断ログ.md`。
+- API response / 差分判断: `docs/仕様書/03_API仕様.md`、`docs/仕様書/10_テスト仕様.md`、実装 routes / tests。
+- 削除理由と保留理由: `docs/作業進捗管理/06_番号付きdocs削除整理.md`。
+
+削除保留:
+
+- `docs/36`〜`docs/38`
+- `docs/39`
+- `docs/44`
+- `docs/53`
+
+保留理由は、MVP受入記録としての履歴価値、または現行 progress 詳細正本としての役割が残るため。
+
+## 9. 今回やらないこと
 
 - `docs/2` / `docs/3` の削除。
 - 既存番号 docs の bulk rename。
@@ -94,7 +113,7 @@
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 9. 今後の docs 更新ルール
+## 10. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -103,7 +122,7 @@
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 10. 関連 docs
+## 11. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
