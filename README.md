@@ -6,9 +6,9 @@
 docs の読み順:
 - docs入口: `docs/0.目次.md`
 - docs体系と分類: `docs/57.北極星 docs正本整理・読む順番（現行）.md`
-- 現行仕様: `docs/specs/00_overview.md`
-- 開発・確認・運用: `docs/operations/00_developer_guide.md`
-- 作業進捗と残課題: `docs/progress/00_current_status.md`
+- 現行仕様: `docs/仕様書/00_全体像.md`
+- 開発・確認・運用: `docs/運用ドキュメント/00_開発者向け入口.md`
+- 作業進捗と残課題: `docs/作業進捗管理/00_現在地.md`
 - 動作確認・受け入れ確認: `docs/walkthrough.md`
 
 ## 技術スタック
