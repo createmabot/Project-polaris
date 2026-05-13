@@ -70,7 +70,23 @@
 
 保留理由は、README や複数履歴資料からの参照影響が大きく、data / API 現行正本への要点移管確認をもう一段行う必要があるため。
 
-## 7. 今回やらないこと
+## 7. legacy numbered docs cleanup PR 3
+
+今回の cleanup PR 3 では、screen / UI / task 系のうち現行正本へ移管済みの MVP初期画面 sample、初期開発 checklist、component split、frontend task docs を削除した。
+
+移管先:
+
+- 画面導線 / 画面仕様: `docs/仕様書/04_画面導線_IA.md`、`docs/仕様書/05_画面仕様.md`、`docs/walkthrough.md`、frontend tests。
+- 起動確認 / 受け入れ確認: `docs/運用ドキュメント/02_起動と確認手順.md`、`docs/walkthrough.md`。
+- UI component 判断: `docs/仕様書/06_UIコンポーネント仕様.md`、`docs/46`、`docs/53`。
+- frontend task / 残課題判断: `docs/作業進捗管理/00_現在地.md`、`docs/作業進捗管理/03_残課題_Backlog.md`、`docs/53`。
+- 削除理由と保留理由: `docs/作業進捗管理/06_番号付きdocs削除整理.md`。
+
+削除保留:
+
+- なし。
+
+## 8. 今回やらないこと
 
 - `docs/2` / `docs/3` の削除。
 - 既存番号 docs の bulk rename。
@@ -78,7 +94,7 @@
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 8. 今後の docs 更新ルール
+## 9. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -87,7 +103,7 @@
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 9. 関連 docs
+## 10. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
