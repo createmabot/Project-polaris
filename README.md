@@ -3,6 +3,12 @@
 株価評価AIツール「北極星」の開発リポジトリです。  
 仕様の正本は `docs/` 配下のドキュメントです。
 
+docs の読み順:
+- docs入口: `docs/0.目次.md`
+- docs分類と正本整理: `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- 動作確認・受け入れ確認: `docs/walkthrough.md`
+- 現在地と残課題: `docs/53.北極星 P3現在地と残課題整理（P3）.md`
+
 ## 技術スタック
 - Node.js 22
 - pnpm workspaces（monorepo）
