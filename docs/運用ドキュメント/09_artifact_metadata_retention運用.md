@@ -133,4 +133,5 @@ artifact diff / JSON diff は後続判断である。
 - `docs/仕様書/08_Backtest_Report仕様.md`
 - `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
 - `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
+- `docs/運用ドキュメント/10_release_acceptance_checklist.md`
 - `docs/walkthrough.md`
