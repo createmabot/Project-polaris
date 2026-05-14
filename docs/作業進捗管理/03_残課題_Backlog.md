@@ -22,7 +22,27 @@
 - BacktestDetail 全面 redesign は急がず、高頻度 section の小改善に留める。
 - responsive UX の余白、情報密度、導線優先度を画面単位で整理する。
 
-## 4. Report comparison / artifact
+## 4. Daily operation UX stabilization 後続候補
+
+PR #343〜#346 で daily operation UX stabilization は完了扱いにする。次に扱う場合は、以下を個別設計してから着手する。
+
+既知制約 / follow-up:
+
+- external symbol metadata provider lookup は未実装。現行は既存 Symbol の metadata 利用と、4桁数字の最小 fallback に限定する。
+- references refresh はユーザー操作起点のみ。scheduled refresh、display-triggered refresh、batch refresh は未実装として維持する。
+- SymbolDetail の CSVファイル import は frontend で text を読み込む方式。multipart upload は未実装として維持する。
+- SymbolDetail の strategy picker は既存 strategies API を利用する。version picker は現時点では最小表示のままで、検索 / pagination は未実装として残す。
+- visual required check の変更は行わない。visual regression 対象拡大は optional pilot の観測後に判断する。
+
+次候補:
+
+- external symbol metadata provider の設計。
+- references refresh job / status history UX。
+- 実際の TradingView CSV サンプルに基づく parser alias 拡張。
+- strategy version picker の検索 / pagination。
+- stable な範囲での daily ops browser smoke 拡張。
+
+## 5. Report comparison / artifact
 
 - CSV import report と internal backtest report の本格比較 UX を判断する。
 - metrics normalization table は初回候補にしないが、比較要件が固まった場合に再検討する。
@@ -35,7 +55,7 @@
 - artifact download endpoint、signed URL、file token は未実装として残す。
 - artifact retention job と hard delete は未実装として残す。
 
-## 5. AI summary / provider operations
+## 6. AI summary / provider operations
 
 - display-triggered enqueue は現行では採用しない。
 - phase 2 で BacktestDetail の latest job status read-only visibility は完了扱いにする。
@@ -51,7 +71,7 @@
 - provider cost cap、rate limit、opt-in policy は auto enqueue や polling を拡張する前に運用判断する。
 - provider cost / latency guard は運用方針整理までであり、本格的な cost cap、rate limit、opt-in、slow job 制御は未実装として残す。
 
-## 6. Testing / CI
+## 7. Testing / CI
 
 - Visual regression pilot は optional check として最小導入済み。対象は ApplicationDetail の application summary stable container 1 箇所に限定する。
 - 本導入や対象拡大は後続判断とし、CI required check には追加しない。
@@ -60,7 +80,7 @@
 - TradingView widget、AI生成文、raw JSON、long page、full page screenshot は pilot 対象外として維持する。
 - browser smoke の対象拡張は、実行系操作や外部依存を含めない範囲から判断する。
 
-## 7. Product / data model
+## 8. Product / data model
 
 - hard delete は未実装のまま維持する。
 - favorite / last used / display priority などの richer metadata は後続判断とする。
@@ -68,7 +88,7 @@
 - SymbolBacktestDetail / StrategyBacktestDetail の新規画面は後続判断とする。
 - 大量データ時の index / read model / cache は未実装として残す。
 
-## 8. 次期フェーズ候補の優先度
+## 9. 次期フェーズ候補の優先度
 
 | 優先度 | 候補 | 理由 |
 |---|---|---|
@@ -83,13 +103,13 @@
 - Visual regression expansion は optional pilot の snapshot churn と実行時間を見て判断する。
 - TradingView / Pine workflow 強化は現行 release stabilization 後に優先度を再評価する。
 
-## 9. Backlog 更新ルール
+## 10. Backlog 更新ルール
 
 - 完了したら `docs/作業進捗管理/02_完了フェーズ.md` と該当正本 docs へ移す。
 - 仕様判断が必要な課題は `docs/仕様書/` または機能別正本 docs へ詳細を書く。
 - 単なる思いつきは backlog に入れず、実装判断に必要な背景と見送り理由を残す。
 
-## 10. 関連 docs
+## 11. 関連 docs
 
 - `docs/39.北極星 MVP後ロードマップ・バックログ整理.md`
 - `docs/53.北極星 P3現在地と残課題整理（P3）.md`
