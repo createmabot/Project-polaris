@@ -1,6 +1,6 @@
 # 北極星 残課題 Backlog
 
-更新日: 2026-05-13
+更新日: 2026-05-15
 分類: 作業進捗管理
 
 ## 1. 目的
@@ -26,7 +26,8 @@
 - CSV import report と internal backtest report の本格比較 UX を判断する。
 - metrics normalization table は初回候補にしないが、比較要件が固まった場合に再検討する。
 - AI summary 同士の比較 UX は後続判断とする。
-- artifact file read / download / diff、artifact metadata schema、retention policy は未決定として残す。
+- artifact metadata / retention / file access boundary は docs-only で設計方針を固定し、実装は後続判断とする。
+- artifact file read / download / diff、retention job、hard delete、cleanup job は未実装として残す。
 
 ## 5. AI summary / provider operations
 
@@ -61,5 +62,6 @@
 - `docs/53.北極星 P3現在地と残課題整理（P3）.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 - `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
+- `docs/運用ドキュメント/09_artifact_metadata_retention運用.md`
 - `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
 - `docs/作業進捗管理/04_設計判断ログ.md`

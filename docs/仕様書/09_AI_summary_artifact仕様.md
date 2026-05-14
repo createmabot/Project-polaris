@@ -1,11 +1,11 @@
 # 北極星 AI summary / artifact 現行仕様
 
-更新日: 2026-05-13
+更新日: 2026-05-15
 分類: 仕様書
 
 ## 1. 目的
 
-本資料は、Backtest AI summary と artifact metadata の現行仕様を整理する。運用判断の詳細は `docs/56`、phase 1 の運用確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、phase 完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` と `docs/53` を参照する。
+本資料は、Backtest AI summary と artifact metadata の現行仕様を整理する。AI summary auto-generation の運用判断は `docs/56`、phase 1 の運用確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、artifact metadata / retention / file access boundary の運用確認は `docs/運用ドキュメント/09_artifact_metadata_retention運用.md`、phase 完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` と `docs/53` を参照する。
 
 ## 2. Backtest AI summary
 
@@ -32,13 +32,135 @@ phase 1 は PR #319 / #320 / #332 により、CSV import parsed report、applica
 | `csv_import` | `BacktestImport` / parsed summary / comparison diff / TradingView文脈 | 作成する | 基本は CSV import metadata / parsed summary 文脈 |
 | `internal_backtest` | `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` | 作成しない | artifact pointer metadata を表示。file read / download / diff はしない |
 
-## 5. 画面責務
+## 5. artifact_pointer metadata
+
+`artifact_pointer` は、artifact 本体ではなく、保存済み artifact への参照 metadata である。現行画面では metadata summary と raw JSON を read-only に表示するが、file content の読込、download、diff は行わない。
+
+代表 metadata:
+
+- `kind`: artifact の種類。例: internal backtest result。
+- `type`: artifact の表現形式。例: json。
+- `execution_id`: 関連する internal execution ID。
+- `path`: artifact 参照情報。UI / docs / PR では絶対 local path をそのまま出さない。
+- `summary_mode`: result summary の生成モード。
+- `source`: artifact 作成元の識別。
+- `generated_at` または `created_at`: artifact metadata 作成時刻または生成時刻。
+
+UI に表示してよい metadata:
+
+- `kind`
+- `type`
+- `execution_id`
+- `source`
+- `summary_mode`
+- `generated_at` / `created_at`
+- report / execution と紐づく safe な識別子
+
+`path` は内部参照として保存されていても、UI では絶対 local path や file system structure をそのまま表示しない。表示が必要な場合は、論理参照または sanitized 表示に限定する。
+
+UI / docs / PR に表示してはいけない metadata:
+
+- absolute local path。
+- local filesystem の directory structure。
+- secret、token、shared secret、API key。
+- provider endpoint。
+- raw prompt。
+- signed URL や file token の実値。
+- stack trace や file system internals。
+
+raw artifact JSON:
+
+- BacktestDetail の raw artifact JSON は、保存済み pointer metadata の確認用である。
+- raw artifact JSON は artifact file content ではない。
+- raw artifact JSON は JSON diff / file diff の入力ではない。
+
+artifact_pointer がない場合:
+
+- report に artifact metadata が保存されていない状態を示す。
+- CSV import report など、artifact pointer を持たない source では正常な欠損として扱う。
+- internal backtest report でも、artifact metadata が未保存または未生成の場合は absence explanation を表示し、file read を試みない。
+
+artifact file が未保存または存在確認できない場合:
+
+- 現行 UI は file existence を保証しない。
+- artifact_pointer があっても、artifact file の永続保存、download 可能性、diff 可能性は保証しない。
+- file content が必要な場合は、将来の access boundary 設計と実装を待つ。
+
+## 6. retention policy 現在地
+
+現時点では retention job、hard delete、artifact cleanup は未実装である。自動削除される、または削除済みであるように docs / UI で表現しない。
+
+現行仕様として保証すること:
+
+- 保存済み `artifact_pointer` metadata は report / execution の read-only context として扱う。
+- BacktestDetail は metadata がある場合に summary / raw JSON を表示できる。
+- metadata がない場合は、artifact absence として説明する。
+
+現行仕様として保証しないこと:
+
+- artifact file content の保存。
+- artifact file の存在確認。
+- artifact file の download。
+- artifact file / JSON diff。
+- retention period。
+- automatic cleanup。
+- hard delete。
+- restore。
+
+将来 retention を設計する場合の候補単位:
+
+- execution 単位。
+- report 単位。
+- symbol application 単位。
+- provider / artifact source 単位。
+
+retention を実装する場合は、削除対象、metadata の扱い、UI 表示、audit log、復旧可否を同時に固定する。現行フェーズでは実装しない。
+
+## 7. file read / download boundary
+
+現行仕様では artifact file read / download を実装しない。frontend に raw path を渡さず、local file path / absolute path を UI / docs / PR に出さない。
+
+将来 download API を作る場合の候補:
+
+- backend proxy 経由で file content を返す。
+- 短命 signed URL を発行する。
+- file token を発行し、raw path を隠蔽する。
+
+将来実装時の必須境界:
+
+- path traversal 対策。
+- frontend へ raw path を渡さない。
+- access control。
+- file token / signed URL の短命化。
+- audit log。
+- log sanitization。
+- secret / token / local path の redaction。
+- artifact source ごとの許可範囲。
+
+## 8. artifact diff boundary
+
+artifact diff / JSON diff は後続判断であり、現行仕様では実装しない。
+
+比較の違い:
+
+- metrics diff: report summary の数値指標を比較する。現行の comparison helper / saved comparison で扱う範囲。
+- JSON diff: saved metadata や structured JSON の key / value 差分を比較する候補。現時点では未実装。
+- file diff: artifact file content 同士を比較する候補。file access boundary が未実装のため対象外。
+
+report comparison UX との関係:
+
+- BacktestComparisonDetail は保存済み pairwise comparison の再訪画面である。
+- 将来 artifact diff / JSON diff を扱う候補画面ではあるが、現時点では artifact diff 画面ではない。
+- AI summary 同士の比較、artifact diff、metrics normalization、comparison entity 拡張は別判断にする。
+
+## 9. 画面責務
 
 - BacktestDetail: 個別 report の AI summary、artifact metadata、raw JSON 表示。
 - ApplicationDetail: report history の入口。AI summary / artifact 詳細は BacktestDetail へ送る。
 - BacktestComparisonDetail: 保存済み pairwise comparison の再訪画面。AI summary 同士の自動比較や artifact diff は後続判断。
+- SymbolDetail: latest report / application 入口を担当し、artifact 詳細は持たせない。
 
-## 6. 後続判断
+## 10. 後続判断
 
 - display-triggered enqueue。
 - batch / scheduled enqueue。
@@ -46,4 +168,6 @@ phase 1 は PR #319 / #320 / #332 により、CSV import parsed report、applica
 - AI summary 同士の比較。
 - artifact file read / download。
 - artifact diff / JSON diff。
+- artifact retention job / cleanup。
+- artifact metadata schema の拡張。
 - provider cost control の本格化。

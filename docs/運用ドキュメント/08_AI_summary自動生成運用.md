@@ -142,6 +142,7 @@ UI 上で見せる範囲:
 
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
+- `docs/運用ドキュメント/09_artifact_metadata_retention運用.md`
 - `docs/運用ドキュメント/05_AI_provider運用.md`
 - `docs/運用ドキュメント/04_CSV取込運用.md`
 - `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
