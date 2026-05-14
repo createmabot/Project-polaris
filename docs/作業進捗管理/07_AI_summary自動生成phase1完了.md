@@ -94,7 +94,7 @@ phase 1 完了に含めないもの:
 - artifact metadata / retention policy の実装判断。設計 docs は `docs/仕様書/09_AI_summary_artifact仕様.md` と `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を参照する。
 - artifact file read / download permission boundary の実装判断。
 - provider cost cap / rate limit / opt-in 条件の本格実装。
-- Visual regression pilot。
+- Visual regression 本導入。
 
 ## 8. 関連 docs
 
