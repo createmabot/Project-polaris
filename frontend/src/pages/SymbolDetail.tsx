@@ -7,6 +7,7 @@ import {
   StrategyVersionListData,
   SymbolAiSummaryData,
   SymbolDetailData,
+  SymbolReferenceRefreshData,
   InternalBacktestExecutionResultData,
   InternalBacktestExecutionStatusData,
   SymbolStrategyApplicationCreateData,
@@ -22,6 +23,7 @@ import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -161,6 +163,12 @@ const LABELS = {
   openBacktestList: '検証レポート一覧を開く',
   researchNoteTitle: 'Research Note',
   referencesTitle: '関連参照情報',
+  refreshReferences: '関連参照情報を再取得',
+  refreshingReferences: '再取得中...',
+  referencesRefreshRunning: '関連参照情報を再取得しています。完了後に一覧を再読み込みします。',
+  referencesRefreshSuccess: '関連参照情報を再取得しました。追加 {saved} 件 / 重複 {skipped} 件。',
+  referencesRefreshQueued: '関連参照情報の再取得はすでに実行中です。少し待ってからページを再読み込みしてください。',
+  referencesRefreshError: '関連参照情報を再取得できませんでした。時間をおいて再実行してください。',
   currentPrice: '現在値',
   dayChange: '前日比',
   volume: '出来高',
@@ -1360,6 +1368,10 @@ export default function SymbolDetail() {
   const tvContainerRef = useRef<HTMLDivElement>(null);
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
+  const [isRefreshingReferences, setIsRefreshingReferences] = useState(false);
+  const [referenceRefreshMessage, setReferenceRefreshMessage] = useState<string | null>(null);
+  const [referenceRefreshTone, setReferenceRefreshTone] = useState<'info' | 'success'>('info');
+  const [referenceRefreshError, setReferenceRefreshError] = useState<string | null>(null);
   const [applicationStatusFilter, setApplicationStatusFilter] = useState<ApplicationStatusFilter>('active');
   const [applicationFilter, setApplicationFilter] = useState<ApplicationReportFilter>('all');
   const [applicationSourceFilter, setApplicationSourceFilter] = useState<ApplicationReportSourceFilter>('all');
@@ -1368,7 +1380,12 @@ export default function SymbolDetail() {
   const [applicationStrategyIdFilter, setApplicationStrategyIdFilter] = useState('');
   const [applicationStrategyVersionIdFilter, setApplicationStrategyVersionIdFilter] = useState('');
 
-  const { data, error, isLoading } = useSWR<SymbolDetailData>(
+  const {
+    data,
+    error,
+    isLoading,
+    mutate: mutateSymbolDetail,
+  } = useSWR<SymbolDetailData>(
     symbolId ? `/api/symbols/${symbolId}` : null,
     swrFetcher,
   );
@@ -1491,6 +1508,34 @@ export default function SymbolDetail() {
       setGenerateThesisError(err?.message ?? 'AI論点カード生成に失敗しました。');
     } finally {
       setIsGeneratingThesis(false);
+    }
+  }
+
+  async function handleRefreshReferences() {
+    if (!symbolId) return;
+    setIsRefreshingReferences(true);
+    setReferenceRefreshError(null);
+    setReferenceRefreshTone('info');
+    setReferenceRefreshMessage(LABELS.referencesRefreshRunning);
+    try {
+      const result = await postApi<SymbolReferenceRefreshData>(`/api/symbols/${symbolId}/references/refresh`, {});
+      if (result.status === 'queued' || result.status === 'running') {
+        setReferenceRefreshTone('info');
+        setReferenceRefreshMessage(LABELS.referencesRefreshQueued);
+      } else {
+        setReferenceRefreshTone('success');
+        setReferenceRefreshMessage(
+          LABELS.referencesRefreshSuccess
+            .replace('{saved}', String(result.saved_count ?? 0))
+            .replace('{skipped}', String(result.skipped_count ?? 0)),
+        );
+        await mutateSymbolDetail();
+      }
+    } catch {
+      setReferenceRefreshMessage(null);
+      setReferenceRefreshError(LABELS.referencesRefreshError);
+    } finally {
+      setIsRefreshingReferences(false);
     }
   }
 
@@ -1723,11 +1768,29 @@ export default function SymbolDetail() {
           )}
         </DetailSection>
 
-        <DetailSection title={LABELS.referencesTitle}>
+        <DetailSection
+          title={LABELS.referencesTitle}
+          actions={
+            <Button
+              variant="secondary"
+              onClick={handleRefreshReferences}
+              disabled={isRefreshingReferences}
+              className="px-4 py-2 disabled:bg-slate-300 disabled:text-slate-600 disabled:opacity-100"
+            >
+              {isRefreshingReferences ? LABELS.refreshingReferences : LABELS.refreshReferences}
+            </Button>
+          }
+        >
           <div className="space-y-3">
             <p className="text-sm text-slate-600">
               {LABELS.breakdown}: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
             </p>
+            {referenceRefreshMessage ? (
+              <InlineNotice tone={referenceRefreshTone}>{referenceRefreshMessage}</InlineNotice>
+            ) : null}
+            {referenceRefreshError ? (
+              <InlineNotice tone="danger">{referenceRefreshError}</InlineNotice>
+            ) : null}
             {data.related_references.length === 0 ? (
               <InfoCard>
                 <EmptyText>{LABELS.noReferences}</EmptyText>

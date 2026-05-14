@@ -689,5 +689,6 @@ describe('SymbolDetail', () => {
     const html = renderToStaticMarkup(<SymbolDetail />);
     expect(html).toContain('news 0 / disclosure 0 / earnings 0');
     expect(html).toContain('参照情報は0件です。');
+    expect(html).toContain('関連参照情報を再取得');
   });
 });

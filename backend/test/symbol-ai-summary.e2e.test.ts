@@ -35,9 +35,12 @@ type Runtime = {
     symbolId: string;
     title: string;
     referenceType: string;
+    sourceName?: string | null;
+    sourceUrl?: string | null;
     summaryText: string | null;
     publishedAt: Date | null;
     updatedAt: Date;
+    dedupeKey?: string;
   }>;
   latestNote: {
     id: string;
@@ -52,7 +55,9 @@ type Runtime = {
   aiSummaries: AiSummaryRow[];
   nextJobId: number;
   nextSummaryId: number;
+  nextReferenceId: number;
   homeAiMode: 'ok' | 'throw' | 'fallback';
+  referenceCollectMode: 'ok' | 'duplicate' | 'throw';
 };
 
 let runtime: Runtime;
@@ -66,9 +71,12 @@ function createRuntime(): Runtime {
         symbolId: 'sym-1',
         title: 'Q4 earnings update',
         referenceType: 'earnings',
+        sourceName: 'tdnet_earnings',
+        sourceUrl: 'https://tdnet.example.test/ref-1.pdf',
         summaryText: 'Revenue grew 8% YoY',
         publishedAt: new Date('2026-04-20T09:00:00+09:00'),
         updatedAt: new Date('2026-04-21T10:00:00+09:00'),
+        dedupeKey: 'sym-1|earnings|https://tdnet.example.test/ref-1.pdf',
       },
     ],
     latestNote: {
@@ -84,7 +92,9 @@ function createRuntime(): Runtime {
     aiSummaries: [],
     nextJobId: 1,
     nextSummaryId: 1,
+    nextReferenceId: 1,
     homeAiMode: 'ok',
+    referenceCollectMode: 'ok',
   };
 }
 
@@ -97,6 +107,12 @@ function nextJobId(): string {
 function nextSummaryId(): string {
   const id = `sum-${runtime.nextSummaryId}`;
   runtime.nextSummaryId += 1;
+  return id;
+}
+
+function nextReferenceId(): string {
+  const id = `ref-new-${runtime.nextReferenceId}`;
+  runtime.nextReferenceId += 1;
   return id;
 }
 
@@ -117,10 +133,34 @@ vi.mock('../src/db', () => {
     },
     externalReference: {
       findMany: async ({ where }: any) => {
-        const ids: string[] = where?.id?.in ?? [];
+        const ids: string[] | null = where?.id?.in ?? null;
         return runtime.references
-          .filter((ref) => ref.symbolId === where?.symbolId && ids.includes(ref.id))
+          .filter((ref) => ref.symbolId === where?.symbolId && (!ids || ids.includes(ref.id)))
           .sort((a, b) => (b.publishedAt?.getTime() ?? 0) - (a.publishedAt?.getTime() ?? 0));
+      },
+      create: async ({ data }: any) => {
+        if (runtime.references.some((ref) => ref.dedupeKey === data.dedupeKey)) {
+          const error: any = new Error('duplicate');
+          error.code = 'P2002';
+          throw error;
+        }
+        const row = {
+          id: nextReferenceId(),
+          symbolId: data.symbolId,
+          title: data.title,
+          referenceType: data.referenceType,
+          sourceName: data.sourceName ?? null,
+          sourceUrl: data.sourceUrl ?? null,
+          summaryText: data.summaryText ?? null,
+          publishedAt: data.publishedAt ?? null,
+          updatedAt: new Date('2026-05-10T00:00:00+09:00'),
+          dedupeKey: data.dedupeKey,
+        };
+        runtime.references.push(row);
+        return row;
+      },
+      findUnique: async ({ where }: any) => {
+        return runtime.references.find((ref) => ref.dedupeKey === where?.dedupeKey) ?? null;
       },
     },
     researchNote: {
@@ -132,6 +172,16 @@ vi.mock('../src/db', () => {
       },
     },
     aiJob: {
+      findFirst: async ({ where }: any) => {
+        return runtime.aiJobs.find((job) => {
+          if (where?.jobType && job.jobType !== where.jobType) return false;
+          if (where?.targetEntityType && job.targetEntityType !== where.targetEntityType) return false;
+          if (where?.targetEntityId && job.targetEntityId !== where.targetEntityId) return false;
+          const statuses = where?.status?.in;
+          if (Array.isArray(statuses) && !statuses.includes(job.status)) return false;
+          return true;
+        }) ?? null;
+      },
       create: async ({ data }: any) => {
         const row: AiJobRow = {
           id: nextJobId(),
@@ -280,6 +330,41 @@ vi.mock('../src/ai/home-ai-service', () => ({
         },
       };
     }
+  },
+}));
+
+vi.mock('../src/references/collector', () => ({
+  buildDedupeKey: (params: {
+    symbolId: string | null;
+    referenceType: string;
+    sourceUrl: string | null;
+    title: string;
+  }) => `${params.symbolId ?? ''}|${params.referenceType}|${params.sourceUrl ?? params.title}`,
+  referenceCollector: {
+    collectForSymbol: async () => {
+      if (runtime.referenceCollectMode === 'throw') {
+        throw new Error('provider failed at https://secret.example.test/token with stack trace');
+      }
+      const sourceUrl = runtime.referenceCollectMode === 'duplicate'
+        ? 'https://tdnet.example.test/ref-1.pdf'
+        : 'https://tdnet.example.test/ref-new.pdf';
+      return [
+        {
+          sourceType: runtime.referenceCollectMode === 'duplicate' ? 'earnings' : 'disclosure',
+          referenceType: runtime.referenceCollectMode === 'duplicate' ? 'earnings' : 'disclosure',
+          title: runtime.referenceCollectMode === 'duplicate' ? 'Q4 earnings update' : 'Manual refresh disclosure',
+          sourceName: 'tdnet_disclosure',
+          sourceUrl,
+          publishedAt: new Date('2026-05-09T15:00:00+09:00'),
+          summaryText: 'Collected by manual refresh',
+          metadataJson: { match_reason: 'code' },
+          relevanceScore: 80,
+          relevanceHint: 'symbol_match',
+          category: 'disclosure',
+          rawPayloadJson: { ok: true },
+        },
+      ];
+    },
   },
 }));
 
@@ -490,6 +575,123 @@ describe('symbol ai-summary routes', () => {
     expect(runtime.aiSummaries).toHaveLength(2);
     expect(runtime.aiSummaries[1].id).not.toBe(firstSummaryId);
     expect(runtime.aiJobs.at(-1)?.responsePayload).toEqual({ summary_id: runtime.aiSummaries[1].id });
+
+    await app.close();
+  });
+
+  it('manually refreshes symbol references and stores deduped rows', async () => {
+    runtime.references = [];
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/references/refresh',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toMatchObject({
+      symbol_id: 'sym-1',
+      status: 'succeeded',
+      saved_count: 1,
+      skipped_count: 0,
+      reference_count: 1,
+      source_breakdown: { disclosure: 1 },
+    });
+    expect(runtime.references).toHaveLength(1);
+    expect(runtime.references[0]).toMatchObject({
+      title: 'Manual refresh disclosure',
+      referenceType: 'disclosure',
+      sourceName: 'tdnet_disclosure',
+    });
+    expect(runtime.aiJobs[0]).toMatchObject({
+      jobType: 'collect_references_for_symbol',
+      targetEntityType: 'symbol',
+      targetEntityId: 'sym-1',
+      status: 'succeeded',
+    });
+
+    await app.close();
+  });
+
+  it('skips duplicate references during manual refresh', async () => {
+    runtime.referenceCollectMode = 'duplicate';
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/references/refresh',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toMatchObject({
+      status: 'succeeded',
+      saved_count: 0,
+      skipped_count: 1,
+      reference_count: 1,
+      source_breakdown: { earnings: 1 },
+    });
+    expect(runtime.references).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('does not start another manual refresh while a collect job is active', async () => {
+    runtime.aiJobs.push({
+      id: 'job-running',
+      jobType: 'collect_references_for_symbol',
+      targetEntityType: 'symbol',
+      targetEntityId: 'sym-1',
+      status: 'running',
+    });
+    const initialReferenceCount = runtime.references.length;
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/references/refresh',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json().data).toMatchObject({
+      symbol_id: 'sym-1',
+      job_id: 'job-running',
+      status: 'running',
+      saved_count: null,
+      skipped_count: null,
+      reference_count: null,
+      source_breakdown: null,
+    });
+    expect(runtime.references).toHaveLength(initialReferenceCount);
+    expect(runtime.aiJobs).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('returns sanitized error when manual reference refresh fails', async () => {
+    runtime.referenceCollectMode = 'throw';
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/references/refresh',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error).toMatchObject({
+      code: 'REFERENCE_REFRESH_FAILED',
+      message: 'Related reference refresh failed. Please try again later.',
+    });
+    expect(res.body).not.toContain('secret.example.test');
+    expect(res.body).not.toContain('stack trace');
+    expect(runtime.aiJobs[0]).toMatchObject({
+      jobType: 'collect_references_for_symbol',
+      status: 'failed',
+      errorMessage: 'Reference refresh failed.',
+    });
 
     await app.close();
   });
