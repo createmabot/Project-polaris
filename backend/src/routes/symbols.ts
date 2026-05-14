@@ -1219,7 +1219,7 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         event: 'symbol_reference_refresh_failed',
         symbol_id: symbolId,
         job_id: refreshJob.id,
-        error: error instanceof Error ? error.message : String(error),
+        error_name: error instanceof Error ? error.name : typeof error,
       });
       await prisma.aiJob.update({
         where: { id: refreshJob.id },
