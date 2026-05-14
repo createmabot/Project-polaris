@@ -93,6 +93,18 @@ type BacktestAiReviewView = {
   insufficient_context: boolean;
 };
 
+type BacktestAiSummaryJobView = {
+  job_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | string;
+  trigger: string | null;
+  error_message: string | null;
+  duration_ms: number | null;
+  estimated_cost_usd: number | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -229,6 +241,47 @@ function toBacktestAiReviewView(summary: any | null): BacktestAiReviewView {
   };
 }
 
+function sanitizeAiJobErrorMessage(message: string | null): string | null {
+  if (!message) return null;
+  let sanitized = message;
+  sanitized = sanitized.replace(/sk-[a-zA-Z0-9_-]{10,}/g, '[REDACTED]');
+  sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]');
+  for (const key of ['api_key', 'token', 'shared_secret', 'password']) {
+    const regex = new RegExp(`(["']?${key}["']?\\s*[:=]\\s*["']?)([^\\s"']+)`, 'gi');
+    sanitized = sanitized.replace(regex, '$1[REDACTED]');
+  }
+  sanitized = sanitized.replace(/[A-Za-z]:\\[^\s"']+/g, '[REDACTED_PATH]');
+  sanitized = sanitized.replace(/\/(?:Users|home|var|tmp|workspace)\/[^\s"']+/g, '[REDACTED_PATH]');
+  if (sanitized.length > 240) {
+    sanitized = `${sanitized.slice(0, 240)}...`;
+  }
+  return sanitized;
+}
+
+function toIsoStringOrNull(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function buildLatestBacktestAiSummaryJobView(job: any | null): BacktestAiSummaryJobView | null {
+  if (!job) return null;
+  const requestPayload = isRecord(job.requestPayload) ? job.requestPayload : null;
+  const trigger = typeof requestPayload?.trigger === 'string' ? requestPayload.trigger : null;
+  return {
+    job_id: job.id,
+    status: job.status,
+    trigger,
+    error_message: sanitizeAiJobErrorMessage(job.errorMessage ?? null),
+    duration_ms: typeof job.durationMs === 'number' ? job.durationMs : null,
+    estimated_cost_usd: typeof job.estimatedCostUsd === 'number' ? job.estimatedCostUsd : null,
+    created_at: toIsoStringOrNull(job.createdAt) ?? new Date(0).toISOString(),
+    started_at: toIsoStringOrNull(job.startedAt),
+    completed_at: toIsoStringOrNull(job.completedAt),
+  };
+}
+
 function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === 'string');
@@ -362,6 +415,18 @@ async function resolveLatestBacktestAiReview(backtestId: string, importIds: stri
     orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
   });
   return toBacktestAiReviewView(summary);
+}
+
+async function resolveLatestBacktestAiSummaryJob(backtestId: string): Promise<BacktestAiSummaryJobView | null> {
+  const job = await prisma.aiJob.findFirst({
+    where: {
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: backtestId,
+    },
+    orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
+  });
+  return buildLatestBacktestAiSummaryJobView(job);
 }
 
 async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
@@ -796,6 +861,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
 
     const backtestRunIds = backtest.imports.map((item) => item.id);
     const aiReview = await resolveLatestBacktestAiReview(backtest.id, backtestRunIds);
+    const latestAiSummaryJob = await resolveLatestBacktestAiSummaryJob(backtest.id);
     const symbolStrategyApplication = await resolveBacktestSymbolStrategyApplication(backtest.id);
 
     const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
@@ -860,6 +926,7 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
         updated_at: item.updatedAt,
       })),
       ai_review: aiReview,
+      latest_ai_summary_job: latestAiSummaryJob,
       symbol_strategy_application: symbolStrategyApplication,
     }));
   });

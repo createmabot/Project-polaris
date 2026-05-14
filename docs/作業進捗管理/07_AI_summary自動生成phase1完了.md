@@ -88,11 +88,12 @@ phase 1 完了に含めないもの:
 
 ## 7. 次フェーズ候補
 
-- retry / polling / live status update。
+- phase 2 で latest job status read-only visibility は完了扱いにする。
+- 自動 retry / polling / live update 本格化。
 - AI summary comparison UX。
 - artifact metadata / retention policy の実装判断。設計 docs は `docs/仕様書/09_AI_summary_artifact仕様.md` と `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を参照する。
 - artifact file read / download permission boundary の実装判断。
-- provider cost / latency policy。
+- provider cost cap / rate limit / opt-in 条件の本格実装。
 - Visual regression pilot。
 
 ## 8. 関連 docs

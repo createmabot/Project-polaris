@@ -34,10 +34,12 @@
 ## 5. AI summary / provider operations
 
 - display-triggered enqueue は現行では採用しない。
-- batch / scheduled job、retry policy、polling / live status update、cost cap、rate limit、provider opt-in 条件は後続判断とする。
+- phase 2 で BacktestDetail の latest job status read-only visibility は完了扱いにする。
+- batch / scheduled job、自動 retry policy、polling / live update 本格化、cost cap、rate limit、provider opt-in 条件は後続判断とする。
 - missing / failed / stale summary は provider 再生成や polling ではなく、read-only status / note と手動生成導線で扱う。
 - AI summary 自動比較生成、artifact metadata schema 拡張、artifact download permission boundary は後続判断とする。
 - provider 生エラー、raw prompt、secret、local path を UI / docs / PR に出さない運用を継続する。
+- ApplicationDetail row への AI summary job status 表示は、row が重くなるため今回見送った。必要になった場合は optional read-only field と表示密度を別途設計する。
 
 ## 6. Testing / CI
 
