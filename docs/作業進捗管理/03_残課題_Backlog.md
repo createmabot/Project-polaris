@@ -28,7 +28,8 @@
 - AI summary comparison UX phase 2 は、既存 summary を read-only に並べる補助までに限定する。
 - 本格 AI summary comparison、AI による summary 同士の比較文生成、comparison entity 拡張は後続判断とする。
 - artifact metadata / retention / file access boundary の設計方針と UI path 非表示は完了済み。file access phase 1 は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定する。
-- metadata schema 拡張、download permission boundary、retention job 設計、artifact diff UX は後続判断とする。
+- download permission boundary は本格実装前の設計境界まで完了済みであり、download / signed URL / file token / backend proxy を作るかは後続判断とする。
+- metadata schema 拡張、retention job 設計、artifact diff UX は後続判断とする。
 - arbitrary artifact file read、download、diff、JSON diff、retention job、cleanup job、hard delete、signed URL / file token、backend proxy、permission boundary 本格実装、audit log 本格化は未実装として残す。
 
 ## 5. AI summary / provider operations
@@ -40,12 +41,15 @@
 - AI summary 自動比較生成、artifact metadata schema 拡張、artifact download permission boundary は後続判断とする。
 - provider 生エラー、raw prompt、secret、local path を UI / docs / PR に出さない運用を継続する。
 - ApplicationDetail row への AI summary job status 表示は、row が重くなるため今回見送った。必要になった場合は optional read-only field と表示密度を別途設計する。
+- AI summary comparison を本格化する場合は、comparison route / entity、metrics normalization、AI generated comparison の責務を先に設計する。
+- provider cost cap、rate limit、opt-in policy は auto enqueue や polling を拡張する前に運用判断する。
 
 ## 6. Testing / CI
 
 - Visual regression pilot は optional check として最小導入済み。対象は ApplicationDetail の stable container 1 箇所に限定する。
 - 本導入や対象拡大は後続判断とし、CI required check には追加しない。
 - dynamic timestamp、locale、seed ordering、raw JSON、AI text、external rendering を安定化または mask する必要がある。
+- TradingView widget、AI生成文、raw JSON、long page、full page screenshot は pilot 対象外として維持する。
 - browser smoke の対象拡張は、実行系操作や外部依存を含めない範囲から判断する。
 
 ## 7. Product / data model
