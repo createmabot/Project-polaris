@@ -1,6 +1,6 @@
 # 北極星 docs 整理履歴
 
-更新日: 2026-05-14
+更新日: 2026-05-15
 分類: 作業進捗管理
 
 ## 1. 目的
@@ -165,7 +165,31 @@ PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは
 
 実装コード、API、backend、frontend、DB、Prisma schema、tests は変更しない。
 
-## 12. 今後の docs 更新ルール
+## 12. Artifact metadata / retention policy phase completion
+
+PR #334 / #335 により、Artifact metadata / retention policy phase は完了扱いにする。
+
+完了範囲:
+
+- `docs/仕様書/09_AI_summary_artifact仕様.md` に artifact_pointer metadata、UI表示可否、retention policy 現在地、file read / download boundary、artifact diff boundary を正本化した。
+- `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を runbook として追加した。
+- BacktestDetail の artifact path 系 metadata 非表示、raw artifact JSON の path 系値非表示、ApplicationDetail report row では artifact path を出さない説明を反映した。
+- 画面責務は BacktestDetail、ApplicationDetail、BacktestComparisonDetail、SymbolDetail に分けて整理した。
+
+未実装として残す範囲:
+
+- artifact file read。
+- download。
+- artifact diff / JSON diff。
+- retention job / cleanup job / hard delete。
+- signed URL / file token。
+- backend proxy。
+- permission boundary 本格実装。
+- audit log 本格化。
+
+実装コード、API、backend、frontend、DB、Prisma schema、tests はこの docs-only completion PR では変更しない。
+
+## 13. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -174,7 +198,7 @@ PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 13. 関連 docs
+## 14. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
