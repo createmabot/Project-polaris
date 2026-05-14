@@ -647,6 +647,34 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('先頭20件を表示中（残り 1 件）');
   });
 
+  it('derives engine_actual artifact JSON link from execution id instead of pointer path', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?internalExecutionId=exec-actual-safe-link', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      createInternalExecutionStatusData({ executionId: 'exec-actual-safe-link', status: 'succeeded' }),
+      createInternalExecutionResultData({
+        executionId: 'exec-actual-safe-link',
+        summaryKind: 'engine_actual',
+        metricsBarCount: 25,
+        snapshotBarCount: 25,
+        artifactPointerPath: '/api/untrusted-artifact-path',
+      }),
+      createInternalExecutionArtifactData({
+        executionId: 'exec-actual-safe-link',
+        tradesCount: 25,
+        equityCount: 21,
+      }),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="engine-actual-artifact-open-json"');
+    expect(html).toContain('href="/api/internal-backtests/executions/exec-actual-safe-link/artifacts/engine_actual/trades-and-equity"');
+    expect(html).not.toContain('/api/untrusted-artifact-path');
+  });
+
   it('shows engine_actual no-trade artifact as non-error empty state', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();

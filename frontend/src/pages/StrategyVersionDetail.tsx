@@ -198,15 +198,7 @@ function resolveEngineActualArtifactApiPath(
   executionId: string,
   artifactPointerPath: unknown,
 ): string {
-  if (typeof artifactPointerPath === 'string' && artifactPointerPath.trim().length > 0) {
-    const trimmed = artifactPointerPath.trim();
-    if (trimmed.startsWith('/api/')) {
-      return trimmed;
-    }
-    if (trimmed.startsWith('/internal-backtests/')) {
-      return `/api${trimmed}`;
-    }
-  }
+  void artifactPointerPath;
   return `/api/internal-backtests/executions/${executionId}/artifacts/engine_actual/trades-and-equity`;
 }
 

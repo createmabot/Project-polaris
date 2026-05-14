@@ -659,6 +659,7 @@ pnpm exec prisma db seed
 - AI summary / artifact operations の運用境界は `docs/53.北極星 P3現在地と残課題整理（P3）.md` を正本とする。
 - CSV import report と internal backtest report では AI summary input と artifact の扱いが異なる。
 - artifact metadata / retention / file access boundary の現行仕様は `docs/仕様書/09_AI_summary_artifact仕様.md`、運用確認は `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を参照する。
+- artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定し、新規 download / signed URL / file token は後続判断とする。
 - artifact download / diff、AI summary 同士の比較は後続判断とする。
 
 ### AI summary / artifact operations completion
