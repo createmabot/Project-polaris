@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-本資料は、CSV import report / internal backtest report / comparison helper の現行仕様を整理する。
+本資料は、CSV import report / internal backtest report / comparison helper の現行仕様を整理する。AI summary comparison UX phase 2 は、既存 Backtest AI summary を read-only に並べて理解する補助に限定し、生成・差分算出・正規化・新規 entity 追加は扱わない。
 
 ## 2. report type
 
@@ -16,6 +16,8 @@
 - `execution_source` は TradingView 由来として扱う。
 - 実運用に近い外部検証結果として扱う。
 - parsed report 作成直後に Backtest AI summary auto enqueue の対象になる。
+- AI summary input は `BacktestImport.parsedSummaryJson`、CSV parsed summary、TradingView report 文脈、既存 comparison diff 文脈を中心に組み立てる。
+- artifact pointer は基本要件ではなく、artifact がないことは正常な欠損として扱う。
 
 ### internal backtest report
 
@@ -24,6 +26,15 @@
 - `execution_source` は `internal_backtest` として扱う。
 - `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` を持つ。
 - report conversion 完了直後に Backtest AI summary auto enqueue の対象になる。
+- AI summary input は `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、`internal_backtest_execution_id`、importless report 文脈を中心に組み立てる。
+- `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。
+
+### input 差分
+
+| source | summary input | metrics root | artifact の扱い |
+|---|---|---|---|
+| CSV import report | `BacktestImport.parsedSummaryJson` / parsed summary / TradingView 文脈 / 既存 comparison diff 文脈 | CSV parsed summary | artifact pointer は基本なし。欠損は正常扱い |
+| internal backtest report | `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` / importless report 文脈 | `strategySnapshotJson.result_summary` | artifact pointer metadata を read-only 表示。file read / download / diff はしない |
 
 ## 3. BacktestDetail
 
@@ -32,12 +43,17 @@
 - used strategy snapshot を表示し、report が参照した strategy version / Pine / assumptions を確認できるようにする。
 - 同一 application の related reports と current / related metrics 横並び比較補助を表示する。
 - metrics 欠損時は、取得元に該当 metric がないことを短く説明する。
+- 同一 application 内の current report と related report の既存 AI summary を read-only に並べる comparison helper を担当する。
+- summary missing / failed / stale は provider 再生成や polling ではなく、read-only status / note と既存 manual generate 導線で扱う。
+- `BacktestDetail` 表示を契機に自動 AI 比較生成、summary 再生成、comparison entity 作成、artifact diff を行わない。
 
 ## 4. report history
 
 - BacktestList は report 全体の一覧入口として扱う。
 - ApplicationDetail reports tab は application-specific report history として扱う。
 - SymbolDetail は latest report と source別 latest pair を表示し、詳細履歴は ApplicationDetail に送る。
+- ApplicationDetail は report history の入口であり、詳細比較や AI summary comparison helper は BacktestDetail へ送る。
+- ApplicationDetail の report row では、AI summary 本文、artifact path、詳細 diff を表示しない。
 
 ## 5. AI summary / artifact
 
@@ -46,13 +62,16 @@
 - internal backtest report は result summary と artifact pointer を AI context に含める。
 - artifact pointer は metadata として表示し、存在しない場合は欠損として説明する。
 - artifact file read / download / diff / retention job は未実装であり、詳細境界は `docs/仕様書/09_AI_summary_artifact仕様.md` を正本とする。
+- AI summary comparison helper は保存済み summary の表示補助であり、summary の優劣判定、自動比較文生成、provider 呼び出しを行わない。
 
 ## 6. comparison UX
 
 - 新規 comparison entity は作らない。
 - metrics normalization table は作らない。
-- artifact diff / AI summary 同士の比較は後続判断。
-- BacktestComparisonDetail は保存済み comparison の再訪画面として維持する。
+- artifact diff / AI summary 同士の本格比較は後続判断。
+- 自動 AI 比較生成は行わない。
+- BacktestComparisonDetail は保存済み pairwise comparison の再訪画面として維持する。
+- BacktestComparisonDetail は将来の本格 AI summary comparison / artifact diff 画面候補だが、phase 2 では実装対象外。
 
 ## 7. 参照
 

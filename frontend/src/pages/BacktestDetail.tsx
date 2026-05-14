@@ -18,6 +18,16 @@ type BacktestDetailProps = {
   params: { backtestId: string };
 };
 
+const UNAVAILABLE_AI_REVIEW = {
+  summary_id: null,
+  title: null,
+  body_markdown: null,
+  structured_json: null,
+  generated_at: null,
+  status: 'unavailable' as const,
+  insufficient_context: true,
+};
+
 function valueText(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '-';
   return String(value);
@@ -293,10 +303,76 @@ function RelatedApplicationReports({ relatedReports }: { relatedReports: NonNull
               <KeyValueRow label="status"><StatusBadge status={report.status} /></KeyValueRow>
               <KeyValueRow label="run type"><code>{report.run_type}</code></KeyValueRow>
               <KeyValueRow label="run status"><StatusBadge status={report.run_status} /></KeyValueRow>
+              <KeyValueRow label="AI summary"><StatusBadge status={(report.ai_review ?? UNAVAILABLE_AI_REVIEW).status} /></KeyValueRow>
               <KeyValueRow label="updated">{formatDateTime(report.updated_at)}</KeyValueRow>
             </KeyValueList>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+type ReportWithAiReview = NonNullable<SymbolStrategyApplicationBacklink['current_report']> | RelatedApplicationReport;
+
+function reportAiSummaryExcerpt(body: string | null): string {
+  if (!body) return '';
+  const normalized = body.replace(/\s+/g, ' ').trim();
+  return normalized.length > 420 ? `${normalized.slice(0, 420)}...` : normalized;
+}
+
+function ReportAiSummaryCard({ title, report }: { title: string; report: ReportWithAiReview }) {
+  const aiReview = report.ai_review ?? UNAVAILABLE_AI_REVIEW;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-1 text-sm font-semibold text-slate-900">{title}</div>
+      <div className="text-sm font-semibold text-sky-700">{report.title}</div>
+      <KeyValueList className="mt-2 gap-1 text-sm">
+        <KeyValueRow label="report type">{reportOriginLabel(report.execution_source)}</KeyValueRow>
+        <KeyValueRow label="source"><code>{report.execution_source}</code></KeyValueRow>
+        <KeyValueRow label="AI summary"><StatusBadge status={aiReview.status} /></KeyValueRow>
+        <KeyValueRow label="generated">{formatDateTime(aiReview.generated_at)}</KeyValueRow>
+      </KeyValueList>
+      {aiReview.status === 'available' ? (
+        <div className="mt-3 rounded-md border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
+          {aiReview.title ? (
+            <div className="mb-1 font-semibold text-slate-900">{aiReview.title}</div>
+          ) : null}
+          <div>{reportAiSummaryExcerpt(aiReview.body_markdown)}</div>
+        </div>
+      ) : (
+        <p className="mt-3 mb-0 text-sm text-slate-600">
+          保存済み AI summary はまだ表示できません。自動生成が未完了、queued / running 中、または failed の可能性があります。
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ApplicationReportAiSummaryComparison({
+  currentReport,
+  relatedReports,
+}: {
+  currentReport: SymbolStrategyApplicationBacklink['current_report'];
+  relatedReports: NonNullable<SymbolStrategyApplicationBacklink['related_reports']>;
+}) {
+  const relatedReport =
+    relatedReports.find((report) => (report.ai_review ?? UNAVAILABLE_AI_REVIEW).status === 'available')
+    ?? relatedReports[0]
+    ?? null;
+  if (!currentReport || !relatedReport) return null;
+
+  return (
+    <div className="mt-4">
+      <h3 className="mb-2 text-base font-semibold text-slate-900">AI summary 横並び確認</h3>
+      <InlineNotice tone="info" className="mb-3">
+        同じ application 配下の current report と related report の保存済み AI summary を read-only に並べます。
+        CSV import report は BacktestImport parsed summary / comparison diff、internal backtest report は result_summary / artifact_pointer を主な input とします。
+        ここでは新規生成、自動比較生成、polling、artifact diff は行いません。
+      </InlineNotice>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+        <ReportAiSummaryCard title="current report AI summary" report={currentReport} />
+        <ReportAiSummaryCard title="related report AI summary" report={relatedReport} />
       </div>
     </div>
   );
@@ -420,6 +496,10 @@ function SymbolStrategyApplicationBacklinkSection({
       <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
       <RelatedApplicationReports relatedReports={symbolStrategyApplication.related_reports ?? []} />
       <ApplicationReportMetricsComparison
+        currentReport={symbolStrategyApplication.current_report}
+        relatedReports={symbolStrategyApplication.related_reports ?? []}
+      />
+      <ApplicationReportAiSummaryComparison
         currentReport={symbolStrategyApplication.current_report}
         relatedReports={symbolStrategyApplication.related_reports ?? []}
       />

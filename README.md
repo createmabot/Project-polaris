@@ -690,3 +690,13 @@ pnpm exec prisma db seed
 - phase 1 の運用確認は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` を参照する。
 - 既存 BacktestDetail の手動生成ボタンは維持し、duplicate enqueue は `summary_scope + target + inputSnapshotHash` を基準に防止する方針とする。
 - DB migration / Prisma schema 変更、表示起点 enqueue、batch / scheduled job、failed job auto retry、polling / live update は対象外。
+
+### AI summary comparison UX phase 2 docs-only design
+
+- Phase 2 の AI summary comparison は、既存 summary を read-only に並べて理解する補助に限定する。
+- `BacktestDetail` は個別 report detail と、同一 application 内の current / related AI summary comparison helper を担当する。
+- `ApplicationDetail` は report history の入口であり、詳細比較は `BacktestDetail` に送る。
+- `BacktestComparisonDetail` は保存済み pairwise comparison の再訪画面であり、本格 AI summary comparison / artifact diff は後続候補とする。
+- CSV import report summary は `BacktestImport` / parsed summary / TradingView 文脈、internal backtest report summary は `strategySnapshotJson.result_summary` / `artifact_pointer` / execution ID 文脈を主 input として扱う。
+- summary missing / failed / stale は provider 再生成や polling ではなく、read-only status / note と手動生成導線で扱う。
+- comparison entity、metrics normalization table、artifact diff、自動 AI 比較生成、DB / API / backend / Prisma schema 変更は対象外。

@@ -34,6 +34,13 @@ phase 1 は PR #319 / #320 / #332 により、CSV import parsed report、applica
 | `csv_import` | `BacktestImport` / parsed summary / comparison diff / TradingView文脈 | 作成する | 基本は CSV import metadata / parsed summary 文脈 |
 | `internal_backtest` | `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` | 作成しない | artifact pointer metadata を表示。file read / download / diff はしない |
 
+AI summary comparison UX phase 2 では、この input 差を明示したうえで保存済み summary を read-only に並べる。CSV import report の summary と internal backtest report の summary は、同じ `backtest_review` でも入力文脈が異なるため、本文や欠損項目を機械的に同一条件として比較しない。
+
+| source | summary input の中心 | 欠損時の扱い |
+|---|---|---|
+| CSV import report | `BacktestImport.parsedSummaryJson`、parsed metrics、TradingView report 文脈 | artifact pointer がなくても正常。CSV にない metrics は `-` または補足 note で扱う |
+| internal backtest report | `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、execution ID | `BacktestImport` がなくても正常。CSV parsed summary 前提の項目は `-` または補足 note で扱う |
+
 ## 5. artifact_pointer metadata
 
 `artifact_pointer` は、artifact 本体ではなく、保存済み artifact への参照 metadata である。現行画面では metadata summary と raw JSON を read-only に表示するが、BacktestDetail では artifact file content の読込、download、diff は行わない。
@@ -172,11 +179,33 @@ report comparison UX との関係:
 - 将来 artifact diff / JSON diff を扱う候補画面ではあるが、現時点では artifact diff 画面ではない。
 - AI summary 同士の比較、artifact diff、metrics normalization、comparison entity 拡張は別判断にする。
 
+## 8-1. AI summary comparison boundary
+
+AI summary comparison UX phase 2 は、同一 application 内の current / related Backtest report に紐づく既存 AI summary を、BacktestDetail で read-only に並べて理解する補助に限定する。
+
+phase 2 で扱うこと:
+
+- 保存済み AI summary の有無と状態を current / related report ごとに表示する。
+- `available` summary は本文を read-only に表示する。
+- `unavailable`、missing、failed、stale は read-only status / note として表示する。
+- 必要な場合は既存 manual generate 導線に進める。
+- CSV import report と internal backtest report の input 差を説明する。
+
+phase 2 で扱わないこと:
+
+- provider を呼び出して AI summary 同士の比較文を自動生成すること。
+- missing / failed / stale を画面表示起点で再生成すること。
+- polling / live update による状態追跡。
+- comparison entity の追加または拡張。
+- metrics normalization table。
+- artifact diff、JSON diff、file diff。
+- BacktestComparisonDetail の本格 AI summary comparison 画面化。
+
 ## 9. 画面責務
 
-- BacktestDetail: 個別 report の AI summary、artifact metadata summary、path 系値を非表示化した raw JSON、absence explanation を表示する。
-- ApplicationDetail: report history の入口。AI summary / artifact 詳細は BacktestDetail へ送り、report row に artifact path は表示しない。
-- BacktestComparisonDetail: 保存済み pairwise comparison の再訪画面。AI summary 同士の自動比較や artifact diff は後続判断。
+- BacktestDetail: 個別 report detail、AI summary、artifact metadata summary、path 系値を非表示化した raw JSON、absence explanation、同一 application 内の current / related AI summary comparison helper を担当する。
+- ApplicationDetail: report history の入口。AI summary / artifact 詳細と詳細比較は BacktestDetail へ送り、report row に artifact path や summary 本文は表示しない。
+- BacktestComparisonDetail: 保存済み pairwise comparison の再訪画面。AI summary 同士の自動比較、本格 AI summary comparison、artifact diff は後続判断。
 - SymbolDetail: latest report / application 入口を担当し、artifact 詳細は持たせない。
 
 ## 10. 後続判断
@@ -185,6 +214,7 @@ report comparison UX との関係:
 - batch / scheduled enqueue。
 - polling 本格化。
 - AI summary 同士の比較。
+- 本格 AI summary comparison UX。
 - artifact file access の本格化。
 - artifact download。
 - artifact diff / JSON diff。
