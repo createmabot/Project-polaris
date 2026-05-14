@@ -7,6 +7,8 @@
 
 本資料は、Backtest AI summary と artifact metadata の現行仕様を整理する。AI summary auto-generation の運用判断は `docs/56`、phase 1 の運用確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、artifact metadata / retention / file access boundary の運用確認は `docs/運用ドキュメント/09_artifact_metadata_retention運用.md`、phase 完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` と `docs/53` を参照する。
 
+Artifact metadata / retention policy phase は、metadata 正本仕様、path 系 metadata 非表示、raw JSON sanitization、ApplicationDetail の artifact path 非表示 note まで完了扱いである。file read / download / diff / retention job は未実装のまま残す。
+
 ## 2. Backtest AI summary
 
 - 状態は `ai_jobs`、生成物は `ai_summaries` を使う。

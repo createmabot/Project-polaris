@@ -26,8 +26,8 @@
 - CSV import report と internal backtest report の本格比較 UX を判断する。
 - metrics normalization table は初回候補にしないが、比較要件が固まった場合に再検討する。
 - AI summary 同士の比較 UX は後続判断とする。
-- artifact metadata / retention / file access boundary は docs-only で設計方針を固定し、実装は後続判断とする。
-- artifact file read / download / diff、retention job、hard delete、cleanup job は未実装として残す。
+- artifact metadata / retention / file access boundary の設計方針と UI path 非表示は完了済み。metadata schema 拡張、download permission boundary、retention job 設計、artifact diff UX は後続判断とする。
+- artifact file read / download / diff、JSON diff、retention job、cleanup job、hard delete、signed URL / file token、backend proxy、permission boundary 本格実装、audit log 本格化は未実装として残す。
 
 ## 5. AI summary / provider operations
 

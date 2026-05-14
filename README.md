@@ -664,6 +664,7 @@ pnpm exec prisma db seed
 ### AI summary / artifact operations completion
 
 - AI summary / artifact operations phase is complete as a docs-first cleanup in `docs/53`.
+- Artifact metadata / retention policy phase is complete for metadata policy, path sanitization visibility, and screen responsibility docs.
 - `BacktestDetail` owns source-aware AI summary input notes and artifact metadata checks.
 - `ApplicationDetail` remains the report history entry point, and `BacktestComparisonDetail` remains the saved pairwise comparison revisit screen.
 - No API, backend, DB, Prisma schema, or test changes are part of this completion pass.

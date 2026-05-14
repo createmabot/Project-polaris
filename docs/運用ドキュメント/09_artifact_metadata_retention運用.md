@@ -7,6 +7,8 @@
 
 本資料は、artifact pointer metadata、retention policy、file access boundary の運用確認観点をまとめる。仕様正本は `docs/仕様書/09_AI_summary_artifact仕様.md`、Backtest report との関係は `docs/仕様書/08_Backtest_Report仕様.md` を参照する。
 
+設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さず、file read / download / diff / retention job は未実装として扱う。
+
 ## 2. 現行運用の範囲
 
 現行で行うこと:
