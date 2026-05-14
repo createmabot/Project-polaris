@@ -448,6 +448,22 @@ describe('watchlist/positions management routes', () => {
     });
     expect(duplicateResponse.statusCode).toBe(200);
     expect(duplicateResponse.json().data.status).toBe('already_exists');
+    expect(duplicateResponse.json().data.item.display_name).toBe('トヨタ自動車');
+    expect(duplicateResponse.json().data.item.market_code).toBe('JP_STOCK');
+    expect(duplicateResponse.json().data.item.tradingview_symbol).toBe('TSE:7203');
+
+    const inferredResponse = await app.inject({
+      method: 'POST',
+      url: '/api/watchlist-items',
+      payload: { symbol_code: '6501' },
+    });
+    expect(inferredResponse.statusCode).toBe(201);
+    expect(inferredResponse.json().data.item).toMatchObject({
+      symbol_code: '6501',
+      display_name: '6501',
+      market_code: 'JP_STOCK',
+      tradingview_symbol: 'TSE:6501',
+    });
 
     const patchResponse = await app.inject({
       method: 'PATCH',
@@ -495,6 +511,11 @@ describe('watchlist/positions management routes', () => {
     expect(homeAfterCreate.statusCode).toBe(200);
     expect(homeAfterCreate.json().data.positions).toHaveLength(1);
     expect(homeAfterCreate.json().data.positions[0].quantity).toBe(100);
+    expect(homeAfterCreate.json().data.positions[0]).toMatchObject({
+      symbol_code: '6758',
+      market_code: 'JP_STOCK',
+      tradingview_symbol: 'TSE:6758',
+    });
     const positionId = homeAfterCreate.json().data.positions[0].position_id as string;
 
     const updateResponse = await app.inject({

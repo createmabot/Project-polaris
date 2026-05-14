@@ -61,8 +61,30 @@ export type ExternalReferenceDto = {
 
 export type HomeData = {
   market_overview: any;
-  watchlist_symbols: any[];
-  positions: any[];
+  watchlist_symbols: Array<{
+    item_id?: string | null;
+    symbol_id: string | null;
+    symbol_code?: string | null;
+    display_name: string | null;
+    market_code?: string | null;
+    tradingview_symbol: string | null;
+    latest_price: number | null;
+    change_rate: number | null;
+    latest_alert_status?: string | null;
+    user_priority?: number | null;
+  }>;
+  positions: Array<{
+    position_id: string | null;
+    symbol_id: string | null;
+    symbol_code?: string | null;
+    display_name: string | null;
+    market_code?: string | null;
+    tradingview_symbol?: string | null;
+    quantity: number | null;
+    avg_cost?: number | null;
+    latest_price: number | null;
+    unrealized_pnl: number | null;
+  }>;
   recent_alerts: AlertEventDto[];
   daily_summary: {
     id: string | null;

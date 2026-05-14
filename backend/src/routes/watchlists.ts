@@ -108,8 +108,11 @@ export async function watchlistRoutes(fastify: FastifyInstance) {
           const symbol = item.symbol;
           const snap = symbol?.id ? (snapshotMap.get(symbol.id) ?? null) : null;
           return {
+            item_id: item.id,
             symbol_id: symbol?.id ?? null,
+            symbol_code: symbol?.symbolCode ?? symbol?.symbol ?? null,
             display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+            market_code: symbol?.marketCode ?? null,
             tradingview_symbol: symbol?.tradingviewSymbol ?? null,
             latest_price:
               snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)

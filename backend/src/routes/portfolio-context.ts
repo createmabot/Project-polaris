@@ -42,6 +42,19 @@ export function toRequiredNonNegativeNumber(value: unknown, fieldName: string): 
   return parsed;
 }
 
+function inferSymbolFallback(symbolCode: string) {
+  if (/^\d{4}$/.test(symbolCode)) {
+    return {
+      marketCode: 'JP_STOCK',
+      tradingviewSymbol: `TSE:${symbolCode}`,
+    };
+  }
+  return {
+    marketCode: null,
+    tradingviewSymbol: null,
+  };
+}
+
 export async function resolveOrCreateDefaultUser(prismaAny: any) {
   const existing = await prismaAny.user.findFirst({
     orderBy: { createdAt: 'asc' },
@@ -110,8 +123,11 @@ export async function resolveOrCreateSymbol(prismaAny: any, input: ResolveSymbol
     throw new AppError(400, 'VALIDATION_ERROR', 'symbol_code is required.');
   }
 
-  const marketCode = normalizeText(input.marketCode) ?? null;
-  const tradingviewSymbol = normalizeText(input.tradingviewSymbol) ?? null;
+  const fallback = inferSymbolFallback(symbolCode);
+  const explicitMarketCode = normalizeText(input.marketCode);
+  const explicitTradingviewSymbol = normalizeText(input.tradingviewSymbol);
+  const marketCode = explicitMarketCode ?? fallback.marketCode;
+  const tradingviewSymbol = explicitTradingviewSymbol ?? fallback.tradingviewSymbol;
   const displayName = normalizeText(input.displayName) ?? symbolCode;
 
   let symbol: any | null = null;
@@ -141,7 +157,7 @@ export async function resolveOrCreateSymbol(prismaAny: any, input: ResolveSymbol
     });
   }
 
-  if (tradingviewSymbol && symbol.tradingviewSymbol && symbol.tradingviewSymbol !== tradingviewSymbol) {
+  if (explicitTradingviewSymbol && symbol.tradingviewSymbol && symbol.tradingviewSymbol !== explicitTradingviewSymbol) {
     throw new AppError(
       409,
       'CONFLICT',
