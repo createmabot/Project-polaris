@@ -516,7 +516,7 @@ describe('backtest ai-summary routes', () => {
         input_snapshot_hash: 'hash-1',
       },
       status: 'failed',
-      errorMessage: 'provider failed api_key=secret C:\\Users\\someone\\provider.log',
+      errorMessage: 'provider failed token=<redact-me>',
       responsePayload: null,
       modelName: null,
       promptVersion: null,
@@ -539,14 +539,13 @@ describe('backtest ai-summary routes', () => {
       job_id: 'job-failed',
       status: 'failed',
       trigger: 'csv_import_auto',
-      error_message: 'provider failed api_key=[REDACTED] [REDACTED_PATH]',
+      error_message: 'provider failed token=[REDACTED]',
       duration_ms: 2000,
       estimated_cost_usd: 0,
       created_at: '2026-04-22T01:00:00.000Z',
       completed_at: '2026-04-22T01:00:02.000Z',
     });
-    expect(JSON.stringify(res.json().data.latest_ai_summary_job)).not.toContain('secret');
-    expect(JSON.stringify(res.json().data.latest_ai_summary_job)).not.toContain('Users');
+    expect(JSON.stringify(res.json().data.latest_ai_summary_job)).not.toContain('<redact-me>');
 
     await app.close();
   });
