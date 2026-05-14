@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-本資料は、Backtest AI summary と artifact metadata の現行仕様を整理する。運用判断の詳細は `docs/56`、phase 完了整理は `docs/53` を参照する。
+本資料は、Backtest AI summary と artifact metadata の現行仕様を整理する。運用判断の詳細は `docs/56`、phase 1 の運用確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、phase 完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` と `docs/53` を参照する。
 
 ## 2. Backtest AI summary
 
@@ -22,6 +22,8 @@
 - 既存 report を返す idempotent path、guarded update 競合で既存 report を返す path、display-triggered enqueue、batch / scheduled job は対象外。
 - 同一 input snapshot hash の succeeded summary、queued / running job、failed job がある場合は auto enqueue しない。
 - failed job の自動 retry は行わず、手動生成に委ねる。
+
+phase 1 は PR #319 / #320 / #332 により、CSV import parsed report、application 起点 CSV import、internal backtest report conversion の auto enqueue と read-only visibility 整理まで完了扱いである。route 別の確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md` を参照する。
 
 ## 4. CSV import report と internal backtest report の違い
 

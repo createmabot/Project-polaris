@@ -30,9 +30,9 @@
 
 ## 5. AI summary / provider operations
 
-- Auto enqueue の read-only status 表示を BacktestDetail / ApplicationDetail に出すか判断する。
 - display-triggered enqueue は現行では採用しない。
-- batch / scheduled job、retry policy、cost cap、rate limit、provider opt-in 条件は後続判断とする。
+- batch / scheduled job、retry policy、polling / live status update、cost cap、rate limit、provider opt-in 条件は後続判断とする。
+- AI summary comparison UX、artifact metadata / retention policy、artifact file read / download permission boundary は後続判断とする。
 - provider 生エラー、raw prompt、secret、local path を UI / docs / PR に出さない運用を継続する。
 
 ## 6. Testing / CI
@@ -60,4 +60,6 @@
 - `docs/39.北極星 MVP後ロードマップ・バックログ整理.md`
 - `docs/53.北極星 P3現在地と残課題整理（P3）.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
+- `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
+- `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
 - `docs/作業進捗管理/04_設計判断ログ.md`

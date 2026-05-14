@@ -5,7 +5,7 @@
 
 ## 1. 目的
 
-本資料は、北極星の AI summary / Pine 生成 / comparison summary で利用する provider 境界の運用をまとめる。仕様詳細は `README.md`、`docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`、`docs/仕様書/09_AI_summary_artifact仕様.md` を参照する。
+本資料は、北極星の AI summary / Pine 生成 / comparison summary で利用する provider 境界の運用をまとめる。Backtest AI summary auto-generation phase 1 の route 別確認手順は `docs/運用ドキュメント/08_AI_summary自動生成運用.md`、仕様詳細は `README.md`、`docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`、`docs/仕様書/09_AI_summary_artifact仕様.md` を参照する。
 
 ## 2. provider の種類
 
@@ -76,4 +76,5 @@ Backtest AI summary は、CSV import report と internal backtest report で inp
 - `README.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
+- `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
 - `docs/運用ドキュメント/04_CSV取込運用.md`

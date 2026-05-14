@@ -143,7 +143,29 @@ PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは
 - walkthrough の大規模分割。
 - 旧 docs 全面書き換え。
 
-## 11. 今後の docs 更新ルール
+## 11. AI summary auto-generation phase 1 runbook / completion docs
+
+今回の docs-only 整理では、PR #319 / #320 / #332 で完了済みの AI summary auto-generation phase 1 を運用手順と完了整理に固定した。
+
+追加した運用 docs:
+
+- `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
+
+追加した進捗 docs:
+
+- `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
+
+更新した入口:
+
+- `docs/0.目次.md`
+- `docs/57.北極星 docs正本整理・読む順番（現行）.md`
+- `docs/仕様書/09_AI_summary_artifact仕様.md`
+- `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
+- `docs/walkthrough.md`
+
+実装コード、API、backend、frontend、DB、Prisma schema、tests は変更しない。
+
+## 12. 今後の docs 更新ルール
 
 - 現行仕様は `docs/仕様書/` に追加・更新する。
 - 開発・確認・運用手順は `docs/運用ドキュメント/` に追加・更新する。
@@ -152,7 +174,7 @@ PR #327〜#330 で、legacy numbered docs cleanup の初期削除フェーズは
 - docs-only PR では `git diff --check` と secret/local path scan を実行する。
 - PR 本文は ASCII English only、docs 本文は UTF-8 日本語で保存する。
 
-## 12. 関連 docs
+## 13. 関連 docs
 
 - `docs/0.目次.md`
 - `docs/57.北極星 docs正本整理・読む順番（現行）.md`
