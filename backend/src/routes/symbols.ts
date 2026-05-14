@@ -19,6 +19,12 @@ type SymbolApplicationRunType = 'csv_import' | 'internal_backtest';
 type SymbolApplicationRunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 type SymbolApplicationSort = 'created_at' | 'updated_at';
 type SortOrder = 'asc' | 'desc';
+type SymbolReferenceRefreshResult = {
+  savedCount: number;
+  skippedCount: number;
+  referenceIds: string[];
+  sourceBreakdown: Record<string, number>;
+};
 
 type SymbolSummaryView = {
   summary_id: string | null;
@@ -324,6 +330,84 @@ async function resolveSymbolSummary(symbolId: string, scope: SymbolSummaryScope)
     orderBy: { generatedAt: 'desc' },
   });
   return toSymbolSummaryView(summary, scope);
+}
+
+async function collectAndSaveReferencesForSymbol(symbol: {
+  id: string;
+  symbol: string;
+  symbolCode: string | null;
+  displayName: string | null;
+  tradingviewSymbol: string | null;
+}): Promise<SymbolReferenceRefreshResult> {
+  const { buildDedupeKey, referenceCollector } = await import('../references/collector.js');
+  const collected = await referenceCollector.collectForSymbol({
+    symbolId: symbol.id,
+    symbolCode: symbol.symbolCode ?? symbol.symbol,
+    displayName: symbol.displayName,
+    tradingviewSymbol: symbol.tradingviewSymbol,
+  });
+
+  let savedCount = 0;
+  let skippedCount = 0;
+  const referenceIds: string[] = [];
+  const sourceBreakdown: Record<string, number> = {};
+
+  for (const ref of collected) {
+    sourceBreakdown[ref.referenceType] = (sourceBreakdown[ref.referenceType] ?? 0) + 1;
+
+    const dedupeKey = buildDedupeKey({
+      symbolId: symbol.id,
+      sourceName: ref.sourceName,
+      sourceUrl: ref.sourceUrl,
+      referenceType: ref.referenceType,
+      title: ref.title,
+      publishedAt: ref.publishedAt,
+    });
+    const metadataJson = {
+      ...(ref.metadataJson ?? {}),
+      source_type: ref.sourceType,
+      category: ref.category ?? null,
+      relevance_hint: ref.relevanceHint ?? null,
+      raw_payload: ref.rawPayloadJson ?? null,
+    };
+
+    try {
+      const saved = await prisma.externalReference.create({
+        data: {
+          symbolId: symbol.id,
+          alertEventId: null,
+          referenceType: ref.referenceType,
+          title: ref.title,
+          sourceName: ref.sourceName,
+          sourceUrl: ref.sourceUrl,
+          publishedAt: ref.publishedAt,
+          summaryText: ref.summaryText,
+          metadataJson: metadataJson as any,
+          dedupeKey,
+          relevanceScore: ref.relevanceScore,
+        },
+      });
+      referenceIds.push(saved.id);
+      savedCount++;
+    } catch (error: any) {
+      if (error?.code === 'P2002') {
+        skippedCount++;
+        const existing = await prisma.externalReference.findUnique({ where: { dedupeKey } });
+        if (existing) {
+          referenceIds.push(existing.id);
+        }
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  return {
+    savedCount,
+    skippedCount,
+    referenceIds,
+    sourceBreakdown,
+  };
 }
 
 async function generateSymbolSummaryWithJob(
@@ -1044,6 +1128,109 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       status: 'queued',
       summary: result.summary,
     }));
+  });
+
+  fastify.post('/:symbolId/references/refresh', async (
+    request: FastifyRequest<{ Params: { symbolId: string } }>,
+    reply: FastifyReply,
+  ) => {
+    const { symbolId } = request.params;
+
+    const symbol = await prisma.symbol.findUnique({
+      where: { id: symbolId },
+      select: {
+        id: true,
+        symbol: true,
+        symbolCode: true,
+        displayName: true,
+        tradingviewSymbol: true,
+      },
+    });
+    if (!symbol) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
+    }
+
+    const activeJob = await prisma.aiJob.findFirst({
+      where: {
+        jobType: 'collect_references_for_symbol',
+        targetEntityType: 'symbol',
+        targetEntityId: symbolId,
+        status: { in: ['queued', 'running'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (activeJob) {
+      return reply.status(202).send(formatSuccess(request, {
+        symbol_id: symbolId,
+        job_id: activeJob.id,
+        status: activeJob.status,
+        saved_count: null,
+        skipped_count: null,
+        reference_count: null,
+        source_breakdown: null,
+      }));
+    }
+
+    const refreshJob = await prisma.aiJob.create({
+      data: {
+        jobType: 'collect_references_for_symbol',
+        targetEntityType: 'symbol',
+        targetEntityId: symbolId,
+        requestPayload: { symbol_id: symbolId } as any,
+        status: 'queued',
+      },
+    });
+
+    await prisma.aiJob.update({
+      where: { id: refreshJob.id },
+      data: {
+        status: 'running',
+        startedAt: new Date(),
+      },
+    });
+
+    try {
+      const result = await collectAndSaveReferencesForSymbol(symbol);
+      await prisma.aiJob.update({
+        where: { id: refreshJob.id },
+        data: {
+          status: 'succeeded',
+          completedAt: new Date(),
+          responsePayload: {
+            saved_count: result.savedCount,
+            skipped_count: result.skippedCount,
+            ref_ids: result.referenceIds,
+            source_breakdown: result.sourceBreakdown,
+          } as any,
+        },
+      });
+
+      return reply.status(200).send(formatSuccess(request, {
+        symbol_id: symbolId,
+        job_id: refreshJob.id,
+        status: 'succeeded',
+        saved_count: result.savedCount,
+        skipped_count: result.skippedCount,
+        reference_count: result.referenceIds.length,
+        source_breakdown: result.sourceBreakdown,
+      }));
+    } catch (error) {
+      request.log.warn({
+        event: 'symbol_reference_refresh_failed',
+        symbol_id: symbolId,
+        job_id: refreshJob.id,
+        error_name: error instanceof Error ? error.name : typeof error,
+      });
+      await prisma.aiJob.update({
+        where: { id: refreshJob.id },
+        data: {
+          status: 'failed',
+          completedAt: new Date(),
+          errorMessage: 'Reference refresh failed.',
+        },
+      });
+      throw new AppError(502, 'REFERENCE_REFRESH_FAILED', 'Related reference refresh failed. Please try again later.');
+    }
   });
 
   fastify.get('/:symbolId', async (

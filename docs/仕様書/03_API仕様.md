@@ -85,7 +85,17 @@
 - CSV import parsed report 作成直後と internal backtest report conversion 完了直後は、最小 auto enqueue 対象。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
-## 7-1. Watchlist / positions management
+## 7-1. Symbol references
+
+- `POST /api/symbols/:symbolId/references/refresh`
+  - SymbolDetail の関連参照情報をユーザー操作起点で手動再取得する。
+  - 画面表示起点、自動定期取得、batch 起点では実行しない。
+  - 既存 `referenceCollector.collectForSymbol` と `external_references.dedupeKey` を使い、重複 reference は追加しない。
+  - response は `job_id`、`status`、`saved_count`、`skipped_count`、`reference_count`、`source_breakdown` を返す。
+  - 既に `collect_references_for_symbol` の `queued|running` job がある場合は、追加実行せず既存 job status を返す。
+  - 失敗時は provider endpoint、secret、stack trace を response に含めない。
+
+## 7-2. Watchlist / positions management
 
 - `POST /api/watchlist-items` と `POST /api/positions` は `symbol_code` だけの追加を受け付ける。
 - 既存 `symbols` に一致する `symbol_code` / `symbol` / `tradingview_symbol` がある場合、既存の `displayName` / `marketCode` / `tradingviewSymbol` を利用する。

@@ -269,6 +269,16 @@ export type SymbolAiSummaryData = {
   };
 };
 
+export type SymbolReferenceRefreshData = {
+  symbol_id: string;
+  job_id: string;
+  status: 'succeeded' | 'queued' | 'running' | 'failed' | string;
+  saved_count: number | null;
+  skipped_count: number | null;
+  reference_count: number | null;
+  source_breakdown: Record<string, number> | null;
+};
+
 export type ComparisonCreateData = {
   comparison_session: {
     id: string;
