@@ -90,14 +90,15 @@ phase 1 完了に含めないもの:
 
 - retry / polling / live status update。
 - AI summary comparison UX。
-- artifact metadata / retention policy。
-- artifact file read / download permission boundary。
+- artifact metadata / retention policy の実装判断。設計 docs は `docs/仕様書/09_AI_summary_artifact仕様.md` と `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を参照する。
+- artifact file read / download permission boundary の実装判断。
 - provider cost / latency policy。
 - Visual regression pilot。
 
 ## 8. 関連 docs
 
 - `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
+- `docs/運用ドキュメント/09_artifact_metadata_retention運用.md`
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 - `docs/作業進捗管理/02_完了フェーズ.md`

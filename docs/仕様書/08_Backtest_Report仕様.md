@@ -1,6 +1,6 @@
 # 北極星 Backtest Report 現行仕様
 
-更新日: 2026-05-13
+更新日: 2026-05-15
 分類: 仕様書
 
 ## 1. 目的
@@ -44,7 +44,8 @@
 - Backtest AI summary は manual generate と auto enqueue の両方で作成される。
 - CSV import report は parsed CSV summary を AI context に含める。
 - internal backtest report は result summary と artifact pointer を AI context に含める。
-- artifact 本体または pointer は source に応じて表示し、存在しない場合は欠損として説明する。
+- artifact pointer は metadata として表示し、存在しない場合は欠損として説明する。
+- artifact file read / download / diff / retention job は未実装であり、詳細境界は `docs/仕様書/09_AI_summary_artifact仕様.md` を正本とする。
 
 ## 6. comparison UX
 
