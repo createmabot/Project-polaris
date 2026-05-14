@@ -809,13 +809,14 @@ describe('BacktestDetail', () => {
     expect(html).toContain('245');
     expect(html).toContain('artifact_pointer');
     expect(html).toContain('internal_backtest_result');
-    expect(html).toContain('artifact file の実体読込、download、diff は行いません。');
+    expect(html).toContain('artifact path は非表示化し、artifact file の実体読込、download、diff は行いません。');
     expect(html).toContain('type');
     expect(html).toContain('json');
     expect(html).toContain('path');
-    expect(html).toContain('/internal-backtests/executions/exec-1');
+    expect(html).toContain('非表示（artifact path）');
+    expect(html).not.toContain('/internal-backtests/executions/exec-1');
     expect(html).toContain('summary_mode');
-    expect(html).toContain('raw artifact JSON は保存済み pointer metadata の確認用です。');
+    expect(html).toContain('raw artifact JSON は保存済み pointer metadata の確認用です。path 系 metadata は非表示化し、file 内容の読み込み、download、JSON diff は後続判断です。');
     expect(html).toContain('raw artifact JSON');
     expect(html).toContain('internal_backtest report の AI summary input は strategySnapshotJson.result_summary / artifact_pointer / internal_backtest_execution_id が中心です。');
     expect(html).toContain('internal backtest report は、新規 report conversion 完了直後に AI summary 自動生成の対象です。');
@@ -885,6 +886,6 @@ describe('BacktestDetail', () => {
 
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-internal-no-artifact' }} />);
     expect(html).toContain('internal backtest report');
-    expect(html).toContain('artifact は未生成、または strategy snapshot に保存されていません。');
+    expect(html).toContain('artifact metadata は未生成、または strategy snapshot に保存されていません。');
   });
 });
