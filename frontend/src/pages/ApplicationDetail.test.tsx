@@ -284,8 +284,8 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('report 1 / 2 件を表示中');
     expect(html).toContain('metrics の - は、CSV parsed summary または internal result_summary から取得できない項目です。');
     expect(html).toContain('CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。');
-    expect(html).toContain('AI summary 本文、available / unavailable、artifact pointer、raw artifact JSON の詳細確認は BacktestDetail で行います。');
-    expect(html).toContain('report row では AI summary status を表示せず、表示起点 enqueue もしません。');
+    expect(html).toContain('AI summary 本文、available / unavailable、artifact metadata、raw artifact JSON の詳細確認は BacktestDetail で行います。');
+    expect(html).toContain('report row では AI summary status や artifact path を表示せず');
     expect(html).toContain('importless_report は internal backtest 由来で BacktestImport を持たない report を示します。');
     expect(html).toContain('report count: 2');
     expect(html).toContain('7203 internal report');

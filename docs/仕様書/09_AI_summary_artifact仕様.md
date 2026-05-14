@@ -56,7 +56,7 @@ UI に表示してよい metadata:
 - `generated_at` / `created_at`
 - report / execution と紐づく safe な識別子
 
-`path` は内部参照として保存されていても、UI では絶対 local path や file system structure をそのまま表示しない。表示が必要な場合は、論理参照または sanitized 表示に限定する。
+`path` は内部参照として保存されていても、UI では絶対 local path や file system structure をそのまま表示しない。BacktestDetail の artifact metadata summary では path 系 metadata を非表示または sanitized 表示に限定する。
 
 UI / docs / PR に表示してはいけない metadata:
 
@@ -73,6 +73,7 @@ raw artifact JSON:
 - BacktestDetail の raw artifact JSON は、保存済み pointer metadata の確認用である。
 - raw artifact JSON は artifact file content ではない。
 - raw artifact JSON は JSON diff / file diff の入力ではない。
+- raw artifact JSON の表示でも、`path` など file location を推測できる path 系値は非表示または sanitized 表示にする。
 
 artifact_pointer がない場合:
 
@@ -155,8 +156,8 @@ report comparison UX との関係:
 
 ## 9. 画面責務
 
-- BacktestDetail: 個別 report の AI summary、artifact metadata、raw JSON 表示。
-- ApplicationDetail: report history の入口。AI summary / artifact 詳細は BacktestDetail へ送る。
+- BacktestDetail: 個別 report の AI summary、artifact metadata summary、path 系値を非表示化した raw JSON、absence explanation を表示する。
+- ApplicationDetail: report history の入口。AI summary / artifact 詳細は BacktestDetail へ送り、report row に artifact path は表示しない。
 - BacktestComparisonDetail: 保存済み pairwise comparison の再訪画面。AI summary 同士の自動比較や artifact diff は後続判断。
 - SymbolDetail: latest report / application 入口を担当し、artifact 詳細は持たせない。
 

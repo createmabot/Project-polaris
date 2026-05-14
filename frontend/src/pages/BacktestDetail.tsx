@@ -432,7 +432,45 @@ function SymbolStrategyApplicationBacklinkSection({
 
 type BacktestStrategySnapshot = NonNullable<BacktestDetailData['used_strategy']['snapshot']>;
 
-const ARTIFACT_PRIMARY_KEYS = ['kind', 'type', 'execution_id', 'path', 'summary_mode'] as const;
+const ARTIFACT_PRIMARY_KEYS = [
+  'kind',
+  'type',
+  'execution_id',
+  'path',
+  'source',
+  'summary_mode',
+  'generated_at',
+  'created_at',
+] as const;
+
+function isArtifactPathKey(key: string): boolean {
+  const normalizedKey = key.toLowerCase();
+  return normalizedKey === 'path' || normalizedKey === 'file_path' || normalizedKey === 'absolute_path' || normalizedKey.endsWith('_path');
+}
+
+function displayArtifactMetadataValue(key: string, value: unknown): string {
+  if (isArtifactPathKey(key) && typeof value === 'string' && value.trim() !== '') {
+    return '非表示（artifact path）';
+  }
+  return displayUnknown(value);
+}
+
+function sanitizeArtifactMetadataForDisplay(value: unknown, key = ''): unknown {
+  if (isArtifactPathKey(key) && typeof value === 'string' && value.trim() !== '') {
+    return '非表示（artifact path）';
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeArtifactMetadataForDisplay(item));
+  }
+  const record = asRecord(value);
+  if (!record) return value;
+  return Object.fromEntries(
+    Object.entries(record).map(([entryKey, entryValue]) => [
+      entryKey,
+      sanitizeArtifactMetadataForDisplay(entryValue, entryKey),
+    ]),
+  );
+}
 
 function buildArtifactRows(
   artifactPointer: Record<string, unknown> | null,
@@ -448,14 +486,14 @@ function buildArtifactRows(
     }
     return {
       key,
-      value: displayUnknown(artifactPointer[key]),
+      value: displayArtifactMetadataValue(key, artifactPointer[key]),
     };
   }).filter((row) => row.value !== '-');
 
   const known = new Set<string>(ARTIFACT_PRIMARY_KEYS);
   const extraRows = Object.entries(artifactPointer)
     .filter(([key, value]) => !known.has(key) && (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'))
-    .map(([key, value]) => ({ key, value: displayUnknown(value) }));
+    .map(([key, value]) => ({ key, value: displayArtifactMetadataValue(key, value) }));
 
   return [...rows, ...extraRows];
 }
@@ -468,15 +506,16 @@ function ArtifactPointerPanel({
   resultSummary: Record<string, unknown> | null;
 }) {
   const artifactRows = buildArtifactRows(artifactPointer, resultSummary);
+  const sanitizedArtifactPointer = sanitizeArtifactMetadataForDisplay(artifactPointer);
 
   return (
     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
       <strong className="text-sm text-slate-900">artifact_pointer</strong>
       <InlineNotice tone="info" className="my-3">
-        internal backtest の artifact pointer を metadata として表示します。artifact file の実体読込、download、diff は行いません。
+        internal backtest の artifact pointer を metadata として表示します。artifact path は非表示化し、artifact file の実体読込、download、diff は行いません。
       </InlineNotice>
       {!artifactPointer ? (
-        <p className="m-0 text-sm text-slate-600">artifact は未生成、または strategy snapshot に保存されていません。</p>
+        <p className="m-0 text-sm text-slate-600">artifact metadata は未生成、または strategy snapshot に保存されていません。</p>
       ) : (
         <>
           {artifactRows.length > 0 ? (
@@ -497,9 +536,9 @@ function ArtifactPointerPanel({
             <p className="m-0 text-sm text-slate-600">表示できる代表 field はありません。raw JSON を確認してください。</p>
           )}
           <p className="mb-0 mt-3 text-sm text-slate-600">
-            raw artifact JSON は保存済み pointer metadata の確認用です。file 内容の読み込み、download、JSON diff は後続判断です。
+            raw artifact JSON は保存済み pointer metadata の確認用です。path 系 metadata は非表示化し、file 内容の読み込み、download、JSON diff は後続判断です。
           </p>
-          <JsonBlock value={artifactPointer} title="raw artifact JSON" className="mt-3" />
+          <JsonBlock value={sanitizedArtifactPointer} title="raw artifact JSON" className="mt-3" />
         </>
       )}
     </div>

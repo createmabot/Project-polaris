@@ -11,8 +11,8 @@
 
 現行で行うこと:
 
-- BacktestDetail で artifact pointer metadata summary を確認する。
-- BacktestDetail で raw artifact JSON を保存済み pointer metadata として確認する。
+- BacktestDetail で artifact pointer metadata summary を確認する。path 系 metadata は非表示または sanitized 表示として扱う。
+- BacktestDetail で raw artifact JSON を保存済み pointer metadata として確認する。raw JSON でも path 系値は非表示または sanitized 表示として扱う。
 - artifact pointer がない場合は absence explanation として扱う。
 - ApplicationDetail / SymbolDetail からは BacktestDetail に遷移して詳細を確認する。
 
@@ -39,6 +39,8 @@ UI / docs / PR に表示してよいもの:
 - report / execution と紐づく safe な識別子
 
 `path` は内部参照として保存されていても、絶対 local path や file system structure をそのまま表示しない。必要な場合は論理参照または sanitized 表示に限定する。
+
+ApplicationDetail は report history の入口であり、report row に artifact path を表示しない。artifact metadata の詳細確認は BacktestDetail に送る。
 
 ## 4. 表示してはいけない情報
 
@@ -100,8 +102,8 @@ artifact diff / JSON diff は後続判断である。
 
 ## 8. 画面別確認
 
-- BacktestDetail: artifact pointer metadata summary、raw JSON、absence explanation を確認する。
-- ApplicationDetail: report history の入口として使い、artifact 詳細は BacktestDetail で確認する。
+- BacktestDetail: artifact pointer metadata summary、path 系値を非表示化した raw JSON、absence explanation を確認する。
+- ApplicationDetail: report history の入口として使い、artifact path は report row に出さず、artifact 詳細は BacktestDetail で確認する。
 - BacktestComparisonDetail: saved comparison の再訪画面として確認し、artifact diff は期待しない。
 - SymbolDetail: latest report / application 入口として確認し、artifact 詳細は期待しない。
 
