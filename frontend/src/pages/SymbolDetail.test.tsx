@@ -20,7 +20,7 @@ vi.mock('../api/client', () => ({
   postApi: vi.fn(async () => ({})),
 }));
 
-import SymbolDetail from './SymbolDetail';
+import SymbolDetail, { readCsvFileForImport } from './SymbolDetail';
 
 const sideRailHomeFixture = {
   market_overview: { indices: [], fx: [], sectors: [] },
@@ -561,6 +561,9 @@ describe('SymbolDetail', () => {
     expect(html).toContain('href="/symbol-strategy-applications/application_1#runs"');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#reports"');
     expect(html).toContain('TradingView CSVを取り込む');
+    expect(html).toContain('CSVファイル');
+    expect(html).toContain('accept=".csv,text/csv,text/plain"');
+    expect(html).toContain('ファイルを選ぶとCSVテキスト欄に読み込みます。');
     expect(html).toContain('CSVテキスト');
     expect(html).toContain('CSV取込を実行');
     expect(html).toContain('内部バックテスト');
@@ -690,5 +693,30 @@ describe('SymbolDetail', () => {
     expect(html).toContain('news 0 / disclosure 0 / earnings 0');
     expect(html).toContain('参照情報は0件です。');
     expect(html).toContain('関連参照情報を再取得');
+  });
+
+  it('reads selected csv file text for the existing text import payload', async () => {
+    const file = {
+      name: 'tradingview-export.csv',
+      text: vi.fn(async () => 'Net Profit,Total Closed Trades\n100,1'),
+    };
+
+    await expect(readCsvFileForImport(file)).resolves.toEqual({
+      fileName: 'tradingview-export.csv',
+      csvText: 'Net Profit,Total Closed Trades\n100,1',
+    });
+    expect(file.text).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a safe file name when selected csv file has no name', async () => {
+    const file = {
+      name: '',
+      text: vi.fn(async () => 'csv body'),
+    };
+
+    await expect(readCsvFileForImport(file)).resolves.toEqual({
+      fileName: 'tradingview.csv',
+      csvText: 'csv body',
+    });
   });
 });
