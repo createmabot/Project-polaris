@@ -343,7 +343,7 @@ vi.mock('../src/references/collector', () => ({
   referenceCollector: {
     collectForSymbol: async () => {
       if (runtime.referenceCollectMode === 'throw') {
-        throw new Error('provider failed at https://secret.example.test/token with stack trace');
+        throw new Error('provider diagnostics at https://provider-error.example.test/failure with stack details');
       }
       const sourceUrl = runtime.referenceCollectMode === 'duplicate'
         ? 'https://tdnet.example.test/ref-1.pdf'
@@ -685,8 +685,9 @@ describe('symbol ai-summary routes', () => {
       code: 'REFERENCE_REFRESH_FAILED',
       message: 'Related reference refresh failed. Please try again later.',
     });
-    expect(res.body).not.toContain('secret.example.test');
-    expect(res.body).not.toContain('stack trace');
+    expect(res.body).not.toContain('provider-error.example.test');
+    expect(res.body).not.toContain('provider diagnostics');
+    expect(res.body).not.toContain('stack details');
     expect(runtime.aiJobs[0]).toMatchObject({
       jobType: 'collect_references_for_symbol',
       status: 'failed',

@@ -9,7 +9,6 @@ import {
   normalizeInsufficientContext,
   withNormalizedInsufficientContext,
 } from '../ai/insufficient-context';
-import { buildDedupeKey, referenceCollector } from '../references/collector';
 
 type JsonObject = Record<string, unknown>;
 type SymbolSummaryScope = 'thesis' | 'latest';
@@ -340,6 +339,7 @@ async function collectAndSaveReferencesForSymbol(symbol: {
   displayName: string | null;
   tradingviewSymbol: string | null;
 }): Promise<SymbolReferenceRefreshResult> {
+  const { buildDedupeKey, referenceCollector } = await import('../references/collector.js');
   const collected = await referenceCollector.collectForSymbol({
     symbolId: symbol.id,
     symbolCode: symbol.symbolCode ?? symbol.symbol,
