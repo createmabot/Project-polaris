@@ -28,7 +28,9 @@
 1. TradingView で strategy を実行する。
 2. Strategy Report / Strategy Tester を開く。
 3. Performance Summary または List of Trades を CSV export する。
-4. 北極星の `/strategy-lab` または `/backtests/:backtestId` から CSV import を実行する。
+4. 北極星の `/strategy-lab`、`/backtests/:backtestId`、または SymbolDetail の保存済み application から CSV import を実行する。
+   - SymbolDetail では CSVファイルを選択して読み込むか、従来どおり CSVテキスト欄へ貼り付ける。
+   - ファイル選択時も frontend でテキスト読込し、既存 text-based API に送信する。multipart upload ではない。
 5. Backtest Detail で `latest_import`、`imports`、主要指標、parse status を確認する。
 6. parsed import が 1 件以上あれば AI summary、2 件以上あれば comparison を確認する。
 

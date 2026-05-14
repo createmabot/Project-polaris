@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -83,6 +83,11 @@ const LABELS = {
   runCount: 'run count',
   csvImport: 'CSV取込',
   csvImportTitle: 'TradingView CSVを取り込む',
+  csvFile: 'CSVファイル',
+  csvFileHelp: 'ファイルを選ぶとCSVテキスト欄に読み込みます。手入力も引き続き利用できます。',
+  csvFileSelected: '選択中ファイル',
+  csvFileReading: 'CSVファイルを読み込み中...',
+  csvFileReadError: 'CSVファイルを読み込めませんでした。ファイルを確認するか、CSVテキスト欄へ貼り付けてください。',
   csvFileName: 'ファイル名',
   csvText: 'CSVテキスト',
   runCsvImport: 'CSV取込を実行',
@@ -291,6 +296,13 @@ type CsvImportMessage = {
   type: 'success' | 'warning';
   text: string;
 };
+
+export async function readCsvFileForImport(file: Pick<File, 'name' | 'text'>): Promise<{ fileName: string; csvText: string }> {
+  return {
+    fileName: file.name || 'tradingview.csv',
+    csvText: await file.text(),
+  };
+}
 
 type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 type ApplicationReportFilter = 'all' | 'with_reports' | 'without_reports';
@@ -664,6 +676,9 @@ function SavedApplicationRow({
 }) {
   const [fileName, setFileName] = useState('tradingview.csv');
   const [csvText, setCsvText] = useState('');
+  const [selectedCsvFileName, setSelectedCsvFileName] = useState<string | null>(null);
+  const [isReadingCsvFile, setIsReadingCsvFile] = useState(false);
+  const [csvFileReadError, setCsvFileReadError] = useState<string | null>(null);
   const [isImportingCsv, setIsImportingCsv] = useState(false);
   const [csvImportMessage, setCsvImportMessage] = useState<CsvImportMessage | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
@@ -707,6 +722,7 @@ function SavedApplicationRow({
         setCsvImportMessage({ type: 'success', text: LABELS.csvImportSuccess });
       }
       setCsvText('');
+      setSelectedCsvFileName(null);
       try {
         await mutateApplications();
       } catch {
@@ -716,6 +732,27 @@ function SavedApplicationRow({
       setCsvImportError(getErrorMessage(error, LABELS.csvImportError));
     } finally {
       setIsImportingCsv(false);
+    }
+  };
+
+  const handleCsvFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    setIsReadingCsvFile(true);
+    setCsvFileReadError(null);
+    setCsvImportMessage(null);
+    setCsvImportError(null);
+    setSelectedCsvFileName(file.name || null);
+    try {
+      const result = await readCsvFileForImport(file);
+      setFileName(result.fileName);
+      setCsvText(result.csvText);
+    } catch {
+      setCsvFileReadError(LABELS.csvFileReadError);
+    } finally {
+      setIsReadingCsvFile(false);
+      event.target.value = '';
     }
   };
 
@@ -814,6 +851,26 @@ function SavedApplicationRow({
         <h5 className="text-sm font-semibold text-slate-900">{LABELS.csvImportTitle}</h5>
         <div className="mt-3 grid gap-3">
           <label className="grid gap-1 text-sm text-slate-700">
+            <span className="font-medium">{LABELS.csvFile}</span>
+            <input
+              type="file"
+              accept=".csv,text/csv,text/plain"
+              onChange={handleCsvFileChange}
+              disabled={isReadingCsvFile || isImportingCsv}
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+            />
+            <span className="text-xs text-slate-500">{LABELS.csvFileHelp}</span>
+          </label>
+          {selectedCsvFileName ? (
+            <p className="text-sm text-slate-600">
+              {LABELS.csvFileSelected}: <code>{selectedCsvFileName}</code>
+            </p>
+          ) : null}
+          {isReadingCsvFile ? <p className="text-sm text-slate-600">{LABELS.csvFileReading}</p> : null}
+          {csvFileReadError ? (
+            <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{csvFileReadError}</p>
+          ) : null}
+          <label className="grid gap-1 text-sm text-slate-700">
             <span className="font-medium">{LABELS.csvFileName}</span>
             <input
               type="text"
@@ -837,7 +894,7 @@ function SavedApplicationRow({
           <button
             type="button"
             onClick={importCsv}
-            disabled={isImportingCsv || !fileName.trim() || !csvText.trim()}
+            disabled={isImportingCsv || isReadingCsvFile || !fileName.trim() || !csvText.trim()}
             className="rounded-md bg-sky-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
           >
             {isImportingCsv ? LABELS.csvImporting : LABELS.runCsvImport}
