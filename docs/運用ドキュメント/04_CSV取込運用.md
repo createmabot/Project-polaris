@@ -39,7 +39,9 @@
 - `parsed_summary` に主要指標が入っている
 - import 履歴に新しい行が追加されている
 - Backtest Detail の主要指標が表示される
-- CSV import report 系では、parsed report 作成直後に Backtest AI summary auto enqueue の対象になる
+- CSV import parsed report 作成直後の Backtest AI summary auto enqueue は phase 1 対象である
+- direct CSV import route と application 起点 CSV import route の両方が対象である
+- route 別の詳細確認は `docs/運用ドキュメント/08_AI_summary自動生成運用.md` を参照する
 
 ## 6. 失敗時の確認
 
@@ -69,3 +71,4 @@
 - `docs/walkthrough.md`
 - `docs/仕様書/08_Backtest_Report仕様.md`
 - `docs/運用ドキュメント/05_AI_provider運用.md`
+- `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
