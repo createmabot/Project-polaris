@@ -10,6 +10,7 @@ docs の読み順:
 - 開発・確認・運用: `docs/運用ドキュメント/00_開発者向け入口.md`
 - 作業進捗と残課題: `docs/作業進捗管理/00_現在地.md`
 - 動作確認・受け入れ確認: `docs/walkthrough.md`
+- Post-P3 release acceptance: `docs/運用ドキュメント/10_release_acceptance_checklist.md`
 
 ## 技術スタック
 - Node.js 22

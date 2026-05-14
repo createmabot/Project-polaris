@@ -188,4 +188,5 @@ provider cost / latency policy:
 - `docs/運用ドキュメント/05_AI_provider運用.md`
 - `docs/運用ドキュメント/04_CSV取込運用.md`
 - `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md`
+- `docs/運用ドキュメント/10_release_acceptance_checklist.md`
 - `docs/walkthrough.md`
