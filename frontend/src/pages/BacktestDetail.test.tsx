@@ -637,6 +637,15 @@ describe('BacktestDetail', () => {
               profit_factor: 1.42,
               win_rate: 48.5,
             },
+            ai_review: {
+              summary_id: 'sum-current',
+              title: 'CSV import AI summary',
+              body_markdown: 'CSV import summary says external validation risk is low.',
+              structured_json: null,
+              generated_at: '2026-01-04T00:00:00.000Z',
+              status: 'available',
+              insufficient_context: false,
+            },
           },
           related_reports: [
             {
@@ -656,6 +665,15 @@ describe('BacktestDetail', () => {
                 max_drawdown_percent: -4.2,
                 profit_factor: 1.8,
                 win_rate: 55,
+              },
+              ai_review: {
+                summary_id: 'sum-related',
+                title: 'Internal backtest AI summary',
+                body_markdown: 'Internal summary says engine result has a stronger simulated profile.',
+                structured_json: null,
+                generated_at: '2026-01-05T00:00:00.000Z',
+                status: 'available',
+                insufficient_context: false,
               },
             },
           ],
@@ -699,6 +717,14 @@ describe('BacktestDetail', () => {
     expect(html).toContain('120');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('12.3');
+    expect(html).toContain('AI summary 横並び確認');
+    expect(html).toContain('保存済み AI summary を read-only に並べます');
+    expect(html).toContain('current report AI summary');
+    expect(html).toContain('related report AI summary');
+    expect(html).toContain('CSV import AI summary');
+    expect(html).toContain('Internal backtest AI summary');
+    expect(html).toContain('CSV import summary says external validation risk is low.');
+    expect(html).toContain('Internal summary says engine result has a stronger simulated profile.');
   });
 
   it('renders internal backtest report without imports', () => {

@@ -25,7 +25,8 @@
 
 - CSV import report と internal backtest report の本格比較 UX を判断する。
 - metrics normalization table は初回候補にしないが、比較要件が固まった場合に再検討する。
-- AI summary 同士の比較 UX は後続判断とする。
+- AI summary comparison UX phase 2 は、既存 summary を read-only に並べる補助までに限定する。
+- 本格 AI summary comparison、AI による summary 同士の比較文生成、comparison entity 拡張は後続判断とする。
 - artifact metadata / retention / file access boundary の設計方針と UI path 非表示は完了済み。file access phase 1 は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定する。
 - metadata schema 拡張、download permission boundary、retention job 設計、artifact diff UX は後続判断とする。
 - arbitrary artifact file read、download、diff、JSON diff、retention job、cleanup job、hard delete、signed URL / file token、backend proxy、permission boundary 本格実装、audit log 本格化は未実装として残す。
@@ -34,7 +35,8 @@
 
 - display-triggered enqueue は現行では採用しない。
 - batch / scheduled job、retry policy、polling / live status update、cost cap、rate limit、provider opt-in 条件は後続判断とする。
-- AI summary comparison UX、artifact metadata schema 拡張、artifact download permission boundary は後続判断とする。
+- missing / failed / stale summary は provider 再生成や polling ではなく、read-only status / note と手動生成導線で扱う。
+- AI summary 自動比較生成、artifact metadata schema 拡張、artifact download permission boundary は後続判断とする。
 - provider 生エラー、raw prompt、secret、local path を UI / docs / PR に出さない運用を継続する。
 
 ## 6. Testing / CI

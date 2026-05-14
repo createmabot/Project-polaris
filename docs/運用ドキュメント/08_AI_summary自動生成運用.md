@@ -22,7 +22,8 @@ auto enqueue 対象:
 - batch / scheduled enqueue。
 - failed job auto retry。
 - polling / live update。
-- AI summary 同士の比較。
+- AI summary 同士の自動比較生成。
+- 本格 AI summary comparison / artifact diff。
 - artifact diff / download。
 
 ## 3. 確認する保存先
@@ -42,6 +43,7 @@ DB / job:
 - BacktestDetail が受け取る AI summary 状態は `available` / `unavailable` のみであり、未生成・queued・running・failed は `unavailable` として見える場合がある。
 - BacktestDetail は polling / live update を行わない。必要に応じて手動再読み込みで確認する。
 - ApplicationDetail は report history の入口であり、report row で AI summary status を表示しない。本文や artifact metadata は BacktestDetail で確認する。
+- AI summary comparison UX phase 2 では、BacktestDetail が同一 application 内の current / related report の既存 summary を read-only に並べる。missing / failed / stale は provider 再生成や polling ではなく、status / note と既存 manual generate 導線で扱う。
 
 Prisma Studio / log:
 
@@ -136,7 +138,8 @@ UI 上で見せる範囲:
 - BacktestDetail は生成済み summary があれば read-only 表示する。
 - 未生成・queued・running・failed は `unavailable` として見える場合がある。
 - failed の場合も、既存の手動生成 / 再生成導線に進める。
-- failed job auto retry、polling、live update、表示起点 enqueue は行わない。
+- stale と判断できる場合も、read-only note として扱い、表示起点で provider 再生成しない。
+- failed job auto retry、polling、live update、表示起点 enqueue、AI summary 自動比較生成は行わない。
 
 ## 10. 関連 docs
 

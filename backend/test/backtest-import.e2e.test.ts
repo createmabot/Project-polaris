@@ -696,6 +696,26 @@ describe('backtest import vertical slice', () => {
       createdAt: new Date('2026-05-02T00:00:00.000Z'),
       updatedAt: new Date('2026-05-02T00:00:00.000Z'),
     });
+    runtime.aiSummaries.set('sum-bt-ssa', {
+      id: 'sum-bt-ssa',
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest',
+      targetEntityId: 'bt-ssa',
+      title: 'CSV summary',
+      bodyMarkdown: 'CSV report summary body',
+      generatedAt: new Date('2026-05-03T00:00:00.000Z'),
+      createdAt: new Date('2026-05-03T00:00:00.000Z'),
+    });
+    runtime.aiSummaries.set('sum-bt-internal-related', {
+      id: 'sum-bt-internal-related',
+      summaryScope: 'backtest_review',
+      targetEntityType: 'backtest',
+      targetEntityId: 'bt-internal-related',
+      title: 'Internal summary',
+      bodyMarkdown: 'Internal report summary body',
+      generatedAt: new Date('2026-05-04T00:00:00.000Z'),
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    });
 
     const detail = await app.inject({
       method: 'GET',
@@ -747,10 +767,28 @@ describe('backtest import vertical slice', () => {
           profit_factor: 1.8,
           win_rate: 55,
         },
+        ai_review: {
+          summary_id: 'sum-bt-internal-related',
+          title: 'Internal summary',
+          body_markdown: 'Internal report summary body',
+          generated_at: '2026-05-04T00:00:00.000Z',
+          structured_json: null,
+          status: 'available',
+          insufficient_context: false,
+        },
       },
     ]);
     expect(detail.json().data.symbol_strategy_application.current_report).toMatchObject({
       backtest_id: 'bt-ssa',
+      ai_review: {
+        summary_id: 'sum-bt-ssa',
+        title: 'CSV summary',
+        body_markdown: 'CSV report summary body',
+        generated_at: '2026-05-03T00:00:00.000Z',
+        structured_json: null,
+        status: 'available',
+        insufficient_context: false,
+      },
       metrics: {
         period_from: '2024-01-01',
         period_to: '2025-12-31',

@@ -916,6 +916,16 @@ export type BacktestImportData = {
   };
 };
 
+export type BacktestAiReviewData = {
+  summary_id: string | null;
+  title: string | null;
+  body_markdown: string | null;
+  structured_json: Record<string, unknown> | null;
+  generated_at: string | null;
+  status: 'available' | 'unavailable';
+  insufficient_context: boolean;
+};
+
 export type BacktestDetailData = {
   backtest: BacktestCreateData['backtest'];
   used_strategy: {
@@ -940,15 +950,7 @@ export type BacktestDetailData = {
   };
   latest_import: BacktestImportData['import'] | null;
   imports: Array<BacktestImportData['import']>;
-  ai_review: {
-    summary_id: string | null;
-    title: string | null;
-    body_markdown: string | null;
-    structured_json: Record<string, unknown> | null;
-    generated_at: string | null;
-    status: 'available' | 'unavailable';
-    insufficient_context: boolean;
-  };
+  ai_review: BacktestAiReviewData;
   symbol_strategy_application: {
     application_id: string;
     application_status: string;
@@ -987,6 +989,7 @@ export type BacktestDetailData = {
       run_status: string;
       updated_at: string;
       metrics: BacktestRelatedReportMetrics;
+      ai_review?: BacktestAiReviewData;
     } | null;
     related_reports?: Array<{
       backtest_id: string;
@@ -997,6 +1000,7 @@ export type BacktestDetailData = {
       run_status: string;
       updated_at: string;
       metrics?: BacktestRelatedReportMetrics;
+      ai_review?: BacktestAiReviewData;
     }>;
   } | null;
 };

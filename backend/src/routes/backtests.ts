@@ -442,7 +442,15 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
     },
   });
 
-  const toRelatedReport = (relatedRun: (typeof relatedRuns)[number]) => {
+  const resolveRunAiReview = async (targetRun: typeof run | (typeof relatedRuns)[number]) => {
+    if (!targetRun.backtest) return toBacktestAiReviewView(null);
+    return resolveLatestBacktestAiReview(
+      targetRun.backtest.id,
+      targetRun.backtest.imports.map((item) => item.id),
+    );
+  };
+
+  const toRelatedReport = async (relatedRun: (typeof relatedRuns)[number]) => {
     if (!relatedRun.backtest) return null;
     return {
       backtest_id: relatedRun.backtest.id,
@@ -453,8 +461,15 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       run_status: relatedRun.status,
       updated_at: relatedRun.backtest.updatedAt,
       metrics: buildReportMetricsSummary(relatedRun.backtest),
+      ai_review: await resolveRunAiReview(relatedRun),
     };
   };
+
+  const relatedReports = await Promise.all(
+    relatedRuns
+      .filter((relatedRun) => relatedRun.backtest && relatedRun.backtestId !== backtestId)
+      .map(toRelatedReport),
+  );
 
   return {
     application_id: run.application.id,
@@ -495,12 +510,11 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
           run_status: run.status,
           updated_at: run.backtest.updatedAt,
           metrics: buildReportMetricsSummary(run.backtest),
+          ai_review: await resolveRunAiReview(run),
         }
       : null,
-    related_reports: relatedRuns
-      .filter((relatedRun) => relatedRun.backtest && relatedRun.backtestId !== backtestId)
-      .map(toRelatedReport)
-      .filter((report): report is NonNullable<ReturnType<typeof toRelatedReport>> => report !== null),
+    related_reports: relatedReports
+      .filter((report): report is NonNullable<Awaited<ReturnType<typeof toRelatedReport>>> => report !== null),
   };
 }
 
