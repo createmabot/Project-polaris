@@ -6,11 +6,18 @@ type AiJobRow = {
   jobType: string;
   targetEntityType: string;
   targetEntityId: string;
+  requestPayload?: Record<string, unknown> | null;
   status: string;
   errorMessage?: string | null;
   responsePayload?: Record<string, unknown> | null;
   modelName?: string | null;
   promptVersion?: string | null;
+  startedAt?: Date | null;
+  completedAt?: Date | null;
+  durationMs?: number | null;
+  estimatedCostUsd?: number | null;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 type AiSummaryRow = {
@@ -160,19 +167,40 @@ vi.mock('../src/db', () => {
           jobType: data.jobType,
           targetEntityType: data.targetEntityType,
           targetEntityId: data.targetEntityId,
+          requestPayload: data.requestPayload ?? null,
           status: data.status ?? 'queued',
           modelName: data.modelName ?? null,
           promptVersion: data.promptVersion ?? null,
           responsePayload: data.responsePayload ?? null,
           errorMessage: null,
+          startedAt: data.startedAt ?? null,
+          completedAt: data.completedAt ?? null,
+          durationMs: data.durationMs ?? null,
+          estimatedCostUsd: data.estimatedCostUsd ?? null,
+          createdAt: new Date(Date.now() + runtime.nextJobId),
+          updatedAt: new Date(Date.now() + runtime.nextJobId),
         };
         runtime.aiJobs.push(row);
         return row;
       },
+      findFirst: async ({ where }: any) => {
+        const rows = runtime.aiJobs
+          .filter((job) => {
+            if (where?.jobType && job.jobType !== where.jobType) return false;
+            if (where?.targetEntityType && job.targetEntityType !== where.targetEntityType) return false;
+            if (where?.targetEntityId && job.targetEntityId !== where.targetEntityId) return false;
+            if (where?.status?.in && !where.status.in.includes(job.status)) return false;
+            const expectedHash = where?.requestPayload?.equals;
+            if (expectedHash && job.requestPayload?.input_snapshot_hash !== expectedHash) return false;
+            return true;
+          })
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return rows[0] ?? null;
+      },
       update: async ({ where, data }: any) => {
         const row = runtime.aiJobs.find((job) => job.id === where.id);
         if (!row) throw new Error(`job not found: ${where.id}`);
-        Object.assign(row, data);
+        Object.assign(row, data, { updatedAt: new Date(Date.now() + runtime.nextJobId) });
         return row;
       },
     },
@@ -473,6 +501,51 @@ describe('backtest ai-summary routes', () => {
       title: 'existing review',
       summary_id: 'sum-existing',
     });
+
+    await app.close();
+  });
+
+  it('returns latest AI summary job status on backtest detail GET', async () => {
+    runtime.aiJobs.push({
+      id: 'job-failed',
+      jobType: 'generate_backtest_review_summary',
+      targetEntityType: 'backtest',
+      targetEntityId: 'bt-1',
+      requestPayload: {
+        trigger: 'csv_import_auto',
+        input_snapshot_hash: 'hash-1',
+      },
+      status: 'failed',
+      errorMessage: 'provider failed token=<redact-me>',
+      responsePayload: null,
+      modelName: null,
+      promptVersion: null,
+      startedAt: new Date('2026-04-22T01:00:00.000Z'),
+      completedAt: new Date('2026-04-22T01:00:02.000Z'),
+      durationMs: 2000,
+      estimatedCostUsd: 0,
+      createdAt: new Date('2026-04-22T01:00:00.000Z'),
+      updatedAt: new Date('2026-04-22T01:00:02.000Z'),
+    });
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/backtests/bt-1',
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.latest_ai_summary_job).toMatchObject({
+      job_id: 'job-failed',
+      status: 'failed',
+      trigger: 'csv_import_auto',
+      error_message: 'provider failed token=[REDACTED]',
+      duration_ms: 2000,
+      estimated_cost_usd: 0,
+      created_at: '2026-04-22T01:00:00.000Z',
+      completed_at: '2026-04-22T01:00:02.000Z',
+    });
+    expect(JSON.stringify(res.json().data.latest_ai_summary_job)).not.toContain('<redact-me>');
 
     await app.close();
   });

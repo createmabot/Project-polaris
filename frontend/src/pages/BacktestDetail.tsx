@@ -79,6 +79,21 @@ function aiReviewAutoEnqueueDescription(isInternalBacktestReport: boolean): stri
   return 'CSV import report は、parse_status=parsed になった直後に AI summary 自動生成の対象です。parse failed import は対象外です。';
 }
 
+function aiSummaryJobTriggerLabel(trigger: string | null | undefined): string {
+  if (trigger === 'manual') return 'manual';
+  if (trigger === 'csv_import_auto') return 'CSV import auto';
+  if (trigger === 'internal_backtest_report_auto') return 'internal backtest report auto';
+  return trigger || '-';
+}
+
+function aiSummaryJobStatusNote(status: string | null | undefined): string {
+  if (status === 'queued') return 'AI summary job は queued です。必要なら少し待ってから手動再読み込みしてください。';
+  if (status === 'running') return 'AI summary job は running です。この画面では live update は行いません。';
+  if (status === 'succeeded') return '最新 AI summary job は succeeded です。保存済み summary がある場合は下に表示されます。';
+  if (status === 'failed') return '最新 AI summary job は failed です。自動 retry は行いません。必要な場合は下の手動生成ボタンで再試行してください。';
+  return '最新 AI summary job はまだありません。';
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -713,6 +728,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const snapshot = usedStrategy.snapshot;
   const isInternalBacktestReport =
     data.backtest.execution_source === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest';
+  const latestAiSummaryJob = data.latest_ai_summary_job ?? null;
   const symbolStrategyApplication = data.symbol_strategy_application;
   const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
   const strategyVersionDetailPath =
@@ -1035,9 +1051,30 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           <p>{aiReviewInputDescription(isInternalBacktestReport)}</p>
           <p>{aiReviewAutoEnqueueDescription(isInternalBacktestReport)}</p>
           <p>
-            この画面は polling / live update を行いません。この画面が受け取る AI summary 状態は available / unavailable のみのため、未生成・queued・running・failed は unavailable として見える場合があります。
+            この画面は polling / live update を行いません。job 状態は手動再読み込み時点の read-only 表示です。
           </p>
         </InlineNotice>
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <div className="mb-2 font-semibold text-slate-900">latest AI summary job</div>
+          {latestAiSummaryJob ? (
+            <>
+              <KeyValueList className="gap-x-4 gap-y-1 sm:grid-cols-2">
+                <KeyValueRow label="status"><StatusBadge status={latestAiSummaryJob.status} /></KeyValueRow>
+                <KeyValueRow label="trigger">{aiSummaryJobTriggerLabel(latestAiSummaryJob.trigger)}</KeyValueRow>
+                <KeyValueRow label="created">{formatDateTime(latestAiSummaryJob.created_at)}</KeyValueRow>
+                <KeyValueRow label="completed">{formatDateTime(latestAiSummaryJob.completed_at)}</KeyValueRow>
+              </KeyValueList>
+              <p className="mb-0 mt-2 text-slate-600">{aiSummaryJobStatusNote(latestAiSummaryJob.status)}</p>
+              {latestAiSummaryJob.status === 'failed' ? (
+                <p className="mb-0 mt-2 text-slate-600">
+                  失敗理由は provider error の詳細を出しすぎない範囲で扱います。必要なら手動生成で retry してください。
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="mb-0 text-slate-600">{aiSummaryJobStatusNote(null)}</p>
+          )}
+        </div>
         {data.ai_review.status === 'available' ? (
           <>
             {data.ai_review.title && (

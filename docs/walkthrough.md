@@ -105,8 +105,12 @@ pnpm run dev
    - `status=available|unavailable`
    - `title`
    - `body_markdown`
-5. `BacktestDetail` は polling / live update を行わず、未生成・queued・running・failed が `unavailable` として見える場合があることを確認する。
-6. failed の場合も、既存の `AI総評を生成` button から manual generation / regeneration に進めることを確認する。
+5. `GET /api/backtests/:backtestId` の `latest_ai_summary_job` を確認する。
+   - `status=queued|running|succeeded|failed`
+   - `trigger`
+   - `created_at` / `completed_at`
+6. `BacktestDetail` は latest job status を read-only 表示するが、polling / live update を行わず、手動再読み込み時点の snapshot として扱うことを確認する。
+7. failed の場合も、自動 retry は行わず、既存の `AI総評を生成` button から manual generation / regeneration に進めることを確認する。
 
 ## 10. inline comparison
 
@@ -117,7 +121,7 @@ pnpm run dev
 
 1. `SymbolDetail` から application reports へ遷移する。
 2. metrics 欠損、AI summary / artifact 詳細確認先、importless report の補足が report 履歴の helper として表示されることを確認する。
-3. report row には AI summary status を追加せず、`BacktestDetail` で `available` / `unavailable` と本文を確認する説明になっていることを確認する。
+3. report row には AI summary job status を追加せず、`BacktestDetail` で `available` / `unavailable`、latest job status、本文を確認する説明になっていることを確認する。
 4. report 一覧、BacktestDetail へのリンク、filter、pagination の挙動が変わっていないことを確認する。
 
 ## 11. saved pairwise comparison

@@ -926,6 +926,18 @@ export type BacktestAiReviewData = {
   insufficient_context: boolean;
 };
 
+export type BacktestAiSummaryJobData = {
+  job_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | string;
+  trigger: string | null;
+  error_message: string | null;
+  duration_ms: number | null;
+  estimated_cost_usd: number | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
+
 export type BacktestDetailData = {
   backtest: BacktestCreateData['backtest'];
   used_strategy: {
@@ -951,6 +963,7 @@ export type BacktestDetailData = {
   latest_import: BacktestImportData['import'] | null;
   imports: Array<BacktestImportData['import']>;
   ai_review: BacktestAiReviewData;
+  latest_ai_summary_job?: BacktestAiSummaryJobData | null;
   symbol_strategy_application: {
     application_id: string;
     application_status: string;

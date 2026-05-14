@@ -146,7 +146,9 @@ describe('BacktestDetail', () => {
     expect(html).toContain('AI 総評');
     expect(html).toContain('CSV import / TradingView report の AI summary input は BacktestImport parsed summary、comparison diff、TradingView report 文脈が中心です。');
     expect(html).toContain('CSV import report は、parse_status=parsed になった直後に AI summary 自動生成の対象です。parse failed import は対象外です。');
-    expect(html).toContain('未生成・queued・running・failed は unavailable として見える場合があります。');
+    expect(html).toContain('job 状態は手動再読み込み時点の read-only 表示です。');
+    expect(html).toContain('latest AI summary job');
+    expect(html).toContain('最新 AI summary job はまだありません。');
     expect(html).toContain('### 結論');
     expect(html).toContain('### 良い点');
     expect(html).toContain('### 懸念点');
@@ -211,6 +213,17 @@ describe('BacktestDetail', () => {
           status: 'unavailable',
           insufficient_context: true,
         },
+        latest_ai_summary_job: {
+          job_id: 'job-failed',
+          status: 'failed',
+          trigger: 'csv_import_auto',
+          error_message: 'provider failed',
+          duration_ms: 2000,
+          estimated_cost_usd: 0,
+          created_at: '2026-01-02T00:00:00.000Z',
+          started_at: '2026-01-02T00:00:00.000Z',
+          completed_at: '2026-01-02T00:00:02.000Z',
+        },
         imports: [],
       },
     });
@@ -220,6 +233,10 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析エラー');
     expect(html).toContain('Missing required columns');
     expect(html).toContain('AI総評は未生成です。');
+    expect(html).toContain('latest AI summary job');
+    expect(html).toContain('CSV import auto');
+    expect(html).toContain('最新 AI summary job は failed です。自動 retry は行いません。必要な場合は下の手動生成ボタンで再試行してください。');
+    expect(html).toContain('失敗理由は provider error の詳細を出しすぎない範囲で扱います。必要なら手動生成で retry してください。');
     expect(html).toContain('自動生成が未完了、queued / running 中、または provider failure により failed job として残っている可能性があります。');
     expect(html).toContain('failed の場合も、既存の「AI総評を生成」から手動生成 / 再生成に進めます。');
     expect(html).toContain('AI総評を生成');

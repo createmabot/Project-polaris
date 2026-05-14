@@ -1,11 +1,11 @@
-# 北極星 AI summary 自動生成 phase 1 運用 runbook
+# 北極星 AI summary 自動生成 phase 1 / phase 2 運用 runbook
 
 更新日: 2026-05-15
 分類: 運用ドキュメント
 
 ## 1. 目的
 
-本資料は、Backtest AI summary auto-generation phase 1 の運用確認手順をまとめる。仕様判断は `docs/仕様書/09_AI_summary_artifact仕様.md` と `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`、完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` を参照する。
+本資料は、Backtest AI summary auto-generation phase 1 の運用確認手順と、phase 2 の latest job status visibility をまとめる。仕様判断は `docs/仕様書/09_AI_summary_artifact仕様.md` と `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`、完了整理は `docs/作業進捗管理/07_AI_summary自動生成phase1完了.md` を参照する。
 
 ## 2. phase 1 の対象
 
@@ -40,9 +40,10 @@ DB / job:
 画面:
 
 - BacktestDetail は生成済み summary を read-only 表示する。
-- BacktestDetail が受け取る AI summary 状態は `available` / `unavailable` のみであり、未生成・queued・running・failed は `unavailable` として見える場合がある。
-- BacktestDetail は polling / live update を行わない。必要に応じて手動再読み込みで確認する。
-- ApplicationDetail は report history の入口であり、report row で AI summary status を表示しない。本文や artifact metadata は BacktestDetail で確認する。
+- `GET /api/backtests/:backtestId` は `ai_review.status=available|unavailable` と、optional read-only field `latest_ai_summary_job` を返す。
+- `latest_ai_summary_job.status` は `queued`、`running`、`succeeded`、`failed` の最新 job snapshot として扱う。
+- BacktestDetail は latest job status を read-only に表示するが、polling / live update は行わない。必要に応じて手動再読み込みで確認する。
+- ApplicationDetail は report history の入口であり、report row で AI summary job status を表示しない。本文や artifact metadata は BacktestDetail で確認する。
 - AI summary comparison UX phase 2 では、BacktestDetail が同一 application 内の current / related report の既存 summary を read-only に並べる。missing / failed / stale は provider 再生成や polling ではなく、status / note と既存 manual generate 導線で扱う。
 
 Prisma Studio / log:
@@ -136,10 +137,48 @@ provider failure / timeout:
 UI 上で見せる範囲:
 
 - BacktestDetail は生成済み summary があれば read-only 表示する。
-- 未生成・queued・running・failed は `unavailable` として見える場合がある。
-- failed の場合も、既存の手動生成 / 再生成導線に進める。
+- `ai_review` は生成物の有無を `available` / `unavailable` で示す。
+- `latest_ai_summary_job` は直近 job の `queued` / `running` / `succeeded` / `failed` を read-only に示す。
+- failed の場合も、既存の手動生成 / 再生成導線に進める。failed job auto retry はしない。
 - stale と判断できる場合も、read-only note として扱い、表示起点で provider 再生成しない。
 - failed job auto retry、polling、live update、表示起点 enqueue、AI summary 自動比較生成は行わない。
+
+## 9-1. phase 2 latest job status visibility
+
+phase 2 の実装範囲:
+
+- `GET /api/backtests/:backtestId` に `latest_ai_summary_job` を optional read-only field として追加する。
+- BacktestDetail の AI 総評 section で最新 job status を最小表示する。
+- 手動生成 / 再生成 button は維持する。
+- failed job は自動 retry せず、手動生成で再試行する説明に留める。
+- ApplicationDetail report row には job status を追加しない。row が重くなり、report history の入口責務を超えるため。
+
+`latest_ai_summary_job` で返してよいもの:
+
+- `job_id`
+- `status`
+- `trigger`
+- `created_at` / `started_at` / `completed_at`
+- `duration_ms`
+- `estimated_cost_usd`
+- sanitized error summary
+
+返さないもの:
+
+- `requestPayload` 全体。
+- `responsePayload`。
+- raw prompt。
+- provider endpoint。
+- API key、token、shared secret。
+- local path。
+- stack trace。
+
+provider cost / latency policy:
+
+- `stub` と `local_llm` は既存 provider boundary を維持する。
+- `openai_api` は明示設定時のみ利用し、対象拡大、cost cap、rate limit、opt-in 条件は後続判断に残す。
+- latency は `duration_ms` の read-only visibility に留め、slow job を画面起点で再実行しない。
+- polling / live update は今回実装しない。将来実装する場合も、無制限 polling は禁止し、回数・間隔・停止条件を docs と実装で同時に固定する。
 
 ## 10. 関連 docs
 
