@@ -20,7 +20,7 @@ vi.mock('../api/client', () => ({
   postApi: vi.fn(async () => ({})),
 }));
 
-import SymbolDetail, { readCsvFileForImport } from './SymbolDetail';
+import SymbolDetail, { buildStrategySelectionListPath, readCsvFileForImport } from './SymbolDetail';
 
 const sideRailHomeFixture = {
   market_overview: { indices: [], fx: [], sectors: [] },
@@ -355,7 +355,7 @@ function getCommonSWRResult(key: string | null) {
   if (key === '/api/positions') {
     return { isLoading: false, error: null, data: sideRailPositionsFixture };
   }
-  if (key === '/api/strategies?page=1&limit=20&sort=updated_at&order=desc&status=active') {
+  if (key === '/api/strategies?page=1&limit=5&sort=updated_at&order=desc&status=active') {
     return { isLoading: false, error: null, data: strategyListFixture };
   }
   if (key === '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc') {
@@ -580,6 +580,13 @@ describe('SymbolDetail', () => {
     expect(html).toContain('検証レポートを開く');
     expect(html).toContain('既存ストラテジーを選ぶ');
     expect(html).toContain('保存すると、この銘柄のストラテジー適用として記録されます。');
+    expect(html).toContain('strategy 検索');
+    expect(html).toContain('placeholder="title を検索"');
+    expect(html).toContain('表示件数');
+    expect(html).toContain('<option value="5" selected="">5</option>');
+    expect(html).toContain('strategy 1 / 1 件を表示中 (page 1)');
+    expect(html).toContain('前へ');
+    expect(html).toContain('次へ');
     expect(html).toContain('押し目買い戦略');
     expect(html).toContain('strategy_id:');
     expect(html).not.toContain('選択中の version');
@@ -718,5 +725,14 @@ describe('SymbolDetail', () => {
       fileName: 'tradingview.csv',
       csvText: 'csv body',
     });
+  });
+
+  it('builds compact strategy selection list query with optional search', () => {
+    expect(buildStrategySelectionListPath({ q: '', page: 2, limit: 5 })).toBe(
+      '/api/strategies?page=2&limit=5&sort=updated_at&order=desc&status=active',
+    );
+    expect(buildStrategySelectionListPath({ q: ' breakout setup ', page: 1, limit: 10 })).toBe(
+      '/api/strategies?page=1&limit=10&sort=updated_at&order=desc&status=active&q=breakout+setup',
+    );
   });
 });

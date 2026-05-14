@@ -1,4 +1,4 @@
-import { type ChangeEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -25,6 +25,7 @@ import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -157,6 +158,16 @@ const LABELS = {
   saveApplyRefreshFailed: '保存しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   saveApplyDescription: '保存後に、保存済みストラテジー適用一覧へ反映します。',
   strategyList: 'ストラテジー一覧',
+  strategySearch: 'strategy 検索',
+  strategySearchPlaceholder: 'title を検索',
+  strategySearchApply: '検索',
+  strategySearchClear: 'クリア',
+  strategyLimit: '表示件数',
+  strategyResultSummary: 'strategy {shown} / {total} 件を表示中 (page {page})',
+  strategyResultSummaryFiltered: 'strategy {shown} / {total} 件を表示中 (検索: {query}, page {page})',
+  strategyPrevious: '前へ',
+  strategyNext: '次へ',
+  noFilteredStrategies: '条件に一致する active strategy はありません。',
   versionList: 'version 一覧',
   openStrategyDetail: 'StrategyDetail を開く',
   openStrategyVersionDetail: 'StrategyVersionDetail を開く',
@@ -297,11 +308,37 @@ type CsvImportMessage = {
   text: string;
 };
 
+const STRATEGY_SELECTION_LIMIT_OPTIONS = [5, 10, 20] as const;
+const DEFAULT_STRATEGY_SELECTION_LIMIT = 5;
+
 export async function readCsvFileForImport(file: Pick<File, 'name' | 'text'>): Promise<{ fileName: string; csvText: string }> {
   return {
     fileName: file.name || 'tradingview.csv',
     csvText: await file.text(),
   };
+}
+
+export function buildStrategySelectionListPath({
+  q,
+  page,
+  limit,
+}: {
+  q: string;
+  page: number;
+  limit: number;
+}): string {
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    sort: 'updated_at',
+    order: 'desc',
+    status: 'active',
+  });
+  const trimmedQuery = q.trim();
+  if (trimmedQuery) {
+    params.set('q', trimmedQuery);
+  }
+  return `/api/strategies?${params.toString()}`;
 }
 
 type ApplicationStatusFilter = 'active' | 'archived' | 'all';
@@ -1183,6 +1220,9 @@ function SavedStrategyApplicationsPanel({
   );
 }
 
+type StrategySelectionItem = StrategyListData['strategies'][number];
+type StrategyVersionSelectionItem = StrategyVersionListData['strategy_versions'][number];
+
 function StrategyApplySelectionPanel({
   symbolId,
   mutateApplications,
@@ -1190,24 +1230,29 @@ function StrategyApplySelectionPanel({
   symbolId: string;
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
-  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [strategySearchInput, setStrategySearchInput] = useState('');
+  const [strategyQuery, setStrategyQuery] = useState('');
+  const [strategyPage, setStrategyPage] = useState(1);
+  const [strategyLimit, setStrategyLimit] = useState(DEFAULT_STRATEGY_SELECTION_LIMIT);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategySelectionItem | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState<StrategyVersionSelectionItem | null>(null);
   const [isSavingApplication, setIsSavingApplication] = useState(false);
   const [saveApplicationError, setSaveApplicationError] = useState<string | null>(null);
   const [saveApplicationMessage, setSaveApplicationMessage] = useState<string | null>(null);
+  const strategyListPath = buildStrategySelectionListPath({
+    q: strategyQuery,
+    page: strategyPage,
+    limit: strategyLimit,
+  });
   const {
     data: strategyListData,
     error: strategyListError,
     isLoading: isStrategyListLoading,
-  } = useSWR<StrategyListData>(
-    '/api/strategies?page=1&limit=20&sort=updated_at&order=desc&status=active',
-    swrFetcher,
-  );
+  } = useSWR<StrategyListData>(strategyListPath, swrFetcher);
 
   const strategies = strategyListData?.strategies ?? [];
-  const selectedStrategy = selectedStrategyId
-    ? strategies.find((strategy) => strategy.id === selectedStrategyId) ?? null
-    : null;
+  const strategyPagination = strategyListData?.pagination;
+  const shownStrategyCount = strategies.length;
 
   const {
     data: versionListData,
@@ -1221,28 +1266,48 @@ function StrategyApplySelectionPanel({
   );
 
   const versions = versionListData?.strategy_versions ?? [];
-  const selectedVersion = selectedVersionId
-    ? versions.find((version) => version.id === selectedVersionId) ?? null
-    : null;
 
-  const chooseStrategy = (strategyId: string) => {
-    setSelectedStrategyId(strategyId);
-    setSelectedVersionId(null);
+  const chooseStrategy = (strategy: StrategySelectionItem) => {
+    setSelectedStrategy(strategy);
+    setSelectedVersion(null);
     setSaveApplicationError(null);
     setSaveApplicationMessage(null);
   };
 
-  const chooseVersion = (versionId: string) => {
-    setSelectedVersionId(versionId);
+  const chooseVersion = (version: StrategyVersionSelectionItem) => {
+    setSelectedVersion(version);
     setSaveApplicationError(null);
     setSaveApplicationMessage(null);
   };
 
   const clearSelection = () => {
-    setSelectedStrategyId(null);
-    setSelectedVersionId(null);
+    setSelectedStrategy(null);
+    setSelectedVersion(null);
     setSaveApplicationError(null);
   };
+
+  const submitStrategySearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStrategyQuery(strategySearchInput.trim());
+    setStrategyPage(1);
+  };
+
+  const clearStrategySearch = () => {
+    setStrategySearchInput('');
+    setStrategyQuery('');
+    setStrategyPage(1);
+  };
+
+  const changeStrategyLimit = (event: ChangeEvent<HTMLSelectElement>) => {
+    setStrategyLimit(Number(event.target.value));
+    setStrategyPage(1);
+  };
+
+  const strategySummaryLabel = (strategyQuery ? LABELS.strategyResultSummaryFiltered : LABELS.strategyResultSummary)
+    .replace('{shown}', String(shownStrategyCount))
+    .replace('{total}', String(strategyPagination?.total ?? shownStrategyCount))
+    .replace('{query}', strategyQuery)
+    .replace('{page}', String(strategyPagination?.page ?? strategyPage));
 
   const saveApplication = async () => {
     if (!selectedStrategy || !selectedVersion) {
@@ -1257,8 +1322,8 @@ function StrategyApplySelectionPanel({
         strategy_version_id: selectedVersion.id,
       });
       setSaveApplicationMessage(LABELS.saveApplySuccess);
-      setSelectedStrategyId(null);
-      setSelectedVersionId(null);
+      setSelectedStrategy(null);
+      setSelectedVersion(null);
     } catch (error) {
       setSaveApplicationError(getErrorMessage(error, 'application を保存できませんでした。'));
       setIsSavingApplication(false);
@@ -1289,36 +1354,90 @@ function StrategyApplySelectionPanel({
       ) : null}
 
       <div>
-        <h4 className="text-sm font-semibold text-slate-900">{LABELS.chooseApplyCandidate}</h4>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-slate-900">{LABELS.chooseApplyCandidate}</h4>
+            <p className="mt-1 text-xs text-slate-500">{LABELS.strategyList}</p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
+            <span>{LABELS.strategyLimit}</span>
+            <select
+              value={strategyLimit}
+              onChange={changeStrategyLimit}
+              className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-900"
+            >
+              {STRATEGY_SELECTION_LIMIT_OPTIONS.map((limit) => (
+                <option key={limit} value={limit}>{limit}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <form onSubmit={submitStrategySearch} className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="min-w-0 flex-1 text-sm font-medium text-slate-700">
+            <span>{LABELS.strategySearch}</span>
+            <input
+              type="search"
+              value={strategySearchInput}
+              onChange={(event) => setStrategySearchInput(event.target.value)}
+              placeholder={LABELS.strategySearchPlaceholder}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            />
+          </label>
+          <Button type="submit" variant="secondary" className="py-2">
+            {LABELS.strategySearchApply}
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={clearStrategySearch}
+            disabled={!strategyQuery && !strategySearchInput}
+            className="py-2"
+          >
+            {LABELS.strategySearchClear}
+          </Button>
+        </form>
         {isStrategyListLoading ? (
           <EmptyText>strategy 候補を読み込み中...</EmptyText>
         ) : strategyListError ? (
           <p className="text-sm text-rose-700">strategy 候補を取得できませんでした。</p>
         ) : strategies.length === 0 ? (
-          <EmptyText>active strategy はまだありません。</EmptyText>
+          <EmptyText>{strategyQuery ? LABELS.noFilteredStrategies : 'active strategy はまだありません。'}</EmptyText>
         ) : (
-          <div className="mt-3 grid gap-2">
-            {strategies.map((strategy) => {
-              const isSelected = selectedStrategy?.id === strategy.id;
-              return (
-                <button
-                  key={strategy.id}
-                  type="button"
-                  onClick={() => chooseStrategy(strategy.id)}
-                  className={
-                    isSelected
-                      ? 'rounded-lg border border-sky-300 bg-sky-50 p-3 text-left'
-                      : 'rounded-lg border border-slate-200 bg-slate-50 p-3 text-left'
-                  }
-                >
-                  <span className="block text-sm font-semibold text-slate-900">{strategy.title}</span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    strategy_id: {strategy.id} / status: {strategy.status} / versions: {strategy.version_count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <div className="mt-3 grid gap-2">
+              {strategies.map((strategy) => {
+                const isSelected = selectedStrategy?.id === strategy.id;
+                return (
+                  <button
+                    key={strategy.id}
+                    type="button"
+                    onClick={() => chooseStrategy(strategy)}
+                    className={
+                      isSelected
+                        ? 'rounded-lg border border-sky-300 bg-sky-50 p-3 text-left'
+                        : 'rounded-lg border border-slate-200 bg-slate-50 p-3 text-left'
+                    }
+                  >
+                    <span className="block text-sm font-semibold text-slate-900">{strategy.title}</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      strategy_id: {strategy.id} / status: {strategy.status} / versions: {strategy.version_count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <PaginationControls
+              page={strategyPagination?.page ?? strategyPage}
+              hasPrev={Boolean(strategyPagination?.has_prev)}
+              hasNext={Boolean(strategyPagination?.has_next)}
+              onPrev={() => setStrategyPage((page) => Math.max(1, page - 1))}
+              onNext={() => setStrategyPage((page) => page + 1)}
+              summaryLabel={strategySummaryLabel}
+              previousLabel={LABELS.strategyPrevious}
+              nextLabel={LABELS.strategyNext}
+              className="mt-2"
+            />
+          </>
         )}
       </div>
 
@@ -1359,7 +1478,7 @@ function StrategyApplySelectionPanel({
                   <button
                     key={version.id}
                     type="button"
-                    onClick={() => chooseVersion(version.id)}
+                    onClick={() => chooseVersion(version)}
                     className={
                       isSelected
                         ? 'rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-left'
