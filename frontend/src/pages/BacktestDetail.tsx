@@ -62,6 +62,13 @@ function aiReviewInputDescription(isInternalBacktestReport: boolean): string {
   return 'CSV import / TradingView report の AI summary input は BacktestImport parsed summary、comparison diff、TradingView report 文脈が中心です。';
 }
 
+function aiReviewAutoEnqueueDescription(isInternalBacktestReport: boolean): string {
+  if (isInternalBacktestReport) {
+    return 'internal backtest report は、新規 report conversion 完了直後に AI summary 自動生成の対象です。既存 report を返す再実行では起動しません。';
+  }
+  return 'CSV import report は、parse_status=parsed になった直後に AI summary 自動生成の対象です。parse failed import は対象外です。';
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -905,8 +912,12 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       </SectionCard>
 
       <SectionCard title="AI 総評" className="mt-4">
-        <InlineNotice tone="info" className="mb-3">
-          {aiReviewInputDescription(isInternalBacktestReport)}
+        <InlineNotice tone="info" className="mb-3 space-y-1">
+          <p>{aiReviewInputDescription(isInternalBacktestReport)}</p>
+          <p>{aiReviewAutoEnqueueDescription(isInternalBacktestReport)}</p>
+          <p>
+            この画面は polling / live update を行いません。この画面が受け取る AI summary 状態は available / unavailable のみのため、未生成・queued・running・failed は unavailable として見える場合があります。
+          </p>
         </InlineNotice>
         {data.ai_review.status === 'available' ? (
           <>
@@ -925,7 +936,10 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         ) : (
           <EmptyState title="AI総評は未生成です。">
             <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
-              現時点では自動生成せず、必要なときに手動生成します。この section は report source ごとの入力文脈を確認し、生成済み AI summary を read-only で表示するための領域です。
+              AI総評はまだ表示可能な summary として保存されていません。自動生成が未完了、queued / running 中、または provider failure により failed job として残っている可能性があります。
+            </p>
+            <p style={{ marginTop: 0, marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+              failed の場合も、既存の「AI総評を生成」から手動生成 / 再生成に進めます。failed job auto retry、表示起点 enqueue、polling は行いません。
             </p>
             <Button
               onClick={onGenerateAiReview}

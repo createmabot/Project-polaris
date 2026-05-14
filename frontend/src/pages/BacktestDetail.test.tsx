@@ -145,6 +145,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('AI 総評');
     expect(html).toContain('CSV import / TradingView report の AI summary input は BacktestImport parsed summary、comparison diff、TradingView report 文脈が中心です。');
+    expect(html).toContain('CSV import report は、parse_status=parsed になった直後に AI summary 自動生成の対象です。parse failed import は対象外です。');
+    expect(html).toContain('未生成・queued・running・failed は unavailable として見える場合があります。');
     expect(html).toContain('### 結論');
     expect(html).toContain('### 良い点');
     expect(html).toContain('### 懸念点');
@@ -218,7 +220,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('解析エラー');
     expect(html).toContain('Missing required columns');
     expect(html).toContain('AI総評は未生成です。');
-    expect(html).toContain('現時点では自動生成せず、必要なときに手動生成します。');
+    expect(html).toContain('自動生成が未完了、queued / running 中、または provider failure により failed job として残っている可能性があります。');
+    expect(html).toContain('failed の場合も、既存の「AI総評を生成」から手動生成 / 再生成に進めます。');
     expect(html).toContain('AI総評を生成');
   });
 
@@ -815,6 +818,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('raw artifact JSON は保存済み pointer metadata の確認用です。');
     expect(html).toContain('raw artifact JSON');
     expect(html).toContain('internal_backtest report の AI summary input は strategySnapshotJson.result_summary / artifact_pointer / internal_backtest_execution_id が中心です。');
+    expect(html).toContain('internal backtest report は、新規 report conversion 完了直後に AI summary 自動生成の対象です。');
   });
 
   it('shows a neutral message when internal backtest artifact is missing', () => {

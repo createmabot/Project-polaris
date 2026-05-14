@@ -59,7 +59,7 @@ const LABELS = {
   metricsMissingDetail:
     'CSV import report は parsed summary、internal backtest report は result_summary がない場合に一部 metrics が未表示になります。',
   aiArtifactDetailNote:
-    'AI summary 本文、artifact pointer、raw artifact JSON の詳細確認は BacktestDetail で行います。この画面は report history の入口です。',
+    'AI summary 本文、available / unavailable、artifact pointer、raw artifact JSON の詳細確認は BacktestDetail で行います。この画面は report history の入口であり、report row では AI summary status を表示せず、表示起点 enqueue もしません。',
   importlessReportNote:
     'importless_report は internal backtest 由来で BacktestImport を持たない report を示します。',
   reportComparisonHelperNote:
