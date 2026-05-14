@@ -353,8 +353,11 @@ export async function homeRoutes(fastify: FastifyInstance) {
       const symbol = item.symbol;
       const snap = symbol?.id ? (watchlistSnapshotMap.get(symbol.id) ?? null) : null;
       return {
+        item_id: item.id,
         symbol_id: symbol?.id ?? null,
+        symbol_code: symbol?.symbolCode ?? symbol?.symbol ?? null,
         display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+        market_code: symbol?.marketCode ?? null,
         tradingview_symbol: symbol?.tradingviewSymbol ?? null,
         latest_price: snap && typeof snap.last_price === 'number' && Number.isFinite(snap.last_price)
           ? snap.last_price
@@ -406,7 +409,10 @@ export async function homeRoutes(fastify: FastifyInstance) {
       return {
         position_id: row.id,
         symbol_id: symbol?.id ?? null,
+        symbol_code: symbol?.symbolCode ?? symbol?.symbol ?? null,
         display_name: symbol?.displayName ?? symbol?.symbolCode ?? symbol?.symbol ?? null,
+        market_code: symbol?.marketCode ?? null,
+        tradingview_symbol: symbol?.tradingviewSymbol ?? null,
         quantity: Number.isFinite(quantity) ? quantity : null,
         avg_cost: Number.isFinite(avgCost) ? avgCost : null,
         latest_price: latestPrice,

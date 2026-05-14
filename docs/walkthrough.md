@@ -293,7 +293,9 @@ seed 以外の運用データを Home 起点で扱う最小手順。
 
 補足:
 - watchlist/positions API は default watchlist/default portfolio が無い場合に自動作成する。
-- symbol_code が未登録なら Symbol を最小作成して処理する。
+- symbol_code だけで追加した場合、既存 Symbol があれば display_name / market_code / tradingview_symbol を既存値から利用する。
+- 既存 Symbol が無い場合、4桁数字の symbol_code は既存 seed 慣例に合わせて `market_code=JP_STOCK`、`tradingview_symbol=TSE:<symbol_code>` で最小作成する。それ以外は symbol_code / display_name の最小 fallback で作成する。
+- ユーザーが display_name / market_code / tradingview_symbol を明示した場合、その値を優先する。
 - positions は transactions 正本のため、更新・削除は manual transaction 経由で read model を再構築する。
 - `/watchlist` と `/positions` は移行期の詳細管理用 route として残すが、主要導線は SideRail とする。
 

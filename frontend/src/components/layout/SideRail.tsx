@@ -107,6 +107,13 @@ function toNonNegativeNumberText(value: string, fieldName: string): number {
   return parsed;
 }
 
+function getFriendlyMutationMessage(error: any, fallback: string): string {
+  if (error?.code === 'VALIDATION_ERROR' && typeof error?.message === 'string') {
+    return error.message;
+  }
+  return fallback;
+}
+
 export default function SideRail({ homeData, homeError, homeIsLoading, mutateHome: mutateProvidedHome }: SideRailProps) {
   const [tab, setTab] = useState<SideRailTab>('watchlist');
   const [collapsed, setCollapsed] = useState(false);
@@ -197,7 +204,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
 
   const openEditWatchlistModal = (symbol: any) => {
     if (!watchlistActionsReady) return;
-    const item = watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id) ?? null;
+    const item =
+      watchlistData?.items.find((row) => row.item_id === symbol.item_id)
+      ?? watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id)
+      ?? null;
     if (!item) {
       setMessage({ kind: 'error', text: '監視銘柄の編集情報を取得できませんでした。' });
       return;
@@ -217,15 +227,20 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
   };
 
   const openDeleteWatchlistModal = (symbol: any) => {
-    if (!watchlistActionsReady) return;
-    const item = watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id) ?? null;
-    if (!item) {
+    const item =
+      watchlistData?.items.find((row) => row.item_id === symbol.item_id)
+      ?? watchlistData?.items.find((row) => row.symbol_id === symbol.symbol_id)
+      ?? null;
+    const itemId = symbol.item_id ?? item?.item_id ?? null;
+    if (!itemId) {
       setMessage({ kind: 'error', text: '監視銘柄の削除情報を取得できませんでした。' });
       return;
     }
     setMessage(null);
-    setSelectedWatchlistItemId(item.item_id);
-    setSelectedWatchlistLabel(item.display_name ?? item.symbol_code ?? item.symbol_id ?? '不明');
+    setSelectedWatchlistItemId(itemId);
+    setSelectedWatchlistLabel(
+      symbol.display_name ?? item?.display_name ?? symbol.symbol_code ?? item?.symbol_code ?? symbol.symbol_id ?? item?.symbol_id ?? '不明',
+    );
     setWatchlistModalMode('delete');
   };
 
@@ -239,7 +254,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
 
   const openEditPositionModal = (position: any) => {
     if (!positionActionsReady) return;
-    const row = positionsData?.positions.find((item) => item.position_id === position.position_id) ?? null;
+    const row =
+      positionsData?.positions.find((item) => item.position_id === position.position_id)
+      ?? positionsData?.positions.find((item) => item.symbol_id === position.symbol_id)
+      ?? null;
     if (!row) {
       setMessage({ kind: 'error', text: '保有銘柄の編集情報を取得できませんでした。' });
       return;
@@ -259,15 +277,18 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
   };
 
   const openDeletePositionModal = (position: any) => {
-    if (!positionActionsReady) return;
-    const row = positionsData?.positions.find((item) => item.position_id === position.position_id) ?? null;
-    if (!row) {
+    const row =
+      positionsData?.positions.find((item) => item.position_id === position.position_id)
+      ?? positionsData?.positions.find((item) => item.symbol_id === position.symbol_id)
+      ?? null;
+    const positionId = position.position_id ?? row?.position_id ?? null;
+    if (!positionId) {
       setMessage({ kind: 'error', text: '保有銘柄の削除情報を取得できませんでした。' });
       return;
     }
     setMessage(null);
-    setSelectedPositionId(row.position_id);
-    setSelectedPositionLabel(row.display_name ?? row.symbol_code ?? row.symbol_id ?? '不明');
+    setSelectedPositionId(positionId);
+    setSelectedPositionLabel(buildPositionDisplayName(position, watchlistDisplayNameById));
     setPositionModalMode('delete');
   };
 
@@ -303,7 +324,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
       }
       resetWatchlistModal();
     } catch (submitError: any) {
-      setMessage({ kind: 'error', text: submitError?.message ?? '監視銘柄の保存に失敗しました。' });
+      setMessage({
+        kind: 'error',
+        text: getFriendlyMutationMessage(submitError, '監視銘柄の保存に失敗しました。入力内容を確認してください。'),
+      });
       setIsSubmitting(false);
     }
   };
@@ -317,7 +341,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
       setMessage({ kind: 'success', text: '監視銘柄を削除しました。' });
       resetWatchlistModal();
     } catch (deleteError: any) {
-      setMessage({ kind: 'error', text: deleteError?.message ?? '監視銘柄の削除に失敗しました。' });
+      setMessage({ kind: 'error', text: '監視銘柄の削除に失敗しました。画面を更新してから再度お試しください。' });
       setIsSubmitting(false);
     }
   };
@@ -354,7 +378,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
       }
       resetPositionModal();
     } catch (submitError: any) {
-      setMessage({ kind: 'error', text: submitError?.message ?? '保有銘柄の保存に失敗しました。' });
+      setMessage({
+        kind: 'error',
+        text: getFriendlyMutationMessage(submitError, '保有銘柄の保存に失敗しました。入力内容を確認してください。'),
+      });
       setIsSubmitting(false);
     }
   };
@@ -368,7 +395,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
       setMessage({ kind: 'success', text: '保有銘柄を削除しました。' });
       resetPositionModal();
     } catch (deleteError: any) {
-      setMessage({ kind: 'error', text: deleteError?.message ?? '保有銘柄の削除に失敗しました。' });
+      setMessage({ kind: 'error', text: '保有銘柄の削除に失敗しました。画面を更新してから再度お試しください。' });
       setIsSubmitting(false);
     }
   };
@@ -400,7 +427,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 <Button
                   variant="danger"
                   onClick={() => openDeleteWatchlistModal(symbol)}
-                  disabled={!watchlistActionsReady}
+                  disabled={!symbol.item_id && !watchlistActionsReady}
                   className="px-2 py-1 text-xs"
                 >
                   削除
@@ -451,7 +478,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 <Button
                   variant="danger"
                   onClick={() => openDeletePositionModal(position)}
-                  disabled={!positionActionsReady}
+                  disabled={!position.position_id && !positionActionsReady}
                   className="px-2 py-1 text-xs"
                 >
                   削除

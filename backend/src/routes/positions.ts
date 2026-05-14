@@ -14,8 +14,11 @@ import {
 
 type CreatePositionBody = {
   symbol_code?: unknown;
+  market?: unknown;
+  exchange?: unknown;
   market_code?: unknown;
   tradingview_symbol?: unknown;
+  name?: unknown;
   display_name?: unknown;
   quantity?: unknown;
   average_cost?: unknown;
@@ -177,9 +180,12 @@ export const positionRoutes: FastifyPluginAsync = async (fastify) => {
     const portfolio = await resolveOrCreateDefaultPortfolio(prismaAny, user.id);
     const symbol = await resolveOrCreateSymbol(prismaAny, {
       symbolCode,
-      marketCode: toOptionalText(request.body?.market_code),
+      marketCode:
+        toOptionalText(request.body?.market_code)
+        ?? toOptionalText(request.body?.market)
+        ?? toOptionalText(request.body?.exchange),
       tradingviewSymbol: toOptionalText(request.body?.tradingview_symbol),
-      displayName: toOptionalText(request.body?.display_name),
+      displayName: toOptionalText(request.body?.display_name) ?? toOptionalText(request.body?.name),
     });
 
     const result = await setPositionWithManualTransactions({

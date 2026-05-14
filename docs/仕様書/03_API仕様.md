@@ -85,6 +85,15 @@
 - CSV import parsed report 作成直後と internal backtest report conversion 完了直後は、最小 auto enqueue 対象。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
+## 7-1. Watchlist / positions management
+
+- `POST /api/watchlist-items` と `POST /api/positions` は `symbol_code` だけの追加を受け付ける。
+- 既存 `symbols` に一致する `symbol_code` / `symbol` / `tradingview_symbol` がある場合、既存の `displayName` / `marketCode` / `tradingviewSymbol` を利用する。
+- request で `display_name` / `name` / `market_code` / `market` / `exchange` / `tradingview_symbol` を明示した場合は、既存の空欄補完または新規作成時にその値を優先する。
+- 既存 Symbol が無い4桁数字の `symbol_code` は、既存 seed 慣例に合わせて `marketCode=JP_STOCK`、`tradingviewSymbol=TSE:<symbol_code>` で最小作成する。
+- 上記以外の未登録 `symbol_code` は外部 API を使わず、`symbol_code` と同じ表示名の最小 Symbol として安全に作成する。
+- SideRail 削除は watchlist item ID / position ID を使い、成功後は watchlist 操作で home + watchlist、positions 操作で home + positions を refresh する。
+
 ## 8. 参照
 
 - Symbol Strategy Application API: `docs/52.北極星 Symbol Strategy Application DB・API設計（P3）.md`

@@ -161,8 +161,11 @@ describe('watchlists routes', () => {
     expect(body.data.watchlist.id).toBe('wl-1');
     expect(body.data.items).toHaveLength(1);
     expect(body.data.items[0]).toMatchObject({
+      item_id: 'wli-1',
       symbol_id: 'sym-7203',
+      symbol_code: '7203',
       display_name: 'Toyota',
+      market_code: 'JP_STOCK',
       tradingview_symbol: 'TSE:7203',
       latest_price: 3000,
       change_rate: 1,
