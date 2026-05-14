@@ -1,6 +1,6 @@
 # 北極星 API 現行仕様
 
-更新日: 2026-05-13
+更新日: 2026-05-15
 分類: 仕様書
 
 ## 1. 目的
@@ -73,7 +73,11 @@
 - `GET /api/internal-backtests/executions/:executionId/result`
   - execution result を返す。
 - `GET /api/internal-backtests/executions/:executionId/artifacts/engine_actual/trades-and-equity`
-  - engine actual artifact を返す。
+  - engine actual の trades / equity artifact を read-only JSON として返す。
+  - execution ID、succeeded execution、stored artifact existence を前提にする。
+  - artifact path suffix は既知 endpoint に対応する whitelist に限定し、arbitrary route や path traversal を許可しない。
+  - frontend へ local path / absolute path を返さず、UI link は execution ID と既知 route から導く。
+  - 新規 download endpoint、file token、signed URL、backend proxy の本格実装は現時点では対象外。
 
 ## 7. AI summary
 

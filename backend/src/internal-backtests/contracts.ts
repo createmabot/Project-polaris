@@ -137,6 +137,11 @@ export type InternalBacktestActualArtifactPayload = {
   }>;
 };
 
+const ALLOWED_ARTIFACT_PATH_SUFFIXES = new Set([
+  '',
+  '/artifacts/engine_actual/trades-and-equity',
+]);
+
 const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireTrimmedString(value: unknown): string | null {
@@ -500,6 +505,9 @@ export function createExecutionArtifactPointer(args: {
     typeof args.pathSuffix === 'string' && args.pathSuffix.trim().length > 0
       ? args.pathSuffix.trim()
       : '';
+  if (!ALLOWED_ARTIFACT_PATH_SUFFIXES.has(pathSuffix)) {
+    throw new Error('artifact_pointer.path_suffix is not allowed.');
+  }
   return {
     type: 'internal_backtest_execution',
     execution_id: args.executionId,

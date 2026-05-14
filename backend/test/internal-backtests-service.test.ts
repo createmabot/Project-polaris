@@ -282,6 +282,41 @@ describe('internal backtest execution service contracts', () => {
     expect(output.inputSnapshot.data_source_snapshot?.bar_count).toBe(20);
   });
 
+  it('rejects artifact pointer suffixes outside the known read route', async () => {
+    await expect(
+      runInternalBacktestExecutionService(
+        {
+          executionId: 'ibtx-invalid-artifact-path',
+          strategyRuleVersionId: 'ver-1',
+          engineVersion: 'ibtx-v0',
+          inputSnapshotJson: {
+            strategy_rule_version_id: 'ver-1',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            execution_target: {
+              symbol: '7203',
+              source_kind: 'daily_ohlcv',
+            },
+            data_range: { from: '2024-01-01', to: '2024-01-20' },
+            engine_config: {},
+            strategy_snapshot: {
+              natural_language_rule: 'rule',
+              generated_pine: 'strategy("x")',
+              market: 'JP_STOCK',
+              timeframe: 'D',
+            },
+          },
+        },
+        {
+          engineAdapter: async () => ({
+            summary_kind: 'engine_actual',
+            artifact_path_suffix: '/artifacts/../../forbidden',
+          }),
+        },
+      ),
+    ).rejects.toThrow('artifact_pointer.path_suffix is not allowed.');
+  });
+
   it('applies fee/slippage bps to engine_actual net metrics', async () => {
     const engineAdapter = createDummyInternalBacktestEngineAdapter({
       fetchDailyOhlcv: async () => ({

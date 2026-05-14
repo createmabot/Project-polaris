@@ -7,7 +7,7 @@
 
 本資料は、artifact pointer metadata、retention policy、file access boundary の運用確認観点をまとめる。仕様正本は `docs/仕様書/09_AI_summary_artifact仕様.md`、Backtest report との関係は `docs/仕様書/08_Backtest_Report仕様.md` を参照する。
 
-設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さず、file read / download / diff / retention job は未実装として扱う。
+設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さない。artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定し、新規 download / diff / retention job は未実装として扱う。
 
 ## 2. 現行運用の範囲
 
@@ -17,10 +17,11 @@
 - BacktestDetail で raw artifact JSON を保存済み pointer metadata として確認する。raw JSON でも path 系値は非表示または sanitized 表示として扱う。
 - artifact pointer がない場合は absence explanation として扱う。
 - ApplicationDetail / SymbolDetail からは BacktestDetail に遷移して詳細を確認する。
+- internal_backtests の既存 `engine_actual` trades / equity JSON read endpoint は、execution ID と既知 route に限定して確認する。
 
 現行で行わないこと:
 
-- artifact file read。
+- arbitrary artifact file read。
 - artifact download。
 - artifact diff / JSON diff。
 - retention job。
@@ -73,7 +74,24 @@ UI / docs / PR / log に残さないもの:
 
 ## 6. file access boundary
 
-現行では file read / download を実装しない。
+現行の file access は、internal_backtests の既存 `engine_actual` trades / equity JSON read endpoint に限定する。
+
+運用境界:
+
+- execution ID を入口にする。
+- succeeded execution と stored artifact existence を前提に確認する。
+- artifact path suffix は whitelist 化された既知 suffix のみ扱う。
+- UI link は execution ID と既知 route から導く。
+- frontend へ raw path、local path、absolute path を渡さない。
+- BacktestDetail には download 導線を追加せず、metadata 表示に留める。
+- 詳細 artifact file access は StrategyVersionDetail / existing route の範囲に限定する。
+
+避けること:
+
+- path traversal。
+- arbitrary route。
+- local path leakage。
+- raw artifact path の log / docs / PR 記載。
 
 将来 download を実装する場合の候補:
 
