@@ -43,8 +43,8 @@
 
 ## 6. Testing / CI
 
-- Visual regression pilot は readiness のみで、本導入は未実施。
-- 初回 pilot を行う場合は ApplicationDetail / SymbolDetail など 1 から 3 個の stable container に絞る。
+- Visual regression pilot は optional check として最小導入済み。対象は ApplicationDetail の stable container 1 箇所に限定する。
+- 本導入や対象拡大は後続判断とし、CI required check には追加しない。
 - dynamic timestamp、locale、seed ordering、raw JSON、AI text、external rendering を安定化または mask する必要がある。
 - browser smoke の対象拡張は、実行系操作や外部依存を含めない範囲から判断する。
 
