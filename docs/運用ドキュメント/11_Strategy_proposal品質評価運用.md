@@ -194,7 +194,7 @@ UI manual check:
 
 ### 5-6. 現時点で確認できる UI / API 観点
 
-現行の StrategyLab proposal flow は、response metadata と最小 UI note で provider observation を確認できる。構造化 provider log、DB 永続化、trend 集計はまだ実装していないため、品質評価では UI / API から観測できる範囲に限定して記録する。
+現行の StrategyLab proposal flow は、response metadata、最小 UI note、proposal history DB で provider observation を確認できる。最小スコープとして `StrategyProposalRun` / `StrategyProposalCandidate` への proposal history 永続化と sanitized `providerObservationJson` の保存は実装済みのため、品質評価では raw prompt / raw response を残さず、UI / API / DB に保存された sanitized metadata の範囲で記録する。
 
 - UI で候補一覧、EmptyState、generic provider failure、validation error のどれになったかを見る。
 - API response が success / empty / provider_error / validation_error のどれに見えるかを記録する。
@@ -205,8 +205,14 @@ UI manual check:
 
 後続候補:
 
-- sanitized provider event log。
-- provider observation の永続化または trend 集計。
+- provider observation の trend 集計。
+- 現行 run metadata を超える event log 永続化。
+- export / benchmark records。
+- filter / pagination / search / retention / full management。
+- StrategyVersion relation。
+- openai_api。
+- Web search / deep research。
+- auto Pine / save。
 - cost / rate guard との連携。
 - fallback metadata の opt-in 拡張。
 
@@ -214,6 +220,7 @@ instrumentation / cost guard の現行:
 
 - `POST /api/strategy-lab/proposals` の optional metadata として `provider_observation` を返す。
 - metadata は provider name、selected_by、elapsed_ms / latency bucket、status、candidate_count、invalid_reason、validation_error_count、fallback_used / fallback_reason、schema_valid、model category を持つ。
+- `StrategyProposalRun` は run-level metadata と sanitized `providerObservationJson` を保存し、`StrategyProposalCandidate` は proposal candidate の最小履歴を保存する。
 - request started at の raw timestamp は response に出さず、必要な場合も sanitized logs に限定する。
 - model name は実値を出さず、configured / default / unknown などの category にする。
 - prompt 全文、raw response、endpoint、secret、token、local path は記録しない。
