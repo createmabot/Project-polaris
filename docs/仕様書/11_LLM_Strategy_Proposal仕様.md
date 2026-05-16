@@ -205,7 +205,7 @@ provider が失敗しても StrategyLab の既存 save / Pine generation / valid
 
 ### 5-2. provider boundary
 
-既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest / Pine generation で使われている。strategy proposal は同じ provider 設定を再利用するか、将来 `STRATEGY_PROPOSAL_PROVIDER` を切るかを実装時に判断する。
+既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest / Pine generation で使われている。strategy proposal は `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を採用済みで、`HOME_AI_PROVIDER` とは分離する。未指定 default は `stub` とし、local_llm は明示 opt-in で使う。
 
 初回は cost / latency / safety の観点から `stub` 相当を第一候補にする。`local_llm` / `openai_api` を使う場合は、prompt / response sanitization、timeout、fallback、error redaction、投資助言 disclaimer を先に固定する。
 
@@ -225,7 +225,9 @@ provider boundary 実装現在地:
 
 - deterministic stub provider は proposal provider boundary 配下に分離済み。
 - route 層は request validation と provider response validation を通してから `strategy_proposal_candidates` を返す。
-- 現時点で選択可能な provider は `stub` のみ。`local_llm` / `openai_api` provider は設計済みだが未実装。
+- `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` で proposal provider を選択できる。未指定 default は `stub`。
+- `local_llm` provider は実装済み。local_llm output は UI に返す前に既存 provider response validation を通す。
+- `openai_api` provider は設計候補のまま未実装。
 - Web search / deep research、proposal history、DB保存、job化、Pine generation 自動連鎖は未実装のまま維持する。
 
 ### 5-2-1. local_llm provider design
@@ -241,16 +243,17 @@ local_llm strategy proposal provider の責務:
 env / config 方針:
 
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を proposal 専用 provider selector とする。
-- 未指定、空、未知値の場合は安全側として `stub` を使うか、implementation PR で明示的な validation error にするかを決める。PR 1 の設計上は未指定 default を `stub` とする。
-- local_llm endpoint、model、timeout、max output は proposal 専用 env で切れるようにする。具体名は implementation PR で固定するが、候補は `STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT`、`STRATEGY_PROPOSAL_LOCAL_LLM_MODEL`、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS`、`STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` とする。
+- 未指定、空、未知値の場合は `stub` を使う。
+- local_llm endpoint、model、timeout、max output は proposal 専用 env で切れる。`STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT`、`STRATEGY_PROPOSAL_LOCAL_LLM_MODEL`、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS`、`STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` を使う。
+- endpoint / model は proposal 専用 env がなければ既存 local LLM env の値を使い、最後に実装 default へ fallback する。
 - endpoint や model の実値は docs / PR / UI / client response に出さない。運用確認では設定有無と sanitized status のみを扱う。
 
 timeout / max output / fallback 方針:
 
 - local_llm 選択時は短い timeout を provider adapter 境界で必ず設定する。
 - max output は既存 schema と `proposal_count` 最大 10 に収まる上限を設け、過大 response は parse 前または validation 前に失敗として扱う。
-- 初回 local_llm 実装では、timeout、provider unavailable、malformed JSON、schema invalid、candidate count invalid、Web search 未実装時の web research basis を provider error として扱う。
-- 初回 local_llm 実装では silent stub fallback を行わない。`STRATEGY_PROPOSAL_PROVIDER=local_llm` を選んだ場合の失敗は proposal section の generic failure として返す。
+- local_llm 実装では、timeout、provider unavailable、malformed JSON、schema invalid、candidate count invalid、Web search 未実装時の web research basis を provider error として扱う。
+- local_llm 実装では silent stub fallback を行わない。`STRATEGY_PROPOSAL_PROVIDER=local_llm` を選んだ場合の失敗は proposal section の generic failure として返す。
 - 設計上は fallback option を後続候補として残す。fallback を実装する場合は opt-in とし、provider metadata に fallback であることを明示する。
 
 prompt / response JSON 方針:
@@ -261,7 +264,7 @@ prompt / response JSON 方針:
 - provider output の投資助言風 wording は wording だけでは invalid にしない。危険・不正・アプリ目的外の response は provider invalid として扱える。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は API response、UI、docs、PR本文に出さない。
 
-local_llm design PR 1 で実装しないもの:
+local_llm provider PR 2 で実装しないもの:
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research。
@@ -382,7 +385,7 @@ UI / docs で避ける表現:
 
 ## 10. 後続候補
 
-- `local_llm` / `openai_api` strategy proposal provider。
+- `openai_api` strategy proposal provider。
 - Web search / deep research option。
 - citation / freshness 表示。
 - proposal history / selected proposal lineage。
