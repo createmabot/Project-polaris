@@ -785,6 +785,23 @@ describe('strategy lab vertical slice', () => {
     expect(storedCandidates.find((candidate) => candidate.id === 'proposal-candidate-1')?.selectedAt).toBeInstanceOf(Date);
     expect(storedCandidates.find((candidate) => candidate.id === 'proposal-candidate-2')?.selectedAt).toBeNull();
     expect(runtime.proposalRuns.get(body.data.proposal_run_id)?.selectedCandidateId).toBe('proposal-candidate-1');
+
+    const selectByInternalIdResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${body.data.proposal_run_id}/select`,
+      payload: {
+        proposal_candidate_id: 'proposal-candidate-2',
+      },
+    });
+
+    expect(selectByInternalIdResponse.statusCode).toBe(200);
+    const selectByInternalIdBody = selectByInternalIdResponse.json();
+    expect(selectByInternalIdBody.data.proposal_run.selected_candidate_id).toBe('proposal-candidate-2');
+    expect(selectByInternalIdBody.data.selected_candidate.id).toBe('proposal-candidate-2');
+    const candidatesAfterInternalIdSelect = Array.from(runtime.proposalCandidates.values())
+      .filter((candidate) => candidate.proposalRunId === body.data.proposal_run_id);
+    expect(candidatesAfterInternalIdSelect.find((candidate) => candidate.id === 'proposal-candidate-1')?.selectedAt).toBeNull();
+    expect(candidatesAfterInternalIdSelect.find((candidate) => candidate.id === 'proposal-candidate-2')?.selectedAt).toBeInstanceOf(Date);
     expect(runtime.strategies.size).toBe(0);
     expect(runtime.versions.size).toBe(0);
     expect(runtime.pineScripts.size).toBe(0);

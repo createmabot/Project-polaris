@@ -30,6 +30,7 @@ type ProposalBody = {
 
 type ProposalSelectBody = {
   candidate_id?: unknown;
+  proposal_candidate_id?: unknown;
 };
 
 function parseProposalHistoryLimit(value: unknown): number {
@@ -224,8 +225,11 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Params: { proposalRunId: string }; Body: ProposalSelectBody }>('/proposals/:proposalRunId/select', async (request, reply) => {
     const candidateId = typeof request.body?.candidate_id === 'string' ? request.body.candidate_id.trim() : '';
-    if (!candidateId) {
-      throw new AppError(400, 'VALIDATION_ERROR', 'candidate_id is required.');
+    const proposalCandidateId = typeof request.body?.proposal_candidate_id === 'string'
+      ? request.body.proposal_candidate_id.trim()
+      : '';
+    if (!candidateId && !proposalCandidateId) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'candidate_id or proposal_candidate_id is required.');
     }
 
     const run = await (prisma as any).strategyProposalRun.findUnique({
@@ -236,10 +240,10 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(404, 'NOT_FOUND', 'Strategy proposal run was not found.');
     }
     const selected = run.candidates.find((candidate: any) => (
-      candidate.id === candidateId || candidate.providerCandidateId === candidateId
+      candidate.id === (candidateId || proposalCandidateId) || (Boolean(candidateId) && candidate.providerCandidateId === candidateId)
     ));
     if (!selected) {
-      throw new AppError(400, 'VALIDATION_ERROR', 'candidate_id must belong to the proposal run.');
+      throw new AppError(400, 'VALIDATION_ERROR', 'candidate_id or proposal_candidate_id must belong to the proposal run.');
     }
 
     const { updatedRun, selectedCandidate } = await (prisma as any).$transaction(async (tx: any) => {

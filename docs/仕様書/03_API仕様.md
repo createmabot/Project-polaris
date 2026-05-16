@@ -101,6 +101,7 @@ Proposal history / selected proposal lineage の最小 API:
 - `GET /api/strategy-lab/proposals` は最近の proposal run 一覧を limit 上限付きで返す。
 - `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する。
+- select request は `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。`candidate_id` は provider candidate id または internal candidate id、`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal candidate id として扱う。
 - selection API は StrategyLab input 反映の履歴だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 - raw prompt、raw provider response、provider endpoint、secret、local path、stack trace は API response に返さない。
 - filter / pagination / large history management は後続判断とし、初回 UI は recent list 程度に留める。

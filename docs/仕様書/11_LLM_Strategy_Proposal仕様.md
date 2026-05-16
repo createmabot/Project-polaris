@@ -478,6 +478,8 @@ relation / index 案:
   - raw prompt / raw response / endpoint / secret / local path は返さない。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select`
   - request: `{ "candidate_id": "..." }` または `{ "proposal_candidate_id": "..." }`。
+  - `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。
+  - `candidate_id` は provider candidate id または internal candidate id として扱う。`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal `StrategyProposalCandidate.id` として扱う。
   - selected candidate を run に記録し、同一 run の既存 candidate `selected_at` を null に戻してから選択 candidate の `selected_at` を更新する。
   - StrategyLab input 反映は frontend state の責務であり、この API は Strategy / StrategyVersion / Pine generation を起動しない。
 
