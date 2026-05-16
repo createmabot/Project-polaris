@@ -88,14 +88,14 @@ Strategy proposal provider expansion では、まず provider boundary を docs 
 provider expansion 時の必須条件:
 
 - request validation は route 層で行う。`proposal_count` は 1〜10、risk / strategy type enum は仕様書の値に限定する。
-- `user_hint` は request parsing 境界で安全な長さに丸める。投資助言に見える禁止表現を含む場合は request validation の `VALIDATION_ERROR` とし、provider invalid response と混同しない。
-- provider response は `strategy_proposal_candidates` schema に正規化し、未知 enum、空 `suggested_natural_language_spec`、投資助言断定を含む候補は invalid output として扱う。0 candidates は UI の EmptyState で扱えるため、provider failure とは分ける。
+- `user_hint` は request parsing 境界で安全な長さに丸める。投資助言風 wording を含んでも request validation では reject しない。type validation と length bounding は維持する。
+- provider response は `strategy_proposal_candidates` schema に正規化し、未知 enum、schema / type / format 不正、必須項目欠落、candidate count 不正、Web search 未実装時の web research basis は invalid output として扱う。投資助言風 wording だけでは provider invalid にしない。0 candidates は UI の EmptyState で扱えるため、provider failure とは分ける。
 - timeout を必ず設定し、timeout / invalid output / provider failure は proposal section の generic failure に閉じる。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
 - fallback は silent に行わない。stub fallback を有効にする場合は opt-in とし、provider metadata と UI 文言で分かるようにする。
 - 有料 provider は明示 opt-in、rate limit、cost cap、prompt length guard の設計後に広げる。
 - 画面表示、typing、polling、batch、scheduled job を契機に proposal を自動生成しない。
-- proposal は投資助言ではないため、利益保証、売買推奨、検証不要と読める表現を禁止する。
+- proposal は投資助言ではなく検証候補であり、backtest と user review を前提にする。安全のために検証候補を狭めすぎず、利益保証、売買推奨、検証不要と読める表現は UI / docs の disclaimer と運用確認で抑制する。
 
 ## 8. 関連 docs
 
