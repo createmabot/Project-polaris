@@ -6,6 +6,7 @@ import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import { SelectField, TextArea, TextInput } from '../components/ui/FormFields';
+import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -14,6 +15,7 @@ import {
   BacktestCreateData,
   BacktestImportData,
   StrategyCreateData,
+  StrategyProposalData,
   StrategyVersionData,
   StrategyVersionPineGenerateData,
   StrategyVersionListData,
@@ -21,6 +23,20 @@ import {
 
 const MARKET_OPTIONS = ['JP_STOCK'];
 const TIMEFRAME_OPTIONS = ['D'];
+const RISK_PREFERENCE_OPTIONS = [
+  { value: 'balanced', label: 'balanced' },
+  { value: 'conservative', label: 'conservative' },
+  { value: 'aggressive', label: 'aggressive' },
+];
+const STRATEGY_TYPE_OPTIONS = [
+  { value: 'any', label: 'any' },
+  { value: 'trend_following', label: 'trend following' },
+  { value: 'mean_reversion', label: 'mean reversion' },
+  { value: 'breakout', label: 'breakout' },
+  { value: 'momentum', label: 'momentum' },
+  { value: 'volatility', label: 'volatility' },
+  { value: 'risk_management', label: 'risk management' },
+];
 
 function buildCsvImportErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
@@ -60,6 +76,19 @@ function buildRuleSubmitErrorMessage(error: unknown): string {
   return error.message || 'ルール生成に失敗しました。';
 }
 
+function buildProposalErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return 'ストラテジー候補の取得に失敗しました。入力内容を確認して再試行してください。';
+  }
+  if (error.status === 400) {
+    return '候補生成の入力に不備があります。市場・時間足・リスク設定を確認してください。';
+  }
+  if (error.status >= 500) {
+    return 'サーバー側で候補取得に失敗しました。時間をおいて再試行してください。';
+  }
+  return error.message || 'ストラテジー候補の取得に失敗しました。';
+}
+
 function buildCsvParseGuidance(parseError: string | null): string[] {
   if (!parseError) {
     return [];
@@ -88,6 +117,11 @@ export default function StrategyLab() {
   );
   const [market, setMarket] = useState('JP_STOCK');
   const [timeframe, setTimeframe] = useState('D');
+  const [proposalRiskPreference, setProposalRiskPreference] = useState('balanced');
+  const [proposalStrategyType, setProposalStrategyType] = useState('any');
+  const [proposalData, setProposalData] = useState<StrategyProposalData | null>(null);
+  const [proposalError, setProposalError] = useState<string | null>(null);
+  const [proposing, setProposing] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +148,42 @@ export default function StrategyLab() {
   );
 
   const latestVersion = useMemo(() => versionsData?.strategy_versions?.[0] ?? null, [versionsData]);
+
+  const onRequestProposals = async () => {
+    setProposing(true);
+    setProposalError(null);
+    setProposalData(null);
+
+    try {
+      const proposals = await postApi<StrategyProposalData>('/api/strategy-lab/proposals', {
+        market,
+        timeframe,
+        risk_preference: proposalRiskPreference,
+        strategy_type_bias: proposalStrategyType,
+        proposal_count: 5,
+        user_hint: naturalLanguageRule.trim() || null,
+      });
+      setProposalData(proposals);
+    } catch (proposalRequestError: unknown) {
+      console.error('Strategy proposal request failed', proposalRequestError);
+      setProposalError(buildProposalErrorMessage(proposalRequestError));
+    } finally {
+      setProposing(false);
+    }
+  };
+
+  const onUseProposal = (candidate: StrategyProposalData['candidates'][number]) => {
+    setTitle(candidate.title);
+    setNaturalLanguageRule(candidate.suggested_natural_language_spec);
+    setProposalError(null);
+    setError(null);
+    setResult(null);
+    setStrategyId(null);
+    setBacktest(null);
+    setCsvFile(null);
+    setImportState(null);
+    setImportError(null);
+  };
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -222,6 +292,108 @@ export default function StrategyLab() {
       <p style={{ color: '#666' }}>
         自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
       </p>
+
+      <SectionCard
+        title='ストラテジー候補の提案'
+        description='AIによる検証候補を取得し、選択した候補を自然言語ルールへ反映します。投資助言ではなく、backtest前提のたたき台です。'
+        className='mt-5'
+      >
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          <InlineNotice tone='warning'>
+            候補は検証用のたたき台です。売買推奨ではありません。選択後に内容を確認し、Pine生成とbacktestで検証してください。
+          </InlineNotice>
+
+          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+            <SelectField
+              label='リスク設定'
+              value={proposalRiskPreference}
+              onChange={(event) => setProposalRiskPreference(event.target.value)}
+            >
+              {RISK_PREFERENCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </SelectField>
+
+            <SelectField
+              label='戦略タイプ'
+              value={proposalStrategyType}
+              onChange={(event) => setProposalStrategyType(event.target.value)}
+            >
+              {STRATEGY_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </SelectField>
+          </div>
+
+          <Button onClick={onRequestProposals} disabled={proposing} variant='primary' className='w-fit'>
+            {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
+          </Button>
+
+          {proposalError && (
+            <ErrorState title='候補取得に失敗しました'>
+              {proposalError}
+            </ErrorState>
+          )}
+
+          {proposalData && (
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <KeyValueList className='sm:grid-cols-2'>
+                <KeyValueRow label='provider'>{proposalData.provider.name} / {proposalData.provider.mode}</KeyValueRow>
+                <KeyValueRow label='web search'>{proposalData.provider.web_search ? 'enabled' : 'disabled'}</KeyValueRow>
+                <KeyValueRow label='保存'>{proposalData.provider.persisted ? 'あり' : 'なし'}</KeyValueRow>
+                <KeyValueRow label='候補数'>{String(proposalData.candidates.length)}</KeyValueRow>
+              </KeyValueList>
+
+              {proposalData.candidates.length === 0 ? (
+                <EmptyState title='候補がありません'>
+                  入力条件を変えて再試行してください。
+                </EmptyState>
+              ) : (
+                proposalData.candidates.map((candidate) => (
+                  <div
+                    key={candidate.candidate_id}
+                    style={{
+                      border: '1px solid #d8dee4',
+                      borderRadius: '8px',
+                      padding: '0.85rem',
+                      display: 'grid',
+                      gap: '0.55rem',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1rem' }}>{candidate.title}</h3>
+                        <p style={{ margin: '0.25rem 0 0', color: '#475569' }}>{candidate.summary}</p>
+                      </div>
+                      <Button onClick={() => onUseProposal(candidate)}>
+                        この候補を使う
+                      </Button>
+                    </div>
+                    <KeyValueList className='sm:grid-cols-3'>
+                      <KeyValueRow label='type'><StatusBadge status={candidate.strategy_type}>{candidate.strategy_type}</StatusBadge></KeyValueRow>
+                      <KeyValueRow label='confidence'>{candidate.confidence}</KeyValueRow>
+                      <KeyValueRow label='Pine feasibility'>{candidate.pine_feasibility}</KeyValueRow>
+                    </KeyValueList>
+                    <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                      <strong>entry:</strong> {candidate.entry_logic.join(' / ')}
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                      <strong>risk:</strong> {candidate.risk_management.join(' / ')}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                      caution: {candidate.backtest_cautions.join(' / ')}
+                    </div>
+                  </div>
+                ))
+              )}
+
+              <InlineNotice tone='info'>
+                {proposalData.disclaimer}
+              </InlineNotice>
+            </div>
+          )}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title='ルール入力'

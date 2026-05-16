@@ -13,7 +13,7 @@ Pine 生成、Strategy / StrategyVersion 保存、validation、CSV import、inte
 
 ### 2-1. 入口
 
-初回実装候補では、StrategyLab の rule input 付近に「ストラテジーを提案」導線を置く。
+初回実装では、StrategyLab の rule input 付近に「ストラテジーを提案」導線を置く。
 
 - StrategyLab は natural language strategy 作成、Pine 生成、保存、検証の作業画面であるため、proposal の入口を置く責務に合う。
 - SymbolDetail / StrategyDetail / BacktestDetail には初回導線を置かない。
@@ -36,7 +36,7 @@ Pine 生成、Strategy / StrategyVersion 保存、validation、CSV import、inte
 
 ### 2-3. 表示
 
-候補は 3〜5 件から初回実装し、将来 5〜10 件へ広げる。UI は card / compact list のどちらでもよいが、各候補で次を読める必要がある。
+候補は deterministic stub provider で返す。初回 UI は 5 件を要求するが、API は `proposal_count` により最大 10 件まで受けられる。UI は compact card list とし、各候補で次を読める必要がある。
 
 - title
 - summary
@@ -188,14 +188,14 @@ Web search / deep research を後続で扱う場合の方針:
 
 ## 5. provider / API 境界
 
-### 5-1. 初回実装候補
+### 5-1. 初回実装
 
-初回実装する場合は、次の小さな backend boundary を候補にする。
+初回実装は、次の小さな backend boundary として扱う。
 
 - `POST /api/strategy-lab/proposals`
 - request: market / timeframe / symbol_code / risk_preference / strategy_type_bias / proposal_count / user_hint
 - response: `strategy_proposal_candidates` schema
-- provider: `stub` または deterministic local provider
+- provider: deterministic `stub`
 - DB 保存: しない
 - job 化: しない
 
@@ -250,15 +250,15 @@ provider が失敗しても StrategyLab の既存 save / Pine generation / valid
 - SymbolDetail: symbol 起点 application / report / import / internal backtest を担当し、proposal 生成は持たない。ただし将来、symbol context を StrategyLab に渡す導線は候補にできる。
 - BacktestDetail / ApplicationDetail: report / history / comparison の確認画面であり、proposal 生成は持たない。
 
-## 9. 初回実装スコープ候補
+## 9. 初回実装スコープ
 
-実装する場合の最小範囲:
+初回実装済みの最小範囲:
 
 1. `POST /api/strategy-lab/proposals` を追加する。
-2. deterministic stub provider で 3〜5 件の proposal candidates を返す。
+2. deterministic stub provider で proposal candidates を返す。
 3. StrategyLab に「ストラテジーを提案」section を追加する。
-4. market / timeframe / risk preference / strategy type bias / optional hint を入力できるようにする。
-5. candidate を選択すると natural language spec に反映する。
+4. market / timeframe は既存 StrategyLab state を使い、risk preference / strategy type bias を入力できるようにする。
+5. candidate を選択すると title と natural language spec に反映する。
 6. Pine generation は既存 button を使い、proposal 選択では自動実行しない。
 7. tests / walkthrough / docs を更新する。
 

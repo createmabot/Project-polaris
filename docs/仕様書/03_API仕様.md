@@ -87,11 +87,11 @@
 
 ## 7-0. Strategy proposal
 
-- LLM strategy proposal の初回実装候補は `POST /api/strategy-lab/proposals` とする。
+- LLM strategy proposal の初回実装は `POST /api/strategy-lab/proposals` とする。
 - request は `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` を候補にする。
 - response は `strategy_proposal_candidates` schema を返し、候補選択は StrategyLab の natural language spec への反映に留める。
-- 初回設計では proposal history、DB migration、Strategy / StrategyVersion への自動保存、Pine generation への自動連鎖は行わない。
-- Web search / deep research を使う provider は後続判断とし、初回実装する場合は deterministic stub provider を第一候補にする。
+- proposal history、DB migration、Strategy / StrategyVersion への自動保存、Pine generation への自動連鎖は行わない。
+- Web search / deep research を使う provider は後続判断とし、初回実装は deterministic stub provider に限定する。
 
 ## 7-1. Symbol references
 

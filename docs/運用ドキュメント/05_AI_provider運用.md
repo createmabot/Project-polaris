@@ -29,7 +29,7 @@
 
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
 
-LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。初回実装では stub / deterministic provider を第一候補にし、Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
+LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。初回実装は deterministic stub provider に限定し、Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
 
 ## 4. job 状態の見方
 

@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../src/utils/response';
 import { strategyRoutes } from '../src/routes/strategies';
+import { strategyLabRoutes } from '../src/routes/strategy-lab';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
 
 vi.mock('../src/ai/home-ai-service', () => {
@@ -412,6 +413,7 @@ async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);
   app.register(strategyRoutes, { prefix: '/api/strategies' });
+  app.register(strategyLabRoutes, { prefix: '/api/strategy-lab' });
   app.register(strategyVersionRoutes, { prefix: '/api/strategy-versions' });
   await app.ready();
   return app;
@@ -420,6 +422,99 @@ async function createApp() {
 describe('strategy lab vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
+  });
+
+  it('returns deterministic strategy proposal candidates without persistence', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'trend_following',
+        proposal_count: 1,
+        user_hint: '出来高を重視したい',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.schema_name).toBe('strategy_proposal_candidates');
+    expect(body.data.provider).toMatchObject({
+      name: 'stub',
+      mode: 'deterministic',
+      web_search: false,
+      persisted: false,
+    });
+    expect(body.data.candidates).toHaveLength(1);
+    expect(body.data.candidates[0]).toMatchObject({
+      strategy_type: 'trend_following',
+      confidence: 'medium',
+      pine_feasibility: 'high',
+    });
+    expect(body.data.candidates[0].suggested_natural_language_spec).toContain('出来高を重視したい');
+    expect(body.data.disclaimer).toContain('投資助言ではありません');
+  });
+
+  it('uses deterministic strategy proposal defaults', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.input).toMatchObject({
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      risk_preference: 'balanced',
+      strategy_type_bias: 'any',
+      proposal_count: 5,
+      user_hint: null,
+    });
+    expect(body.data.provider.persisted).toBe(false);
+    expect(body.data.candidates).toHaveLength(5);
+  });
+
+  it('rejects invalid strategy proposal query values', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 99,
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('VALIDATION_ERROR');
+
+    const invalidRisk = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        risk_preference: 'maximum',
+      },
+    });
+    expect(invalidRisk.statusCode).toBe(400);
+    expect(invalidRisk.json().error.code).toBe('VALIDATION_ERROR');
+
+    const invalidStrategyType = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        strategy_type_bias: 'scalping',
+      },
+    });
+    expect(invalidStrategyType.statusCode).toBe(400);
+    expect(invalidStrategyType.json().error.code).toBe('VALIDATION_ERROR');
   });
 
   it('creates strategy, creates version, and generates pine successfully', async () => {

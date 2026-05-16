@@ -509,6 +509,53 @@ export type StrategyVersionListData = {
   }>;
 };
 
+export type StrategyProposalData = {
+  schema_name: 'strategy_proposal_candidates' | string;
+  schema_version: string;
+  input: {
+    market: string;
+    timeframe: string;
+    symbol_code: string | null;
+    risk_preference: string;
+    strategy_type_bias: string;
+    proposal_count: number;
+    user_hint: string | null;
+  };
+  provider: {
+    name: string;
+    mode: string;
+    web_search: boolean;
+    persisted: boolean;
+  };
+  candidates: Array<{
+    candidate_id: string;
+    title: string;
+    summary: string;
+    market_assumption: string;
+    timeframe_assumption: string;
+    strategy_type: string;
+    entry_logic: string[];
+    exit_logic: string[];
+    risk_management: string[];
+    invalidation_conditions: string[];
+    expected_strengths: string[];
+    expected_weaknesses: string[];
+    required_indicators: string[];
+    pine_feasibility: string;
+    backtest_cautions: string[];
+    research_basis: Array<{
+      source_type: string;
+      label: string;
+      url: string | null;
+    }>;
+    confidence: string;
+    uncertainty: string[];
+    suggested_natural_language_spec: string;
+    suggested_pine_constraints: string[];
+  }>;
+  disclaimer: string;
+};
+
 export type StrategyListData = {
   query: {
     q: string;
