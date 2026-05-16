@@ -1,6 +1,6 @@
 # 北極星 AI provider 運用
 
-更新日: 2026-05-16
+更新日: 2026-05-17
 分類: 運用ドキュメント
 
 ## 1. 目的
@@ -108,11 +108,26 @@ local_llm provider 運用:
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
 - `openai_api`、Web search / deep research、request-time provider selection、proposal history、auto Pine generation / auto save は後続候補として残す。
 
+## 7-2. LLM strategy proposal quality evaluation
+
+Strategy proposal quality evaluation は、required check ではなく manual runbook として扱う。`stub` は deterministic baseline、`local_llm` は明示 opt-in の比較対象であり、local_llm 実体依存 test は required check に入れない。
+
+確認観点:
+
+- schema validity、candidate count、required fields、enum validity は自動検査しやすい項目として見る。
+- diversity、user_hint alignment、market / timeframe assumption、entry / exit、risk management、invalidation condition、Pine feasibility、backtest caution、uncertainty、unsupported claim risk は手動評価する。
+- 投資助言風 wording は一律 reject しない。proposal が売買推奨ではなく、backtest / user review 前提の検証候補として提示されているかを見る。
+- latency、timeout、invalid JSON、schema invalid、provider unavailable は provider ごとに記録する。
+- provider logs や評価記録には raw prompt、raw response、endpoint、model 実値、credential、local path、stack trace を残さない。
+
+詳細手順と記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を参照する。
+
 ## 8. 関連 docs
 
 - `README.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
 - `docs/仕様書/11_LLM_Strategy_Proposal仕様.md`
+- `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md`
 - `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
 - `docs/運用ドキュメント/04_CSV取込運用.md`

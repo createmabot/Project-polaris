@@ -1,6 +1,6 @@
 # 北極星 LLM strategy proposal 現行設計
 
-更新日: 2026-05-16
+更新日: 2026-05-17
 分類: 仕様書
 
 ## 1. 目的
@@ -383,7 +383,40 @@ UI / docs で避ける表現:
 - proposal から Pine generation への自動連鎖。
 - 投資助言風 wording だけを理由に proposal 候補を過剰に狭めること。
 
-## 10. 後続候補
+## 10. quality evaluation 方針
+
+Strategy proposal quality evaluation は、stub と local_llm の出力を同じ評価軸で確認し、schema が正しいだけでなく、検証候補として使える粒度かを判断する。
+
+自動検査対象:
+
+- schema validity。
+- candidate count と `proposal_count` / 最大 10 件の境界。
+- enum validity。
+- required fields 欠落。
+- invalid JSON / schema invalid / candidate count invalid。
+- latency / timeout / provider failure rate。
+
+手動評価対象:
+
+- candidate diversity / strategy_type diversity。
+- user_hint alignment。
+- market / timeframe assumption clarity。
+- entry / exit logic clarity。
+- risk management quality。
+- invalidation condition clarity。
+- Pine feasibility。
+- backtest caution quality。
+- uncertainty / limitations。
+- 検証候補として提示されているか。
+- hallucination / stale / unsupported claim risk。
+
+stub は deterministic baseline として schema、UI表示、候補選択、empty candidates を確認する。local_llm は diversity、user_hint alignment、risk / caution quality、Pine feasibility、latency、invalid response rate を stub と比較する。
+
+投資助言風 wording を含む input / output は wording だけで reject しない。評価では、売買推奨や利益保証ではなく backtest / user review 前提の検証候補として提示されているかを確認する。
+
+詳細な評価シナリオ、manual runbook、記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を正本とする。
+
+## 11. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -391,14 +424,15 @@ UI / docs で避ける表現:
 - proposal history / selected proposal lineage。
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
-- proposal quality evaluation。
+- quality evaluation の実測記録と provider 比較サマリー。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 11. 参照
+## 12. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
 - API 方針: `docs/仕様書/03_API仕様.md`
 - AI provider 運用: `docs/運用ドキュメント/05_AI_provider運用.md`
+- Strategy proposal 品質評価運用: `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md`
 - backlog: `docs/作業進捗管理/03_残課題_Backlog.md`
