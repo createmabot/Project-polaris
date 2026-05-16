@@ -418,7 +418,49 @@ stub は deterministic baseline として schema、UI表示、候補選択、emp
 
 詳細な評価シナリオ、manual runbook、記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を正本とする。
 
-## 11. 後続候補
+## 11. instrumentation / cost guard 設計方針
+
+Strategy proposal provider instrumentation は、provider 品質と failure 分類を観測するための sanitized metadata として扱う。初回実装候補は `POST /api/strategy-lab/proposals` の optional metadata であり、既存 response shape を壊さない形に限定する。DB 永続化、proposal history、job 化は行わない。
+
+metadata 候補:
+
+- provider name: `stub` / `local_llm`。
+- selected_by: `env` / `config` / `default`。request-time provider selection は未実装のため、現時点では `request` は使わない。
+- request started at: raw timestamp は client response に出さない。必要な場合は logs 内の sanitized event に限定し、UI/API では elapsed と bucket を優先する。
+- elapsed_ms: optional。UI に出す場合は丸めるか、latency bucket を優先する。
+- latency bucket: `fast` / `acceptable` / `slow` / `timeout`。
+- status: `succeeded` / `validation_failed` / `provider_unavailable` / `timeout` / `invalid_response` / `provider_error`。
+- candidate_count。
+- invalid_reason: `none` / `schema_invalid` / `malformed_json` / `required_field_missing` / `enum_invalid` / `candidate_count_invalid` / `web_research_basis_disabled` / `provider_unavailable` / `timeout` / `unknown`。raw provider diagnostics は含めない。
+- validation_error_count。
+- fallback_used / fallback_reason。現行は silent fallback なしのため、既定は `false` / `null`。
+- schema_valid。
+- model name: 実値は response / UI / docs / PR に出さない。必要な場合は `configured` / `default` / `unknown` などの sanitized category に留める。
+
+response / logs 方針:
+
+- response metadata は optional とし、既存 `data.candidates` と validation behavior を壊さない。
+- logs を出す場合も sanitized event のみとし、raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は出さない。
+- UI 表示は最小 provider note に留め、debug console や long diagnostics panel は初回対象外にする。
+- instrumentation metadata は品質評価と運用切り分けの補助であり、投資判断や候補 ranking には使わない。
+
+cost / rate guard 方針:
+
+- `local_llm` は latency / timeout を主な運用観点とし、短い timeout、max output、candidate count 上限を維持する。
+- `openai_api` を導入する場合は、明示 opt-in、max candidates、max output、rate limit、cost cap、prompt length guard、provider unavailable / timeout 時の retry 方針を実装前に固定する。
+- retry は既定で行わない。導入する場合は user operation 起点の明示 retry または bounded retry に限定し、画面表示 / typing / polling 起点では実行しない。
+- request-time provider selection は cost / abuse / consistency の境界が重いため、role / env / feature flag / audit などの運用条件を先に設計する。
+- Web search / deep research は latency と cost が大きいため、同期 proposal API ではなく job 化候補として分離する。
+
+CI / manual 境界:
+
+- CI は mock / fake response で metadata 分類、status、invalid_reason、fallback flags を検査する。
+- real local_llm endpoint に依存する test は required check に入れない。
+- local_llm latency / timeout / invalid response rate は manual runbook で観測する。
+
+本設計 PR では、実装コード、API、test、frontend、backend、DB、Prisma schema は変更しない。
+
+## 12. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -427,11 +469,11 @@ stub は deterministic baseline として schema、UI表示、候補選択、emp
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
 - provider quality benchmark records。
-- provider instrumentation（sanitized provider event / duration bucket / error category）。
+- provider instrumentation implementation（sanitized provider event / duration bucket / error category）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 12. 参照
+## 13. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
