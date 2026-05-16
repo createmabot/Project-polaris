@@ -14,6 +14,24 @@ export class ApiError extends Error {
   }
 }
 
+function shouldAttachJsonContentType(init?: RequestInit): boolean {
+  if (init?.body === undefined || init.body === null) {
+    return false;
+  }
+  if (typeof FormData !== 'undefined' && init.body instanceof FormData) {
+    return false;
+  }
+  return true;
+}
+
+function buildHeaders(init?: RequestInit): Headers {
+  const headers = new Headers(init?.headers);
+  if (shouldAttachJsonContentType(init) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+  return headers;
+}
+
 /**
  * A generic fetch wrapper for our `{ data, meta, error }` JSON layout API.
  * Returns only the `data` portion of the response directly, throwing on error.
@@ -21,10 +39,7 @@ export class ApiError extends Error {
 export async function fetchApi<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init?.headers,
-    },
+    headers: buildHeaders(init),
   });
 
   if (!res.ok) {
