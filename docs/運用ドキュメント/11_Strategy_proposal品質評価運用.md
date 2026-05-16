@@ -162,6 +162,16 @@ local_llm opt-in:
 - fallback metadata。
 - UI/API で参照できる範囲の provider diagnostics。
 
+instrumentation / cost guard design PR 1 の方針:
+
+- 初回実装候補は `POST /api/strategy-lab/proposals` の optional metadata とする。
+- metadata は provider name、selected_by、elapsed_ms / latency bucket、status、candidate_count、invalid_reason、validation_error_count、fallback_used / fallback_reason、schema_valid を候補にする。
+- request started at の raw timestamp は response に出さず、必要な場合も sanitized logs に限定する。
+- model name は実値を出さず、configured / default / unknown などの category にする。
+- prompt 全文、raw response、endpoint、secret、token、local path は記録しない。
+- CI は mock / fake response で metadata 分類を検査し、local_llm 実体依存 test は required check に入れない。
+- local_llm の latency / timeout は manual runbook で観測し、openai_api / Web search / deep research は別フェーズで cost / job 化を判断する。
+
 ## 6. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。

@@ -123,6 +123,43 @@ Strategy proposal quality evaluation は、required check ではなく manual ru
 
 詳細手順と記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を参照する。
 
+## 7-3. LLM strategy proposal instrumentation / cost guard 設計
+
+instrumentation の初回実装候補は、`POST /api/strategy-lab/proposals` の optional metadata と sanitized provider event である。DB 永続化、proposal history、job 化は行わない。
+
+記録してよい sanitized metadata:
+
+- provider name: `stub` / `local_llm`。
+- selected_by: `env` / `config` / `default`。
+- elapsed_ms または latency bucket。
+- status: succeeded / validation_failed / provider_unavailable / timeout / invalid_response / provider_error。
+- candidate_count。
+- invalid_reason。
+- validation_error_count。
+- schema_valid。
+- fallback_used / fallback_reason。
+
+記録しないもの:
+
+- raw prompt。
+- raw response。
+- provider endpoint。
+- model 実値。
+- secret、token、credential。
+- local path。
+- stack trace。
+
+運用方針:
+
+- raw request started at timestamp は client response に出さず、必要な場合も sanitized logs に限定する。
+- model は実値ではなく configured / default / unknown などの category で扱う。
+- UI 表示は最小 provider note に留める。
+- local_llm は latency / timeout / max output を主な guard とする。
+- openai_api を導入する場合は、明示 opt-in、max candidates、max output、rate limit、cost cap、prompt length guard、retry なしまたは bounded retry を先に固定する。
+- request-time provider selection は cost / abuse / consistency の観点から、別設計を経て導入判断する。
+- Web search / deep research は同期 API ではなく job 化候補として扱う。
+- CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
+
 ## 8. 関連 docs
 
 - `README.md`
