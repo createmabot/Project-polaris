@@ -93,6 +93,18 @@
 - proposal history、DB migration、Strategy / StrategyVersion への自動保存、Pine generation への自動連鎖は行わない。
 - Web search / deep research を使う provider は後続判断とし、初回実装は deterministic stub provider に限定する。
 
+Proposal history / selected proposal lineage の次フェーズ API 方針:
+
+- `POST /api/strategy-lab/proposals` は後方互換を維持する。
+- history 保存を実装する場合も、既存 response の `schema_name` / `schema_version` / `input` / `provider` / `provider_observation` / `candidates` / `disclaimer` は壊さない。
+- 追加する場合は optional `proposal_run_id` または `history.proposal_run_id` に留める。
+- `GET /api/strategy-lab/proposals` は最近の proposal run 一覧を返す候補 endpoint とする。
+- `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す候補 endpoint とする。
+- `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する候補 endpoint とする。
+- selection API は StrategyLab input 反映の履歴だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
+- raw prompt、raw provider response、provider endpoint、secret、local path、stack trace は API response に返さない。
+- filter / pagination / large history management は後続判断とし、初回 UI は recent list 程度に留める。
+
 ## 7-1. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`

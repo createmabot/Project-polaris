@@ -220,6 +220,24 @@ prompt regression / provider benchmark phase の完了整理:
 - 実測 raw output は原則 commit せず、必要な場合も sanitized summary のみを progress docs に残す。
 - raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace は docs / PR / output に出さない。
 
+proposal history / selected proposal lineage design PR 1 の docs-only 固定:
+
+- proposal history は generation run と candidates、selected candidate を後から確認するための履歴として扱う。
+- 初回実装方針は `StrategyProposalRun` / `StrategyProposalCandidate` 相当の新規 model 追加を第一候補にする。
+- selected だけではなく全候補保存を第一候補にする。比較文脈と provider quality 観測を残すため。
+- provider_observation は sanitized metadata のみ保存する。
+- user_hint は raw prompt ではなく bounded / sanitized request input として扱う。最終保存有無は実装 PR で確認する。
+- candidate JSON は normalized schema のみ保存し、raw provider response は保存しない。
+- raw prompt、raw provider response、provider secret、endpoint、model 実値、local path、stack trace は保存しない。
+- local_llm failure / invalid response は candidates なしの failed run として sanitized status / reason を残す方針を第一候補にする。request validation error は保存対象外を第一候補にする。
+- `POST /api/strategy-lab/proposals` は後方互換を維持し、history id を返す場合も optional field にする。
+- 初回 API 候補は recent list の `GET /api/strategy-lab/proposals`、detail の `GET /api/strategy-lab/proposals/:proposalRunId`、selection の `POST /api/strategy-lab/proposals/:proposalRunId/select` とする。
+- 初回 UI は StrategyLab の「最近の提案」程度に留める。filter / pagination / large history management は後続判断にする。
+- `selected_strategy_id` / `selected_strategy_version_id` / `StrategyRuleVersion.createdFromProposalCandidateId` は初回では入れず、後続 lineage relation として判断する。
+- 実装 PR では DB migration / Prisma schema change が必要。migration、backend API、frontend UI、tests を docs-only PR から分ける。
+- local_llm 実体依存 test は required check に入れない。
+- proposal から Pine generation、StrategyVersion 自動保存、backtest、AI summary への自動連鎖は引き続き対象外。
+
 初回ではやらないこと:
 
 - DB migration / proposal entity。

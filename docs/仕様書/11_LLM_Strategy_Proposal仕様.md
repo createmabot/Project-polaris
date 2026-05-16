@@ -336,6 +336,223 @@ failure policy:
 - AI job / summary 基盤を使うか、strategy proposal 専用 job を作るか。
 - selected proposal から作成された StrategyVersion との lineage をどう持つか。
 
+### 6-1. proposal history / selected proposal lineage 設計方針
+
+次フェーズの proposal history / selected proposal lineage は、StrategyLab で取得した strategy proposal run と、その run 内の候補、ユーザーが選択した候補を後から確認するための履歴である。目的は「どの提案候補から natural language spec を作ったか」を追えるようにすることであり、Strategy / StrategyVersion / Pine generation / backtest の自動起動ではない。
+
+責務:
+
+- generation run: 1 回の `POST /api/strategy-lab/proposals` を表す履歴単位として保存する。
+- candidate: run 内で UI に返した候補を保存する。初回実装では selected だけではなく、返却された全候補を保存する方針を第一候補にする。
+- selected candidate: ユーザーが StrategyLab input に反映した候補を明示的に記録する。
+- selected state: run 側に `selected_candidate_id` 相当を持つか、candidate 側に `selected_at` を持つ。初回案では run の selected relation と candidate の `selected_at` を併用できる形にする。
+- StrategyLab input 反映: selected candidate は StrategyLab の title / natural language rule へ反映された事実を示すだけで、保存済み Strategy / StrategyVersion を意味しない。
+- Strategy / StrategyVersion / Pine generation: proposal selection だけでは作成しない。既存の保存・Pine生成・validation・backtest は手動導線を維持する。
+
+保存するもの:
+
+- request parameters: `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` は保存対象にする。
+- user_hint: raw text ではなく、保存する場合も length bounded / sanitized text として扱う。実装時に「保存しない」「短い sanitized summary のみ保存」「bounded text を保存」のいずれかを最終判断する。第一候補は bounded / sanitized text で、raw prompt とは分ける。
+- provider metadata: `provider.name` / `provider.mode` / `web_search` / `persisted` のような sanitized metadata を保存する。
+- provider_observation: `status` / `latency_bucket` / `elapsed_ms` / `candidate_count` / `invalid_reason` / `validation_error_count` / `fallback_used` / `fallback_reason` / `schema_valid` / `model_category` など、既存 response metadata と同等の sanitized 値を保存する。
+- candidate JSON: UI 表示と後続選択再現に必要な normalized candidate JSON を保存する。schema は現行 `strategy_proposal_candidates` / `1.0` を基準にし、candidate 単位の normalized JSON と主要検索用 field を分ける。
+- selected reflection snapshot: selected candidate の `title` と `suggested_natural_language_spec` を、選択時点の snapshot として candidate 側に含める。
+
+保存しないもの:
+
+- raw prompt。
+- raw provider response。
+- provider secret / token / credential。
+- provider endpoint。
+- model 実値。
+- local path。
+- stack trace。
+- Web search / deep research の raw source payload。
+
+local_llm failure / invalid response の扱い:
+
+- local_llm の timeout / unavailable / malformed JSON / invalid schema は、candidate がない failed run として履歴に残す方針を第一候補にする。
+- failed run は sanitized `provider_observation` と request parameters のみを保存し、raw provider diagnostics は保存しない。
+- 0 candidates の成功応答は failed run ではなく succeeded run with zero candidates として扱う。
+- request validation error は保存しない方針を第一候補にする。request として成立していないため、履歴よりも client-side / API validation error に閉じる。
+
+全候補保存を第一候補にする理由:
+
+- selected だけ保存すると、ユーザーが何と比較して選んだかが失われる。
+- provider quality / diversity の後続評価で、selected 以外の候補が必要になる。
+- candidate JSON は normalized schema に限定し、raw response を保存しないことで retention risk を抑える。
+
+selected だけ保存案の見送り理由:
+
+- storage は軽くなるが、提案比較の文脈が残らない。
+- local_llm の candidate diversity / rejected candidates の品質確認に使いにくい。
+- 後から「なぜこの candidate を選んだか」を UI 上で説明しにくい。
+
+### 6-2. data model 案
+
+実装 PR では DB migration / Prisma schema change が必要になる。docs-only PR では model を追加しない。
+
+`StrategyProposalRun` 相当:
+
+- `id`
+- `userId` nullable
+- `schemaName`
+- `schemaVersion`
+- `market`
+- `timeframe`
+- `symbolCode` nullable
+- `riskPreference`
+- `strategyTypeBias`
+- `proposalCount`
+- `userHintText` nullable。raw prompt ではなく bounded / sanitized request input。
+- `providerName`
+- `providerMode`
+- `providerWebSearch`
+- `providerPersisted`
+- `providerObservationJson`
+- `status`: `succeeded` / `validation_failed` / `provider_unavailable` / `timeout` / `invalid_response` / `provider_error`
+- `candidateCount`
+- `selectedCandidateId` nullable
+- `selectedAt` nullable
+- `createdAt`
+- `updatedAt`
+
+`StrategyProposalCandidate` 相当:
+
+- `id`
+- `proposalRunId`
+- `candidateKey`: provider response 内の `candidate_id`
+- `sortOrder`
+- `title`
+- `summary`
+- `strategyType`
+- `marketAssumption`
+- `timeframeAssumption`
+- `pineFeasibility`
+- `confidence`
+- `candidateJson`: normalized candidate JSON。raw provider response ではない。
+- `suggestedNaturalLanguageSpec`。必要なら `candidateJson` から分離して検索 / 表示しやすくする。
+- `selectedAt` nullable
+- `createdAt`
+- `updatedAt`
+
+relation / index 案:
+
+- `StrategyProposalRun` 1 対多 `StrategyProposalCandidate`。
+- `StrategyProposalRun.selectedCandidateId` は nullable foreign key とする。
+- `StrategyProposalCandidate(proposalRunId, sortOrder)`。
+- `StrategyProposalRun(createdAt)`。
+- `StrategyProposalRun(status, createdAt)`。
+- `StrategyProposalCandidate(strategyType, createdAt)` は必要になった時点で追加判断する。
+
+初回では入れない relation:
+
+- `selected_strategy_id` は初回では不要。proposal selection と Strategy 作成は別操作であり、同一トランザクションで結ばないため。
+- `selected_strategy_version_id` は初回では不要。StrategyVersion は既存保存操作で作成され、proposal selection だけでは作られないため。
+- `created_from_candidate_id` を `StrategyRuleVersion` に追加する案は後続判断。StrategyVersion 作成 API に proposal candidate id を渡す UI / API 変更が必要になるため、history 初回実装とは分ける。
+
+後続 lineage 案:
+
+- `StrategyRuleVersion.createdFromProposalCandidateId` 相当を nullable で追加する。
+- StrategyLab で selected candidate がある状態で保存する場合だけ、明示的に candidate id を StrategyVersion 作成 request に渡す。
+- 既存 StrategyVersion 作成 API の必須 field にはしない。
+- proposal candidate が削除されても StrategyVersion は残す必要があるため、relation は `onDelete: SetNull` を第一候補にする。
+
+### 6-3. API 方針
+
+後方互換:
+
+- 既存 `POST /api/strategy-lab/proposals` の response shape は維持する。
+- history 保存を実装しても、既存 client が読む `schema_name` / `schema_version` / `input` / `provider` / `provider_observation` / `candidates` / `disclaimer` は壊さない。
+- 追加する場合は optional field として `proposal_run_id` または `history.proposal_run_id` を返す。
+- provider failure response の `error.details.provider_observation` は sanitized metadata のまま維持する。
+
+候補 API:
+
+- `GET /api/strategy-lab/proposals`
+  - 最近の proposal run 一覧を返す。
+  - 初回は `limit` 上限付きの recent list に限定する。
+  - filter / pagination / large history management は後続判断とする。
+- `GET /api/strategy-lab/proposals/:proposalRunId`
+  - run detail と candidates を返す。
+  - raw prompt / raw response / endpoint / secret / local path は返さない。
+- `POST /api/strategy-lab/proposals/:proposalRunId/select`
+  - request: `{ "candidate_id": "..." }` または `{ "proposal_candidate_id": "..." }`。
+  - selected candidate を run に記録し、candidate の `selected_at` を更新する。
+  - StrategyLab input 反映は frontend state の責務であり、この API は Strategy / StrategyVersion / Pine generation を起動しない。
+
+selection API の代替案:
+
+- `POST /api/strategy-lab/proposal-candidates/:candidateId/select`
+  - candidate id だけで選択できるが、run 文脈が URL から見えにくい。
+- `PATCH /api/strategy-lab/proposals/:proposalRunId`
+  - 汎用 patch は将来 field が増えた時に責務が広がるため、初回は select 専用 endpoint を第一候補にする。
+
+failed run API:
+
+- failed run を保存する場合も、detail API は candidates 空配列と sanitized provider observation を返す。
+- provider error の raw details は返さない。
+
+### 6-4. migration 方針
+
+proposal history / lineage は新規 table が必要になるため、実装 PR では DB migration / Prisma schema change が必要である。docs-only PR では migration を作らない。
+
+実装 PR を分ける理由:
+
+- migration、Prisma schema、backend API、frontend UI、tests の影響範囲が docs-only 設計より大きい。
+- rollback 時に table / relation / nullable FK の扱いを明示する必要がある。
+- seed への影響有無を確認する必要がある。
+- StrategyVersion lineage relation を同時に入れるかどうかで migration scope が変わる。
+
+rollback 方針:
+
+- 初回 migration は additive table 追加に限定する。
+- 既存 table の必須 column 追加は避ける。
+- StrategyVersion への nullable relation は初回では入れず、rollback を単純にする。
+- rollback が必要な場合は、新規 proposal history tables の drop だけで既存 strategy / backtest data に影響しない構成を第一候補にする。
+
+seed 影響:
+
+- 初回実装では seed は変更しない方針を第一候補にする。
+- UI 目視用の proposal history seed が必要になった場合も、別 PR または optional seed として扱う。
+
+### 6-5. 初回実装スコープ案
+
+初回実装候補:
+
+1. DB migration / Prisma schema: `StrategyProposalRun` と `StrategyProposalCandidate` を追加する。
+2. Backend: `POST /api/strategy-lab/proposals` の後方互換を維持しつつ、成功 run と failed provider run の sanitized history を保存する。
+3. Backend: `GET /api/strategy-lab/proposals` と `GET /api/strategy-lab/proposals/:proposalRunId` を read-only で追加する。
+4. Backend: selection API を追加し、selected candidate を記録する。
+5. Frontend: StrategyLab に「最近の提案」程度の最小 UI を追加する。
+6. Frontend: candidate 選択時に selection API を呼び、従来どおり title / natural language rule に反映する。
+7. Tests: DB persistence / API shape / selection / no auto Pine / no auto save / sanitized metadata を mock / stub で確認する。
+
+初回 UI:
+
+- StrategyLab 内に recent proposal runs を数件表示する。
+- run status、created_at、provider name、candidate count、selected 有無を表示する。
+- detail は run 内 candidates の再表示と「この候補を使う」に留める。
+- filter / pagination / search / bulk delete / retention management / provider quality trend UI は後続にする。
+
+required check 方針:
+
+- `stub` と mocked provider response による persistence / API / validation tests を required check 対象にする。
+- real `local_llm` 実体依存 test は required check に入れない。
+- local_llm failure / invalid response の履歴保存は fake provider / mocked fetch で確認する。
+
+初回でやらないこと:
+
+- StrategyVersion 自動保存。
+- Pine generation 自動起動。
+- backtest 自動起動。
+- Web search / deep research。
+- openai_api provider。
+- raw prompt / raw response 保存。
+- provider endpoint / local path / secret 保存。
+- retention job / hard delete。
+- full history management。
+
 ## 7. safety / disclaimer
 
 本機能は投資助言ではない。UI と docs では次を明示する。
