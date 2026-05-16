@@ -597,6 +597,12 @@ pnpm exec prisma db seed
 - StrategyLab and BacktestComparisonDetail now use shared UI components for selected section, state, status, key-value, link, and button presentation.
 - The pass keeps StrategyLab generation, save, validation, CSV import behavior, Backtest comparison API shape, backend, DB, and Prisma schema unchanged.
 
+### LLM strategy proposal initial implementation
+
+- StrategyLab now provides a deterministic stub proposal flow for strategy idea candidates.
+- Selecting a proposal fills the StrategyLab title and natural language rule only; Pine generation, save, validation, and backtest execution remain explicit user actions.
+- The proposal flow is for verification candidates, not investment advice. Web search, deep research, proposal history, and automatic Pine generation remain future decisions.
+
 ### Home and SideRail light cleanup pass
 
 - Home and SideRail now use shared UI components for selected loading, error, empty, key-value, and button presentation.

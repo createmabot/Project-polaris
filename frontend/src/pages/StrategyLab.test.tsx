@@ -47,14 +47,21 @@ function primeScenarioState(params: {
   backtest?: Record<string, unknown> | null;
   importState?: Record<string, unknown> | null;
   importError?: string | null;
+  proposalData?: Record<string, unknown> | null;
+  proposalError?: string | null;
 }) {
   mockUseState.mockReset();
-  const setters = Array.from({ length: 14 }).map(() => vi.fn());
+  const setters = Array.from({ length: 19 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
     'JP_STOCK',
     'D',
+    'balanced',
+    'any',
+    params.proposalData ?? null,
+    params.proposalError ?? null,
+    false,
     false,
     null,
     params.result ?? null,
@@ -88,6 +95,11 @@ describe('StrategyLab', () => {
     expect(html).toContain('履歴一覧を見る');
     expect(html).toContain('ルール検証ラボ');
     expect(html).toContain('自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。');
+    expect(html).toContain('ストラテジー候補の提案');
+    expect(html).toContain('候補は検証用のたたき台です。売買推奨ではありません。');
+    expect(html).toContain('リスク設定');
+    expect(html).toContain('戦略タイプ');
+    expect(html).toContain('ストラテジーを提案');
     expect(html).toContain('戦略タイトル');
     expect(html).toContain('自然言語ルール');
     expect(html).toContain('市場');
@@ -180,5 +192,56 @@ describe('StrategyLab', () => {
     expect(html).toContain('CSVが空です。TradingView のエクスポート内容が1行以上あることを確認してください。');
     expect(html).toContain('ヘッダー行とデータ行が不足しています。エクスポート直後のCSVをそのまま使用してください。');
     expect(html).toContain('必要列が不足しています。Performance Summary なら主要指標列、List of Trades なら約定列を含むCSVを使用してください。');
+  });
+
+  it('renders strategy proposal candidates without auto-generating pine', () => {
+    primeScenarioState({
+      proposalData: {
+        provider: {
+          name: 'stub',
+          mode: 'deterministic',
+          web_search: false,
+          persisted: false,
+        },
+        candidates: [
+          {
+            candidate_id: 'stub-1',
+            title: '移動平均トレンドフォロー候補',
+            summary: '中期移動平均と出来高で上昇トレンドを確認してから入る検証候補。',
+            strategy_type: 'trend_following',
+            confidence: 'medium',
+            pine_feasibility: 'high',
+            entry_logic: ['終値が25日移動平均を上回る'],
+            risk_management: ['1回の損失を限定する'],
+            backtest_cautions: ['長期上昇相場に過剰適合しないか確認する'],
+          },
+        ],
+        disclaimer: '検証候補の提案です。投資助言ではありません。',
+      },
+    });
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-lab', vi.fn()]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+    expect(html).toContain('provider:');
+    expect(html).toContain('stub / deterministic');
+    expect(html).toContain('web search:');
+    expect(html).toContain('disabled');
+    expect(html).toContain('保存:');
+    expect(html).toContain('なし');
+    expect(html).toContain('移動平均トレンドフォロー候補');
+    expect(html).toContain('この候補を使う');
+    expect(html).toContain('trend_following');
+    expect(html).toContain('Pine feasibility:');
+    expect(html).toContain('検証候補の提案です。投資助言ではありません。');
+    expect(html).toContain('保存してPine生成');
+    expect(html).not.toContain('生成結果');
+    expect(html).not.toContain('CSV取込（MVP）');
   });
 });
