@@ -1,6 +1,6 @@
 # 北極星 AI provider 運用
 
-更新日: 2026-05-13
+更新日: 2026-05-16
 分類: 運用ドキュメント
 
 ## 1. 目的
@@ -30,6 +30,8 @@
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
 
 LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。初回実装は deterministic stub provider に限定し、Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
+
+Strategy proposal provider expansion では、まず provider boundary を docs 上で固定する。`local_llm` / `openai_api` を使う場合も、proposal は StrategyLab の一時候補生成に限定し、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を自動起動しない。
 
 ## 4. job 状態の見方
 
@@ -73,6 +75,25 @@ LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補
 - 自動生成対象を広げる前に cost cap / rate limit / opt-in 条件を設計する。
 - page view 起点の生成は過剰 enqueue になりやすいため現行では採用しない。
 - polling 本格化、batch retry、scheduled job は後続判断とする。
+
+## 7-1. LLM strategy proposal provider 運用境界
+
+現行:
+
+- `POST /api/strategy-lab/proposals` はユーザー操作起点の同期 API として扱う。
+- 初回 provider は deterministic `stub`。DB 保存、job 化、proposal history は行わない。
+- Web search / deep research は行わない。`source_type=web` は将来予約であり、現行 response では citation / freshness を主張しない。
+
+provider expansion 時の必須条件:
+
+- request validation は route 層で行う。`proposal_count` は 1〜10、risk / strategy type enum は仕様書の値に限定する。
+- provider response は `strategy_proposal_candidates` schema に正規化し、未知 enum、空 candidate、空 `suggested_natural_language_spec`、投資助言断定を含む候補は invalid output として扱う。
+- timeout を必ず設定し、timeout / invalid output / provider failure は proposal section の generic failure に閉じる。
+- provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
+- fallback は silent に行わない。stub fallback を有効にする場合は opt-in とし、provider metadata と UI 文言で分かるようにする。
+- 有料 provider は明示 opt-in、rate limit、cost cap、prompt length guard の設計後に広げる。
+- 画面表示、typing、polling、batch、scheduled job を契機に proposal を自動生成しない。
+- proposal は投資助言ではないため、利益保証、売買推奨、検証不要と読める表現を禁止する。
 
 ## 8. 関連 docs
 
