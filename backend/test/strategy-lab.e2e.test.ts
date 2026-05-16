@@ -517,6 +517,41 @@ describe('strategy lab vertical slice', () => {
     expect(invalidStrategyType.json().error.code).toBe('VALIDATION_ERROR');
   });
 
+  it('classifies investment advice wording in proposal user hints as request validation', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        user_hint: 'must buy this setup',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    const body = response.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).not.toContain('PROVIDER_INVALID_RESPONSE');
+  });
+
+  it('keeps empty strategy proposal candidates representable', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        strategy_type_bias: 'other',
+        proposal_count: 5,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.input.strategy_type_bias).toBe('other');
+    expect(body.data.candidates).toEqual([]);
+  });
+
   it('creates strategy, creates version, and generates pine successfully', async () => {
     const app = await createApp();
 
