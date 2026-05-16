@@ -179,7 +179,7 @@ Web search / deep research を後続で扱う場合の方針:
 - 引用元がない market assertion は uncertainty に明記する。
 - timeout / provider failure 時は partial result または stub fallback を明示する。
 - cost / latency が高くなるため、opt-in、rate limit、cost cap を先に設計する。
-- 投資助言に見える断定表現を禁止し、backtest required / user review required を UI と docs に出す。
+- 投資助言に見える断定表現だけを理由に入力や候補を reject しない。安全のために検証候補を狭めすぎず、売買推奨ではなく backtest required / user review required であることを UI と docs に出す。
 
 初回で採用しないもの:
 
@@ -236,21 +236,21 @@ request validation:
 - `risk_preference`: `conservative|balanced|aggressive`。
 - `strategy_type_bias`: `any|trend_following|mean_reversion|breakout|momentum|volatility|risk_management|other`。
 - `proposal_count`: 1〜10 の整数。
-- `user_hint`: 任意。長文は request parsing 境界で安全な長さに丸める。投資助言に見える禁止表現を含む場合は request validation の `VALIDATION_ERROR` とし、provider invalid response と混同しない。prompt / log / error 表示では raw text を不用意に出さない。
+- `user_hint`: 任意。長文は request parsing 境界で安全な長さに丸める。投資助言に見える表現を含んでも入力段階では拒否しない。type validation と length bounding は維持し、prompt / log / error 表示では raw text を不用意に出さない。
 
 response validation:
 
 - `schema_name` は `strategy_proposal_candidates`、`schema_version` は `1.0` を維持する。
 - `candidates` は配列で、各 candidate は `candidate_id`、`title`、`summary`、`strategy_type`、`entry_logic`、`exit_logic`、`risk_management`、`backtest_cautions`、`confidence`、`uncertainty`、`suggested_natural_language_spec` を必須相当として扱う。
 - enum は本資料の `3-1. enum 候補` に限定する。未知値は UI にそのまま出さず、provider output invalid として扱う。
-- `suggested_natural_language_spec` が空、過度に短い、または投資助言断定を含む場合は invalid として扱う。
+- `suggested_natural_language_spec` が空または過度に短い場合は invalid として扱う。単なる投資助言風 wording だけを理由に provider invalid とはしない。
 - `research_basis.url` は現行では `null` を基本とする。Web search 未実装の provider が URL を返した場合は採用しない。
 
 failure policy:
 
 - request validation error は `VALIDATION_ERROR` として短い説明にする。
-- user input 由来の禁止表現は request validation error として扱い、provider が生成した invalid output と分ける。
-- provider timeout / invalid output / safety violation / upstream failure は generic failure とし、raw provider diagnostics は返さない。
+- user input 由来の投資助言風表現は request validation error にしない。入力として許容し、検証候補であることを UI / docs で明示する。
+- provider timeout / schema不正 / 型不正 / 必須項目欠落 / JSON または format 不正 / candidate数不正 / upstream failure は generic failure とし、raw provider diagnostics は返さない。
 - 0 candidates は既存 UI の EmptyState で表現できるため、schema 上は成功 response として許容する。provider failure とは分ける。
 - 失敗時に StrategyLab の既存 input を消さない。proposal candidates だけを失敗表示にする。
 
@@ -266,7 +266,7 @@ failure policy:
 ### 5-5. safety boundary
 
 - proposal は「検証候補」であり、売買推奨、利益保証、銘柄推奨ではない。
-- candidate title / summary / suggested spec では「買うべき」「必ず利益」「損失なし」などの断定表現を禁止する。
+- candidate title / summary / suggested spec に「買うべき」「必ず利益」「損失なし」などの投資助言風 wording が含まれる場合でも、その wording だけを理由に reject しない。安全のために検証候補を狭めすぎず、画面上の disclaimer と backtest / user review required の前提で扱う。
 - 銘柄固有の判断材料、最新ニュース、業績、開示情報を参照したように見せない。現行 provider は Web search / deep research を行わないため、freshness を主張しない。
 - backtest required、user review required、forward validation required を UI / docs の前提にする。
 - provider safety violation は generic failure とし、危険な候補を partial display しない。
@@ -299,7 +299,7 @@ failure policy:
 - Web search / provider knowledge は古い可能性や誤りを含む。
 - confidence は検証優先度の補助であり、成績見込みではない。
 
-禁止する表現:
+UI / docs で避ける表現:
 
 - 必ず儲かる。
 - この銘柄を買うべき。
@@ -334,7 +334,7 @@ failure policy:
 - strategy proposal job 化。
 - proposal から Strategy / StrategyVersion への自動保存。
 - proposal から Pine generation への自動連鎖。
-- 投資助言に見える断定表現。
+- 投資助言風 wording だけを理由に proposal 候補を過剰に狭めること。
 
 ## 10. 後続候補
 

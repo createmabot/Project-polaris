@@ -517,7 +517,7 @@ describe('strategy lab vertical slice', () => {
     expect(invalidStrategyType.json().error.code).toBe('VALIDATION_ERROR');
   });
 
-  it('classifies investment advice wording in proposal user hints as request validation', async () => {
+  it('allows investment advice style wording in proposal user hints', async () => {
     const app = await createApp();
 
     const response = await app.inject({
@@ -528,10 +528,11 @@ describe('strategy lab vertical slice', () => {
       },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.error.code).toBe('VALIDATION_ERROR');
-    expect(body.error.message).not.toContain('PROVIDER_INVALID_RESPONSE');
+    expect(body.data.input.user_hint).toBe('must buy this setup');
+    expect(body.data.candidates.length).toBeGreaterThan(0);
+    expect(body.data.disclaimer).toContain('投資助言ではありません');
   });
 
   it('keeps empty strategy proposal candidates representable', async () => {

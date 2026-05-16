@@ -77,10 +77,12 @@ describe('strategy proposal validation', () => {
     }));
   });
 
-  it('rejects investment advice style wording', () => {
-    expectProviderInvalidResponse(() => validateStrategyProposalCandidate(validCandidate({
+  it('allows investment advice style wording while preserving structural validation', () => {
+    const candidate = validateStrategyProposalCandidate(validCandidate({
       summary: 'この銘柄を買うべきで、必ず儲かる候補。',
-    })));
+    }));
+
+    expect(candidate.summary).toBe('この銘柄を買うべきで、必ず儲かる候補。');
   });
 
   it('keeps empty candidate responses representable for existing UI empty states', () => {
@@ -111,13 +113,16 @@ describe('strategy proposal validation', () => {
     expect(parsed.user_hint).toHaveLength(1000);
   });
 
-  it('classifies investment advice wording in user hints as request validation', () => {
-    expectValidationError(() => parseStrategyProposalRequest({
+  it('allows investment advice style wording in user hints while bounding text', () => {
+    const english = parseStrategyProposalRequest({
       user_hint: 'must buy this setup',
-    }));
-    expectValidationError(() => parseStrategyProposalRequest({
+    });
+    const japanese = parseStrategyProposalRequest({
       user_hint: 'この銘柄は買うべき',
-    }));
+    });
+
+    expect(english.user_hint).toBe('must buy this setup');
+    expect(japanese.user_hint).toBe('この銘柄は買うべき');
   });
 });
 
@@ -128,15 +133,5 @@ function expectProviderInvalidResponse(run: () => unknown) {
   } catch (error) {
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe('PROVIDER_INVALID_RESPONSE');
-  }
-}
-
-function expectValidationError(run: () => unknown) {
-  try {
-    run();
-    throw new Error('expected validation to fail');
-  } catch (error) {
-    expect(error).toBeInstanceOf(AppError);
-    expect((error as AppError).code).toBe('VALIDATION_ERROR');
   }
 }

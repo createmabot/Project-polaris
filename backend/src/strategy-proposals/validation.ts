@@ -25,17 +25,6 @@ type ValidationOptions = {
   allowWebResearchBasis?: boolean;
 };
 
-const FORBIDDEN_ADVICE_PATTERNS = [
-  /必ず儲/i,
-  /買うべき/i,
-  /売るべき/i,
-  /損失が出ない/i,
-  /guaranteed profit/i,
-  /must buy/i,
-  /must sell/i,
-  /no loss/i,
-];
-
 function readOptionalText(value: unknown, fallback: string): string {
   if (typeof value !== 'string') {
     return fallback;
@@ -50,13 +39,6 @@ function readNullableText(value: unknown, maxLength = 1000): string | null {
   }
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, maxLength) : null;
-}
-
-function rejectForbiddenAdviceInput(value: string | null, field: string): string | null {
-  if (value && hasForbiddenAdvice(value)) {
-    throw new AppError(400, 'VALIDATION_ERROR', `${field} must not include investment advice wording.`);
-  }
-  return value;
 }
 
 function readProposalCount(value: unknown): number {
@@ -111,7 +93,7 @@ export function parseStrategyProposalRequest(body: ProposalBody = {}): StrategyP
     risk_preference: normalizeRiskPreference(body.risk_preference),
     strategy_type_bias: normalizeStrategyTypeBias(body.strategy_type_bias),
     proposal_count: readProposalCount(body.proposal_count),
-    user_hint: rejectForbiddenAdviceInput(userHint, 'user_hint'),
+    user_hint: userHint,
   };
 }
 
@@ -144,10 +126,6 @@ function normalizeTextArray(value: unknown, field: string, maxItems = 8, maxItem
   return normalized;
 }
 
-function hasForbiddenAdvice(text: string): boolean {
-  return FORBIDDEN_ADVICE_PATTERNS.some((pattern) => pattern.test(text));
-}
-
 function invalidProviderOutput(message: string): AppError {
   return new AppError(502, 'PROVIDER_INVALID_RESPONSE', `Strategy proposal provider returned invalid output. ${message}`);
 }
@@ -176,9 +154,8 @@ export function validateStrategyProposalCandidate(
   const title = requireText(candidate.title, 'title', 120);
   const summary = requireText(candidate.summary, 'summary', 500);
   const suggestedSpec = requireText(candidate.suggested_natural_language_spec, 'suggested_natural_language_spec', 4000);
-  const combinedSafetyText = [title, summary, suggestedSpec].join('\n');
-  if (suggestedSpec.length < 20 || hasForbiddenAdvice(combinedSafetyText)) {
-    throw invalidProviderOutput('candidate failed safety validation.');
+  if (suggestedSpec.length < 20) {
+    throw invalidProviderOutput('suggested_natural_language_spec is too short.');
   }
 
   const researchBasis = Array.isArray(candidate.research_basis) ? candidate.research_basis : [];
