@@ -228,7 +228,7 @@ provider boundary 実装現在地:
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` で proposal provider を選択できる。未指定 default は `stub`。
 - `local_llm` provider は実装済み。local_llm output は UI に返す前に既存 provider response validation を通す。
 - `openai_api` provider は設計候補のまま未実装。
-- Web search / deep research、proposal history、DB保存、job化、Pine generation 自動連鎖は未実装のまま維持する。
+- Proposal history / DB 保存は sanitized run / candidates / selected candidate の backend 最小範囲を実装済み。Web search / deep research、job化、Pine generation 自動連鎖は未実装のまま維持する。
 
 ### 5-2-1. local_llm provider design
 
@@ -320,7 +320,7 @@ failure policy:
 
 ## 6. 保存 / 履歴 / 再利用
 
-初回は proposal candidates を DB 保存しない。一時 UI 表示に留め、ユーザーが選択した候補を existing StrategyLab input に反映する。
+初回 UI 実装では proposal candidates を一時表示に留めていた。現行 backend は proposal candidates を sanitized history として DB 保存し、ユーザーが選択した候補を selected candidate として記録できる。
 
 保存しない理由:
 
@@ -336,9 +336,9 @@ failure policy:
 - AI job / summary 基盤を使うか、strategy proposal 専用 job を作るか。
 - selected proposal から作成された StrategyVersion との lineage をどう持つか。
 
-### 6-1. proposal history / selected proposal lineage 設計方針
+### 6-1. proposal history / selected proposal lineage 実装現在地
 
-次フェーズの proposal history / selected proposal lineage は、StrategyLab で取得した strategy proposal run と、その run 内の候補、ユーザーが選択した候補を後から確認するための履歴である。目的は「どの提案候補から natural language spec を作ったか」を追えるようにすることであり、Strategy / StrategyVersion / Pine generation / backtest の自動起動ではない。
+Proposal history / selected proposal lineage は、StrategyLab で取得した strategy proposal run と、その run 内の候補、ユーザーが選択した候補を後から確認するための履歴である。backend persistence / API の最小範囲は実装済み。目的は「どの提案候補から natural language spec を作ったか」を追えるようにすることであり、Strategy / StrategyVersion / Pine generation / backtest の自動起動ではない。
 
 責務:
 
@@ -518,15 +518,18 @@ seed 影響:
 
 ### 6-5. 初回実装スコープ案
 
-初回実装候補:
+backend 最小実装済み:
 
-1. DB migration / Prisma schema: `StrategyProposalRun` と `StrategyProposalCandidate` を追加する。
-2. Backend: `POST /api/strategy-lab/proposals` の後方互換を維持しつつ、成功 run と failed provider run の sanitized history を保存する。
-3. Backend: `GET /api/strategy-lab/proposals` と `GET /api/strategy-lab/proposals/:proposalRunId` を read-only で追加する。
-4. Backend: selection API を追加し、selected candidate を記録する。
-5. Frontend: StrategyLab に「最近の提案」程度の最小 UI を追加する。
-6. Frontend: candidate 選択時に selection API を呼び、従来どおり title / natural language rule に反映する。
-7. Tests: DB persistence / API shape / selection / no auto Pine / no auto save / sanitized metadata を mock / stub で確認する。
+1. DB migration / Prisma schema: `StrategyProposalRun` と `StrategyProposalCandidate` を追加済み。
+2. Backend: `POST /api/strategy-lab/proposals` の後方互換を維持しつつ、成功 run と failed provider run の sanitized history を保存済み。
+3. Backend: `GET /api/strategy-lab/proposals` と `GET /api/strategy-lab/proposals/:proposalRunId` を read-only で追加済み。
+4. Backend: selection API を追加し、selected candidate を記録済み。
+5. Tests: DB persistence / API shape / selection / no auto Pine / no auto save / sanitized metadata を mock / stub で確認済み。
+
+後続 UI:
+
+- StrategyLab に「最近の提案」程度の最小 UI を追加する。
+- candidate 選択時に selection API を呼び、従来どおり title / natural language rule に反映する。
 
 初回 UI:
 
@@ -637,7 +640,7 @@ stub は deterministic baseline として schema、UI表示、候補選択、emp
 
 ## 11. instrumentation / cost guard 設計方針
 
-Strategy proposal provider instrumentation は、provider 品質と failure 分類を観測するための sanitized metadata として扱う。現行実装では `POST /api/strategy-lab/proposals` の optional response metadata として `provider_observation` を追加済み。既存 `provider` / `candidates` / validation behavior は壊さず、DB 永続化、proposal history、job 化は行わない。
+Strategy proposal provider instrumentation は、provider 品質と failure 分類を観測するための sanitized metadata として扱う。現行実装では `POST /api/strategy-lab/proposals` の optional response metadata として `provider_observation` を返し、proposal history にも sanitized metadata として保存する。既存 `provider` / `candidates` / validation behavior は壊さず、job 化は行わない。
 
 実装済み metadata:
 
@@ -676,7 +679,7 @@ CI / manual 境界:
 - real local_llm endpoint に依存する test は required check に入れない。
 - local_llm latency / timeout / invalid response rate は manual runbook で観測する。
 
-現行 instrumentation metadata 実装では、optional response metadata、backend provider observation 分類、最小 frontend 表示、mock / fake response による test coverage を含む。DB / Prisma schema は変更しない。
+現行 instrumentation metadata 実装では、optional response metadata、backend provider observation 分類、proposal history DB 保存、最小 frontend 表示、mock / fake response による test coverage を含む。
 
 ## 12. prompt regression / provider benchmark 設計方針
 
