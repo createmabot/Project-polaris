@@ -76,17 +76,42 @@ function buildRuleSubmitErrorMessage(error: unknown): string {
   return error.message || 'ルール生成に失敗しました。';
 }
 
-function buildProposalErrorMessage(error: unknown): string {
+function readProviderObservationText(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return /^[a-z_]+$/i.test(trimmed) && trimmed.length <= 60 ? trimmed : null;
+}
+
+function buildProviderObservationMessage(error: ApiError): string | null {
+  const observation = error.details?.provider_observation;
+  if (!observation || typeof observation !== 'object') {
+    return null;
+  }
+  const data = observation as Record<string, unknown>;
+  const status = readProviderObservationText(data.status) ?? 'unknown';
+  const reason = readProviderObservationText(data.invalid_reason) ?? 'unknown';
+  const latency = readProviderObservationText(data.latency_bucket) ?? 'unknown';
+  const fallback = data.fallback_used === true ? ' / fallback used' : '';
+  return `provider status: ${status} / reason: ${reason} / latency: ${latency}${fallback}`;
+}
+
+export function buildProposalErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
     return 'ストラテジー候補の取得に失敗しました。入力内容を確認して再試行してください。';
   }
+  const providerObservationMessage = buildProviderObservationMessage(error);
+  const appendProviderObservation = (message: string) =>
+    providerObservationMessage ? `${message} (${providerObservationMessage})` : message;
+
   if (error.status === 400) {
-    return '候補生成の入力に不備があります。市場・時間足・リスク設定を確認してください。';
+    return appendProviderObservation('候補生成の入力に不備があります。市場・時間足・リスク設定を確認してください。');
   }
   if (error.status >= 500) {
-    return 'サーバー側で候補取得に失敗しました。時間をおいて再試行してください。';
+    return appendProviderObservation('サーバー側で候補取得に失敗しました。時間をおいて再試行してください。');
   }
-  return error.message || 'ストラテジー候補の取得に失敗しました。';
+  return appendProviderObservation(error.message || 'ストラテジー候補の取得に失敗しました。');
 }
 
 function buildCsvParseGuidance(parseError: string | null): string[] {
