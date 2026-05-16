@@ -25,8 +25,11 @@
 - Comparison AI 総評
 - Backtest AI 総評
 - 自然言語から Pine 生成
+- LLM strategy proposal
 
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
+
+LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。初回実装では stub / deterministic provider を第一候補にし、Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
 
 ## 4. job 状態の見方
 
@@ -76,5 +79,6 @@ Backtest AI summary は、CSV import report と internal backtest report で inp
 - `README.md`
 - `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
+- `docs/仕様書/11_LLM_Strategy_Proposal仕様.md`
 - `docs/運用ドキュメント/08_AI_summary自動生成運用.md`
 - `docs/運用ドキュメント/04_CSV取込運用.md`
