@@ -90,17 +90,18 @@
 - LLM strategy proposal の初回実装は `POST /api/strategy-lab/proposals` とする。
 - request は `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` を候補にする。
 - response は `strategy_proposal_candidates` schema を返し、候補選択は StrategyLab の natural language spec への反映に留める。
-- proposal history、DB migration、Strategy / StrategyVersion への自動保存、Pine generation への自動連鎖は行わない。
+- proposal history は backend persistence / API の最小範囲を実装済み。Strategy / StrategyVersion への自動保存、Pine generation への自動連鎖は行わない。
 - Web search / deep research を使う provider は後続判断とし、初回実装は deterministic stub provider に限定する。
 
-Proposal history / selected proposal lineage の次フェーズ API 方針:
+Proposal history / selected proposal lineage の最小 API:
 
 - `POST /api/strategy-lab/proposals` は後方互換を維持する。
 - history 保存を実装する場合も、既存 response の `schema_name` / `schema_version` / `input` / `provider` / `provider_observation` / `candidates` / `disclaimer` は壊さない。
-- 追加する場合は optional `proposal_run_id` または `history.proposal_run_id` に留める。
-- `GET /api/strategy-lab/proposals` は最近の proposal run 一覧を返す候補 endpoint とする。
-- `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す候補 endpoint とする。
-- `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する候補 endpoint とする。
+- success response には optional `proposal_run_id` と `history.proposal_run_id` を追加する。
+- `GET /api/strategy-lab/proposals` は最近の proposal run 一覧を limit 上限付きで返す。
+- `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す。
+- `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する。
+- select request は `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。`candidate_id` は provider candidate id または internal candidate id、`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal candidate id として扱う。
 - selection API は StrategyLab input 反映の履歴だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 - raw prompt、raw provider response、provider endpoint、secret、local path、stack trace は API response に返さない。
 - filter / pagination / large history management は後続判断とし、初回 UI は recent list 程度に留める。

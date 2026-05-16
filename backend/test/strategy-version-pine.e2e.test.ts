@@ -150,7 +150,10 @@ vi.mock('../src/db', () => {
         if (where?.id) {
           rows = rows.filter((row) => row.id === where.id);
         }
-        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        rows.sort((a, b) => (
+          b.createdAt.getTime() - a.createdAt.getTime()
+          || b.id.localeCompare(a.id, undefined, { numeric: true })
+        ));
         const selected = rows[0] ?? null;
         if (!selected) return null;
         const generatedFromRevision = Array.from(runtime.pineRevisionInputs.values()).find(
@@ -193,7 +196,10 @@ vi.mock('../src/db', () => {
         if (where?.strategyRuleVersionId) {
           rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
         }
-        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        rows.sort((a, b) => (
+          b.createdAt.getTime() - a.createdAt.getTime()
+          || b.id.localeCompare(a.id, undefined, { numeric: true })
+        ));
         return rows[0] ?? null;
       },
     },

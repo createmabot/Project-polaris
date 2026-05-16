@@ -462,6 +462,49 @@ model StrategyRuleVersion {
   symbolStrategyApplications SymbolStrategyApplication[]
 }
 
+model StrategyProposalRun {
+  id                      String   @id @default(uuid())
+  status                  String   @default("succeeded")
+  providerName            String   @map("provider_name")
+  providerMode            String   @map("provider_mode")
+  selectedBy              String   @map("selected_by")
+  inputJson               Json     @map("input_json")
+  userHint                String?  @map("user_hint") @db.VarChar(1000)
+  providerObservationJson Json?    @map("provider_observation_json")
+  candidateCount          Int      @default(0) @map("candidate_count")
+  selectedCandidateId     String?  @map("selected_candidate_id")
+  completedAt             DateTime? @map("completed_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  candidates StrategyProposalCandidate[]
+  selectedCandidate StrategyProposalCandidate? @relation("StrategyProposalRunSelectedCandidate", fields: [selectedCandidateId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([status, createdAt])
+  @@index([selectedCandidateId])
+  @@map("strategy_proposal_runs")
+}
+
+model StrategyProposalCandidate {
+  id                  String   @id @default(uuid())
+  proposalRunId       String   @map("proposal_run_id")
+  proposalRun         StrategyProposalRun @relation(fields: [proposalRunId], references: [id], onDelete: Cascade)
+  providerCandidateId String   @map("provider_candidate_id")
+  rank                Int
+  candidateJson       Json     @map("candidate_json")
+  selectedAt          DateTime? @map("selected_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  selectedByRuns StrategyProposalRun[] @relation("StrategyProposalRunSelectedCandidate")
+
+  @@unique([proposalRunId, providerCandidateId])
+  @@index([proposalRunId, rank])
+  @@index([selectedAt])
+  @@map("strategy_proposal_candidates")
+}
+
 model PineScript {
   id                    String              @id @default(uuid())
   strategyRuleVersionId String

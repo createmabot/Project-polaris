@@ -29,7 +29,7 @@
 
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
 
-LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。現行は deterministic `stub` を default とし、`STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示設定時だけ local_llm provider を使える。Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
+LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。現行は deterministic `stub` を default とし、`STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示設定時だけ local_llm provider を使える。Proposal history は sanitized run / candidate / selection の最小 backend persistence まで実装済み。Web search / deep research、citation 保存、provider cost cap の本格実装は後続判断とする。
 
 Strategy proposal provider expansion では、まず provider boundary を docs 上で固定する。`local_llm` / `openai_api` を使う場合も、proposal は StrategyLab の一時候補生成に限定し、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を自動起動しない。
 
@@ -81,7 +81,7 @@ Strategy proposal provider expansion では、まず provider boundary を docs 
 現行:
 
 - `POST /api/strategy-lab/proposals` はユーザー操作起点の同期 API として扱う。
-- provider boundary は実装済みで、`STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を選択できる。未指定 default は deterministic `stub`。DB 保存、job 化、proposal history は行わない。
+- provider boundary は実装済みで、`STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を選択できる。未指定 default は deterministic `stub`。DB 保存は sanitized proposal history の最小範囲に限定し、job 化は行わない。
 - route 層で request validation と response validation を行い、invalid provider output は generic failure として扱う。
 - Web search / deep research は行わない。`source_type=web` は将来予約であり、現行 response では citation / freshness を主張しない。
 
@@ -125,7 +125,7 @@ Strategy proposal quality evaluation は、required check ではなく manual ru
 
 ## 7-3. LLM strategy proposal instrumentation / cost guard
 
-現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata と StrategyLab の最小 provider note / error note で扱う。DB 永続化、proposal history、job 化、sanitized provider event log persistence は行わない。
+現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata と proposal history の sanitized DB 保存で扱う。job 化、sanitized provider event log persistence、trend aggregation は行わない。
 
 記録してよい sanitized metadata:
 
@@ -204,7 +204,7 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 
 ## 7-5. LLM strategy proposal history / lineage 運用境界
 
-Proposal history / selected proposal lineage を実装する場合も、provider 運用の原則は維持する。
+Proposal history / selected proposal lineage は backend persistence / API の最小範囲を実装済み。provider 運用の原則は維持する。
 
 保存してよいもの:
 

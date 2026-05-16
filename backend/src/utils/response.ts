@@ -13,7 +13,14 @@ export class AppError extends Error {
 }
 
 export const errorHandler = (error: Error, request: FastifyRequest, reply: FastifyReply) => {
-  request.log.error(error);
+  if (error instanceof AppError) {
+    request.log.error({
+      code: error.code,
+      statusCode: error.statusCode,
+    }, 'Application error');
+  } else {
+    request.log.error(error);
+  }
   const fastifyStatusCode = (error as { statusCode?: unknown })?.statusCode;
   const statusCode = typeof fastifyStatusCode === 'number' ? fastifyStatusCode : null;
   const fastifyCode = (error as { code?: unknown })?.code;
