@@ -219,6 +219,13 @@ provider expansion の境界:
 - fallback は silent に行わない。stub fallback を使う場合は opt-in とし、response の provider metadata で `name` / `mode` / `web_search=false` を明示する。
 - provider 呼び出しはユーザー操作起点に限定する。画面表示、typing、polling、batch、scheduled job を契機に proposal を自動生成しない。
 
+provider boundary 実装現在地:
+
+- deterministic stub provider は proposal provider boundary 配下に分離済み。
+- route 層は request validation と provider response validation を通してから `strategy_proposal_candidates` を返す。
+- 現時点で選択可能な provider は `stub` のみ。`local_llm` / `openai_api` provider は設計済みだが未実装。
+- Web search / deep research、proposal history、DB保存、job化、Pine generation 自動連鎖は未実装のまま維持する。
+
 ### 5-3. schema validation / failure
 
 request validation:
@@ -229,7 +236,7 @@ request validation:
 - `risk_preference`: `conservative|balanced|aggressive`。
 - `strategy_type_bias`: `any|trend_following|mean_reversion|breakout|momentum|volatility|risk_management|other`。
 - `proposal_count`: 1〜10 の整数。
-- `user_hint`: 任意。prompt / log / error 表示では raw text を不用意に出さない。
+- `user_hint`: 任意。長文は request parsing 境界で安全な長さに丸め、prompt / log / error 表示では raw text を不用意に出さない。
 
 response validation:
 
@@ -243,7 +250,7 @@ failure policy:
 
 - request validation error は `VALIDATION_ERROR` として短い説明にする。
 - provider timeout / invalid output / safety violation / upstream failure は generic failure とし、raw provider diagnostics は返さない。
-- 0 candidates は成功ではなく provider output invalid として扱う。ただし将来 partial result を採用する場合は、`candidates` と `warnings` を明示する設計を別途固定する。
+- 0 candidates は既存 UI の EmptyState で表現できるため、schema 上は成功 response として許容する。provider failure とは分ける。
 - 失敗時に StrategyLab の既存 input を消さない。proposal candidates だけを失敗表示にする。
 
 ### 5-4. timeout / fallback / cost / rate limit
