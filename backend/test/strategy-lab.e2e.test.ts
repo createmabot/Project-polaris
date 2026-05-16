@@ -481,6 +481,9 @@ vi.mock('../src/db', () => {
       update: async ({ where, data, include }: any) => {
         const row = runtime.proposalRuns.get(where.id);
         if (!row) throw new Error(`proposal_run_not_found:${where.id}`);
+        if (data.selectedCandidateId && !runtime.proposalCandidates.has(data.selectedCandidateId)) {
+          throw new Error(`proposal_candidate_fk_not_found:${data.selectedCandidateId}`);
+        }
         const next = {
           ...row,
           ...data,
@@ -498,6 +501,12 @@ vi.mock('../src/db', () => {
     },
     strategyProposalCandidate: {
       create: async ({ data }: any) => {
+        const duplicate = Array.from(runtime.proposalCandidates.values()).find((row) => (
+          row.proposalRunId === data.proposalRunId && row.providerCandidateId === data.providerCandidateId
+        ));
+        if (duplicate) {
+          throw new Error(`proposal_candidate_unique_violation:${data.providerCandidateId}`);
+        }
         const id = `proposal-candidate-${runtime.proposalCandidateSeq++}`;
         const now = new Date();
         const row: StrategyProposalCandidateRow = {
@@ -513,6 +522,21 @@ vi.mock('../src/db', () => {
         runtime.proposalCandidates.set(id, row);
         return row;
       },
+      updateMany: async ({ where, data }: any) => {
+        let count = 0;
+        for (const row of Array.from(runtime.proposalCandidates.values())) {
+          if (where?.proposalRunId && row.proposalRunId !== where.proposalRunId) {
+            continue;
+          }
+          runtime.proposalCandidates.set(row.id, {
+            ...row,
+            ...data,
+            updatedAt: new Date(),
+          });
+          count += 1;
+        }
+        return { count };
+      },
       update: async ({ where, data }: any) => {
         const row = runtime.proposalCandidates.get(where.id);
         if (!row) throw new Error(`proposal_candidate_not_found:${where.id}`);
@@ -524,6 +548,23 @@ vi.mock('../src/db', () => {
         runtime.proposalCandidates.set(where.id, next);
         return next;
       },
+    },
+    $transaction: async (callback: any) => {
+      const snapshot = {
+        proposalRunSeq: runtime.proposalRunSeq,
+        proposalCandidateSeq: runtime.proposalCandidateSeq,
+        proposalRuns: new Map(Array.from(runtime.proposalRuns.entries()).map(([key, value]) => [key, { ...value }])),
+        proposalCandidates: new Map(Array.from(runtime.proposalCandidates.entries()).map(([key, value]) => [key, { ...value }])),
+      };
+      try {
+        return await callback(prisma);
+      } catch (error) {
+        runtime.proposalRunSeq = snapshot.proposalRunSeq;
+        runtime.proposalCandidateSeq = snapshot.proposalCandidateSeq;
+        runtime.proposalRuns = snapshot.proposalRuns;
+        runtime.proposalCandidates = snapshot.proposalCandidates;
+        throw error;
+      }
     },
   };
 
@@ -727,6 +768,23 @@ describe('strategy lab vertical slice', () => {
     expect(selectBody.data.proposal_run.selected_candidate_id).toBe('proposal-candidate-2');
     expect(selectBody.data.selected_candidate.provider_candidate_id).toBe(candidateId);
     expect(selectBody.data.selected_candidate.selected_at).toBeTruthy();
+
+    const reselectResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${body.data.proposal_run_id}/select`,
+      payload: {
+        candidate_id: body.data.candidates[0].candidate_id,
+      },
+    });
+
+    expect(reselectResponse.statusCode).toBe(200);
+    const reselectBody = reselectResponse.json();
+    expect(reselectBody.data.proposal_run.selected_candidate_id).toBe('proposal-candidate-1');
+    const storedCandidates = Array.from(runtime.proposalCandidates.values())
+      .filter((candidate) => candidate.proposalRunId === body.data.proposal_run_id);
+    expect(storedCandidates.find((candidate) => candidate.id === 'proposal-candidate-1')?.selectedAt).toBeInstanceOf(Date);
+    expect(storedCandidates.find((candidate) => candidate.id === 'proposal-candidate-2')?.selectedAt).toBeNull();
+    expect(runtime.proposalRuns.get(body.data.proposal_run_id)?.selectedCandidateId).toBe('proposal-candidate-1');
     expect(runtime.strategies.size).toBe(0);
     expect(runtime.versions.size).toBe(0);
     expect(runtime.pineScripts.size).toBe(0);
@@ -827,6 +885,42 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.stream).toBe(false);
     expect(requestBody.think).toBe(false);
     expect(requestBody.options.num_predict).toBe(2000);
+  });
+
+  it('does not leave partial proposal history when candidate persistence fails', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const duplicateCandidate = validLocalLlmCandidate({ candidate_id: 'dup-1' });
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [
+        duplicateCandidate,
+        validLocalLlmCandidate({
+          ...duplicateCandidate,
+          title: '重複IDの別候補',
+          candidate_id: 'dup-1',
+        }),
+      ],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 2,
+      },
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(runtime.proposalRuns.size).toBe(0);
+    expect(runtime.proposalCandidates.size).toBe(0);
+    expect(JSON.stringify(response.json())).not.toContain('dup-1');
+    expect(JSON.stringify(response.json())).not.toContain('http://');
+
+    await app.close();
   });
 
   it('returns safe provider error when local_llm returns malformed JSON', async () => {

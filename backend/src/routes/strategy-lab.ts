@@ -78,32 +78,34 @@ async function createProposalRun(params: {
   providerObservation: StrategyProposalProviderObservation;
   candidates: StrategyProposalCandidate[];
 }) {
-  const run = await (prisma as any).strategyProposalRun.create({
-    data: {
-      status: params.status,
-      providerName: params.providerName,
-      providerMode: params.providerMode,
-      selectedBy: params.selectedBy,
-      inputJson: params.input,
-      userHint: params.input.user_hint,
-      providerObservationJson: params.providerObservation,
-      candidateCount: params.candidates.length,
-      completedAt: new Date(),
-    },
-  });
-
-  for (const [index, candidate] of params.candidates.entries()) {
-    await (prisma as any).strategyProposalCandidate.create({
+  return (prisma as any).$transaction(async (tx: any) => {
+    const run = await tx.strategyProposalRun.create({
       data: {
-        proposalRunId: run.id,
-        providerCandidateId: candidate.candidate_id,
-        rank: index + 1,
-        candidateJson: candidate,
+        status: params.status,
+        providerName: params.providerName,
+        providerMode: params.providerMode,
+        selectedBy: params.selectedBy,
+        inputJson: params.input,
+        userHint: params.input.user_hint,
+        providerObservationJson: params.providerObservation,
+        candidateCount: params.candidates.length,
+        completedAt: new Date(),
       },
     });
-  }
 
-  return run;
+    for (const [index, candidate] of params.candidates.entries()) {
+      await tx.strategyProposalCandidate.create({
+        data: {
+          proposalRunId: run.id,
+          providerCandidateId: candidate.candidate_id,
+          rank: index + 1,
+          candidateJson: candidate,
+        },
+      });
+    }
+
+    return run;
+  });
 }
 
 function withProposalRunId(data: StrategyProposalData, proposalRunId: string): StrategyProposalData & {
@@ -240,23 +242,27 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, 'VALIDATION_ERROR', 'candidate_id must belong to the proposal run.');
     }
 
-    const selectedAt = new Date();
-    await (prisma as any).strategyProposalCandidate.update({
-      where: { id: selected.id },
-      data: { selectedAt },
-    });
-    const updatedRun = await (prisma as any).strategyProposalRun.update({
-      where: { id: run.id },
-      data: { selectedCandidateId: selected.id },
-      include: { candidates: { orderBy: { rank: 'asc' } } },
+    const { updatedRun, selectedCandidate } = await (prisma as any).$transaction(async (tx: any) => {
+      const selectedAt = new Date();
+      await tx.strategyProposalCandidate.updateMany({
+        where: { proposalRunId: run.id },
+        data: { selectedAt: null },
+      });
+      const selectedCandidate = await tx.strategyProposalCandidate.update({
+        where: { id: selected.id },
+        data: { selectedAt },
+      });
+      const updatedRun = await tx.strategyProposalRun.update({
+        where: { id: run.id },
+        data: { selectedCandidateId: selected.id },
+        include: { candidates: { orderBy: { rank: 'asc' } } },
+      });
+      return { updatedRun, selectedCandidate };
     });
 
     return reply.status(200).send(formatSuccess(request, {
       proposal_run: serializeRun(updatedRun),
-      selected_candidate: serializeCandidate({
-        ...selected,
-        selectedAt,
-      }),
+      selected_candidate: serializeCandidate(selectedCandidate),
     }));
   });
 };

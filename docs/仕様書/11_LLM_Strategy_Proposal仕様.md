@@ -478,7 +478,7 @@ relation / index 案:
   - raw prompt / raw response / endpoint / secret / local path は返さない。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select`
   - request: `{ "candidate_id": "..." }` または `{ "proposal_candidate_id": "..." }`。
-  - selected candidate を run に記録し、candidate の `selected_at` を更新する。
+  - selected candidate を run に記録し、同一 run の既存 candidate `selected_at` を null に戻してから選択 candidate の `selected_at` を更新する。
   - StrategyLab input 反映は frontend state の責務であり、この API は Strategy / StrategyVersion / Pine generation を起動しない。
 
 selection API の代替案:
@@ -525,6 +525,12 @@ backend 最小実装済み:
 3. Backend: `GET /api/strategy-lab/proposals` と `GET /api/strategy-lab/proposals/:proposalRunId` を read-only で追加済み。
 4. Backend: selection API を追加し、selected candidate を記録済み。
 5. Tests: DB persistence / API shape / selection / no auto Pine / no auto save / sanitized metadata を mock / stub で確認済み。
+
+永続化整合性:
+
+- run と candidates の作成は transaction とし、candidate insert 失敗時に partial history を残さない。
+- `StrategyProposalRun.selectedCandidateId` は nullable foreign key とし、存在しない candidate ID を保存しない。
+- selection 更新は transaction とし、同一 run 内で `selectedCandidateId` と candidate `selected_at` が矛盾しないようにする。
 
 後続 UI:
 

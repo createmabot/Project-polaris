@@ -37,3 +37,4 @@ CREATE INDEX "strategy_proposal_candidates_proposal_run_id_rank_idx" ON "strateg
 CREATE INDEX "strategy_proposal_candidates_selected_at_idx" ON "strategy_proposal_candidates"("selected_at");
 
 ALTER TABLE "strategy_proposal_candidates" ADD CONSTRAINT "strategy_proposal_candidates_proposal_run_id_fkey" FOREIGN KEY ("proposal_run_id") REFERENCES "strategy_proposal_runs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "strategy_proposal_runs" ADD CONSTRAINT "strategy_proposal_runs_selected_candidate_id_fkey" FOREIGN KEY ("selected_candidate_id") REFERENCES "strategy_proposal_candidates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
