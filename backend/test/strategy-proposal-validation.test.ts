@@ -70,10 +70,56 @@ describe('strategy proposal validation', () => {
     expect(validateStrategyProposalCandidate(validCandidate()).strategy_type).toBe('trend_following');
   });
 
+  it('accepts valid provider data with required fields, enums, and candidate count', () => {
+    const data = validateStrategyProposalData(validData({
+      input: {
+        ...validData().input,
+        proposal_count: 1,
+      },
+      candidates: [validCandidate({
+        strategy_type: 'breakout',
+        pine_feasibility: 'medium',
+        confidence: 'low',
+      })],
+    }));
+
+    expect(data.candidates).toHaveLength(1);
+    expect(data.candidates[0].strategy_type).toBe('breakout');
+    expect(data.candidates[0].pine_feasibility).toBe('medium');
+    expect(data.candidates[0].confidence).toBe('low');
+  });
+
+  it('rejects provider data with too many candidates for the request', () => {
+    expectProviderInvalidResponse(() => validateStrategyProposalData(validData({
+      input: {
+        ...validData().input,
+        proposal_count: 1,
+      },
+      candidates: [
+        validCandidate({ candidate_id: 'candidate-1' }),
+        validCandidate({ candidate_id: 'candidate-2' }),
+      ],
+    })));
+  });
+
+  it('rejects missing required candidate fields', () => {
+    const candidate = validCandidate() as Record<string, unknown>;
+    delete candidate.entry_logic;
+
+    expectProviderInvalidResponse(() => validateStrategyProposalCandidate(candidate));
+  });
+
   it('rejects unsupported enum values', () => {
     expectProviderInvalidResponse(() => validateStrategyProposalCandidate({
       ...validCandidate(),
       strategy_type: 'scalping',
+    }));
+  });
+
+  it('rejects schema metadata mismatch', () => {
+    expectProviderInvalidResponse(() => validateStrategyProposalData({
+      ...validData(),
+      schema_name: 'unexpected_schema' as StrategyProposalData['schema_name'],
     }));
   });
 
