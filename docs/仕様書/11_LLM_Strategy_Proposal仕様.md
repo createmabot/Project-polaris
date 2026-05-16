@@ -534,17 +534,18 @@ backend 最小実装済み:
 - `StrategyProposalRun.selectedCandidateId` は nullable foreign key とし、存在しない candidate ID を保存しない。
 - selection 更新は transaction とし、同一 run 内で `selectedCandidateId` と candidate `selected_at` が矛盾しないようにする。
 
-後続 UI:
-
-- StrategyLab に「最近の提案」程度の最小 UI を追加する。
-- candidate 選択時に selection API を呼び、従来どおり title / natural language rule に反映する。
-
-初回 UI:
+frontend 最小 UI 実装済み:
 
 - StrategyLab 内に recent proposal runs を数件表示する。
+- 初回表示時と proposal 生成後に `GET /api/strategy-lab/proposals?limit=5` で recent runs を取得する。過剰 polling は行わない。
 - run status、created_at、provider name、candidate count、selected 有無を表示する。
-- detail は run 内 candidates の再表示と「この候補を使う」に留める。
+- detail は必要な run の candidates 再表示と「この候補を使う」に留める。
+- 現在表示中 proposal candidates は、`proposal_run_id` または `history.proposal_run_id` がある場合に `POST /api/strategy-lab/proposals/:proposalRunId/select` を呼んでから title / natural language rule に反映する。
+- history detail candidates は、`proposal_candidate_id` で selection API を呼んでから title / natural language rule に反映する。
+- selection API 失敗時は StrategyLab 内の error 表示に留める。
+- proposal 選択から Strategy / StrategyVersion 保存、Pine generation、validation、backtest、AI summary は自動起動しない。
 - filter / pagination / search / bulk delete / retention management / provider quality trend UI は後続にする。
+- StrategyVersion lineage relation は初回 UI では扱わず、後続判断とする。
 
 required check 方針:
 
