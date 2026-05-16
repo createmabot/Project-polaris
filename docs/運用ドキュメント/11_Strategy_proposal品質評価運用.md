@@ -11,6 +11,8 @@ strategy proposal は投資助言ではなく、ユーザーが backtest と rev
 
 PR #359〜#360 で、本 runbook と validation / failure path の自動 test 拡充は完了扱いにする。StrategyLab UI は既存 copy と provider error 表示で十分と判断し、quality evaluation phase では追加 UI 変更を行わない。
 
+PR #365〜#366 で、prompt regression / provider benchmark の design、fixed scenario set、code fixture、optional script、tests は完了扱いにする。benchmark result recording workflow と trend 集計は後続課題として残す。
+
 ## 2. 前提
 
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を利用できる。

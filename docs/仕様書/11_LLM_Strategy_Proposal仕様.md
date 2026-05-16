@@ -465,6 +465,8 @@ CI / manual 境界:
 
 Strategy proposal prompt regression / provider benchmark は、provider を増やす前後で proposal 品質と failure 傾向を比較するための任意運用である。required check とは分け、CI で安定する schema / validation test と、provider 実体に依存する manual / optional benchmark を混同しない。
 
+PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture / optional benchmark script / tests をもって、本 phase は完了扱いにする。DB / Prisma schema は変更していない。
+
 対象 provider:
 
 - `stub`: deterministic baseline。schema、candidate count、empty candidates、UI 表示の回帰確認に使う。
@@ -496,7 +498,7 @@ optional script 方針:
 
 - optional benchmark PR 2 で `pnpm --filter backend strategy-proposal:benchmark` を追加済み。
 - script は required check に入れない。default は env に依存しない `stub` で、`--provider=local_llm` は manual optional とする。
-- scenario fixture は本章と品質評価 runbook の scenario id に合わせる。
+- scenario fixture は本章と品質評価 runbook の fixed scenario id に合わせる。対象は `generic_default`、`jp_stock_daily`、`us_stock_daily`、`short_swing`、`long_trend_following`、`mean_reversion`、`breakout`、`volatility`、`conservative_risk`、`aggressive_risk`、`concrete_user_hint`、`vague_user_hint`、`long_user_hint`、`advice_like_wording`。
 - output は stdout の sanitized summary とし、raw prompt / raw response / endpoint / model 実値 / secret / local path / stack trace / user_hint 全文を出さない。
 - summary は `provider_observation` 相当の status / latency bucket / candidate_count / invalid_reason と、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。
 - file 出力は初回実装しない。実測値を残す場合は raw output ではなく sanitized summary の要約だけを progress docs に残す。
