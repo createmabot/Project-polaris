@@ -124,8 +124,9 @@ provider boundary 実装範囲:
 
 - deterministic stub provider は provider boundary 配下に整理済み。
 - route 層の request validation と provider response validation は導入済み。
-- user input 由来の投資助言風表現は request `VALIDATION_ERROR` として扱う。provider output 由来の invalid enum、Web research basis、schema / safety validation failure は `PROVIDER_INVALID_RESPONSE` として扱う。0 candidates は既存 UI の EmptyState で扱う。
+- user input 由来の投資助言風表現は request `VALIDATION_ERROR` にせず、入力として許容する。provider output 由来の invalid enum、Web research basis、schema / type / format / candidate count 不正は `PROVIDER_INVALID_RESPONSE` として扱うが、単なる投資助言風 wording だけでは reject しない。0 candidates は既存 UI の EmptyState で扱う。
 - `user_hint` の長文 bounding と、`strategy_type_bias=other` の empty candidates 維持は完了済み。
+- 安全のために検証候補を狭めすぎず、売買推奨ではなく backtest / user review 前提であることを UI / docs で明示する。
 
 初回ではやらないこと:
 
@@ -133,7 +134,7 @@ provider boundary 実装範囲:
 - proposal から StrategyVersion への自動保存。
 - proposal から Pine generation への自動連鎖。
 - Web search 必須化。
-- 投資助言に見える断定表現。
+- 投資助言風 wording だけを理由に proposal 候補を過剰に狭めること。
 - provider raw diagnostics、raw prompt、credential、local path の UI / docs / PR 表示。
 
 ## 9. 次期フェーズ候補の優先度
