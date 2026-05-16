@@ -167,6 +167,27 @@ response / UI:
 - Web search / deep research は同期 API ではなく job 化候補として扱う。
 - CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
 
+## 7-4. LLM strategy proposal benchmark 運用境界
+
+Strategy proposal prompt regression / provider benchmark は、required check ではなく manual / optional 運用として扱う。
+
+対象:
+
+- `stub`: deterministic baseline。
+- `local_llm`: opt-in provider。
+- future `openai_api`: cost / rate guard 固定後の候補。
+- future Web search / deep research: 同期 API ではなく job 化候補。
+
+運用方針:
+
+- automated validation は schema、candidate count、required fields、enum、malformed JSON、timeout / unavailable 分類を mock / fake response で確認する。
+- manual / optional benchmark は real provider の latency、invalid response、candidate diversity、user_hint alignment、Pine feasibility、unsupported claim risk を見る。
+- `provider_observation` の status、latency_bucket、candidate_count、invalid_reason、validation_error_count、schema_valid、fallback_used を記録する。
+- 投資助言風 wording は wording だけで reject しない。benchmark では、検証候補として提示され、backtest / user review 前提が維持されているかを見る。
+- 実測 raw output は原則 commit しない。必要な場合は sanitized summary のみを progress docs に残す。
+- optional script / fixture / package script は別 PR で判断し、required check には入れない。
+- raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は出さない。
+
 ## 8. 関連 docs
 
 - `README.md`
