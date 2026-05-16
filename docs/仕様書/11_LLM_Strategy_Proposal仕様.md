@@ -387,6 +387,8 @@ UI / docs で避ける表現:
 
 Strategy proposal quality evaluation は、stub と local_llm の出力を同じ評価軸で確認し、schema が正しいだけでなく、検証候補として使える粒度かを判断する。
 
+PR #359〜#360 で、quality evaluation runbook と validation / failure path test coverage は完了扱いにする。StrategyLab UI は既存の「検証候補」「売買推奨ではない」「Pine生成 / backtest は手動」の copy と provider error handling で十分と判断し、追加 UI 変更は行わない。
+
 自動検査対象:
 
 - schema validity。
@@ -424,7 +426,8 @@ stub は deterministic baseline として schema、UI表示、候補選択、emp
 - proposal history / selected proposal lineage。
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
-- quality evaluation の実測記録と provider 比較サマリー。
+- provider quality benchmark records。
+- provider instrumentation（sanitized provider event / duration bucket / error category）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 

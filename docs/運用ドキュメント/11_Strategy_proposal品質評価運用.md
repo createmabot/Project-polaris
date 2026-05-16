@@ -9,6 +9,8 @@
 
 strategy proposal は投資助言ではなく、ユーザーが backtest と review を行うための検証候補である。投資助言風 wording は一律 reject せず、候補が検証前提として提示されているかを評価する。
 
+PR #359〜#360 で、本 runbook と validation / failure path の自動 test 拡充は完了扱いにする。StrategyLab UI は既存 copy と provider error 表示で十分と判断し、quality evaluation phase では追加 UI 変更を行わない。
+
 ## 2. 前提
 
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を利用できる。
@@ -162,7 +164,7 @@ local_llm opt-in:
 
 ## 6. 記録テンプレート
 
-評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の quality evaluation 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。
+評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。
 
 記録テンプレート:
 
