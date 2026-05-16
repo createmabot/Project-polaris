@@ -236,7 +236,7 @@ request validation:
 - `risk_preference`: `conservative|balanced|aggressive`。
 - `strategy_type_bias`: `any|trend_following|mean_reversion|breakout|momentum|volatility|risk_management|other`。
 - `proposal_count`: 1〜10 の整数。
-- `user_hint`: 任意。長文は request parsing 境界で安全な長さに丸め、prompt / log / error 表示では raw text を不用意に出さない。
+- `user_hint`: 任意。長文は request parsing 境界で安全な長さに丸める。投資助言に見える禁止表現を含む場合は request validation の `VALIDATION_ERROR` とし、provider invalid response と混同しない。prompt / log / error 表示では raw text を不用意に出さない。
 
 response validation:
 
@@ -249,6 +249,7 @@ response validation:
 failure policy:
 
 - request validation error は `VALIDATION_ERROR` として短い説明にする。
+- user input 由来の禁止表現は request validation error として扱い、provider が生成した invalid output と分ける。
 - provider timeout / invalid output / safety violation / upstream failure は generic failure とし、raw provider diagnostics は返さない。
 - 0 candidates は既存 UI の EmptyState で表現できるため、schema 上は成功 response として許容する。provider failure とは分ける。
 - 失敗時に StrategyLab の既存 input を消さない。proposal candidates だけを失敗表示にする。

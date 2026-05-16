@@ -52,6 +52,13 @@ function readNullableText(value: unknown, maxLength = 1000): string | null {
   return trimmed ? trimmed.slice(0, maxLength) : null;
 }
 
+function rejectForbiddenAdviceInput(value: string | null, field: string): string | null {
+  if (value && hasForbiddenAdvice(value)) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${field} must not include investment advice wording.`);
+  }
+  return value;
+}
+
 function readProposalCount(value: unknown): number {
   if (value === undefined || value === null || value === '') {
     return 5;
@@ -96,6 +103,7 @@ function normalizeStrategyTypeBias(value: unknown): StrategyProposalRequest['str
 }
 
 export function parseStrategyProposalRequest(body: ProposalBody = {}): StrategyProposalRequest {
+  const userHint = readNullableText(body.user_hint, 1000);
   return {
     market: normalizeMarket(body.market),
     timeframe: normalizeTimeframe(body.timeframe),
@@ -103,7 +111,7 @@ export function parseStrategyProposalRequest(body: ProposalBody = {}): StrategyP
     risk_preference: normalizeRiskPreference(body.risk_preference),
     strategy_type_bias: normalizeStrategyTypeBias(body.strategy_type_bias),
     proposal_count: readProposalCount(body.proposal_count),
-    user_hint: readNullableText(body.user_hint, 1000),
+    user_hint: rejectForbiddenAdviceInput(userHint, 'user_hint'),
   };
 }
 

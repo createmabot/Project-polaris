@@ -88,7 +88,7 @@ Strategy proposal provider expansion では、まず provider boundary を docs 
 provider expansion 時の必須条件:
 
 - request validation は route 層で行う。`proposal_count` は 1〜10、risk / strategy type enum は仕様書の値に限定する。
-- `user_hint` は request parsing 境界で安全な長さに丸め、provider output の長大化や raw input leak を避ける。
+- `user_hint` は request parsing 境界で安全な長さに丸める。投資助言に見える禁止表現を含む場合は request validation の `VALIDATION_ERROR` とし、provider invalid response と混同しない。
 - provider response は `strategy_proposal_candidates` schema に正規化し、未知 enum、空 `suggested_natural_language_spec`、投資助言断定を含む候補は invalid output として扱う。0 candidates は UI の EmptyState で扱えるため、provider failure とは分ける。
 - timeout を必ず設定し、timeout / invalid output / provider failure は proposal section の generic failure に閉じる。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
