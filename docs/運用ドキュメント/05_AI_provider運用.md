@@ -202,6 +202,42 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 - prompt regression automation。
 - auto Pine / auto save は引き続き out of scope。
 
+## 7-5. LLM strategy proposal history / lineage 運用境界
+
+Proposal history / selected proposal lineage を実装する場合も、provider 運用の原則は維持する。
+
+保存してよいもの:
+
+- request parameters。
+- bounded / sanitized user_hint。
+- normalized candidate JSON。
+- selected candidate id / selected_at。
+- sanitized provider metadata。
+- sanitized `provider_observation`。
+
+保存しないもの:
+
+- raw prompt。
+- raw provider response。
+- provider endpoint。
+- model 実値。
+- secret、token、credential。
+- local path。
+- stack trace。
+
+failure の扱い:
+
+- local_llm timeout / unavailable / malformed JSON / invalid schema は、sanitized failed run として残す方針を第一候補にする。
+- 0 candidates は failure ではなく succeeded run with zero candidates として扱う。
+- request validation error は履歴保存対象外を第一候補にする。
+
+運用方針:
+
+- history は provider quality と user selection lineage の補助であり、投資判断や automatic ranking には使わない。
+- real local_llm 実体依存 test は required check に入れない。
+- history UI は recent list 程度から始め、filter / pagination / retention job / hard delete / trend aggregation は後続判断とする。
+- selection は StrategyLab input 反映の記録であり、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
+
 ## 8. 関連 docs
 
 - `README.md`
