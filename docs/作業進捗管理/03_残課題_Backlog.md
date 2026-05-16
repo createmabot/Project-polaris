@@ -204,7 +204,7 @@ prompt regression / provider benchmark design PR 1 の docs-only 固定:
 - `provider_observation` の status、latency_bucket、candidate_count、invalid_reason、validation_error_count、schema_valid、fallback_used を記録軸にする。
 - scenario set は generic、JP stock、US stock、short swing、long trend following、mean reversion、breakout、volatility、conservative / aggressive risk、concrete / vague / long user_hint、investment-advice-like wording を最小候補にする。
 - 投資助言風 wording は wording だけで reject せず、検証候補として提示されているかを見る。
-- optional script / fixture / package script は今回実装しない。次 PR で実装する場合も required check には入れない。
+- optional benchmark PR 2 で scenario fixture と `pnpm --filter backend strategy-proposal:benchmark` を追加済み。required check には入れず、real provider は manual optional とする。
 - 実測 raw output は原則 commit せず、必要な場合も sanitized summary のみを progress docs に残す。
 - raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace は docs / PR / output に出さない。
 
@@ -223,7 +223,7 @@ prompt regression / provider benchmark design PR 1 の docs-only 固定:
 |---|---|---|
 | 1 | Release / operations stabilization | 現行完成範囲を安全に出すため、required checks、docs-only acceptance、manual walkthrough、provider failure 運用を先に安定化する。 |
 | 2 | AI quality / cost operations | auto enqueue と latest job visibility 後の cost cap、rate limit、provider opt-in、failure analysis、retry 方針を整理する。 |
-| 3 | LLM strategy proposal provider operations | benchmark design 後に optional script / fixtures、openai_api、sanitized provider event log persistence、cost / rate guard、fallback metadata を個別設計してから段階判断する。 |
+| 3 | LLM strategy proposal provider operations | optional benchmark script 後に benchmark record 運用、openai_api、sanitized provider event log persistence、cost / rate guard、fallback metadata を個別設計してから段階判断する。 |
 | 4 | Artifact operations phase 2 | download / signed URL / file token / retention / diff は権限境界が重いため、個別設計してから実装判断する。 |
 | 5 | Report comparison phase 3 | read-only helper の利用実績を見て、comparison entity、metrics normalization、自動比較生成の要否を判断する。 |
 

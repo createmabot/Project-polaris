@@ -129,6 +129,17 @@ local_llm opt-in:
 
 ### 5-2. 実行方法
 
+optional benchmark script:
+
+- `pnpm --filter backend strategy-proposal:benchmark` で `stub` default の sanitized summary を stdout に出す。
+- `pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default` のように provider / scenario を絞れる。
+- `--provider=local_llm` は manual optional。local_llm 実体依存 benchmark は required check に入れない。
+- script output は raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文を出さない。
+- summary は scenario id、provider observation 相当の status / latency bucket / candidate_count / invalid_reason、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。
+- file 出力は現時点で行わない。保存したい場合は terminal output をそのまま docs に貼らず、下記テンプレートで要約する。
+
+UI manual check:
+
 1. StrategyLab を開く。
 2. provider ごとに代表シナリオを入力する。
 3. proposal count は基本 5 件で確認し、境界確認時だけ 1 件、10 件、0 candidates になり得る条件を確認する。
