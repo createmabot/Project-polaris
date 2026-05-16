@@ -8,6 +8,7 @@ import ErrorState from '../components/ui/ErrorState';
 import { SelectField, TextArea, TextInput } from '../components/ui/FormFields';
 import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -15,7 +16,11 @@ import {
   BacktestCreateData,
   BacktestImportData,
   StrategyCreateData,
+  StrategyProposalCandidate,
   StrategyProposalData,
+  StrategyProposalHistoryDetailData,
+  StrategyProposalHistoryListData,
+  StrategyProposalSelectData,
   StrategyVersionData,
   StrategyVersionPineGenerateData,
   StrategyVersionListData,
@@ -134,6 +139,34 @@ function buildCsvParseGuidance(parseError: string | null): string[] {
   return guidance;
 }
 
+function getProposalRunId(data: StrategyProposalData | null): string | null {
+  return data?.proposal_run_id ?? data?.history?.proposal_run_id ?? null;
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString('ja-JP');
+}
+
+function buildProposalSelectionErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status >= 500) {
+    return '候補の選択履歴を記録できませんでした。時間をおいて再試行してください。';
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return '対象の提案履歴が見つかりませんでした。最新の履歴を再読み込みしてください。';
+  }
+  if (error instanceof ApiError && error.status === 400) {
+    return '候補の選択履歴を記録できませんでした。候補を確認して再試行してください。';
+  }
+  return '候補の選択履歴を記録できませんでした。';
+}
+
 export default function StrategyLab() {
   const [, setLocation] = useLocation();
   const [title, setTitle] = useState('監視銘柄比較ルール');
@@ -147,6 +180,9 @@ export default function StrategyLab() {
   const [proposalData, setProposalData] = useState<StrategyProposalData | null>(null);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposing, setProposing] = useState(false);
+  const [selectedProposalRunId, setSelectedProposalRunId] = useState<string | null>(null);
+  const [proposalSelectionError, setProposalSelectionError] = useState<string | null>(null);
+  const [selectingProposalCandidateId, setSelectingProposalCandidateId] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +207,21 @@ export default function StrategyLab() {
     strategyId ? `/api/strategies/${strategyId}/versions` : null,
     swrFetcher
   );
+  const {
+    data: proposalHistoryData,
+    error: proposalHistoryError,
+    isLoading: proposalHistoryLoading,
+    mutate: mutateProposalHistory,
+  } = useSWR<StrategyProposalHistoryListData>('/api/strategy-lab/proposals?limit=5', swrFetcher);
+  const {
+    data: selectedProposalDetail,
+    error: selectedProposalDetailError,
+    isLoading: selectedProposalDetailLoading,
+    mutate: mutateSelectedProposalDetail,
+  } = useSWR<StrategyProposalHistoryDetailData>(
+    selectedProposalRunId ? `/api/strategy-lab/proposals/${selectedProposalRunId}` : null,
+    swrFetcher
+  );
 
   const latestVersion = useMemo(() => versionsData?.strategy_versions?.[0] ?? null, [versionsData]);
 
@@ -189,6 +240,8 @@ export default function StrategyLab() {
         user_hint: naturalLanguageRule.trim() || null,
       });
       setProposalData(proposals);
+      setSelectedProposalRunId(getProposalRunId(proposals));
+      void mutateProposalHistory();
     } catch (proposalRequestError: unknown) {
       console.error('Strategy proposal request failed', proposalRequestError);
       setProposalError(buildProposalErrorMessage(proposalRequestError));
@@ -197,10 +250,11 @@ export default function StrategyLab() {
     }
   };
 
-  const onUseProposal = (candidate: StrategyProposalData['candidates'][number]) => {
+  const applyProposalCandidate = (candidate: StrategyProposalCandidate) => {
     setTitle(candidate.title);
     setNaturalLanguageRule(candidate.suggested_natural_language_spec);
     setProposalError(null);
+    setProposalSelectionError(null);
     setError(null);
     setResult(null);
     setStrategyId(null);
@@ -208,6 +262,54 @@ export default function StrategyLab() {
     setCsvFile(null);
     setImportState(null);
     setImportError(null);
+  };
+
+  const recordProposalSelection = async (
+    proposalRunId: string,
+    body: { candidate_id?: string; proposal_candidate_id?: string },
+    selectingId: string,
+  ) => {
+    setSelectingProposalCandidateId(selectingId);
+    setProposalSelectionError(null);
+    try {
+      await postApi<StrategyProposalSelectData>(`/api/strategy-lab/proposals/${proposalRunId}/select`, body);
+      void mutateProposalHistory();
+      void mutateSelectedProposalDetail();
+      return true;
+    } catch (selectionError: unknown) {
+      console.error('Strategy proposal selection failed', selectionError);
+      setProposalSelectionError(buildProposalSelectionErrorMessage(selectionError));
+      return false;
+    } finally {
+      setSelectingProposalCandidateId(null);
+    }
+  };
+
+  const onUseProposal = async (candidate: StrategyProposalCandidate) => {
+    const proposalRunId = getProposalRunId(proposalData);
+    if (proposalRunId) {
+      const recorded = await recordProposalSelection(
+        proposalRunId,
+        { candidate_id: candidate.candidate_id },
+        candidate.candidate_id,
+      );
+      if (!recorded) {
+        return;
+      }
+    }
+    applyProposalCandidate(candidate);
+  };
+
+  const onUseHistoryProposal = async (proposalRunId: string, proposalCandidateId: string, candidate: StrategyProposalCandidate) => {
+    const recorded = await recordProposalSelection(
+      proposalRunId,
+      { proposal_candidate_id: proposalCandidateId },
+      proposalCandidateId,
+    );
+    if (!recorded) {
+      return;
+    }
+    applyProposalCandidate(candidate);
   };
 
   const onSubmit = async (event: FormEvent) => {
@@ -360,6 +462,12 @@ export default function StrategyLab() {
             </ErrorState>
           )}
 
+          {proposalSelectionError && (
+            <ErrorState title='候補選択の記録に失敗しました'>
+              {proposalSelectionError}
+            </ErrorState>
+          )}
+
           {proposalData && (
             <div style={{ display: 'grid', gap: '0.75rem' }}>
               <KeyValueList className='sm:grid-cols-2'>
@@ -398,8 +506,11 @@ export default function StrategyLab() {
                         <h3 style={{ margin: 0, fontSize: '1rem' }}>{candidate.title}</h3>
                         <p style={{ margin: '0.25rem 0 0', color: '#475569' }}>{candidate.summary}</p>
                       </div>
-                      <Button onClick={() => onUseProposal(candidate)}>
-                        この候補を使う
+                      <Button
+                        onClick={() => void onUseProposal(candidate)}
+                        disabled={selectingProposalCandidateId === candidate.candidate_id}
+                      >
+                        {selectingProposalCandidateId === candidate.candidate_id ? '記録中...' : 'この候補を使う'}
                       </Button>
                     </div>
                     <KeyValueList className='sm:grid-cols-3'>
@@ -425,6 +536,104 @@ export default function StrategyLab() {
               </InlineNotice>
             </div>
           )}
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title='最近の提案'
+        description='直近の strategy proposal run を最小表示します。候補を使う操作は title と自然言語ルールへの反映に留めます。'
+        className='mt-5'
+      >
+        <div style={{ display: 'grid', gap: '0.85rem' }}>
+          {proposalHistoryLoading && (
+            <LoadingState title='提案履歴を読み込み中です' />
+          )}
+
+          {proposalHistoryError && (
+            <ErrorState title='提案履歴を読み込めませんでした'>
+              時間をおいて再試行してください。
+            </ErrorState>
+          )}
+
+          {!proposalHistoryLoading && !proposalHistoryError && proposalHistoryData?.proposal_runs?.length === 0 && (
+            <EmptyState title='最近の提案はありません'>
+              候補を生成するとここに履歴が表示されます。
+            </EmptyState>
+          )}
+
+          {proposalHistoryData?.proposal_runs?.map((run) => (
+            <div
+              key={run.id}
+              style={{
+                border: '1px solid #d8dee4',
+                borderRadius: '8px',
+                padding: '0.85rem',
+                display: 'grid',
+                gap: '0.55rem',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <KeyValueList className='sm:grid-cols-2'>
+                  <KeyValueRow label='status'><StatusBadge status={run.status}>{run.status}</StatusBadge></KeyValueRow>
+                  <KeyValueRow label='created'>{formatDateTime(run.created_at)}</KeyValueRow>
+                  <KeyValueRow label='provider'>{run.provider_name}</KeyValueRow>
+                  <KeyValueRow label='candidate count'>{String(run.candidate_count)}</KeyValueRow>
+                  <KeyValueRow label='selected'>{run.selected_candidate_id ? 'あり' : 'なし'}</KeyValueRow>
+                </KeyValueList>
+                <Button onClick={() => setSelectedProposalRunId(run.id)}>
+                  候補を見る
+                </Button>
+              </div>
+
+              {selectedProposalRunId === run.id && (
+                <div style={{ display: 'grid', gap: '0.65rem' }}>
+                  {selectedProposalDetailLoading && (
+                    <LoadingState title='候補 detail を読み込み中です' />
+                  )}
+                  {selectedProposalDetailError && (
+                    <ErrorState title='候補 detail を読み込めませんでした'>
+                      時間をおいて再試行してください。
+                    </ErrorState>
+                  )}
+                  {selectedProposalDetail?.candidates.length === 0 && (
+                    <EmptyState title='履歴候補はありません'>
+                      failed run または候補なしの run です。
+                    </EmptyState>
+                  )}
+                  {selectedProposalDetail?.candidates.map((historyCandidate) => (
+                    <div
+                      key={historyCandidate.id}
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '0.75rem',
+                        display: 'grid',
+                        gap: '0.45rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                        <div>
+                          <h3 style={{ margin: 0, fontSize: '1rem' }}>{historyCandidate.candidate.title}</h3>
+                          <p style={{ margin: '0.25rem 0 0', color: '#475569' }}>{historyCandidate.candidate.summary}</p>
+                        </div>
+                        <Button
+                          onClick={() => void onUseHistoryProposal(run.id, historyCandidate.id, historyCandidate.candidate)}
+                          disabled={selectingProposalCandidateId === historyCandidate.id}
+                        >
+                          {selectingProposalCandidateId === historyCandidate.id ? '記録中...' : 'この候補を使う'}
+                        </Button>
+                      </div>
+                      <KeyValueList className='sm:grid-cols-3'>
+                        <KeyValueRow label='rank'>{String(historyCandidate.rank)}</KeyValueRow>
+                        <KeyValueRow label='type'><StatusBadge status={historyCandidate.candidate.strategy_type}>{historyCandidate.candidate.strategy_type}</StatusBadge></KeyValueRow>
+                        <KeyValueRow label='selected'>{historyCandidate.selected_at ? 'あり' : 'なし'}</KeyValueRow>
+                      </KeyValueList>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </SectionCard>
 

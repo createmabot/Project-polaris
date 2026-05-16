@@ -232,9 +232,11 @@ proposal history / selected proposal lineage backend 実装現在地:
 - local_llm failure / invalid response は candidates なしの failed run として sanitized status / reason を残す方針を第一候補にする。request validation error は保存対象外を第一候補にする。
 - `POST /api/strategy-lab/proposals` は後方互換を維持し、optional `proposal_run_id` / `history.proposal_run_id` を返す。
 - recent list の `GET /api/strategy-lab/proposals`、detail の `GET /api/strategy-lab/proposals/:proposalRunId`、selection の `POST /api/strategy-lab/proposals/:proposalRunId/select` を追加済み。
-- 初回 UI は StrategyLab の「最近の提案」程度に留める。filter / pagination / large history management は後続判断にする。
+- 初回 UI は StrategyLab の「最近の提案」程度として実装済み。run status、created_at、provider、candidate count、selected 有無、detail candidates を最小表示する。
+- 現在表示中 proposal candidates と history detail candidates の「この候補を使う」は selection API を呼び、title / natural language spec への反映だけを行う。
+- filter / pagination / retention / full history management は後続判断にする。
 - `selected_strategy_id` / `selected_strategy_version_id` / `StrategyRuleVersion.createdFromProposalCandidateId` は初回では入れず、後続 lineage relation として判断する。
-- backend API / tests は追加済み。frontend UI は次 PR に分ける。
+- backend API / tests と frontend minimal UI / tests は追加済み。
 - local_llm 実体依存 test は required check に入れない。
 - proposal から Pine generation、StrategyVersion 自動保存、backtest、AI summary への自動連鎖は引き続き対象外。
 
@@ -254,7 +256,8 @@ prompt regression / provider benchmark は optional script と fixed scenario se
 - provider quality trend aggregation。
 - `openai_api` provider。
 - Web search / deep research job 化。
-- proposal history / selected proposal lineage。
+- proposal history filter / pagination / retention / full history management。
+- StrategyVersion lineage relation。
 - provider cost / rate guard hardening。
 - sanitized provider event log persistence。
 - prompt regression automation。

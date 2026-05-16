@@ -586,6 +586,52 @@ export type StrategyProposalData = {
     suggested_pine_constraints: string[];
   }>;
   disclaimer: string;
+  proposal_run_id?: string;
+  history?: {
+    proposal_run_id?: string;
+  };
+};
+
+export type StrategyProposalCandidate = StrategyProposalData['candidates'][number];
+
+export type StrategyProposalHistoryRun = {
+  id: string;
+  status: string;
+  provider_name: string;
+  provider_mode: string;
+  selected_by: string;
+  input: StrategyProposalData['input'];
+  provider_observation?: StrategyProposalData['provider_observation'] | Record<string, unknown> | null;
+  candidate_count: number;
+  selected_candidate_id: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StrategyProposalHistoryCandidate = {
+  id: string;
+  proposal_run_id: string;
+  provider_candidate_id: string;
+  rank: number;
+  candidate: StrategyProposalCandidate;
+  selected_at: string | null;
+  created_at: string;
+};
+
+export type StrategyProposalHistoryListData = {
+  proposal_runs: StrategyProposalHistoryRun[];
+  limit: number;
+};
+
+export type StrategyProposalHistoryDetailData = {
+  proposal_run: StrategyProposalHistoryRun;
+  candidates: StrategyProposalHistoryCandidate[];
+};
+
+export type StrategyProposalSelectData = {
+  proposal_run: StrategyProposalHistoryRun;
+  selected_candidate: StrategyProposalHistoryCandidate;
 };
 
 export type StrategyListData = {

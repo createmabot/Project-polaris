@@ -106,7 +106,8 @@ local_llm provider 運用:
 - timeout、provider unavailable、malformed JSON、schema / type / format 不正、必須項目欠落、candidate count 不正、Web search 未実装時の web research basis は provider error として扱う。
 - local_llm は silent stub fallback を行わない。必要になった場合のみ、後続で opt-in fallback と fallback metadata を設計する。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
-- `openai_api`、Web search / deep research、request-time provider selection、proposal history、auto Pine generation / auto save は後続候補として残す。
+- Proposal history は sanitized generation run / candidates / selected candidate の最小保存と StrategyLab の recent UI までに限定する。filter、pagination、retention UI、full history management、StrategyVersion lineage relation は後続候補として残す。
+- `openai_api`、Web search / deep research、request-time provider selection、auto Pine generation / auto save は後続候補として残す。
 
 ## 7-2. LLM strategy proposal quality evaluation
 
