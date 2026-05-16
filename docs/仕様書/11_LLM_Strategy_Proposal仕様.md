@@ -385,7 +385,7 @@ UI / docs で避ける表現:
 
 ## 10. 後続候補
 
-- `local_llm` / `openai_api` strategy proposal provider。
+- `openai_api` strategy proposal provider。
 - Web search / deep research option。
 - citation / freshness 表示。
 - proposal history / selected proposal lineage。
