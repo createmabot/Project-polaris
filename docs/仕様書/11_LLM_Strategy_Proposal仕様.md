@@ -459,7 +459,7 @@ CI / manual 境界:
 - real local_llm endpoint に依存する test は required check に入れない。
 - local_llm latency / timeout / invalid response rate は manual runbook で観測する。
 
-本設計 PR では、実装コード、API、test、frontend、backend、DB、Prisma schema は変更しない。
+現行 instrumentation metadata 実装では、optional response metadata、backend provider observation 分類、最小 frontend 表示、mock / fake response による test coverage を含む。DB / Prisma schema は変更しない。
 
 ## 12. 後続候補
 
