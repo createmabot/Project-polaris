@@ -121,7 +121,7 @@ provider boundary 実装範囲:
 
 - deterministic stub provider は provider boundary 配下に整理済み。
 - route 層の request validation と provider response validation は導入済み。
-- invalid enum、Web research basis、投資助言断定表現は provider invalid output として扱う。0 candidates は既存 UI の EmptyState で扱う。
+- user input 由来の投資助言風表現は request `VALIDATION_ERROR` として扱う。provider output 由来の invalid enum、Web research basis、schema / safety validation failure は `PROVIDER_INVALID_RESPONSE` として扱う。0 candidates は既存 UI の EmptyState で扱う。
 
 初回ではやらないこと:
 
