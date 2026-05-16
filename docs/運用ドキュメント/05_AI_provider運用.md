@@ -29,7 +29,7 @@
 
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
 
-LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。初回実装は deterministic stub provider に限定し、Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
+LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。現行は deterministic `stub` を default とし、`STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示設定時だけ local_llm provider を使える。Web search / deep research、citation 保存、proposal history、provider cost cap の本格実装は後続判断とする。
 
 Strategy proposal provider expansion では、まず provider boundary を docs 上で固定する。`local_llm` / `openai_api` を使う場合も、proposal は StrategyLab の一時候補生成に限定し、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を自動起動しない。
 

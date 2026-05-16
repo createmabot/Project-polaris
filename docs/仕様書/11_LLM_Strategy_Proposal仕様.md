@@ -205,7 +205,7 @@ provider が失敗しても StrategyLab の既存 save / Pine generation / valid
 
 ### 5-2. provider boundary
 
-既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest / Pine generation で使われている。strategy proposal は同じ provider 設定を再利用するか、将来 `STRATEGY_PROPOSAL_PROVIDER` を切るかを実装時に判断する。
+既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest / Pine generation で使われている。strategy proposal は `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を採用済みで、`HOME_AI_PROVIDER` とは分離する。未指定 default は `stub` とし、local_llm は明示 opt-in で使う。
 
 初回は cost / latency / safety の観点から `stub` 相当を第一候補にする。`local_llm` / `openai_api` を使う場合は、prompt / response sanitization、timeout、fallback、error redaction、投資助言 disclaimer を先に固定する。
 
