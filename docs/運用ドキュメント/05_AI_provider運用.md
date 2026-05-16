@@ -81,7 +81,7 @@ Strategy proposal provider expansion では、まず provider boundary を docs 
 現行:
 
 - `POST /api/strategy-lab/proposals` はユーザー操作起点の同期 API として扱う。
-- provider boundary は実装済みで、現時点の provider は deterministic `stub` のみ。DB 保存、job 化、proposal history は行わない。
+- provider boundary は実装済みで、`STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を選択できる。未指定 default は deterministic `stub`。DB 保存、job 化、proposal history は行わない。
 - route 層で request validation と response validation を行い、invalid provider output は generic failure として扱う。
 - Web search / deep research は行わない。`source_type=web` は将来予約であり、現行 response では citation / freshness を主張しない。
 
@@ -97,14 +97,14 @@ provider expansion 時の必須条件:
 - 画面表示、typing、polling、batch、scheduled job を契機に proposal を自動生成しない。
 - proposal は投資助言ではなく検証候補であり、backtest と user review を前提にする。安全のために検証候補を狭めすぎず、利益保証、売買推奨、検証不要と読める表現は UI / docs の disclaimer と運用確認で抑制する。
 
-local_llm provider design:
+local_llm provider 運用:
 
 - proposal 専用 provider selector は `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` とし、未指定 default は `stub` とする。
-- local_llm endpoint / model / timeout / max output は proposal 専用設定で分離する。設定名候補は仕様書に集約し、実値は docs / PR / UI / response に出さない。
+- local_llm endpoint / model / timeout / max output は proposal 専用設定で分離する。実値は docs / PR / UI / response に出さない。
 - local_llm は StrategyLab の一時 proposal candidates を返すだけで、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 - local_llm response は既存 `strategy_proposal_candidates` schema に正規化し、UI に出す前に既存 request / provider response validation を必ず通す。
 - timeout、provider unavailable、malformed JSON、schema / type / format 不正、必須項目欠落、candidate count 不正、Web search 未実装時の web research basis は provider error として扱う。
-- 初回 local_llm 実装では silent stub fallback を行わない。必要になった場合のみ、後続で opt-in fallback と fallback metadata を設計する。
+- local_llm は silent stub fallback を行わない。必要になった場合のみ、後続で opt-in fallback と fallback metadata を設計する。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。
 - `openai_api`、Web search / deep research、request-time provider selection、proposal history、auto Pine generation / auto save は後続候補として残す。
 

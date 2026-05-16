@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { errorHandler } from '../src/utils/response';
 import { strategyRoutes } from '../src/routes/strategies';
 import { strategyLabRoutes } from '../src/routes/strategy-lab';
@@ -419,9 +419,56 @@ async function createApp() {
   return app;
 }
 
+function validLocalLlmCandidate(overrides: Record<string, unknown> = {}) {
+  return {
+    candidate_id: 'local-1',
+    title: 'ローカルLLM検証候補',
+    summary: '買うべきという入力があっても、検証候補としてbacktest前提で扱う候補。',
+    market_assumption: 'JP_STOCK',
+    timeframe_assumption: 'D',
+    strategy_type: 'trend_following',
+    entry_logic: ['終値が25日移動平均を上回る'],
+    exit_logic: ['終値が5日移動平均を下回る'],
+    risk_management: ['1回の損失を限定する'],
+    invalidation_conditions: ['出来高が伴わない上抜け'],
+    expected_strengths: ['条件が単純で検証しやすい'],
+    expected_weaknesses: ['横ばい相場でダマシが増える'],
+    required_indicators: ['SMA', 'Volume'],
+    pine_feasibility: 'high',
+    backtest_cautions: ['複数期間でbacktestする'],
+    research_basis: [
+      {
+        source_type: 'provider_knowledge',
+        label: 'local llm generated candidate',
+        url: null,
+      },
+    ],
+    confidence: 'medium',
+    uncertainty: ['市場環境や銘柄固有材料は未評価です。'],
+    suggested_natural_language_spec:
+      'JP_STOCK / D を前提に、終値が25日移動平均を上回り、出来高が平均を上回る場合に検証します。終値が5日移動平均を下回る場合に手仕舞いします。',
+    suggested_pine_constraints: ['long_only', 'daily first'],
+    ...overrides,
+  };
+}
+
 describe('strategy lab vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
+    delete process.env.STRATEGY_PROPOSAL_PROVIDER;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
+  });
+
+  afterEach(() => {
+    delete process.env.STRATEGY_PROPOSAL_PROVIDER;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
+    vi.unstubAllGlobals();
   });
 
   it('returns deterministic strategy proposal candidates without persistence', async () => {
@@ -457,6 +504,159 @@ describe('strategy lab vertical slice', () => {
     });
     expect(body.data.candidates[0].suggested_natural_language_spec).toContain('出来高を重視したい');
     expect(body.data.disclaimer).toContain('投資助言ではありません');
+  });
+
+  it('uses stub strategy proposal provider by default without calling local llm', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.provider.name).toBe('stub');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('uses local_llm strategy proposal provider when selected by env', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT = 'http://local-llm.example.test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL = 'proposal-model-test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '1234';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS = '8000';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: {
+          content: JSON.stringify({
+            schema_name: 'strategy_proposal_candidates',
+            schema_version: '1.0',
+            candidates: [validLocalLlmCandidate()],
+            disclaimer: '検証候補の提案です。投資助言ではありません。',
+          }),
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        proposal_count: 1,
+        user_hint: 'must buy wording should remain input context',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.provider).toMatchObject({
+      name: 'local_llm',
+      mode: 'local',
+      web_search: false,
+      persisted: false,
+    });
+    expect(body.data.input.user_hint).toBe('must buy wording should remain input context');
+    expect(body.data.candidates).toHaveLength(1);
+    expect(body.data.candidates[0].summary).toContain('買うべきという入力があっても');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://local-llm.example.test/api/chat');
+    const requestBody = JSON.parse(String(init.body));
+    expect(requestBody.model).toBe('proposal-model-test');
+    expect(requestBody.stream).toBe(false);
+    expect(requestBody.think).toBe(false);
+    expect(requestBody.options.num_predict).toBe(2000);
+  });
+
+  it('returns safe provider error when local_llm returns malformed JSON', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: {
+          content: 'not json',
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.message).toBe('Strategy proposal provider failed to return usable candidates. Please try again later.');
+    expect(JSON.stringify(body)).not.toContain('not json');
+  });
+
+  it('returns safe provider error when local_llm schema metadata is invalid', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: {
+          content: JSON.stringify({
+            schema_name: 'unexpected_schema',
+            schema_version: '1.0',
+            candidates: [validLocalLlmCandidate()],
+            disclaimer: '検証候補の提案です。投資助言ではありません。',
+          }),
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.message).not.toContain('http://');
+    expect(body.error.message).not.toContain('proposal-model-test');
+  });
+
+  it('returns safe provider error when local_llm is unavailable', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('provider-error.example.test/failure'));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(JSON.stringify(body)).not.toContain('provider-error.example.test');
   });
 
   it('uses deterministic strategy proposal defaults', async () => {

@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { formatSuccess } from '../utils/response';
-import { createStrategyProposalProvider } from '../strategy-proposals/provider';
+import { createStrategyProposalProvider, getStrategyProposalProviderMode } from '../strategy-proposals/provider';
 import {
   parseStrategyProposalRequest,
   validateStrategyProposalData,
@@ -19,7 +19,7 @@ type ProposalBody = {
 export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: ProposalBody }>('/proposals', async (request, reply) => {
     const input = parseStrategyProposalRequest(request.body ?? {});
-    const provider = createStrategyProposalProvider('stub');
+    const provider = createStrategyProposalProvider(getStrategyProposalProviderMode());
     const generated = await provider.generate(input);
 
     const data = validateStrategyProposalData({
