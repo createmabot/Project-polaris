@@ -142,6 +142,44 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('configured');
   });
 
+  it.each([
+    ['proposal_run_id', { proposal_run_id: 'failed-proposal-run-1' }],
+    ['history.proposal_run_id', { history: { proposal_run_id: 'failed-proposal-run-1' } }],
+  ])('refreshes recent proposal history when failed proposal details include %s', async (_label, details) => {
+    const historyMutate = vi.fn();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    primeDefaultState();
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === '/api/strategy-lab/proposals?limit=5') {
+        return {
+          isLoading: false,
+          error: null,
+          data: null,
+          mutate: historyMutate,
+        };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockRejectedValue(new ApiError(
+      'provider invalid response',
+      'PROVIDER_INVALID_RESPONSE',
+      details,
+      502,
+    ));
+
+    try {
+      renderToStaticMarkup(<StrategyLab />);
+      const requestProposalButton = renderedButtons.find((button) => button.children === 'ストラテジーを提案');
+      expect(requestProposalButton).toBeDefined();
+      await requestProposalButton?.onClick?.();
+      await flushPromises();
+
+      expect(historyMutate).toHaveBeenCalledTimes(1);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('renders initial guidance and core actions', () => {
     primeDefaultState();
     mockUseSWR.mockReturnValue({

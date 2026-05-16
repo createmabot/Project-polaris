@@ -139,8 +139,30 @@ function buildCsvParseGuidance(parseError: string | null): string[] {
   return guidance;
 }
 
+function getProposalRunIdFromRecord(data: unknown): string | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+  const record = data as Record<string, unknown>;
+  if (typeof record.proposal_run_id === 'string') {
+    return record.proposal_run_id;
+  }
+  if (!record.history || typeof record.history !== 'object') {
+    return null;
+  }
+  const history = record.history as Record<string, unknown>;
+  return typeof history.proposal_run_id === 'string' ? history.proposal_run_id : null;
+}
+
 function getProposalRunId(data: StrategyProposalData | null): string | null {
-  return data?.proposal_run_id ?? data?.history?.proposal_run_id ?? null;
+  return getProposalRunIdFromRecord(data);
+}
+
+function getProposalErrorRunId(error: unknown): string | null {
+  if (!(error instanceof ApiError)) {
+    return null;
+  }
+  return getProposalRunIdFromRecord(error.details);
 }
 
 function formatDateTime(value: string | null): string {
@@ -245,6 +267,9 @@ export default function StrategyLab() {
     } catch (proposalRequestError: unknown) {
       console.error('Strategy proposal request failed', proposalRequestError);
       setProposalError(buildProposalErrorMessage(proposalRequestError));
+      if (getProposalErrorRunId(proposalRequestError)) {
+        void mutateProposalHistory();
+      }
     } finally {
       setProposing(false);
     }
