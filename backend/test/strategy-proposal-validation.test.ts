@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  runStrategyProposalBenchmarkScenario,
+  sanitizeStrategyProposalBenchmarkText,
+} from '../src/strategy-proposals/benchmark';
+import {
+  STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS,
+  toStrategyProposalBenchmarkRequest,
+} from '../src/strategy-proposals/benchmark-scenarios';
+import {
   parseStrategyProposalRequest,
   validateStrategyProposalCandidate,
   validateStrategyProposalData,
@@ -195,6 +203,81 @@ describe('strategy proposal validation', () => {
 
     expect(english.user_hint).toBe('must buy this setup');
     expect(japanese.user_hint).toBe('この銘柄は買うべき');
+  });
+
+  it('keeps benchmark scenarios aligned with the documented scenario set and valid request shape', () => {
+    expect(STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.map((scenario) => scenario.id)).toEqual([
+      'generic_default',
+      'jp_stock_daily',
+      'us_stock_daily',
+      'short_swing',
+      'long_trend_following',
+      'mean_reversion',
+      'breakout',
+      'volatility',
+      'conservative_risk',
+      'aggressive_risk',
+      'concrete_user_hint',
+      'vague_user_hint',
+      'long_user_hint',
+      'advice_like_wording',
+    ]);
+
+    for (const scenario of STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS) {
+      expect(toStrategyProposalBenchmarkRequest(scenario).proposal_count).toBeGreaterThanOrEqual(1);
+      expect(toStrategyProposalBenchmarkRequest(scenario).proposal_count).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('keeps advice-like benchmark wording as a valid stub benchmark scenario', async () => {
+    const scenario = STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.find((item) => item.id === 'advice_like_wording');
+    expect(scenario).toBeDefined();
+
+    const result = await runStrategyProposalBenchmarkScenario(scenario!, { providerMode: 'stub' });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.schema_valid).toBe(true);
+    expect(result.candidate_count).toBeGreaterThan(0);
+  });
+
+  it('uses stub for benchmark runs without options even when provider env requests local_llm', async () => {
+    const previous = process.env.STRATEGY_PROPOSAL_PROVIDER;
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    try {
+      const scenario = STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.find((item) => item.id === 'generic_default');
+      expect(scenario).toBeDefined();
+
+      const result = await runStrategyProposalBenchmarkScenario(scenario!);
+
+      expect(result.provider_name).toBe('stub');
+      expect(result.selected_by).toBe('default');
+      expect(result.status).toBe('succeeded');
+    } finally {
+      if (previous === undefined) {
+        delete process.env.STRATEGY_PROPOSAL_PROVIDER;
+      } else {
+        process.env.STRATEGY_PROPOSAL_PROVIDER = previous;
+      }
+    }
+  });
+
+  it('sanitizes benchmark output summaries before printing provider-derived text', () => {
+    const endpointLike = ['https://', 'provider-error.example.test/failure'].join('');
+    const sensitiveAssignment = [['api', 'key'].join('_'), 'sample-value'].join('=');
+    const pathLike = ['Z:', 'example', 'path'].join('\\');
+    const sanitized = sanitizeStrategyProposalBenchmarkText([
+      'candidate',
+      endpointLike,
+      sensitiveAssignment,
+      pathLike,
+    ].join(' '));
+
+    expect(sanitized).not.toContain(endpointLike);
+    expect(sanitized).not.toContain('sample-value');
+    expect(sanitized).not.toContain(pathLike);
+    expect(sanitized).toContain('[redacted-url]');
+    expect(sanitized).toContain('[redacted-sensitive]');
+    expect(sanitized).toContain('[redacted-path]');
   });
 });
 
