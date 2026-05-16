@@ -6,7 +6,6 @@ import {
 } from './instrumentation';
 import {
   createStrategyProposalProvider,
-  getStrategyProposalProviderSelection,
   type StrategyProposalProviderMode,
   type StrategyProposalProviderSelection,
 } from './provider';
@@ -69,7 +68,7 @@ function resolveSelection(options: StrategyProposalBenchmarkRunOptions): Strateg
   if (options.providerMode) {
     return { mode: options.providerMode, selectedBy: 'config' };
   }
-  return getStrategyProposalProviderSelection();
+  return { mode: 'stub', selectedBy: 'default' };
 }
 
 function summarizeCandidates(

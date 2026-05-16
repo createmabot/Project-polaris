@@ -495,7 +495,7 @@ prompt regression と provider benchmark の違い:
 optional script 方針:
 
 - optional benchmark PR 2 で `pnpm --filter backend strategy-proposal:benchmark` を追加済み。
-- script は required check に入れない。default は `stub` で、`--provider=local_llm` は manual optional とする。
+- script は required check に入れない。default は env に依存しない `stub` で、`--provider=local_llm` は manual optional とする。
 - scenario fixture は本章と品質評価 runbook の scenario id に合わせる。
 - output は stdout の sanitized summary とし、raw prompt / raw response / endpoint / model 実値 / secret / local path / stack trace / user_hint 全文を出さない。
 - summary は `provider_observation` 相当の status / latency bucket / candidate_count / invalid_reason と、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。

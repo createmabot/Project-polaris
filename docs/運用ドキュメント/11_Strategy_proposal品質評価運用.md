@@ -131,7 +131,7 @@ local_llm opt-in:
 
 optional benchmark script:
 
-- `pnpm --filter backend strategy-proposal:benchmark` で `stub` default の sanitized summary を stdout に出す。
+- `pnpm --filter backend strategy-proposal:benchmark` で env に依存しない `stub` default の sanitized summary を stdout に出す。
 - `pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default` のように provider / scenario を絞れる。
 - `--provider=local_llm` は manual optional。local_llm 実体依存 benchmark は required check に入れない。
 - script output は raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文を出さない。

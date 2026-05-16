@@ -16,6 +16,7 @@ function printHelp() {
     'Usage: pnpm --filter backend strategy-proposal:benchmark [--provider=stub|local_llm] [--scenario=id[,id]]',
     '',
     'Runs an optional sanitized Strategy proposal benchmark summary.',
+    'The default benchmark provider is stub and does not read STRATEGY_PROPOSAL_PROVIDER.',
     'This command is not a required check and does not print raw prompt, raw response, endpoint, model value, or user_hint text.',
   ].join('\n'));
 }
@@ -78,7 +79,7 @@ async function main() {
   console.log(JSON.stringify({
     schema_name: 'strategy_proposal_benchmark_summary',
     schema_version: '1.0',
-    provider_requested: options.providerMode ?? 'env_or_default',
+    provider_requested: options.providerMode ?? 'stub',
     scenario_count: results.length,
     results,
   }, null, 2));

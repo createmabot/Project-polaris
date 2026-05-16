@@ -240,6 +240,27 @@ describe('strategy proposal validation', () => {
     expect(result.candidate_count).toBeGreaterThan(0);
   });
 
+  it('uses stub for benchmark runs without options even when provider env requests local_llm', async () => {
+    const previous = process.env.STRATEGY_PROPOSAL_PROVIDER;
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    try {
+      const scenario = STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.find((item) => item.id === 'generic_default');
+      expect(scenario).toBeDefined();
+
+      const result = await runStrategyProposalBenchmarkScenario(scenario!);
+
+      expect(result.provider_name).toBe('stub');
+      expect(result.selected_by).toBe('default');
+      expect(result.status).toBe('succeeded');
+    } finally {
+      if (previous === undefined) {
+        delete process.env.STRATEGY_PROPOSAL_PROVIDER;
+      } else {
+        process.env.STRATEGY_PROPOSAL_PROVIDER = previous;
+      }
+    }
+  });
+
   it('sanitizes benchmark output summaries before printing provider-derived text', () => {
     const endpointLike = ['https://', 'provider-error.example.test/failure'].join('');
     const sensitiveAssignment = [['api', 'key'].join('_'), 'sample-value'].join('=');
