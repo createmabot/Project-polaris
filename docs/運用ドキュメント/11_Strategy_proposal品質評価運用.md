@@ -71,6 +71,40 @@ stub と local_llm の比較観点:
 - long user_hint: 長文 bounding 後も安全に処理され、raw input を log / UI に出さないこと。
 - investment-advice-like wording を含む case: wording だけで reject せず、売買推奨ではなく検証候補として扱うこと。
 
+benchmark scenario set:
+
+| scenario id | 入力方針 | 主な確認観点 |
+|---|---|---|
+| `generic_default` | 入力なしに近い proposal。market / timeframe は default。 | schema validity、candidate_count、diversity、uncertainty、unsupported claim risk。 |
+| `jp_stock_daily` | 日本株向け。`market=JP_STOCK`, `timeframe=D`。 | market assumption、entry / exit、backtest caution、freshness を主張しないこと。 |
+| `us_stock_daily` | 米国株向け。`market=US_STOCK`, `timeframe=D`。 | market assumption、unsupported claim risk、provider 間の安定性。 |
+| `short_swing` | 短期 swing を user_hint で指定。 | timeframe clarity、entry / exit、risk、Pine feasibility。 |
+| `long_trend_following` | 長期 trend following を指定。 | strategy_type diversity、継続条件、exit、invalidation。 |
+| `mean_reversion` | mean reversion を指定。 | 反転条件、過熱判定、stop、backtest caution。 |
+| `breakout` | breakout を指定。 | だまし対策、volume / volatility、invalidation。 |
+| `volatility` | volatility regime を指定。 | position size、stop width、uncertainty。 |
+| `conservative_risk` | conservative risk を指定。 | risk management quality、candidate aggressiveness。 |
+| `aggressive_risk` | aggressive risk を指定。 | risk と overfitting caution の両立。 |
+| `concrete_user_hint` | 指標・閾値を含む具体 user_hint。 | user_hint alignment、Pine feasibility、余計な条件の混入。 |
+| `vague_user_hint` | 曖昧な user_hint。 | uncertainty、勝手な事実補完をしないこと。 |
+| `long_user_hint` | 長文 user_hint。 | length bounding、raw input 非表示、alignment。 |
+| `advice_like_wording` | 投資助言風 wording を含む user_hint。 | wording だけで reject しないこと、検証候補として提示すること。 |
+
+各 scenario で見る共通項目:
+
+- schema validity。
+- candidate count / strategy_type diversity。
+- user_hint alignment。
+- market / timeframe assumption。
+- entry / exit logic。
+- risk management。
+- invalidation condition。
+- Pine feasibility。
+- backtest caution。
+- uncertainty / limitations。
+- hallucination / stale / unsupported claim risk。
+- latency / provider failure / invalid JSON / schema invalid。
+
 fixture 作成時の注意:
 
 - 実在の secret、endpoint、model 実値、local path を記録しない。
@@ -174,6 +208,14 @@ instrumentation / cost guard の現行:
 ## 6. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。
+
+prompt regression / provider benchmark の記録方針:
+
+- 実測 raw output は原則 commit しない。必要な場合も raw prompt / raw response / endpoint / model 実値 / secret / local path を含めない。
+- docs に残すのは、scenario id、provider、provider_observation の sanitized summary、manual score memo、follow-up の要約に限定する。
+- ignored local output、CI artifact、一時 file のどれを使うかは script 実装 PR で決める。
+- provider benchmark は provider 間比較、prompt regression は同一 provider / 同一 scenario の変更前後比較として分けて記録する。
+- future `openai_api` / Web search / deep research を比較する場合も、cost / citation / freshness は raw output ではなく sanitized summary として扱う。
 
 記録テンプレート:
 

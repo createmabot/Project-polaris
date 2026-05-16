@@ -461,7 +461,45 @@ CI / manual 境界:
 
 現行 instrumentation metadata 実装では、optional response metadata、backend provider observation 分類、最小 frontend 表示、mock / fake response による test coverage を含む。DB / Prisma schema は変更しない。
 
-## 12. 後続候補
+## 12. prompt regression / provider benchmark 設計方針
+
+Strategy proposal prompt regression / provider benchmark は、provider を増やす前後で proposal 品質と failure 傾向を比較するための任意運用である。required check とは分け、CI で安定する schema / validation test と、provider 実体に依存する manual / optional benchmark を混同しない。
+
+対象 provider:
+
+- `stub`: deterministic baseline。schema、candidate count、empty candidates、UI 表示の回帰確認に使う。
+- `local_llm`: opt-in provider。diversity、user_hint alignment、latency、invalid response、unsupported claim risk を比較する。
+- future `openai_api`: 有料 provider。実装前に cost / rate guard、明示 opt-in、保存しない raw output 方針を固定する。
+- future Web search / deep research: 同期 proposal API ではなく job 化候補。citation / freshness / cost / latency を別枠で扱う。
+
+required check と benchmark の境界:
+
+- required check: mock / fake response による schema validation、required fields、enum、candidate count、malformed JSON、provider unavailable / timeout の分類確認。
+- manual / optional benchmark: real `local_llm`、future `openai_api`、future Web search / deep research の latency、failure rate、diversity、qualitative score の比較。
+- real provider 依存 benchmark は required check に入れない。
+
+prompt regression と provider benchmark の違い:
+
+- prompt regression: 同じ provider / 同じ scenario で、prompt や schema 変更前後の出力傾向が大きく崩れていないかを見る。
+- provider benchmark: 同じ scenario を provider 間で比較し、品質、latency、invalid response、cost risk の差を見る。
+
+記録方針:
+
+- `provider_observation` の status、latency_bucket、candidate_count、invalid_reason、validation_error_count、schema_valid、fallback_used を一次指標にする。
+- latency、invalid response、candidate_count、schema validity は定量記録する。
+- diversity、user_hint alignment、entry / exit、risk、invalidation、Pine feasibility、backtest caution、uncertainty、unsupported claim risk は手動評価として短く記録する。
+- investment-advice-like wording は一律 reject しない。benchmark では、売買推奨や利益保証ではなく検証候補として扱えているかを見る。
+- raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は保存しない。
+- 実測値は原則 commit しない。必要な場合は raw output ではなく、scenario 単位の要約だけを progress docs に残す。
+
+optional script 方針:
+
+- 本設計 PR では script、fixture、test、package script は追加しない。
+- 次 PR で実装する場合の候補名は `scripts/strategy-proposal-benchmark` 程度とし、required check には入れない。
+- output は ignored local output、CI artifact、または一時 file を候補にし、raw prompt / raw response / endpoint / model 実値 / secret / local path を出さない。
+- commit 対象にする場合は、実測 raw ではなく sanitized summary のみとする。
+
+## 13. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -474,7 +512,7 @@ CI / manual 境界:
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 13. 参照
+## 14. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
