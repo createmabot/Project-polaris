@@ -420,9 +420,9 @@ stub は deterministic baseline として schema、UI表示、候補選択、emp
 
 ## 11. instrumentation / cost guard 設計方針
 
-Strategy proposal provider instrumentation は、provider 品質と failure 分類を観測するための sanitized metadata として扱う。初回実装候補は `POST /api/strategy-lab/proposals` の optional metadata であり、既存 response shape を壊さない形に限定する。DB 永続化、proposal history、job 化は行わない。
+Strategy proposal provider instrumentation は、provider 品質と failure 分類を観測するための sanitized metadata として扱う。現行実装では `POST /api/strategy-lab/proposals` の optional response metadata として `provider_observation` を追加済み。既存 `provider` / `candidates` / validation behavior は壊さず、DB 永続化、proposal history、job 化は行わない。
 
-metadata 候補:
+実装済み metadata:
 
 - provider name: `stub` / `local_llm`。
 - selected_by: `env` / `config` / `default`。request-time provider selection は未実装のため、現時点では `request` は使わない。
@@ -440,8 +440,9 @@ metadata 候補:
 response / logs 方針:
 
 - response metadata は optional とし、既存 `data.candidates` と validation behavior を壊さない。
-- logs を出す場合も sanitized event のみとし、raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は出さない。
-- UI 表示は最小 provider note に留め、debug console や long diagnostics panel は初回対象外にする。
+- success response では `data.provider_observation` として返す。provider error 時も返す場合は `error.details.provider_observation` の sanitized enum / count / bucket のみに限定する。
+- 現時点では構造化 provider log の永続化や専用 event stream は実装しない。logs を追加する場合も sanitized event のみとし、raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は出さない。
+- UI 表示は provider status、latency、fallback、schema の最小 note に留め、debug console や long diagnostics panel は初回対象外にする。
 - instrumentation metadata は品質評価と運用切り分けの補助であり、投資判断や候補 ranking には使わない。
 
 cost / rate guard 方針:
@@ -469,7 +470,7 @@ CI / manual 境界:
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
 - provider quality benchmark records。
-- provider instrumentation implementation（sanitized provider event / duration bucket / error category）。
+- provider instrumentation 拡張（sanitized provider event / log persistence / trend aggregation）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 

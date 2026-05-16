@@ -203,6 +203,20 @@ describe('StrategyLab', () => {
           web_search: false,
           persisted: false,
         },
+        provider_observation: {
+          provider_name: 'stub',
+          selected_by: 'default',
+          elapsed_ms: 20,
+          latency_bucket: 'fast',
+          status: 'succeeded',
+          candidate_count: 1,
+          invalid_reason: 'none',
+          validation_error_count: 0,
+          fallback_used: false,
+          fallback_reason: null,
+          schema_valid: true,
+          model_category: 'unknown',
+        },
         candidates: [
           {
             candidate_id: 'stub-1',
@@ -235,6 +249,13 @@ describe('StrategyLab', () => {
     expect(html).toContain('disabled');
     expect(html).toContain('保存:');
     expect(html).toContain('なし');
+    expect(html).toContain('provider status:');
+    expect(html).toContain('succeeded');
+    expect(html).toContain('latency:');
+    expect(html).toContain('fast / 20ms');
+    expect(html).toContain('fallback:');
+    expect(html).toContain('schema:');
+    expect(html).toContain('valid');
     expect(html).toContain('移動平均トレンドフォロー候補');
     expect(html).toContain('この候補を使う');
     expect(html).toContain('trend_following');

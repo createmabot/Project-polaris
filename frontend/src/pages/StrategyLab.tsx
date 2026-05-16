@@ -342,6 +342,14 @@ export default function StrategyLab() {
                 <KeyValueRow label='web search'>{proposalData.provider.web_search ? 'enabled' : 'disabled'}</KeyValueRow>
                 <KeyValueRow label='保存'>{proposalData.provider.persisted ? 'あり' : 'なし'}</KeyValueRow>
                 <KeyValueRow label='候補数'>{String(proposalData.candidates.length)}</KeyValueRow>
+                {proposalData.provider_observation && (
+                  <>
+                    <KeyValueRow label='provider status'>{proposalData.provider_observation.status}</KeyValueRow>
+                    <KeyValueRow label='latency'>{proposalData.provider_observation.latency_bucket} / {proposalData.provider_observation.elapsed_ms}ms</KeyValueRow>
+                    <KeyValueRow label='fallback'>{proposalData.provider_observation.fallback_used ? 'used' : 'none'}</KeyValueRow>
+                    <KeyValueRow label='schema'>{proposalData.provider_observation.schema_valid ? 'valid' : 'invalid'}</KeyValueRow>
+                  </>
+                )}
               </KeyValueList>
 
               {proposalData.candidates.length === 0 ? (

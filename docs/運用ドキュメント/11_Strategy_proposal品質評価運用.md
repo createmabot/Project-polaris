@@ -106,6 +106,7 @@ local_llm opt-in:
 
 - UI に候補が表示される場合、schema validation を通った response として扱う。
 - malformed JSON、invalid schema、candidate count invalid、provider unavailable、timeout は generic provider failure として proposal section に閉じる。
+- API response に `provider_observation` がある場合は、status、latency bucket、candidate_count、invalid_reason、schema_valid を確認する。model 実値、endpoint、raw prompt、raw response は metadata に含めない。
 - error 表示や logs に raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace が出ていないことを確認する。
 - 0 candidates は provider failure ではなく EmptyState として扱う。
 
@@ -144,28 +145,26 @@ local_llm opt-in:
 
 ### 5-6. 現時点で確認できる UI / API 観点
 
-現行の StrategyLab proposal flow は、sanitized event、duration bucket、error category を持つ構造化 provider log を出していない。品質評価では、現時点で UI / API から観測できる範囲に限定して記録する。
+現行の StrategyLab proposal flow は、response metadata と最小 UI note で provider observation を確認できる。構造化 provider log、DB 永続化、trend 集計はまだ実装していないため、品質評価では UI / API から観測できる範囲に限定して記録する。
 
 - UI で候補一覧、EmptyState、generic provider failure、validation error のどれになったかを見る。
 - API response が success / empty / provider_error / validation_error のどれに見えるかを記録する。
-- latency は評価者が手元で測った体感または手動計測の bucket として記録する。
+- `provider_observation.status`、`latency_bucket`、`candidate_count`、`invalid_reason`、`schema_valid` を記録する。metadata がない古い response では手動観測で補う。
 - provider unavailable や timeout は local_llm の運用課題として記録し、stub fallback 成功に読み替えない。
 - local_llm 実体依存の結果は required check ではなく manual observation として扱う。
 - raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace は評価記録へ転記しない。
 
 後続候補:
 
-- sanitized provider event。
-- duration bucket。
-- error category。
-- provider name / mode。
-- fallback metadata。
-- UI/API で参照できる範囲の provider diagnostics。
+- sanitized provider event log。
+- provider observation の永続化または trend 集計。
+- cost / rate guard との連携。
+- fallback metadata の opt-in 拡張。
 
-instrumentation / cost guard design PR 1 の方針:
+instrumentation / cost guard の現行:
 
-- 初回実装候補は `POST /api/strategy-lab/proposals` の optional metadata とする。
-- metadata は provider name、selected_by、elapsed_ms / latency bucket、status、candidate_count、invalid_reason、validation_error_count、fallback_used / fallback_reason、schema_valid を候補にする。
+- `POST /api/strategy-lab/proposals` の optional metadata として `provider_observation` を返す。
+- metadata は provider name、selected_by、elapsed_ms / latency bucket、status、candidate_count、invalid_reason、validation_error_count、fallback_used / fallback_reason、schema_valid、model category を持つ。
 - request started at の raw timestamp は response に出さず、必要な場合も sanitized logs に限定する。
 - model name は実値を出さず、configured / default / unknown などの category にする。
 - prompt 全文、raw response、endpoint、secret、token、local path は記録しない。

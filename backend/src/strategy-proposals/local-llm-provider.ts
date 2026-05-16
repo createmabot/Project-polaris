@@ -1,8 +1,9 @@
 import { AppError } from '../utils/response';
-import {
+import type {
   StrategyProposalCandidate,
   StrategyProposalProvider,
   StrategyProposalRequest,
+  StrategyProposalProviderObservation,
 } from './types';
 
 type LocalLlmResponse = {
@@ -34,24 +35,27 @@ function stripJsonFence(value: string): string {
   return value.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 }
 
-function providerFailure(): AppError {
+type LocalLlmFailureReason = StrategyProposalProviderObservation['invalid_reason'];
+
+function providerFailure(reason: LocalLlmFailureReason = 'unknown'): AppError {
   return new AppError(
     502,
     'PROVIDER_INVALID_RESPONSE',
     'Strategy proposal provider failed to return usable candidates. Please try again later.',
+    { provider_failure_reason: reason },
   );
 }
 
 function normalizeCandidateInput(value: unknown): StrategyProposalCandidate[] {
   if (!value || typeof value !== 'object') {
-    throw providerFailure();
+    throw providerFailure('schema_invalid');
   }
   const data = value as Record<string, unknown>;
   if (data.schema_name !== 'strategy_proposal_candidates' || data.schema_version !== '1.0') {
-    throw providerFailure();
+    throw providerFailure('schema_invalid');
   }
   if (!Array.isArray(data.candidates)) {
-    throw providerFailure();
+    throw providerFailure('schema_invalid');
   }
   return data.candidates as StrategyProposalCandidate[];
 }
@@ -165,26 +169,31 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
         }),
         signal: AbortSignal.timeout(this.timeoutMs),
       });
-    } catch {
-      throw providerFailure();
+    } catch (error) {
+      const name = error instanceof Error ? error.name.toLowerCase() : '';
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      const reason = name.includes('timeout') || name.includes('abort') || message.includes('timeout')
+        ? 'timeout'
+        : 'provider_unavailable';
+      throw providerFailure(reason);
     }
 
     if (!response.ok) {
-      throw providerFailure();
+      throw providerFailure('provider_unavailable');
     }
 
     try {
       const data = (await response.json()) as LocalLlmResponse;
       const content = data.message?.content ?? data.choices?.[0]?.message?.content;
       if (typeof content !== 'string' || content.trim().length === 0 || content.length > this.maxOutputChars) {
-        throw providerFailure();
+        throw providerFailure('schema_invalid');
       }
       return content;
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
       }
-      throw providerFailure();
+      throw providerFailure('schema_invalid');
     }
   }
 
@@ -192,14 +201,14 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
     try {
       const parsed = JSON.parse(stripJsonFence(rawText));
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw providerFailure();
+        throw providerFailure('schema_invalid');
       }
       return parsed as Record<string, unknown>;
     } catch (error) {
       if (error instanceof AppError) {
         throw error;
       }
-      throw providerFailure();
+      throw providerFailure('malformed_json');
     }
   }
 }

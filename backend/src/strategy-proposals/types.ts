@@ -38,6 +38,37 @@ export type StrategyProposalProviderMetadata = {
   persisted: boolean;
 };
 
+export type StrategyProposalProviderObservation = {
+  provider_name: string;
+  selected_by: 'default' | 'env' | 'config';
+  elapsed_ms: number;
+  latency_bucket: 'fast' | 'acceptable' | 'slow' | 'timeout';
+  status:
+    | 'succeeded'
+    | 'validation_failed'
+    | 'provider_unavailable'
+    | 'timeout'
+    | 'invalid_response'
+    | 'provider_error';
+  candidate_count: number;
+  invalid_reason:
+    | 'none'
+    | 'schema_invalid'
+    | 'malformed_json'
+    | 'required_field_missing'
+    | 'enum_invalid'
+    | 'candidate_count_invalid'
+    | 'web_research_basis_disabled'
+    | 'provider_unavailable'
+    | 'timeout'
+    | 'unknown';
+  validation_error_count: number;
+  fallback_used: boolean;
+  fallback_reason: string | null;
+  schema_valid: boolean;
+  model_category: 'configured' | 'default' | 'unknown';
+};
+
 export type StrategyProposalResearchBasis = {
   source_type: ResearchSourceType;
   label: string;
@@ -72,6 +103,7 @@ export type StrategyProposalData = {
   schema_version: '1.0';
   input: StrategyProposalRequest;
   provider: StrategyProposalProviderMetadata;
+  provider_observation?: StrategyProposalProviderObservation;
   candidates: StrategyProposalCandidate[];
   disclaimer: string;
 };

@@ -89,6 +89,32 @@ describe('strategy proposal validation', () => {
     expect(data.candidates[0].confidence).toBe('low');
   });
 
+  it('preserves optional provider observation metadata after structural validation', () => {
+    const data = validateStrategyProposalData(validData({
+      provider_observation: {
+        provider_name: 'stub',
+        selected_by: 'default',
+        elapsed_ms: 20,
+        latency_bucket: 'fast',
+        status: 'succeeded',
+        candidate_count: 1,
+        invalid_reason: 'none',
+        validation_error_count: 0,
+        fallback_used: false,
+        fallback_reason: null,
+        schema_valid: true,
+        model_category: 'unknown',
+      },
+    }));
+
+    expect(data.provider_observation).toMatchObject({
+      provider_name: 'stub',
+      status: 'succeeded',
+      candidate_count: 1,
+      schema_valid: true,
+    });
+  });
+
   it('rejects provider data with too many candidates for the request', () => {
     expectProviderInvalidResponse(() => validateStrategyProposalData(validData({
       input: {
