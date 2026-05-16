@@ -527,6 +527,38 @@ export type StrategyProposalData = {
     web_search: boolean;
     persisted: boolean;
   };
+  provider_observation?: {
+    provider_name: string;
+    selected_by: 'default' | 'env' | 'config' | string;
+    elapsed_ms: number;
+    latency_bucket: 'fast' | 'acceptable' | 'slow' | 'timeout' | string;
+    status:
+      | 'succeeded'
+      | 'validation_failed'
+      | 'provider_unavailable'
+      | 'timeout'
+      | 'invalid_response'
+      | 'provider_error'
+      | string;
+    candidate_count: number;
+    invalid_reason:
+      | 'none'
+      | 'schema_invalid'
+      | 'malformed_json'
+      | 'required_field_missing'
+      | 'enum_invalid'
+      | 'candidate_count_invalid'
+      | 'web_research_basis_disabled'
+      | 'provider_unavailable'
+      | 'timeout'
+      | 'unknown'
+      | string;
+    validation_error_count: number;
+    fallback_used: boolean;
+    fallback_reason: string | null;
+    schema_valid: boolean;
+    model_category: 'configured' | 'default' | 'unknown' | string;
+  };
   candidates: Array<{
     candidate_id: string;
     title: string;

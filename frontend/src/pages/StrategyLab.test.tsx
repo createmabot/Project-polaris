@@ -32,6 +32,8 @@ vi.mock('../api/client', async () => {
 });
 
 import StrategyLab from './StrategyLab';
+import { ApiError } from '../api/client';
+import { buildProposalErrorMessage } from './StrategyLab';
 
 const DEFAULT_RULE =
   '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。';
@@ -79,6 +81,30 @@ function primeScenarioState(params: {
 }
 
 describe('StrategyLab', () => {
+  it('appends sanitized provider observation details to proposal errors', () => {
+    const message = buildProposalErrorMessage(new ApiError(
+      'provider failed with raw diagnostics',
+      'PROVIDER_INVALID_RESPONSE',
+      {
+        provider_observation: {
+          status: 'timeout',
+          invalid_reason: 'timeout',
+          latency_bucket: 'timeout',
+          fallback_used: false,
+          provider_name: 'local_llm',
+          model_category: 'configured',
+        },
+      },
+      502,
+    ));
+
+    expect(message).toContain('サーバー側で候補取得に失敗しました。時間をおいて再試行してください。');
+    expect(message).toContain('provider status: timeout / reason: timeout / latency: timeout');
+    expect(message).not.toContain('raw diagnostics');
+    expect(message).not.toContain('local_llm');
+    expect(message).not.toContain('configured');
+  });
+
   it('renders initial guidance and core actions', () => {
     primeDefaultState();
     mockUseSWR.mockReset();
@@ -203,6 +229,20 @@ describe('StrategyLab', () => {
           web_search: false,
           persisted: false,
         },
+        provider_observation: {
+          provider_name: 'stub',
+          selected_by: 'default',
+          elapsed_ms: 20,
+          latency_bucket: 'fast',
+          status: 'succeeded',
+          candidate_count: 1,
+          invalid_reason: 'none',
+          validation_error_count: 0,
+          fallback_used: false,
+          fallback_reason: null,
+          schema_valid: true,
+          model_category: 'unknown',
+        },
         candidates: [
           {
             candidate_id: 'stub-1',
@@ -235,6 +275,13 @@ describe('StrategyLab', () => {
     expect(html).toContain('disabled');
     expect(html).toContain('保存:');
     expect(html).toContain('なし');
+    expect(html).toContain('provider status:');
+    expect(html).toContain('succeeded');
+    expect(html).toContain('latency:');
+    expect(html).toContain('fast / 20ms');
+    expect(html).toContain('fallback:');
+    expect(html).toContain('schema:');
+    expect(html).toContain('valid');
     expect(html).toContain('移動平均トレンドフォロー候補');
     expect(html).toContain('この候補を使う');
     expect(html).toContain('trend_following');

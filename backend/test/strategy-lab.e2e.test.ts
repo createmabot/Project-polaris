@@ -507,6 +507,20 @@ describe('strategy lab vertical slice', () => {
       web_search: false,
       persisted: false,
     });
+    expect(body.data.provider_observation).toMatchObject({
+      provider_name: 'stub',
+      selected_by: 'default',
+      status: 'succeeded',
+      candidate_count: 1,
+      invalid_reason: 'none',
+      validation_error_count: 0,
+      fallback_used: false,
+      fallback_reason: null,
+      schema_valid: true,
+      model_category: 'unknown',
+    });
+    expect(typeof body.data.provider_observation.elapsed_ms).toBe('number');
+    expect(['fast', 'acceptable', 'slow']).toContain(body.data.provider_observation.latency_bucket);
     expect(body.data.candidates).toHaveLength(1);
     expect(body.data.candidates[0]).toMatchObject({
       strategy_type: 'trend_following',
@@ -576,6 +590,20 @@ describe('strategy lab vertical slice', () => {
       web_search: false,
       persisted: false,
     });
+    expect(body.data.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      selected_by: 'env',
+      status: 'succeeded',
+      candidate_count: 1,
+      invalid_reason: 'none',
+      validation_error_count: 0,
+      fallback_used: false,
+      fallback_reason: null,
+      schema_valid: true,
+      model_category: 'configured',
+    });
+    expect(JSON.stringify(body.data.provider_observation)).not.toContain('local-llm.example.test');
+    expect(JSON.stringify(body.data.provider_observation)).not.toContain('proposal-model-test');
     expect(body.data.input.user_hint).toBe('must buy wording should remain input context');
     expect(body.data.candidates).toHaveLength(1);
     expect(body.data.candidates[0].summary).toContain('買うべきという入力があっても');
@@ -614,6 +642,17 @@ describe('strategy lab vertical slice', () => {
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
     expect(body.error.message).toBe('Strategy proposal provider failed to return usable candidates. Please try again later.');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      selected_by: 'env',
+      status: 'invalid_response',
+      candidate_count: 0,
+      invalid_reason: 'malformed_json',
+      validation_error_count: 1,
+      fallback_used: false,
+      fallback_reason: null,
+      schema_valid: false,
+    });
     expect(JSON.stringify(body)).not.toContain('not json');
   });
 
@@ -639,6 +678,12 @@ describe('strategy lab vertical slice', () => {
     expect(response.statusCode).toBe(502);
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'schema_invalid',
+      schema_valid: false,
+    });
     expect(body.error.message).not.toContain('http://');
     expect(body.error.message).not.toContain('proposal-model-test');
   });
@@ -667,6 +712,12 @@ describe('strategy lab vertical slice', () => {
     expect(response.statusCode).toBe(502);
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'required_field_missing',
+      schema_valid: false,
+    });
     expect(JSON.stringify(body)).not.toContain('ローカルLLM検証候補');
   });
 
@@ -692,7 +743,14 @@ describe('strategy lab vertical slice', () => {
     });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json().error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'enum_invalid',
+      schema_valid: false,
+    });
   });
 
   it('returns safe provider error when local_llm returns too many candidates', async () => {
@@ -718,11 +776,21 @@ describe('strategy lab vertical slice', () => {
     });
 
     expect(response.statusCode).toBe(502);
-    expect(response.json().error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'candidate_count_invalid',
+      candidate_count: 0,
+      schema_valid: false,
+    });
   });
 
   it('returns safe provider error when local_llm is unavailable', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT = 'http://local-llm.example.test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL = 'proposal-model-test';
     const fetchMock = vi.fn().mockRejectedValue(new Error('provider-error.example.test/failure'));
     vi.stubGlobal('fetch', fetchMock);
     const app = await createApp();
@@ -738,7 +806,15 @@ describe('strategy lab vertical slice', () => {
     expect(response.statusCode).toBe(502);
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'provider_unavailable',
+      invalid_reason: 'provider_unavailable',
+      schema_valid: false,
+    });
     expect(JSON.stringify(body)).not.toContain('provider-error.example.test');
+    expect(JSON.stringify(body)).not.toContain('local-llm.example.test');
+    expect(JSON.stringify(body)).not.toContain('proposal-model-test');
   });
 
   it('returns safe provider error when local_llm times out', async () => {
@@ -758,6 +834,13 @@ describe('strategy lab vertical slice', () => {
     expect(response.statusCode).toBe(502);
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'timeout',
+      latency_bucket: 'timeout',
+      invalid_reason: 'timeout',
+      schema_valid: false,
+    });
     expect(JSON.stringify(body)).not.toContain('provider diagnostics');
   });
 
@@ -853,6 +936,12 @@ describe('strategy lab vertical slice', () => {
     const body = response.json();
     expect(body.data.input.strategy_type_bias).toBe('other');
     expect(body.data.candidates).toEqual([]);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      candidate_count: 0,
+      invalid_reason: 'none',
+      schema_valid: true,
+    });
   });
 
   it('creates strategy, creates version, and generates pine successfully', async () => {

@@ -3,6 +3,11 @@ import { StubStrategyProposalProvider } from './stub-provider';
 import { LocalLlmStrategyProposalProvider } from './local-llm-provider';
 
 export type StrategyProposalProviderMode = 'stub' | 'local_llm';
+export type StrategyProposalProviderSelectedBy = 'default' | 'env' | 'config';
+export type StrategyProposalProviderSelection = {
+  mode: StrategyProposalProviderMode;
+  selectedBy: StrategyProposalProviderSelectedBy;
+};
 
 export function createStrategyProposalProvider(mode: StrategyProposalProviderMode = 'stub'): StrategyProposalProvider {
   switch (mode) {
@@ -16,6 +21,16 @@ export function createStrategyProposalProvider(mode: StrategyProposalProviderMod
 }
 
 export function getStrategyProposalProviderMode(): StrategyProposalProviderMode {
+  return getStrategyProposalProviderSelection().mode;
+}
+
+export function getStrategyProposalProviderSelection(): StrategyProposalProviderSelection {
   const raw = process.env.STRATEGY_PROPOSAL_PROVIDER?.trim();
-  return raw === 'local_llm' ? 'local_llm' : 'stub';
+  if (raw === 'local_llm') {
+    return { mode: 'local_llm', selectedBy: 'env' };
+  }
+  if (raw === 'stub') {
+    return { mode: 'stub', selectedBy: 'env' };
+  }
+  return { mode: 'stub', selectedBy: raw ? 'env' : 'default' };
 }

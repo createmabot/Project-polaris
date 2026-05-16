@@ -1,6 +1,11 @@
 import { FastifyPluginAsync } from 'fastify';
-import { formatSuccess } from '../utils/response';
-import { createStrategyProposalProvider, getStrategyProposalProviderMode } from '../strategy-proposals/provider';
+import { AppError, formatSuccess } from '../utils/response';
+import { createStrategyProposalProvider, getStrategyProposalProviderSelection } from '../strategy-proposals/provider';
+import {
+  buildStrategyProposalObservation,
+  classifyStrategyProposalInvalidReason,
+  statusForInvalidReason,
+} from '../strategy-proposals/instrumentation';
 import {
   parseStrategyProposalRequest,
   validateStrategyProposalData,
@@ -18,19 +23,48 @@ type ProposalBody = {
 
 export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{ Body: ProposalBody }>('/proposals', async (request, reply) => {
-    const input = parseStrategyProposalRequest(request.body ?? {});
-    const provider = createStrategyProposalProvider(getStrategyProposalProviderMode());
-    const generated = await provider.generate(input);
+    const startedAtMs = Date.now();
+    const selection = getStrategyProposalProviderSelection();
 
-    const data = validateStrategyProposalData({
-      schema_name: 'strategy_proposal_candidates',
-      schema_version: '1.0',
-      input,
-      provider: generated.provider,
-      candidates: generated.candidates,
-      disclaimer: generated.disclaimer,
-    });
+    try {
+      const input = parseStrategyProposalRequest(request.body ?? {});
+      const provider = createStrategyProposalProvider(selection.mode);
+      const generated = await provider.generate(input);
 
-    return reply.status(200).send(formatSuccess(request, data));
+      const data = validateStrategyProposalData({
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        input,
+        provider: generated.provider,
+        candidates: generated.candidates,
+        disclaimer: generated.disclaimer,
+        provider_observation: buildStrategyProposalObservation({
+          startedAtMs,
+          selection,
+          provider: generated.provider,
+          status: 'succeeded',
+          candidateCount: generated.candidates.length,
+          schemaValid: true,
+        }),
+      });
+
+      return reply.status(200).send(formatSuccess(request, data));
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'PROVIDER_INVALID_RESPONSE') {
+        const invalidReason = classifyStrategyProposalInvalidReason(error);
+        throw new AppError(error.statusCode, error.code, error.message, {
+          provider_observation: buildStrategyProposalObservation({
+            startedAtMs,
+            selection,
+            status: statusForInvalidReason(invalidReason),
+            candidateCount: 0,
+            invalidReason,
+            validationErrorCount: 1,
+            schemaValid: false,
+          }),
+        });
+      }
+      throw error;
+    }
   });
 };
