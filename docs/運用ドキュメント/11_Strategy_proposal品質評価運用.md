@@ -140,12 +140,25 @@ local_llm opt-in:
 - stack trace。
 - user_hint の全文。必要な場合は scenario 名と要約だけを残す。
 
-### 5-6. provider logs の見方
+### 5-6. 現時点で確認できる UI / API 観点
 
-- sanitized event、provider name、status、duration bucket、error category を見る。
-- raw provider diagnostics は評価記録へ転記しない。
+現行の StrategyLab proposal flow は、sanitized event、duration bucket、error category を持つ構造化 provider log を出していない。品質評価では、現時点で UI / API から観測できる範囲に限定して記録する。
+
+- UI で候補一覧、EmptyState、generic provider failure、validation error のどれになったかを見る。
+- API response が success / empty / provider_error / validation_error のどれに見えるかを記録する。
+- latency は評価者が手元で測った体感または手動計測の bucket として記録する。
 - provider unavailable や timeout は local_llm の運用課題として記録し、stub fallback 成功に読み替えない。
 - local_llm 実体依存の結果は required check ではなく manual observation として扱う。
+- raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace は評価記録へ転記しない。
+
+後続候補:
+
+- sanitized provider event。
+- duration bucket。
+- error category。
+- provider name / mode。
+- fallback metadata。
+- UI/API で参照できる範囲の provider diagnostics。
 
 ## 6. 記録テンプレート
 

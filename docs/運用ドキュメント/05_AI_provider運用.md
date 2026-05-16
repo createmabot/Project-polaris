@@ -118,7 +118,8 @@ Strategy proposal quality evaluation は、required check ではなく manual ru
 - diversity、user_hint alignment、market / timeframe assumption、entry / exit、risk management、invalidation condition、Pine feasibility、backtest caution、uncertainty、unsupported claim risk は手動評価する。
 - 投資助言風 wording は一律 reject しない。proposal が売買推奨ではなく、backtest / user review 前提の検証候補として提示されているかを見る。
 - latency、timeout、invalid JSON、schema invalid、provider unavailable は provider ごとに記録する。
-- provider logs や評価記録には raw prompt、raw response、endpoint、model 実値、credential、local path、stack trace を残さない。
+- 現行 StrategyLab proposal flow には構造化 provider log はないため、quality evaluation は UI / API から観測できる success / empty / provider_error / validation_error と手動 latency bucket を記録する。
+- 評価記録には raw prompt、raw response、endpoint、model 実値、credential、local path、stack trace を残さない。
 
 詳細手順と記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を参照する。
 
