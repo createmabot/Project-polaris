@@ -452,6 +452,17 @@ function validLocalLlmCandidate(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function localLlmResponseContent(payload: Record<string, unknown>) {
+  return {
+    ok: true,
+    json: async () => ({
+      message: {
+        content: JSON.stringify(payload),
+      },
+    }),
+  };
+}
+
 describe('strategy lab vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -608,19 +619,12 @@ describe('strategy lab vertical slice', () => {
 
   it('returns safe provider error when local_llm schema metadata is invalid', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        message: {
-          content: JSON.stringify({
-            schema_name: 'unexpected_schema',
-            schema_version: '1.0',
-            candidates: [validLocalLlmCandidate()],
-            disclaimer: '検証候補の提案です。投資助言ではありません。',
-          }),
-        },
-      }),
-    });
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'unexpected_schema',
+      schema_version: '1.0',
+      candidates: [validLocalLlmCandidate()],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
     vi.stubGlobal('fetch', fetchMock);
     const app = await createApp();
 
@@ -637,6 +641,84 @@ describe('strategy lab vertical slice', () => {
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
     expect(body.error.message).not.toContain('http://');
     expect(body.error.message).not.toContain('proposal-model-test');
+  });
+
+  it('returns safe provider error when local_llm omits required candidate fields', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const candidate = validLocalLlmCandidate();
+    delete (candidate as Record<string, unknown>).risk_management;
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [candidate],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(JSON.stringify(body)).not.toContain('ローカルLLM検証候補');
+  });
+
+  it('returns safe provider error when local_llm returns unsupported enum values', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [validLocalLlmCandidate({
+        strategy_type: 'scalping',
+      })],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.code).toBe('PROVIDER_INVALID_RESPONSE');
+  });
+
+  it('returns safe provider error when local_llm returns too many candidates', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [
+        validLocalLlmCandidate({ candidate_id: 'local-1' }),
+        validLocalLlmCandidate({ candidate_id: 'local-2' }),
+      ],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error.code).toBe('PROVIDER_INVALID_RESPONSE');
   });
 
   it('returns safe provider error when local_llm is unavailable', async () => {
@@ -657,6 +739,26 @@ describe('strategy lab vertical slice', () => {
     const body = response.json();
     expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
     expect(JSON.stringify(body)).not.toContain('provider-error.example.test');
+  });
+
+  it('returns safe provider error when local_llm times out', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const fetchMock = vi.fn().mockRejectedValue(new Error('timeout with provider diagnostics'));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(body.error.code).toBe('PROVIDER_INVALID_RESPONSE');
+    expect(JSON.stringify(body)).not.toContain('provider diagnostics');
   });
 
   it('uses deterministic strategy proposal defaults', async () => {
