@@ -148,6 +148,14 @@ local_llm provider PR 2 の実装範囲:
 - 投資助言ではなく、backtest / user review 前提の検証候補として扱う。
 - silent stub fallback、openai_api、Web search / deep research、request-time provider selection、proposal history、auto Pine generation / auto save は当時未実装として残した。proposal history / selected proposal lineage は PR #368〜#370 で完了済み。
 
+local_llm schema_invalid smoke fix の完了範囲:
+
+- real browser smoke で出た `provider status: invalid_response / reason: schema_invalid / latency: slow` に対し、prompt 強化、JSON mode 相当指定、code fence / 前後説明文からの JSON 抽出、root metadata 補完、string array の配列化、enum 表記揺れの正規化、空 `research_basis` の最小補完を実装する。
+- raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文は UI / API response / docs / PR / benchmark output に出さない方針を維持する。
+- 重要本文の欠落、候補数不正、Web search 未実装時の `source_type=web`、unsupported enum、malformed JSON は引き続き provider invalid response として扱う。
+- bounded retry、advanced repair、silent fallback、request-time provider selection、openai_api、Web search / deep research は後続候補のまま残す。
+- local_llm 実体依存 test は required check に入れず、mock / fake response で local_llm schema handling を確認する。
+
 provider expansion PR 1 の docs-only 固定:
 
 - provider boundary は `docs/仕様書/11_LLM_Strategy_Proposal仕様.md` を正本とし、route 層で request / response schema validation、error sanitization、fallback 表示責務を持つ。
