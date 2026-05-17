@@ -198,6 +198,10 @@ function hasUsableValue(value: unknown): boolean {
   return value !== undefined && value !== null;
 }
 
+function hasRequiredScalar(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
 function applyFieldAliases(candidate: Record<string, unknown>): number {
   let aliasCount = 0;
   for (const [canonical, aliases] of Object.entries(FIELD_ALIASES)) {
@@ -384,7 +388,7 @@ function collectMissingRequiredFields(candidates: unknown[]): MissingFieldDiagno
       if (field === 'suggested_natural_language_spec') {
         return typeof value !== 'string' || value.trim().length < 20;
       }
-      return !hasUsableValue(value);
+      return !hasRequiredScalar(value);
     });
     if (candidateMissing.length > 0) {
       affectedCandidateCount += 1;
