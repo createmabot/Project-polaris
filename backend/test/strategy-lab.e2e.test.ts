@@ -4,7 +4,10 @@ import { errorHandler } from '../src/utils/response';
 import { strategyRoutes } from '../src/routes/strategies';
 import { strategyLabRoutes } from '../src/routes/strategy-lab';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
-import { resetStrategyProposalRateLimitForTests } from '../src/strategy-proposals/guards';
+import {
+  resetStrategyProposalRateLimitForTests,
+  resolveStrategyProposalRateLimitKey,
+} from '../src/strategy-proposals/guards';
 
 vi.mock('../src/ai/home-ai-service', () => {
   class HomeAiService {
@@ -651,6 +654,7 @@ describe('strategy lab vertical slice', () => {
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS;
+    delete process.env.STRATEGY_PROPOSAL_TRUST_FORWARDED_IP;
   });
 
   afterEach(() => {
@@ -663,6 +667,7 @@ describe('strategy lab vertical slice', () => {
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS;
+    delete process.env.STRATEGY_PROPOSAL_TRUST_FORWARDED_IP;
     vi.unstubAllGlobals();
   });
 
@@ -1090,6 +1095,7 @@ describe('strategy lab vertical slice', () => {
     const first = await app.inject({
       method: 'POST',
       url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'forwarded-alpha, proxy-alpha' },
       payload: {
         proposal_count: 1,
       },
@@ -1097,6 +1103,7 @@ describe('strategy lab vertical slice', () => {
     const second = await app.inject({
       method: 'POST',
       url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'forwarded-beta, proxy-alpha' },
       payload: {
         proposal_count: 1,
       },
@@ -1112,6 +1119,7 @@ describe('strategy lab vertical slice', () => {
       limit: 1,
       window_ms: 60000,
       provider_mode: 'stub',
+      rate_limit_key_source: 'request_ip',
     });
     expect(typeof body.error.details.retry_after_ms).toBe('number');
     expect(runtime.proposalRuns.size).toBe(1);
@@ -1120,6 +1128,82 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(body)).not.toContain('http://');
     expect(JSON.stringify(body)).not.toContain('C:\\');
     expect(JSON.stringify(body)).not.toContain('stack');
+  });
+
+  it('resolves strategy proposal rate limit keys without exposing identifier values', () => {
+    const userKey = resolveStrategyProposalRateLimitKey({
+      userId: 'user-alpha',
+      requestIp: 'request-alpha',
+      forwardedFor: 'forwarded-alpha, proxy-alpha',
+      trustedForwardedIp: true,
+    });
+    const trustedForwardedKey = resolveStrategyProposalRateLimitKey({
+      requestIp: 'request-alpha',
+      forwardedFor: 'forwarded-alpha, proxy-alpha',
+      trustedForwardedIp: true,
+    });
+    const untrustedForwardedKey = resolveStrategyProposalRateLimitKey({
+      requestIp: 'request-alpha',
+      forwardedFor: 'forwarded-alpha, proxy-alpha',
+      trustedForwardedIp: false,
+    });
+    const emptyForwardedKey = resolveStrategyProposalRateLimitKey({
+      requestIp: 'request-alpha',
+      forwardedFor: ' , forwarded-alpha',
+      trustedForwardedIp: true,
+    });
+    const unknownKey = resolveStrategyProposalRateLimitKey({});
+
+    expect(userKey.source).toBe('user');
+    expect(trustedForwardedKey.source).toBe('forwarded_ip');
+    expect(untrustedForwardedKey.source).toBe('request_ip');
+    expect(emptyForwardedKey.source).toBe('request_ip');
+    expect(unknownKey.source).toBe('unknown');
+    expect(userKey.key).not.toContain('user-alpha');
+    expect(trustedForwardedKey.key).not.toContain('forwarded-alpha');
+    expect(untrustedForwardedKey.key).not.toContain('request-alpha');
+    expect(userKey.key).not.toBe(trustedForwardedKey.key);
+  });
+
+  it('uses trusted forwarded client header for rate limit buckets only when opt-in is enabled', async () => {
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED = 'true';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS = '1';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.STRATEGY_PROPOSAL_TRUST_FORWARDED_IP = 'true';
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'forwarded-alpha, proxy-alpha' },
+      payload: { proposal_count: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'forwarded-beta, proxy-alpha' },
+      payload: { proposal_count: 1 },
+    });
+    const third = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'forwarded-alpha, proxy-alpha' },
+      payload: { proposal_count: 1 },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(third.statusCode).toBe(429);
+    const body = third.json();
+    expect(body.error.details).toMatchObject({
+      rate_limited: true,
+      rate_limit_key_source: 'forwarded_ip',
+    });
+    expect(JSON.stringify(body)).not.toContain('forwarded-alpha');
+    expect(JSON.stringify(body)).not.toContain('proxy-alpha');
+    expect(JSON.stringify(body)).not.toContain('request_ip:');
+    expect(JSON.stringify(body)).not.toContain('forwarded_ip:');
+    expect(runtime.proposalRuns.size).toBe(2);
   });
 
   it('can disable the strategy proposal in-memory rate guard for local checks', async () => {

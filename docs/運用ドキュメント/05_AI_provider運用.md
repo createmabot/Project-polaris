@@ -187,6 +187,8 @@ Strategy proposal provider guard hardening 後の運用境界:
 - `local_llm` の retry は `required_field_missing` に対する最大 1 回だけ。retry prompt は missing field names だけを使い、raw response は含めない。
 - `POST /api/strategy-lab/proposals` は in-memory per-process rate guard を持つ。上限超過時は 429 / `RATE_LIMITED` とし、proposal history は保存しない。
 - rate guard は accidental load と連打抑止が目的であり、multi-process 環境の厳密な abuse prevention ではない。
+- rate guard key は user id が使える場合は user、trusted forwarded IP opt-in 時のみ forwarded client IP、それ以外は request IP を使う。default では forwarded header を信頼しない。
+- reverse proxy / tunnel 配下で全利用者が同じ bucket になる場合のみ、trust boundary を確認してから strategy proposal 用の forwarded IP opt-in を有効にする。actual IP や forwarded header value は response / UI / docs / PR に残さない。
 - 429 時の UI は短い再試行案内に留め、limit / window / provider 設定の実値をユーザー向けに強調しない。
 - silent stub fallback は引き続き行わない。fallback が必要になった場合は explicit opt-in と metadata 表示を別 PR で設計する。
 
