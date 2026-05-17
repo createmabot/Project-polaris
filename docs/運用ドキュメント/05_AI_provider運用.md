@@ -126,7 +126,7 @@ Strategy proposal quality evaluation は、required check ではなく manual ru
 
 ## 7-3. LLM strategy proposal instrumentation / cost guard
 
-現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata と proposal history の sanitized DB 保存で扱う。job 化、sanitized provider event log persistence、trend aggregation は行わない。
+現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata、proposal history の sanitized DB 保存、provider quality trend aggregation の read-only 集計で扱う。job 化、sanitized provider event log persistence、benchmark result persistence は行わない。
 
 記録してよい sanitized metadata:
 
@@ -146,6 +146,8 @@ response / UI:
 - success response は `data.provider_observation` に返す。
 - provider error response は返す場合でも `error.details.provider_observation` の sanitized enum / count / bucket に限定する。
 - StrategyLab は provider status、latency、fallback、schema の最小 note と、provider error / timeout が分かる短い error note だけを表示する。
+- StrategyLab の「最近の提案」内に provider quality trend の compact note を表示する。これは sanitized history からの運用品質集計であり、候補ランキングや投資判断ではない。
+- `GET /api/strategy-lab/proposals/provider-quality-trend` は recent runs を read-only 集計し、summary / provider 別 count / candidate distribution / recent failures を返す。
 
 記録しないもの:
 
@@ -156,6 +158,9 @@ response / UI:
 - secret、token、credential。
 - local path。
 - stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec。
+- raw `inputJson` / raw `candidateJson` / raw `providerObservationJson` 全体。
 
 運用方針:
 
@@ -167,6 +172,7 @@ response / UI:
 - request-time provider selection は cost / abuse / consistency の観点から、別設計を経て導入判断する。
 - Web search / deep research は同期 API ではなく job 化候補として扱う。
 - CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
+- provider quality trend aggregation は既存 history の read-only 集計から始め、DB materialization、event log persistence、p50 / p95、benchmark records は後続判断とする。
 
 ## 7-4. LLM strategy proposal benchmark 運用境界
 
@@ -194,7 +200,6 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 残課題:
 
 - benchmark result recording workflow / sanitized summary records。
-- provider quality trend aggregation。
 - `openai_api` provider。
 - Web search / deep research job 化。
 - StrategyVersion created-from-proposal relation。
@@ -237,14 +242,15 @@ failure の扱い:
 
 - history は provider quality と user selection lineage の補助であり、投資判断や automatic ranking には使わない。
 - real local_llm 実体依存 test は required check に入れない。
-- history UI は recent list 程度から始め、filter / pagination / retention job / hard delete / trend aggregation は後続判断とする。
+- history UI は recent list と compact trend note までとし、filter / pagination / retention job / hard delete / materialized trend aggregation は後続判断とする。
 - selection は StrategyLab input 反映の記録であり、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 
 後続候補:
 
 - StrategyVersion created-from-proposal relation。
 - proposal history filter / pagination / search / retention / full management。
-- provider quality trend aggregation / event log persistence。
+- provider quality trend の range / filter / percentile / materialized aggregation。
+- provider event log persistence。
 - proposal history export / benchmark records。
 - `openai_api` provider。
 - Web search / deep research job。

@@ -634,6 +634,70 @@ export type StrategyProposalSelectData = {
   selected_candidate: StrategyProposalHistoryCandidate;
 };
 
+export type StrategyProposalProviderQualityTrendData = {
+  summary: {
+    total_runs: number;
+    succeeded_runs: number;
+    failed_runs: number;
+    success_rate: number;
+    selected_runs: number;
+    selected_rate: number;
+    zero_candidate_runs: number;
+    avg_candidate_count: number;
+    avg_elapsed_ms: number;
+  };
+  by_provider: Array<{
+    provider_name: string;
+    run_count: number;
+    succeeded_runs: number;
+    failed_runs: number;
+    success_rate: number;
+    selected_runs: number;
+    selected_rate: number;
+    zero_candidate_runs: number;
+    avg_candidate_count: number;
+    avg_elapsed_ms: number;
+    latency_buckets: Array<{ value: string; count: number }>;
+    status_counts: Array<{ value: string; count: number }>;
+    invalid_reason_counts: Array<{ value: string; count: number }>;
+    selected_by_counts: Array<{ value: string; count: number }>;
+    provider_mode_counts: Array<{ value: string; count: number }>;
+  }>;
+  by_market: Array<{
+    market: string;
+    run_count: number;
+    success_rate: number;
+    avg_candidate_count: number;
+  }>;
+  by_strategy_type_bias: Array<{
+    strategy_type_bias: string;
+    run_count: number;
+    success_rate: number;
+    avg_candidate_count: number;
+  }>;
+  candidate_distribution: {
+    strategy_type_counts: Array<{ value: string; count: number }>;
+    confidence_counts: Array<{ value: string; count: number }>;
+    pine_feasibility_counts: Array<{ value: string; count: number }>;
+  };
+  recent_failures: Array<{
+    proposal_run_id: string;
+    created_at: string | null;
+    provider_name: string;
+    status: string;
+    invalid_reason: string;
+    candidate_count: number;
+    latency_bucket: string;
+  }>;
+  meta: {
+    source: 'strategy_proposal_history' | string;
+    sanitized: boolean;
+    raw_prompt_included: boolean;
+    raw_response_included: boolean;
+    limit: number;
+  };
+};
+
 export type StrategyListData = {
   query: {
     q: string;

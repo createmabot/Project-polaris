@@ -106,6 +106,15 @@ Proposal history / selected proposal lineage の最小 API:
 - raw prompt、raw provider response、provider endpoint、secret、local path、stack trace は API response に返さない。
 - filter / pagination / large history management は後続判断とし、初回 UI は recent list 程度に留める。
 
+Provider quality trend aggregation の最小 API:
+
+- `GET /api/strategy-lab/proposals/provider-quality-trend` は、保存済み proposal history から provider 品質傾向を read-only 集計して返す。
+- query は `limit` のみを受け、上限付き recent runs を集計対象にする。
+- response は `summary` / `by_provider` / `by_market` / `by_strategy_type_bias` / `candidate_distribution` / `recent_failures` / `meta` に限定する。
+- `meta` では `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false` を返す。
+- response には raw `inputJson`、user_hint 全文、candidate title / summary / suggested_natural_language_spec、raw provider response、provider endpoint、model 実値、secret、local path、stack trace を含めない。
+- trend aggregation は provider 運用品質の確認補助であり、投資判断、candidate ranking、Strategy / StrategyVersion 自動保存、Pine generation 自動起動には使わない。
+
 ## 7-1. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`
