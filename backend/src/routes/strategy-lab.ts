@@ -400,6 +400,7 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
         status: 'succeeded',
         candidateCount: generated.candidates.length,
         schemaValid: true,
+        details: generated.provider_observation,
       });
 
       const data = validateStrategyProposalData({
@@ -431,8 +432,12 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
           status: statusForInvalidReason(invalidReason),
           candidateCount: 0,
           invalidReason,
-          validationErrorCount: 1,
+          validationErrorCount:
+            typeof error.details?.missing_required_field_count === 'number'
+              ? error.details.missing_required_field_count
+              : 1,
           schemaValid: false,
+          details: error.details,
         });
         let proposalRunId: string | undefined;
         if (input) {

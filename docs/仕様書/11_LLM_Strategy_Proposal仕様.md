@@ -263,18 +263,20 @@ prompt / response JSON 方針:
 - local_llm には JSON object のみ、markdown code fence / 説明文なし、英語 key 固定、値の日本語は許容、Web search 未実装時は `research_basis.source_type=web` を使わない、という schema 厳守 prompt を使う。
 - local_llm response は、Ollama chat response の `message.content` または互換 response の message content から取り出す。content が空、過大、parse 不可の場合は provider invalid response とする。
 - JSON 抽出では、前後説明文や markdown code fence が混ざる軽微な provider 出力を想定し、JSON object / array を抽出して parse する。抽出時は `{}` と `[]` の nesting、string、escape sequence を同時に追跡し、root array 内の candidate object と nested array fields を正しく扱う。ただし raw response は保存・表示・通常 log に出さない。
-- 機械的に安全な normalization だけを行う。欠けた root `schema_name` / `schema_version` / `input` / `disclaimer` の補完、string で返った array field の 1 要素配列化、`trend following` などの enum 表記揺れの snake_case 化、`invalidation_condition` から `invalidation_conditions` への alias 補正、空の `research_basis` への `provider_knowledge` 最小値補完に限定する。
+- 機械的に安全な normalization だけを行う。欠けた root `schema_name` / `schema_version` / `input` / `disclaimer` の補完、string で返った array field の 1 要素配列化、`trend following` などの enum 表記揺れの snake_case 化、よくある alias（例: `entry` -> `entry_logic`, `strengths` -> `expected_strengths`, `natural_language_spec` -> `suggested_natural_language_spec`）の exact key への補正、空の `research_basis` への `provider_knowledge` 最小値補完に限定する。
+- `backtest_cautions`、`uncertainty`、`suggested_pine_constraints` は検証前提を示す非中核 metadata として、欠落時に固定の cautious fallback を補える。`title`、`summary`、`strategy_type`、`entry_logic`、`exit_logic`、`risk_management`、`suggested_natural_language_spec` などの中核 field は backend が内容を生成して補完しない。
 - candidate の重要本文（title、summary、entry / exit / risk、suggested natural language spec など）を provider なしに生成して補うことはしない。重要 field が欠落した candidate は引き続き validation failure とする。
 - malformed JSON、schema_name / schema_version 不一致、型不正、必須項目欠落、enum 不正、candidate count 不正、空または過度に短い `suggested_natural_language_spec` は provider invalid response とする。
+- 必須 field 欠落時は sanitized diagnostics として field 名、field 数、影響 candidate 数だけを `provider_observation` に含められる。field value、candidate JSON、raw provider response は含めない。
 - provider output の投資助言風 wording は wording だけでは invalid にしない。危険・不正・アプリ目的外の response は provider invalid として扱える。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は API response、UI、docs、PR本文に出さない。
 - schema invalid の詳細調査は sanitized reason と required check の mock / fake response test で扱う。real local_llm 実体依存の確認は manual smoke に限定し、required check には入れない。
 
 retry / repair 境界:
 
-- 現時点では bounded retry は実装しない。schema invalid の改善は prompt 強化、JSON extraction、上記の軽量 normalization を第一候補とする。
-- retry を後続で導入する場合は local_llm のみ最大 1 回、raw response 全文を correction prompt に入れず、missing field / invalid enum などの sanitized summary だけを使う。
-- retry を実装する場合は latency 悪化と retry storm を避け、`provider_observation` へ sanitized retry metadata を追加する設計 PR を先に分ける。
+- `required_field_missing` に限り、local_llm provider 内で最大 1 回だけ bounded retry を行う。retry prompt には raw response 全文を入れず、missing field names と affected candidate count だけを渡し、完全な JSON を最初から再生成させる。
+- retry 成功時は `provider_observation.retry_used=true` / `retry_reason=required_field_missing` / `retry_succeeded=true` を返せる。retry 後も失敗する場合は sanitized missing field diagnostics と `retry_succeeded=false` を返す。
+- malformed JSON、enum invalid、candidate count invalid、provider unavailable、timeout はこの bounded retry の対象外とする。
 
 local_llm provider PR 2 時点で実装していなかったもの:
 

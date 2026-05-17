@@ -91,6 +91,7 @@ export function buildStrategyProposalObservation(params: {
   invalidReason?: StrategyProposalProviderObservation['invalid_reason'];
   validationErrorCount?: number;
   schemaValid?: boolean;
+  details?: Partial<StrategyProposalProviderObservation>;
 }): StrategyProposalProviderObservation {
   const elapsed = Math.max(0, Date.now() - params.startedAtMs);
   const elapsedMs = Math.round(elapsed / 10) * 10;
@@ -103,6 +104,12 @@ export function buildStrategyProposalObservation(params: {
           ? 'acceptable'
           : 'slow';
 
+  const missingRequiredFields = Array.isArray(params.details?.missing_required_fields)
+    ? params.details.missing_required_fields
+      .filter((field) => typeof field === 'string' && /^[a-z0-9_]+$/i.test(field))
+      .slice(0, 24)
+    : undefined;
+
   return {
     provider_name: params.provider?.name ?? params.selection.mode,
     selected_by: params.selection.selectedBy,
@@ -112,6 +119,24 @@ export function buildStrategyProposalObservation(params: {
     candidate_count: params.candidateCount,
     invalid_reason: params.invalidReason ?? 'none',
     validation_error_count: params.validationErrorCount ?? 0,
+    ...(missingRequiredFields && missingRequiredFields.length > 0 ? { missing_required_fields: missingRequiredFields } : {}),
+    ...(typeof params.details?.missing_required_field_count === 'number'
+      ? { missing_required_field_count: params.details.missing_required_field_count }
+      : {}),
+    ...(typeof params.details?.affected_candidate_count === 'number'
+      ? { affected_candidate_count: params.details.affected_candidate_count }
+      : {}),
+    ...(typeof params.details?.retry_used === 'boolean' ? { retry_used: params.details.retry_used } : {}),
+    ...(typeof params.details?.retry_reason === 'string' || params.details?.retry_reason === null
+      ? { retry_reason: params.details.retry_reason }
+      : {}),
+    ...(typeof params.details?.retry_succeeded === 'boolean' ? { retry_succeeded: params.details.retry_succeeded } : {}),
+    ...(typeof params.details?.normalization_fallback_used === 'boolean'
+      ? { normalization_fallback_used: params.details.normalization_fallback_used }
+      : {}),
+    ...(typeof params.details?.fallback_field_count === 'number'
+      ? { fallback_field_count: params.details.fallback_field_count }
+      : {}),
     fallback_used: false,
     fallback_reason: null,
     schema_valid: params.schemaValid ?? params.status === 'succeeded',

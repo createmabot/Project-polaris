@@ -1127,6 +1127,153 @@ describe('strategy lab vertical slice', () => {
     ]);
   });
 
+  it('normalizes common local_llm field aliases and safe metadata fallbacks', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const candidate = validLocalLlmCandidate({
+      entry: ['終値が高値を上抜ける'],
+      exit: ['終値が短期平均を下回る'],
+      riskManagement: ['1回の損失を限定する'],
+      strengths: ['条件が単純で検証しやすい'],
+      weaknesses: ['レンジでダマシが出る'],
+      indicators: ['SMA'],
+      natural_language_spec:
+        'JP_STOCK / D を前提に、上抜け条件と手仕舞い条件を明確化して検証します。',
+    }) as Record<string, unknown>;
+    delete candidate.entry_logic;
+    delete candidate.exit_logic;
+    delete candidate.risk_management;
+    delete candidate.expected_strengths;
+    delete candidate.expected_weaknesses;
+    delete candidate.required_indicators;
+    delete candidate.backtest_cautions;
+    delete candidate.uncertainty;
+    delete candidate.suggested_pine_constraints;
+    delete candidate.suggested_natural_language_spec;
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      candidates: [candidate],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.candidates[0].entry_logic).toEqual(['終値が高値を上抜ける']);
+    expect(body.data.candidates[0].exit_logic).toEqual(['終値が短期平均を下回る']);
+    expect(body.data.candidates[0].risk_management).toEqual(['1回の損失を限定する']);
+    expect(body.data.candidates[0].expected_strengths).toEqual(['条件が単純で検証しやすい']);
+    expect(body.data.candidates[0].expected_weaknesses).toEqual(['レンジでダマシが出る']);
+    expect(body.data.candidates[0].required_indicators).toEqual(['SMA']);
+    expect(body.data.candidates[0].backtest_cautions).toHaveLength(1);
+    expect(body.data.candidates[0].uncertainty).toHaveLength(1);
+    expect(body.data.candidates[0].suggested_pine_constraints).toHaveLength(1);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      normalization_fallback_used: true,
+      fallback_field_count: 3,
+    });
+    expect(JSON.stringify(body)).not.toContain('raw');
+  });
+
+  it('retries once when local_llm omits required candidate fields and succeeds with sanitized metadata', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const missingCandidate = validLocalLlmCandidate({
+      title: 'first response should not leak',
+    }) as Record<string, unknown>;
+    delete missingCandidate.entry_logic;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(localLlmResponseContent({
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        candidates: [missingCandidate],
+        disclaimer: '検証候補の提案です。投資助言ではありません。',
+      }))
+      .mockResolvedValueOnce(localLlmResponseContent({
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        candidates: [validLocalLlmCandidate()],
+        disclaimer: '検証候補の提案です。投資助言ではありません。',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      retry_used: true,
+      retry_reason: 'required_field_missing',
+      retry_succeeded: true,
+    });
+    const retryRequestBody = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+    expect(JSON.stringify(retryRequestBody)).toContain('entry_logic');
+    expect(JSON.stringify(retryRequestBody)).not.toContain('first response should not leak');
+    expect(JSON.stringify(body)).not.toContain('first response should not leak');
+  });
+
+  it('returns sanitized missing required field diagnostics when local_llm retry still fails', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const firstCandidate = validLocalLlmCandidate({
+      title: 'first missing candidate should not leak',
+    }) as Record<string, unknown>;
+    const secondCandidate = validLocalLlmCandidate({
+      title: 'second missing candidate should not leak',
+    }) as Record<string, unknown>;
+    delete firstCandidate.entry_logic;
+    delete secondCandidate.expected_strengths;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(localLlmResponseContent({
+        candidates: [firstCandidate],
+      }))
+      .mockResolvedValueOnce(localLlmResponseContent({
+        candidates: [secondCandidate],
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(502);
+    const body = response.json();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'required_field_missing',
+      retry_used: true,
+      retry_reason: 'required_field_missing',
+      retry_succeeded: false,
+      schema_valid: false,
+      missing_required_fields: ['expected_strengths'],
+      missing_required_field_count: 1,
+      affected_candidate_count: 1,
+    });
+    expect(JSON.stringify(body)).not.toContain('first missing candidate should not leak');
+    expect(JSON.stringify(body)).not.toContain('second missing candidate should not leak');
+  });
+
   it('extracts bare local_llm candidate arrays with nested arrays, objects, and escaped delimiters', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
     const candidate = validLocalLlmCandidate({
