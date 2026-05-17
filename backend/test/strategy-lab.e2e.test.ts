@@ -4,6 +4,7 @@ import { errorHandler } from '../src/utils/response';
 import { strategyRoutes } from '../src/routes/strategies';
 import { strategyLabRoutes } from '../src/routes/strategy-lab';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
+import { resetStrategyProposalRateLimitForTests } from '../src/strategy-proposals/guards';
 
 vi.mock('../src/ai/home-ai-service', () => {
   class HomeAiService {
@@ -641,19 +642,27 @@ function localLlmResponseText(content: string) {
 describe('strategy lab vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
+    resetStrategyProposalRateLimitForTests();
     delete process.env.STRATEGY_PROPOSAL_PROVIDER;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS;
   });
 
   afterEach(() => {
+    resetStrategyProposalRateLimitForTests();
     delete process.env.STRATEGY_PROPOSAL_PROVIDER;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS;
+    delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS;
     vi.unstubAllGlobals();
   });
 
@@ -1036,6 +1045,102 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.think).toBe(false);
     expect(requestBody.format).toBe('json');
     expect(requestBody.options.num_predict).toBe(2000);
+  });
+
+  it('bounds local_llm guard env values before provider request options are built', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT = 'http://local-llm.example.test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL = 'proposal-model-test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '999999';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS = '999999';
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [validLocalLlmCandidate()],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [, init] = fetchMock.mock.calls[0];
+    const requestBody = JSON.parse(String(init.body));
+    expect(requestBody.options.num_predict).toBe(10000);
+    expect(JSON.stringify(response.json())).not.toContain('999999');
+    expect(JSON.stringify(response.json())).not.toContain('proposal-model-test');
+    expect(JSON.stringify(response.json())).not.toContain('local-llm.example.test');
+  });
+
+  it('rate limits repeated strategy proposal provider calls without persisting blocked runs', async () => {
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED = 'true';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS = '1';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS = '60000';
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    const body = second.json();
+    expect(body.error.code).toBe('RATE_LIMITED');
+    expect(body.error.message).toContain('少し時間をおいて再試行してください');
+    expect(body.error.details).toMatchObject({
+      rate_limited: true,
+      limit: 1,
+      window_ms: 60000,
+      provider_mode: 'stub',
+    });
+    expect(typeof body.error.details.retry_after_ms).toBe('number');
+    expect(runtime.proposalRuns.size).toBe(1);
+    expect(JSON.stringify(body)).not.toContain('prompt');
+    expect(JSON.stringify(body)).not.toContain('response');
+    expect(JSON.stringify(body)).not.toContain('http://');
+    expect(JSON.stringify(body)).not.toContain('C:\\');
+    expect(JSON.stringify(body)).not.toContain('stack');
+  });
+
+  it('can disable the strategy proposal in-memory rate guard for local checks', async () => {
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED = 'false';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS = '1';
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1 },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(runtime.proposalRuns.size).toBe(2);
   });
 
   it('extracts local_llm JSON from markdown fences and surrounding explanation', async () => {

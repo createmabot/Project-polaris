@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { createStrategyProposalProvider, getStrategyProposalProviderSelection } from '../strategy-proposals/provider';
+import { checkStrategyProposalRateLimit } from '../strategy-proposals/guards';
 import {
   buildStrategyProposalObservation,
   classifyStrategyProposalInvalidReason,
@@ -391,6 +392,24 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       input = parseStrategyProposalRequest(request.body ?? {});
+      const rateLimit = checkStrategyProposalRateLimit({
+        key: request.ip ?? 'unknown',
+        providerMode: selection.mode,
+      });
+      if (!rateLimit.allowed) {
+        throw new AppError(
+          429,
+          'RATE_LIMITED',
+          '短時間に候補取得が続いたため、少し時間をおいて再試行してください。',
+          {
+            rate_limited: true,
+            retry_after_ms: rateLimit.retryAfterMs,
+            limit: rateLimit.limit,
+            window_ms: rateLimit.windowMs,
+            provider_mode: selection.mode,
+          },
+        );
+      }
       const provider = createStrategyProposalProvider(selection.mode);
       const generated = await provider.generate(input);
       const providerObservation = buildStrategyProposalObservation({
