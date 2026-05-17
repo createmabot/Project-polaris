@@ -5,6 +5,7 @@ import type {
   StrategyProposalRequest,
   StrategyProposalProviderObservation,
 } from './types';
+import { getStrategyProposalLocalLlmGuardConfig } from './guards';
 import { validateStrategyProposalCandidate } from './validation';
 
 type LocalLlmResponse = {
@@ -21,8 +22,6 @@ type LocalLlmProviderOptions = {
 
 const DEFAULT_ENDPOINT = 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen3-30b-a3b-2507';
-const DEFAULT_TIMEOUT_MS = 90_000;
-const DEFAULT_MAX_OUTPUT_CHARS = 20_000;
 const DEFAULT_DISCLAIMER =
   '検証候補の提案です。投資助言ではありません。Pine生成とbacktest、ユーザー確認を前提にしてください。';
 const ARRAY_FIELDS = [
@@ -92,14 +91,6 @@ type NormalizedPayloadResult = {
   data: Record<string, unknown>;
   fallbackFieldCount: number;
 };
-
-function readPositiveInteger(value: string | undefined, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
 
 type LocalLlmFailureReason = StrategyProposalProviderObservation['invalid_reason'];
 
@@ -471,6 +462,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
   private readonly maxOutputChars: number;
 
   constructor(options: LocalLlmProviderOptions = {}) {
+    const guardConfig = getStrategyProposalLocalLlmGuardConfig();
     this.endpoint = (
       options.endpoint ??
       process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT ??
@@ -482,12 +474,8 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
       process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL ??
       process.env.PRIMARY_LOCAL_MODEL ??
       DEFAULT_MODEL;
-    this.timeoutMs =
-      options.timeoutMs ??
-      readPositiveInteger(process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
-    this.maxOutputChars =
-      options.maxOutputChars ??
-      readPositiveInteger(process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS, DEFAULT_MAX_OUTPUT_CHARS);
+    this.timeoutMs = options.timeoutMs ?? guardConfig.timeoutMs;
+    this.maxOutputChars = options.maxOutputChars ?? guardConfig.maxOutputChars;
   }
 
   async generate(input: StrategyProposalRequest) {

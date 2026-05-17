@@ -1,6 +1,6 @@
 # 北極星 LLM strategy proposal 現行設計
 
-更新日: 2026-05-17
+更新日: 2026-05-18
 分類: 仕様書
 
 ## 1. 目的
@@ -902,15 +902,52 @@ API response は `summary`、`by_provider`、`by_market`、`by_strategy_type_bia
 
 現時点で含めないもの:
 
-- benchmark result recording workflow / sanitized summary records。
 - sanitized provider event log persistence。
 - provider quality trend の DB materialization。
 - p50 / p95 などの本格 percentile。
-- provider cost / rate guard hardening。
 - `openai_api` / Web search / deep research provider。
 - StrategyVersion created-from-proposal relation。
 
-## 15. 後続候補
+## 15. provider cost / rate guard hardening
+
+Strategy proposal provider cost / rate guard hardening は、`openai_api` や Web search / deep research を追加する前に、同期 proposal API の費用・遅延・連打・失敗時挙動を固定するための境界である。
+
+現行実装範囲:
+
+- default provider は引き続き `stub`。`local_llm` は `STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示 opt-in のみ。
+- `proposal_count` は request validation で 1〜10 に制限する。StrategyLab UI は通常 5 件を要求する。
+- `user_hint` は request validation で長さを制限する。投資助言風 wording は、それだけでは reject しない。
+- `local_llm` timeout と max output は env で調整できるが、backend の guard config で下限・上限に丸める。
+- `local_llm` の retry は `required_field_missing` に対する最大 1 回の bounded retry のみ。retry prompt に raw provider response は入れない。
+- `POST /api/strategy-lab/proposals` は in-memory per-process rate guard を持つ。短時間に上限を超えた場合は `RATE_LIMITED` として 429 を返し、proposal run は保存しない。
+- rate guard の response は retry_after / limit / window / provider mode 程度の sanitized metadata に限定する。
+- silent stub fallback は行わない。fallback を導入する場合は後続で explicit opt-in と metadata 表示を設計する。
+- raw prompt、raw provider response、provider endpoint、model 実値、secret、token、local path、stack trace は response / UI / docs / PR に出さない。
+
+rate guard の位置づけ:
+
+- 初回は単一 process 内の軽量 guard であり、multi-process / distributed production の厳密な abuse prevention ではない。
+- local dev の確認を妨げる場合は env で無効化できるが、通常は有効にして連打と accidental load を抑える。
+- UI は 429 を「短時間に候補取得が続いたため、少し時間をおいて再試行」として表示し、内部値や provider 設定は表示しない。
+
+future provider 前提:
+
+- `openai_api` provider を実装する前に、明示 opt-in、prompt length guard、max candidates、max output、rate limit、cost cap、retry 有無を設計する。
+- `openai_api` の retry は cost に直結するため、初回は retry なし、または cost cap 内の最大 1 回に限定する。
+- Web search / deep research は同期 proposal API ではなく job 化候補とし、citation / freshness / cost / timeout / cancellation を別設計する。
+- request-time provider selection は cost / abuse / consistency の観点から今回対象外とし、別設計を必要とする。
+
+含めないもの:
+
+- DB migration / Prisma schema 変更。
+- per-user billing system。
+- provider event log persistence。
+- benchmark result DB table。
+- `openai_api` provider 実装。
+- Web search / deep research 実装。
+- proposal から Pine generation / save / backtest / AI summary への自動連鎖。
+
+## 16. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -920,12 +957,12 @@ API response は `summary`、`by_provider`、`by_market`、`by_strategy_type_bia
 - benchmark result DB table / prompt regression automation。
 - proposal history export。
 - symbol context から StrategyLab へ遷移する導線。
-- provider cost cap / rate limit / opt-in。
+- distributed rate limit / hard cost cap / per-user billing。
 - provider instrumentation 拡張（sanitized provider event / log persistence）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 16. 参照
+## 17. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`

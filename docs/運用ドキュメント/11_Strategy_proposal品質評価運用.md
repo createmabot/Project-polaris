@@ -1,6 +1,6 @@
 # 北極星 Strategy proposal 品質評価運用
 
-更新日: 2026-05-17
+更新日: 2026-05-18
 分類: 運用ドキュメント
 
 ## 1. 目的
@@ -361,7 +361,28 @@ record に含めないもの:
 - 初回では両者を DB 上で統合しない。
 - 将来 DB 永続化する場合は、BenchmarkResult 相当の model、retention、prompt versioning、comparison、cost / rate guard との関係を別 PR で設計する。
 
-## 7. 記録テンプレート
+
+## 7. provider guard 確認
+
+Strategy proposal provider guard は、品質評価や benchmark を実行する前に、連打・長時間応答・過大 output・retry の境界が期待どおり動くかを確認するための運用項目である。
+
+確認観点:
+
+- `stub` が default provider のままになっていること。
+- `local_llm` は `STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示 opt-in でだけ使うこと。
+- proposal_count は最大 10 件に制限され、通常 UI は 5 件を要求すること。
+- `local_llm` の timeout / max output は env で調整できるが、backend 側の guard 上限に丸められること。
+- `required_field_missing` retry は最大 1 回であり、raw response を retry prompt に入れないこと。
+- 短時間に proposal を連続実行した場合、rate guard が 429 / `RATE_LIMITED` を返し、proposal history に blocked run を保存しないこと。
+- UI は rate limited を短い再試行案内として表示し、provider endpoint / model 実値 / raw diagnostics は表示しないこと。
+
+manual / optional 評価時の扱い:
+
+- local_llm 実体依存の smoke / benchmark は required check に入れない。
+- rate guard を一時的に無効化して比較する場合は local のみで行い、docs / PR に実測 endpoint や model 実値を残さない。
+- provider quality trend は実利用履歴の read-only 集計、benchmark recording は optional benchmark の一時 record として分ける。
+- guard hardening は投資助言品質の評価ではなく、provider 利用の費用・遅延・失敗境界の確認である。
+## 8. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。
 
@@ -398,7 +419,7 @@ Notes without raw prompt / raw response / endpoint / model / secret / local path
 Follow-up:
 ```
 
-## 8. 関連 docs
+## 9. 関連 docs
 
 - `docs/仕様書/11_LLM_Strategy_Proposal仕様.md`
 - `docs/運用ドキュメント/05_AI_provider運用.md`

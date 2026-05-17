@@ -1,6 +1,6 @@
 # 北極星 AI provider 運用
 
-更新日: 2026-05-17
+更新日: 2026-05-18
 分類: 運用ドキュメント
 
 ## 1. 目的
@@ -177,6 +177,24 @@ response / UI:
 - CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
 - provider quality trend aggregation は既存 history の read-only 集計として完了済み。DB materialization、event log persistence、p50 / p95 は後続判断とする。
 
+
+### 7-3-1. Strategy proposal provider guard hardening
+
+Strategy proposal provider guard hardening 後の運用境界:
+
+- `STRATEGY_PROPOSAL_PROVIDER` 未指定時は `stub`。`local_llm` は明示 opt-in のみ。
+- `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` と `STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` は backend 側で下限・上限に丸める。極端な値を設定しても raw 設定値は response / UI / docs に出さない。
+- `local_llm` の retry は `required_field_missing` に対する最大 1 回だけ。retry prompt は missing field names だけを使い、raw response は含めない。
+- `POST /api/strategy-lab/proposals` は in-memory per-process rate guard を持つ。上限超過時は 429 / `RATE_LIMITED` とし、proposal history は保存しない。
+- rate guard は accidental load と連打抑止が目的であり、multi-process 環境の厳密な abuse prevention ではない。
+- 429 時の UI は短い再試行案内に留め、limit / window / provider 設定の実値をユーザー向けに強調しない。
+- silent stub fallback は引き続き行わない。fallback が必要になった場合は explicit opt-in と metadata 表示を別 PR で設計する。
+
+future provider の前提:
+
+- `openai_api` provider は未実装。実装前に explicit opt-in、prompt length guard、max candidates、max output、rate limit、cost cap、retry policy を固定する。
+- Web search / deep research は同期 proposal API ではなく job 化候補とし、citation / freshness / timeout / cancellation / cost を別設計する。
+- request-time provider selection は今回対象外であり、cost / abuse / consistency を別途設計してから判断する。
 ## 7-4. LLM strategy proposal benchmark 運用境界
 
 Strategy proposal prompt regression / provider benchmark は、required check ではなく manual / optional 運用として扱う。
@@ -209,7 +227,6 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 - Web search / deep research job 化。
 - StrategyVersion created-from-proposal relation。
 - proposal history filter / pagination / search / retention / full management。
-- provider cost / rate guard hardening。
 - sanitized provider event log persistence。
 - prompt regression automation。
 - auto Pine / auto save は引き続き out of scope。

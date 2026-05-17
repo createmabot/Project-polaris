@@ -142,6 +142,24 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('configured');
   });
 
+  it('shows a generic retry message for strategy proposal rate limiting', () => {
+    const message = buildProposalErrorMessage(new ApiError(
+      'rate limited with internal details',
+      'RATE_LIMITED',
+      {
+        rate_limited: true,
+        retry_after_ms: 60000,
+        provider_mode: 'local_llm',
+      },
+      429,
+    ));
+
+    expect(message).toBe('短時間に候補取得が続いたため、少し時間をおいて再試行してください。');
+    expect(message).not.toContain('local_llm');
+    expect(message).not.toContain('60000');
+    expect(message).not.toContain('internal details');
+  });
+
   it.each([
     ['proposal_run_id', { proposal_run_id: 'failed-proposal-run-1' }],
     ['history.proposal_run_id', { history: { proposal_run_id: 'failed-proposal-run-1' } }],

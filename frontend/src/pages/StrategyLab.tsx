@@ -114,6 +114,9 @@ export function buildProposalErrorMessage(error: unknown): string {
   if (error.status === 400) {
     return appendProviderObservation('候補生成の入力に不備があります。市場・時間足・リスク設定を確認してください。');
   }
+  if (error.status === 429) {
+    return appendProviderObservation('短時間に候補取得が続いたため、少し時間をおいて再試行してください。');
+  }
   if (error.status >= 500) {
     return appendProviderObservation('サーバー側で候補取得に失敗しました。時間をおいて再試行してください。');
   }
