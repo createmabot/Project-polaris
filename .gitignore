@@ -14,3 +14,4 @@ coverage
 *.log
 frontend/playwright-report
 frontend/test-results
+backend/.benchmark-records/

@@ -172,7 +172,7 @@ response / UI:
 - request-time provider selection は cost / abuse / consistency の観点から、別設計を経て導入判断する。
 - Web search / deep research は同期 API ではなく job 化候補として扱う。
 - CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
-- provider quality trend aggregation は既存 history の read-only 集計から始め、DB materialization、event log persistence、p50 / p95、benchmark records は後続判断とする。
+- provider quality trend aggregation は既存 history の read-only 集計として完了済み。DB materialization、event log persistence、p50 / p95 は後続判断とする。
 
 ## 7-4. LLM strategy proposal benchmark 運用境界
 
@@ -195,11 +195,13 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 - 投資助言風 wording は wording だけで reject しない。benchmark では、検証候補として提示され、backtest / user review 前提が維持されているかを見る。
 - 実測 raw output は原則 commit しない。必要な場合は sanitized summary のみを progress docs に残す。
 - optional script / fixture / package script として `pnpm --filter backend strategy-proposal:benchmark` を追加済み。script default は env に依存しない `stub` とし、required check には入れず、real provider は manual optional とする。
-- raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace は出さない。
+- output は raw prompt、raw response、provider endpoint、model 実値、secret、token、credential、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
+- `--output=<file>.json` 指定時だけ、gitignore 済み benchmark record directory 配下へ sanitized summary record を出力する。actual benchmark record は commit しない。
+- sanitized summary record は provider / scenario / status / latency bucket / candidate count / enum distribution / safety flags に限定し、candidate title / summary / suggested natural language spec は含めない。
 
 残課題:
 
-- benchmark result recording workflow / sanitized summary records。
+- benchmark result DB table / prompt regression automation。
 - `openai_api` provider。
 - Web search / deep research job 化。
 - StrategyVersion created-from-proposal relation。

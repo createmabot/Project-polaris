@@ -1,4 +1,10 @@
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { runStrategyProposalBenchmarkScenario } from '../strategy-proposals/benchmark';
+import {
+  buildStrategyProposalBenchmarkSummaryRecord,
+  resolveStrategyProposalBenchmarkOutputPath,
+} from '../strategy-proposals/benchmark-record';
 import {
   STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS,
   type StrategyProposalBenchmarkScenario,
@@ -8,16 +14,20 @@ import type { StrategyProposalProviderMode } from '../strategy-proposals/provide
 type CliOptions = {
   providerMode?: StrategyProposalProviderMode;
   scenarioIds: string[];
+  outputPath?: string;
+  fixedGeneratedAt?: string;
   help: boolean;
 };
 
 function printHelp() {
   console.log([
     'Usage: pnpm --filter backend strategy-proposal:benchmark [--provider=stub|local_llm] [--scenario=id[,id]]',
+    '       pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default --output=generic_default.json',
     '',
     'Runs an optional sanitized Strategy proposal benchmark summary.',
     'The default benchmark provider is stub and does not read STRATEGY_PROPOSAL_PROVIDER.',
-    'This command is not a required check and does not print raw prompt, raw response, endpoint, model value, or user_hint text.',
+    'This command is not a required check and does not print raw prompt, raw response, endpoint, model value, user_hint text, or candidate free text.',
+    'When --output is set, the sanitized JSON record is written under backend/.benchmark-records/strategy-proposal/ and should not be committed.',
   ].join('\n'));
 }
 
@@ -42,6 +52,17 @@ function parseCliArgs(args: string[]): CliOptions {
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
+      continue;
+    }
+    if (arg.startsWith('--output=')) {
+      options.outputPath = arg.slice('--output='.length);
+      continue;
+    }
+    if (arg.startsWith('--fixed-generated-at=')) {
+      options.fixedGeneratedAt = arg.slice('--fixed-generated-at='.length);
+      if (Number.isNaN(Date.parse(options.fixedGeneratedAt))) {
+        throw new Error('fixed generated_at must be a valid ISO timestamp');
+      }
       continue;
     }
     throw new Error('unsupported argument');
@@ -76,12 +97,36 @@ async function main() {
     }));
   }
 
+  const generatedAt = options.fixedGeneratedAt ?? new Date().toISOString();
+  const record = buildStrategyProposalBenchmarkSummaryRecord({
+    generatedAt,
+    results,
+  });
+
+  if (options.outputPath) {
+    const outputPath = resolveStrategyProposalBenchmarkOutputPath(options.outputPath);
+    await mkdir(path.dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, `${JSON.stringify(record, null, 2)}\n`, 'utf8');
+  }
+
   console.log(JSON.stringify({
     schema_name: 'strategy_proposal_benchmark_summary',
     schema_version: '1.0',
     provider_requested: options.providerMode ?? 'stub',
     scenario_count: results.length,
     results,
+    record: options.outputPath
+      ? {
+        written: true,
+        sanitized: true,
+        raw_prompt_included: false,
+        raw_response_included: false,
+        endpoint_included: false,
+        model_value_included: false,
+        user_hint_full_text_included: false,
+        candidate_free_text_included: false,
+      }
+      : undefined,
   }, null, 2));
 }
 

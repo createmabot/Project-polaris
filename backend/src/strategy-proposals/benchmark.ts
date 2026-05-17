@@ -21,11 +21,11 @@ import {
 } from './benchmark-scenarios';
 
 type StrategyProposalBenchmarkCandidateSummary = {
-  title: string;
   strategy_type: StrategyProposalCandidate['strategy_type'];
   confidence: StrategyProposalCandidate['confidence'];
   pine_feasibility: StrategyProposalCandidate['pine_feasibility'];
   backtest_caution_count: number;
+  uncertainty_count: number;
 };
 
 export type StrategyProposalBenchmarkResult = {
@@ -75,11 +75,11 @@ function summarizeCandidates(
   candidates: StrategyProposalCandidate[],
 ): StrategyProposalBenchmarkCandidateSummary[] {
   return candidates.map((candidate) => ({
-    title: sanitizeStrategyProposalBenchmarkText(candidate.title),
     strategy_type: candidate.strategy_type,
     confidence: candidate.confidence,
     pine_feasibility: candidate.pine_feasibility,
     backtest_caution_count: candidate.backtest_cautions.length,
+    uncertainty_count: candidate.uncertainty.length,
   }));
 }
 

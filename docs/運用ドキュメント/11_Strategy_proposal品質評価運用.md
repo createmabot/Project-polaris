@@ -11,7 +11,7 @@ strategy proposal は投資助言ではなく、ユーザーが backtest と rev
 
 PR #359〜#360 で、本 runbook と validation / failure path の自動 test 拡充は完了扱いにする。StrategyLab UI は既存 copy と provider error 表示で十分と判断し、quality evaluation phase では追加 UI 変更を行わない。
 
-PR #365〜#366 で、prompt regression / provider benchmark の design、fixed scenario set、code fixture、optional script、tests は完了扱いにする。benchmark result recording workflow と trend 集計は後続課題として残す。
+PR #365〜#366 で、prompt regression / provider benchmark の design、fixed scenario set、code fixture、optional script、tests は完了扱いにする。PR #372 で provider quality trend aggregation は proposal history 由来の read-only 集計として完了済み。Benchmark result recording workflow は、optional benchmark の sanitized summary record を local file として残す運用として扱う。
 
 PR #368〜#370 で、proposal history / selected proposal lineage の backend persistence / API と StrategyLab minimal UI は完了扱いにする。品質評価では sanitized history と selection 記録を確認できるが、raw prompt / raw response / endpoint / secret / local path は記録しない。
 
@@ -137,10 +137,12 @@ optional benchmark script:
 
 - `pnpm --filter backend strategy-proposal:benchmark` で env に依存しない `stub` default の sanitized summary を stdout に出す。
 - `pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default` のように provider / scenario を絞れる。
+- `--output=<file>.json` を指定した場合だけ、gitignore 済みの benchmark record directory 配下へ sanitized summary record を出力する。
+- deterministic smoke や test では `--fixed-generated-at=<iso>` で record timestamp を固定できる。
 - `--provider=local_llm` は manual optional。local_llm 実体依存 benchmark は required check に入れない。
-- script output は raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文を出さない。
-- summary は scenario id、provider observation 相当の status / latency bucket / candidate_count / invalid_reason、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。
-- file 出力は現時点で行わない。保存したい場合は terminal output をそのまま docs に貼らず、下記テンプレートで要約する。
+- script output は raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
+- summary は scenario id、provider observation 相当の status / latency bucket / candidate_count / invalid_reason、candidate の strategy_type / confidence / pine_feasibility / caution count / uncertainty count に限定する。
+- stdout や output file を docs にそのまま貼らない。残す場合は下記テンプレートか sanitized summary record の count / bucket だけを要約する。
 
 UI manual check:
 
@@ -268,15 +270,77 @@ trend response に含めてはいけないもの:
 - real local_llm 実体依存の評価は manual / optional とし、required check には入れない。
 - trend aggregation は recent runs の read-only 集計であり、benchmark result persistence や provider event log persistence ではない。
 
-## 6. 記録テンプレート
+## 6. benchmark result recording workflow
 
-評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。
+Benchmark result recording は、manual optional benchmark の結果を raw output ではなく sanitized summary record として local に残す運用である。Provider quality trend aggregation は proposal history に基づく read-only 集計であり、benchmark result recording は optional benchmark の一時記録である。初回では DB 永続化しない。
+
+### 6-1. 出力手順
+
+stub の単一 scenario を local record として出す例:
+
+```bash
+pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default --output=generic_default.json
+```
+
+固定時刻で deterministic smoke を行う例:
+
+```bash
+pnpm --filter backend strategy-proposal:benchmark -- --provider=stub --scenario=generic_default --fixed-generated-at=2026-05-17T00:00:00.000Z --output=generic_default.json
+```
+
+運用ルール:
+
+- `--output` は repository 内の gitignore 済み benchmark record directory 配下へ出力する。
+- output path は relative `.json` file のみ許可する。
+- actual benchmark record は commit しない。
+- local_llm 実体依存 benchmark は manual optional に留め、required check や CI required workflow に入れない。
+- pnpm の wrapper output には実行環境の path が出る場合があるため、そのまま docs / PR に貼らない。
+
+### 6-2. sanitized summary record の見方
+
+record で見る項目:
+
+- `source.required_check=false`。
+- `source.provider_real_dependency`: real provider 依存かどうか。
+- `run.provider` / `provider_category` / `provider_mode`。
+- `run.status` / `invalid_reason` / `schema_valid`。
+- `run.latency_bucket` / `elapsed_ms_bucket`。
+- `candidate_summary.strategy_type_counts`。
+- `candidate_summary.confidence_counts`。
+- `candidate_summary.pine_feasibility_counts`。
+- `candidate_summary.backtest_caution_count` / `uncertainty_count`。
+- `quality_notes.manual_review_required=true`。
+- `safety.*_included=false`。
+
+record に含めないもの:
+
+- raw prompt。
+- raw provider response。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec。
+- entry_logic / exit_logic / risk_management / research_basis URL などの candidate 自由文本文。
+
+### 6-3. provider quality trend aggregation との使い分け
+
+- provider quality trend aggregation: 保存済み proposal history から provider 品質傾向を read-only に集計する。StrategyLab compact note と API で確認する。
+- benchmark result recording: optional benchmark の実行結果を sanitized summary record として local に残す。実測 record は commit しない。
+- 初回では両者を DB 上で統合しない。
+- 将来 DB 永続化する場合は、BenchmarkResult 相当の model、retention、prompt versioning、comparison、cost / rate guard との関係を別 PR で設計する。
+
+## 7. 記録テンプレート
+
+評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。
 
 prompt regression / provider benchmark の記録方針:
 
 - 実測 raw output は原則 commit しない。必要な場合も raw prompt / raw response / endpoint / model 実値 / secret / local path を含めない。
 - docs に残すのは、scenario id、provider、provider_observation の sanitized summary、manual score memo、follow-up の要約に限定する。
-- ignored local output、CI artifact、一時 file のどれを使うかは script 実装 PR で決める。
+- ignored local output は `--output` で作る。CI artifact や DB 永続化は初回対象外。
 - provider benchmark は provider 間比較、prompt regression は同一 provider / 同一 scenario の変更前後比較として分けて記録する。
 - future `openai_api` / Web search / deep research を比較する場合も、cost / citation / freshness は raw output ではなく sanitized summary として扱う。
 
@@ -305,7 +369,7 @@ Notes without raw prompt / raw response / endpoint / model / secret / local path
 Follow-up:
 ```
 
-## 7. 関連 docs
+## 8. 関連 docs
 
 - `docs/仕様書/11_LLM_Strategy_Proposal仕様.md`
 - `docs/運用ドキュメント/05_AI_provider運用.md`

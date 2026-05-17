@@ -723,11 +723,132 @@ optional script 方針:
 - optional benchmark PR 2 で `pnpm --filter backend strategy-proposal:benchmark` を追加済み。
 - script は required check に入れない。default は env に依存しない `stub` で、`--provider=local_llm` は manual optional とする。
 - scenario fixture は本章と品質評価 runbook の fixed scenario id に合わせる。対象は `generic_default`、`jp_stock_daily`、`us_stock_daily`、`short_swing`、`long_trend_following`、`mean_reversion`、`breakout`、`volatility`、`conservative_risk`、`aggressive_risk`、`concrete_user_hint`、`vague_user_hint`、`long_user_hint`、`advice_like_wording`。
-- output は stdout の sanitized summary とし、raw prompt / raw response / endpoint / model 実値 / secret / local path / stack trace / user_hint 全文を出さない。
-- summary は `provider_observation` 相当の status / latency bucket / candidate_count / invalid_reason と、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。
-- file 出力は初回実装しない。実測値を残す場合は raw output ではなく sanitized summary の要約だけを progress docs に残す。
+- output は stdout の sanitized summary とし、raw prompt / raw response / endpoint / model 実値 / secret / local path / stack trace / user_hint 全文 / candidate 自由文本文を出さない。
+- summary は `provider_observation` 相当の status / latency bucket / candidate_count / invalid_reason と、candidate の strategy_type / confidence / pine_feasibility / caution count / uncertainty count に限定する。candidate title / summary / suggested_natural_language_spec は出さない。
+- `--output=<file>.json` を指定した場合だけ、gitignore 済みの benchmark record directory 配下へ sanitized summary record を書き出す。実測 record は原則 commit しない。
 
-## 13. provider quality trend aggregation
+## 13. benchmark result recording workflow / sanitized summary records
+
+Benchmark result recording workflow は、manual optional benchmark の結果を raw output ではなく sanitized summary record として一時保存し、provider 追加前後の比較材料にするための仕様である。Provider quality trend aggregation は proposal history に基づく read-only 集計であり、benchmark result recording は任意 benchmark の局所的な実行結果を file として残す workflow である。初回では両者を DB 上で統合しない。
+
+初回実装範囲:
+
+- 新規 DB migration / Prisma schema 変更は行わない。
+- benchmark result table は作らない。
+- optional benchmark script の default stdout は維持する。
+- `--output=<file>.json` 指定時のみ sanitized summary record を local file に出力する。
+- 出力先は `backend/.benchmark-records/strategy-proposal/` 配下に限定し、この directory は gitignore 対象とする。
+- `--fixed-generated-at=<iso>` は deterministic test / smoke 用の固定時刻 option とし、real benchmark record の通常運用では current timestamp を使う。
+- actual benchmark record は原則 commit しない。commit してよいのは schema / docs / tests / deterministic fake fixture のみとする。
+
+sanitized summary record schema:
+
+```json
+{
+  "schema_name": "strategy_proposal_benchmark_summary_records",
+  "schema_version": "1.0",
+  "generated_at": "2026-05-17T00:00:00.000Z",
+  "record_kind": "manual_optional_benchmark",
+  "source": {
+    "script": "strategy-proposal:benchmark",
+    "required_check": false,
+    "provider_real_dependency": false
+  },
+  "records": [
+    {
+      "run": {
+        "provider": "stub",
+        "provider_mode": "deterministic",
+        "provider_category": "stub",
+        "scenario_id": "generic_default",
+        "scenario_set_version": "1.0",
+        "candidate_count": 5,
+        "status": "succeeded",
+        "latency_bucket": "fast",
+        "elapsed_ms_bucket": "0_1000",
+        "schema_valid": true,
+        "invalid_reason": "none",
+        "validation_error_count": 0,
+        "fallback_used": false,
+        "fallback_reason": null
+      },
+      "candidate_summary": {
+        "strategy_type_counts": [{ "value": "trend_following", "count": 1 }],
+        "confidence_counts": [{ "value": "medium", "count": 5 }],
+        "pine_feasibility_counts": [{ "value": "medium", "count": 5 }],
+        "backtest_caution_count": 5,
+        "uncertainty_count": 5
+      },
+      "quality_notes": {
+        "manual_review_required": true,
+        "advice_like_wording_observed": false,
+        "unsupported_claim_risk": "unknown",
+        "notes": []
+      },
+      "safety": {
+        "sanitized": true,
+        "raw_prompt_included": false,
+        "raw_response_included": false,
+        "endpoint_included": false,
+        "model_value_included": false,
+        "secret_included": false,
+        "local_path_included": false,
+        "stack_trace_included": false,
+        "user_hint_full_text_included": false,
+        "candidate_free_text_included": false
+      }
+    }
+  ],
+  "meta": {
+    "actual_record_should_be_committed": false,
+    "raw_prompt_included": false,
+    "raw_response_included": false,
+    "endpoint_included": false,
+    "model_value_included": false,
+    "user_hint_full_text_included": false,
+    "candidate_free_text_included": false
+  }
+}
+```
+
+記録してよいもの:
+
+- provider category / provider mode。
+- scenario id / scenario set version。
+- status / latency bucket / elapsed bucket。
+- candidate count。
+- invalid reason / validation error count / schema valid。
+- fallback flags。
+- strategy_type / confidence / pine_feasibility distribution。
+- backtest caution count / uncertainty count。
+- manual review required flag。
+- advice-like wording observed flag。
+- unsupported claim risk の sanitized category。
+- required_check=false / provider_real_dependency flag。
+- safety flags。
+
+記録しないもの:
+
+- raw prompt。
+- raw provider response。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec。
+- entry_logic / exit_logic / risk_management / research_basis URL などの candidate 自由文本文。
+- raw `inputJson` / raw `candidateJson` / raw `providerObservationJson`。
+
+Provider quality trend aggregation との関係:
+
+- provider quality trend aggregation は、実利用または proposal history に基づく read-only 集計である。
+- benchmark result recording は、manual optional benchmark の実行結果を sanitized file として一時記録する workflow である。
+- 初回では benchmark result を DB 永続化しない。
+- 将来統合する場合は、別 design PR で BenchmarkResult 相当の model、retention、prompt versioning、comparison、cost / rate guard との関係を設計する。
+
+## 14. provider quality trend aggregation
 
 Strategy proposal provider quality trend aggregation は、保存済み `StrategyProposalRun` / `StrategyProposalCandidate` と sanitized `provider_observation` を使って、provider ごとの品質傾向を read-only に確認するための補助仕様である。投資判断、candidate ranking、売買推奨の評価には使わない。
 
@@ -775,21 +896,22 @@ API response は `summary`、`by_provider`、`by_market`、`by_strategy_type_bia
 - `openai_api` / Web search / deep research provider。
 - StrategyVersion created-from-proposal relation。
 
-## 14. 後続候補
+## 15. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
 - citation / freshness 表示。
 - StrategyVersion created-from-proposal relation。
 - proposal history filter / pagination / search / retention / full management。
-- proposal history export / benchmark records。
+- benchmark result DB table / prompt regression automation。
+- proposal history export。
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
 - provider instrumentation 拡張（sanitized provider event / log persistence）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 15. 参照
+## 16. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
