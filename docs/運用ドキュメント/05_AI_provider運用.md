@@ -103,6 +103,9 @@ local_llm provider 運用:
 - local_llm endpoint / model / timeout / max output は proposal 専用設定で分離する。実値は docs / PR / UI / response に出さない。
 - local_llm は StrategyLab の一時 proposal candidates を返すだけで、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 - local_llm response は既存 `strategy_proposal_candidates` schema に正規化し、UI に出す前に既存 request / provider response validation を必ず通す。
+- local_llm request では JSON mode 相当を利用できる場合は利用し、prompt で JSON object のみ、英語 key 固定、array field は配列、`source_type=web` 不使用を要求する。
+- local_llm response は `message.content` から取り出し、code fence や前後説明文が混ざる軽微な出力は最初の JSON object / array を抽出して処理する。raw response は保存・表示・通常 log に出さない。
+- schema_invalid 低減のため、root metadata 補完、string array の配列化、enum 表記揺れの snake_case 化など機械的で安全な normalization だけを行う。重要本文の欠落は補わず provider invalid response のまま扱う。
 - timeout、provider unavailable、malformed JSON、schema / type / format 不正、必須項目欠落、candidate count 不正、Web search 未実装時の web research basis は provider error として扱う。
 - local_llm は silent stub fallback を行わない。必要になった場合のみ、後続で opt-in fallback と fallback metadata を設計する。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は response / UI / docs / PR に出さない。

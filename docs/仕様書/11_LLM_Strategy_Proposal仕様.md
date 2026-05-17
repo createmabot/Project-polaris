@@ -260,9 +260,21 @@ prompt / response JSON 方針:
 
 - prompt は既存 request validation 済み input から構築し、raw user_hint や raw prompt を log / UI / API response に出さない。
 - response は structured JSON 相当を要求し、route 層で既存 `validateStrategyProposalData` 相当の validation を必ず通してから UI に返す。
+- local_llm には JSON object のみ、markdown code fence / 説明文なし、英語 key 固定、値の日本語は許容、Web search 未実装時は `research_basis.source_type=web` を使わない、という schema 厳守 prompt を使う。
+- local_llm response は、Ollama chat response の `message.content` または互換 response の message content から取り出す。content が空、過大、parse 不可の場合は provider invalid response とする。
+- JSON 抽出では、前後説明文や markdown code fence が混ざる軽微な provider 出力を想定し、最初の JSON object / array を抽出して parse する。ただし raw response は保存・表示・通常 log に出さない。
+- 機械的に安全な normalization だけを行う。欠けた root `schema_name` / `schema_version` / `input` / `disclaimer` の補完、string で返った array field の 1 要素配列化、`trend following` などの enum 表記揺れの snake_case 化、`invalidation_condition` から `invalidation_conditions` への alias 補正、空の `research_basis` への `provider_knowledge` 最小値補完に限定する。
+- candidate の重要本文（title、summary、entry / exit / risk、suggested natural language spec など）を provider なしに生成して補うことはしない。重要 field が欠落した candidate は引き続き validation failure とする。
 - malformed JSON、schema_name / schema_version 不一致、型不正、必須項目欠落、enum 不正、candidate count 不正、空または過度に短い `suggested_natural_language_spec` は provider invalid response とする。
 - provider output の投資助言風 wording は wording だけでは invalid にしない。危険・不正・アプリ目的外の response は provider invalid として扱える。
 - provider endpoint、raw prompt、raw response、stack trace、credential、local path は API response、UI、docs、PR本文に出さない。
+- schema invalid の詳細調査は sanitized reason と required check の mock / fake response test で扱う。real local_llm 実体依存の確認は manual smoke に限定し、required check には入れない。
+
+retry / repair 境界:
+
+- 現時点では bounded retry は実装しない。schema invalid の改善は prompt 強化、JSON extraction、上記の軽量 normalization を第一候補とする。
+- retry を後続で導入する場合は local_llm のみ最大 1 回、raw response 全文を correction prompt に入れず、missing field / invalid enum などの sanitized summary だけを使う。
+- retry を実装する場合は latency 悪化と retry storm を避け、`provider_observation` へ sanitized retry metadata を追加する設計 PR を先に分ける。
 
 local_llm provider PR 2 時点で実装していなかったもの:
 

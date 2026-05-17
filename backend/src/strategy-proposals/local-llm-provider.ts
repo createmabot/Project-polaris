@@ -20,8 +20,22 @@ type LocalLlmProviderOptions = {
 
 const DEFAULT_ENDPOINT = 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen3-30b-a3b-2507';
-const DEFAULT_TIMEOUT_MS = 60_000;
-const DEFAULT_MAX_OUTPUT_CHARS = 12_000;
+const DEFAULT_TIMEOUT_MS = 90_000;
+const DEFAULT_MAX_OUTPUT_CHARS = 20_000;
+const DEFAULT_DISCLAIMER =
+  '検証候補の提案です。投資助言ではありません。Pine生成とbacktest、ユーザー確認を前提にしてください。';
+const ARRAY_FIELDS = [
+  'entry_logic',
+  'exit_logic',
+  'risk_management',
+  'invalidation_conditions',
+  'expected_strengths',
+  'expected_weaknesses',
+  'required_indicators',
+  'backtest_cautions',
+  'uncertainty',
+  'suggested_pine_constraints',
+] as const;
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
@@ -29,10 +43,6 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   }
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function stripJsonFence(value: string): string {
-  return value.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 }
 
 type LocalLlmFailureReason = StrategyProposalProviderObservation['invalid_reason'];
@@ -46,11 +56,189 @@ function providerFailure(reason: LocalLlmFailureReason = 'unknown'): AppError {
   );
 }
 
-function normalizeCandidateInput(value: unknown): StrategyProposalCandidate[] {
+function normalizeToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+}
+
+function normalizeStrategyType(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const normalized = normalizeToken(value);
+  const aliases: Record<string, StrategyProposalCandidate['strategy_type']> = {
+    trend: 'trend_following',
+    trend_follow: 'trend_following',
+    trend_following: 'trend_following',
+    mean_reversion: 'mean_reversion',
+    reversion: 'mean_reversion',
+    breakout: 'breakout',
+    momentum: 'momentum',
+    volatility: 'volatility',
+    risk: 'risk_management',
+    risk_management: 'risk_management',
+    other: 'other',
+  };
+  return aliases[normalized] ?? normalized;
+}
+
+function normalizeThreeLevel(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const normalized = normalizeToken(value);
+  if (normalized === 'moderate' || normalized === 'normal') {
+    return 'medium';
+  }
+  return normalized;
+}
+
+function normalizeSourceType(value: unknown): unknown {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  return normalizeToken(value);
+}
+
+function normalizeStringArray(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return [value.trim()];
+  }
+  return value;
+}
+
+function normalizeResearchBasis(value: unknown): unknown {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [
+      {
+        source_type: 'provider_knowledge',
+        label: 'local llm generated candidate',
+        url: null,
+      },
+    ];
+  }
+  return value.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return item;
+    }
+    const record = item as Record<string, unknown>;
+    return {
+      ...record,
+      source_type: normalizeSourceType(record.source_type),
+      url: typeof record.url === 'string' ? record.url : null,
+    };
+  });
+}
+
+function normalizeCandidate(value: unknown, input: StrategyProposalRequest, index: number): unknown {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const candidate = { ...(value as Record<string, unknown>) };
+  candidate.candidate_id = typeof candidate.candidate_id === 'string' && candidate.candidate_id.trim()
+    ? candidate.candidate_id
+    : `candidate-${index + 1}`;
+  candidate.market_assumption = typeof candidate.market_assumption === 'string' && candidate.market_assumption.trim()
+    ? candidate.market_assumption
+    : input.market;
+  candidate.timeframe_assumption = typeof candidate.timeframe_assumption === 'string' && candidate.timeframe_assumption.trim()
+    ? candidate.timeframe_assumption
+    : input.timeframe;
+  if (!candidate.invalidation_conditions && candidate.invalidation_condition) {
+    candidate.invalidation_conditions = candidate.invalidation_condition;
+  }
+  candidate.strategy_type = normalizeStrategyType(candidate.strategy_type);
+  candidate.pine_feasibility = normalizeThreeLevel(candidate.pine_feasibility);
+  candidate.confidence = normalizeThreeLevel(candidate.confidence);
+  for (const field of ARRAY_FIELDS) {
+    candidate[field] = normalizeStringArray(candidate[field]);
+  }
+  candidate.research_basis = normalizeResearchBasis(candidate.research_basis);
+  return candidate;
+}
+
+function normalizePayload(value: unknown, input: StrategyProposalRequest): Record<string, unknown> {
+  if (Array.isArray(value)) {
+    return {
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      input,
+      candidates: value.map((candidate, index) => normalizeCandidate(candidate, input, index)),
+      disclaimer: DEFAULT_DISCLAIMER,
+    };
+  }
   if (!value || typeof value !== 'object') {
     throw providerFailure('schema_invalid');
   }
-  const data = value as Record<string, unknown>;
+  const data = { ...(value as Record<string, unknown>) };
+  data.schema_name = data.schema_name ?? 'strategy_proposal_candidates';
+  data.schema_version = data.schema_version ?? '1.0';
+  data.input = data.input ?? input;
+  data.disclaimer = typeof data.disclaimer === 'string' && data.disclaimer.trim()
+    ? data.disclaimer
+    : DEFAULT_DISCLAIMER;
+  if (Array.isArray(data.candidates)) {
+    data.candidates = data.candidates.map((candidate, index) => normalizeCandidate(candidate, input, index));
+  }
+  return data;
+}
+
+function extractJsonValues(value: string): string[] {
+  const trimmed = value.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  const text = fenced ? fenced[1].trim() : trimmed;
+  const candidates: string[] = [];
+
+  for (let start = 0; start < text.length; start += 1) {
+    const openChar = text[start];
+    if (openChar !== '{' && openChar !== '[') {
+      continue;
+    }
+    const closeChar = openChar === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < text.length; index += 1) {
+      const char = text[index];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = inString;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) {
+        continue;
+      }
+      if (char === openChar) {
+        depth += 1;
+        continue;
+      }
+      if (char === closeChar) {
+        depth -= 1;
+        if (depth === 0) {
+          candidates.push(text.slice(start, index + 1));
+          break;
+        }
+      }
+    }
+  }
+  return candidates;
+}
+
+function normalizeCandidateInput(value: unknown, input: StrategyProposalRequest): StrategyProposalCandidate[] {
+  const normalized = normalizePayload(value, input);
+  if (!normalized || typeof normalized !== 'object') {
+    throw providerFailure('schema_invalid');
+  }
+  const data = normalized;
   if (data.schema_name !== 'strategy_proposal_candidates' || data.schema_version !== '1.0') {
     throw providerFailure('schema_invalid');
   }
@@ -89,6 +277,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
   async generate(input: StrategyProposalRequest) {
     const rawText = await this.callLocalLlm(input);
     const parsed = this.parseJson(rawText);
+    const normalized = normalizePayload(parsed, input);
     return {
       provider: {
         name: 'local_llm',
@@ -96,11 +285,11 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
         web_search: false,
         persisted: false,
       },
-      candidates: normalizeCandidateInput(parsed),
+      candidates: normalizeCandidateInput(normalized, input),
       disclaimer:
-        typeof (parsed as Record<string, unknown>).disclaimer === 'string'
-          ? String((parsed as Record<string, unknown>).disclaimer)
-          : '検証候補の提案です。投資助言ではありません。Pine生成とbacktest、ユーザー確認を前提にしてください。',
+        typeof normalized.disclaimer === 'string'
+          ? String(normalized.disclaimer)
+          : DEFAULT_DISCLAIMER,
     };
   }
 
@@ -117,10 +306,17 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
               role: 'system',
               content: [
                 'You generate temporary strategy verification candidates for StrategyLab.',
-                'Return strict JSON only. Do not include markdown fences.',
-                'The output must match schema_name=strategy_proposal_candidates and schema_version=1.0.',
-                'Do not claim web research or cite URLs.',
+                'Return one JSON object only. Do not include markdown fences, comments, headings, or explanations.',
+                'Use English schema keys exactly as requested. Japanese text is allowed only inside string values.',
+                'The root object must include schema_name="strategy_proposal_candidates", schema_version="1.0", input, candidates, and disclaimer.',
+                'Each candidate must include every required field. Array fields must be arrays of strings, not a single string.',
+                'strategy_type must be one of trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other.',
+                'pine_feasibility and confidence must be one of high, medium, low.',
+                'research_basis.source_type must be one of internal, user_input, provider_knowledge. Do not use web because Web search is disabled.',
+                'Do not claim web research, cite URLs, or rely on current news.',
+                'Make suggested_natural_language_spec a concrete rule description long enough for manual Pine generation.',
                 'Treat proposals as verification candidates, not investment advice.',
+                'Do not guarantee profit or present the candidates as buy/sell recommendations.',
               ].join(' '),
             },
             {
@@ -162,6 +358,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
           ],
           stream: false,
           think: false,
+          format: 'json',
           options: {
             temperature: 0.2,
             num_predict: Math.max(256, Math.ceil(this.maxOutputChars / 4)),
@@ -197,13 +394,25 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
     }
   }
 
-  private parseJson(rawText: string): Record<string, unknown> {
+  private parseJson(rawText: string): unknown {
     try {
-      const parsed = JSON.parse(stripJsonFence(rawText));
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        throw providerFailure('schema_invalid');
+      for (const candidate of extractJsonValues(rawText)) {
+        try {
+          const parsed = JSON.parse(candidate);
+          if (!parsed || typeof parsed !== 'object') {
+            throw providerFailure('schema_invalid');
+          }
+          if (Array.isArray(parsed) && parsed.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
+            continue;
+          }
+          return parsed;
+        } catch (error) {
+          if (error instanceof AppError) {
+            throw error;
+          }
+        }
       }
-      return parsed as Record<string, unknown>;
+      throw providerFailure('malformed_json');
     } catch (error) {
       if (error instanceof AppError) {
         throw error;

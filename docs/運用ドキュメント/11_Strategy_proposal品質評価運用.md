@@ -161,6 +161,25 @@ UI manual check:
 - error 表示や logs に raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace が出ていないことを確認する。
 - 0 candidates は provider failure ではなく EmptyState として扱う。
 
+local_llm の `provider status: invalid_response / reason: schema_invalid / latency: slow` を確認した場合:
+
+1. real local_llm 実体依存の問題として扱い、required test に入れない。
+2. StrategyLab の UI では sanitized provider status / reason / latency だけを確認する。raw response、endpoint、model 実値、stack trace は残さない。
+3. backend 側では mock / fake response tests で、code fence 付き JSON、前後説明文付き JSON、root metadata 欠落、array field の string 返却、enum 表記揺れ、重要 field 欠落を切り分ける。
+4. local_llm prompt は JSON object のみ、英語 key 固定、array field は配列、`source_type=web` 不使用、投資助言ではなく検証候補という前提を要求する。
+5. 実装側は軽量 normalization だけを行う。root metadata 補完、string array の配列化、enum の snake_case 化、`invalidation_condition` alias 補正、空 `research_basis` の `provider_knowledge` 補完に限定する。
+6. title / summary / entry / exit / risk / suggested natural language spec などの重要本文が欠けている場合は、候補内容を勝手に生成せず provider invalid response として扱う。
+7. 再現調査で benchmark script を使う場合も、`--provider=local_llm` は manual optional に留め、stdout / record に raw prompt、raw response、user_hint 全文、candidate 自由文本文を残さない。
+
+manual browser smoke:
+
+1. local LLM process が起動していることを確認する。
+2. `STRATEGY_PROPOSAL_PROVIDER=local_llm` と proposal 専用の endpoint / model / timeout / max output 設定を local env に置く。実値を docs、PR、screenshot、log へ残さない。
+3. backend / frontend dev process を再起動する。
+4. StrategyLab を開き、proposal count 5 で `ストラテジーを提案` を実行する。
+5. 成功時は candidate cards、provider note `succeeded`、最近の提案、provider quality trend が壊れていないことを確認する。
+6. 失敗時は sanitized provider status / reason / latency だけを記録し、raw response は保存しない。
+
 ### 5-4. 手動評価の見方
 
 - diversity: strategy_type と entry idea が重複しすぎていないかを見る。

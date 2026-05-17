@@ -602,6 +602,7 @@ pnpm exec prisma db seed
 - StrategyLab now provides a deterministic stub proposal flow for strategy idea candidates.
 - Selecting a proposal fills the StrategyLab title and natural language rule only; Pine generation, save, validation, and backtest execution remain explicit user actions.
 - The proposal flow is for verification candidates, not investment advice. Proposal history, provider observation, optional benchmark, sanitized benchmark summary records, and sanitized provider quality trend are available; Web search, deep research, and automatic Pine generation remain future decisions.
+- `STRATEGY_PROPOSAL_PROVIDER=local_llm` is opt-in. local_llm schema failures are handled with strict JSON prompting, safe JSON extraction, lightweight normalization, and sanitized provider status only.
 
 ### Home and SideRail light cleanup pass
 

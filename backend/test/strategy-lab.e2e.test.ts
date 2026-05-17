@@ -624,11 +624,15 @@ function validLocalLlmCandidate(overrides: Record<string, unknown> = {}) {
 }
 
 function localLlmResponseContent(payload: Record<string, unknown>) {
+  return localLlmResponseText(JSON.stringify(payload));
+}
+
+function localLlmResponseText(content: string) {
   return {
     ok: true,
     json: async () => ({
       message: {
-        content: JSON.stringify(payload),
+        content,
       },
     }),
   };
@@ -1030,7 +1034,97 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.model).toBe('proposal-model-test');
     expect(requestBody.stream).toBe(false);
     expect(requestBody.think).toBe(false);
+    expect(requestBody.format).toBe('json');
     expect(requestBody.options.num_predict).toBe(2000);
+  });
+
+  it('extracts local_llm JSON from markdown fences and surrounding explanation', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const payload = {
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      candidates: [validLocalLlmCandidate()],
+      disclaimer: '検証候補の提案です。投資助言ではありません。',
+    };
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseText([
+      '以下は検証候補です。',
+      '```json',
+      JSON.stringify(payload),
+      '```',
+      'backtestで確認してください。',
+    ].join('\n')));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.provider.name).toBe('local_llm');
+    expect(body.data.candidates).toHaveLength(1);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      invalid_reason: 'none',
+      schema_valid: true,
+    });
+    expect(JSON.stringify(body)).not.toContain('以下は検証候補です。');
+  });
+
+  it('repairs safe local_llm shape issues without accepting missing candidate substance', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const candidate = validLocalLlmCandidate({
+      entry_logic: '終値が25日移動平均を上回る',
+      exit_logic: '終値が5日移動平均を下回る',
+      risk_management: '1回の損失を限定する',
+      invalidation_condition: '出来高が伴わない上抜け',
+      expected_strengths: '条件が単純で検証しやすい',
+      expected_weaknesses: '横ばい相場でダマシが増える',
+      required_indicators: 'SMA',
+      backtest_cautions: '複数期間でbacktestする',
+      uncertainty: '市場環境や銘柄固有材料は未評価です。',
+      suggested_pine_constraints: 'long_only',
+      strategy_type: 'trend following',
+      pine_feasibility: 'High',
+      confidence: 'Moderate',
+      research_basis: [],
+    });
+    delete (candidate as Record<string, unknown>).schema_name;
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      candidates: [candidate],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.candidates[0]).toMatchObject({
+      strategy_type: 'trend_following',
+      pine_feasibility: 'high',
+      confidence: 'medium',
+    });
+    expect(body.data.candidates[0].entry_logic).toEqual(['終値が25日移動平均を上回る']);
+    expect(body.data.candidates[0].invalidation_conditions).toEqual(['出来高が伴わない上抜け']);
+    expect(body.data.candidates[0].research_basis).toEqual([
+      {
+        source_type: 'provider_knowledge',
+        label: 'local llm generated candidate',
+        url: null,
+      },
+    ]);
   });
 
   it('does not leave partial proposal history when candidate persistence fails', async () => {
