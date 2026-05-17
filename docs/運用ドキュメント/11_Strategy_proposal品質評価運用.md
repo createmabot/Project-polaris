@@ -205,7 +205,6 @@ UI manual check:
 
 後続候補:
 
-- provider observation の trend 集計。
 - 現行 run metadata を超える event log 永続化。
 - export / benchmark records。
 - filter / pagination / search / retention / full management。
@@ -226,6 +225,48 @@ instrumentation / cost guard の現行:
 - prompt 全文、raw response、endpoint、secret、token、local path は記録しない。
 - CI は mock / fake response で metadata 分類を検査し、local_llm 実体依存 test は required check に入れない。
 - local_llm の latency / timeout は manual runbook で観測し、openai_api / Web search / deep research は別フェーズで cost / job 化を判断する。
+
+### 5-7. provider quality trend aggregation の確認
+
+Provider quality trend aggregation は、保存済み proposal history と sanitized `provider_observation` から provider 品質傾向を read-only に確認するための補助機能である。StrategyLab の「最近の提案」内に compact note として表示し、詳細な運用確認は API response を見る。
+
+確認 endpoint:
+
+```bash
+GET /api/strategy-lab/proposals/provider-quality-trend?limit=50
+```
+
+確認する観点:
+
+- `summary.total_runs`、`succeeded_runs`、`failed_runs`、`success_rate`。
+- `summary.selected_runs`、`selected_rate`。これは候補が使われた比率であり、投資成果や candidate quality の保証ではない。
+- `summary.zero_candidate_runs`。0 candidates は failure ではなく、succeeded run with zero candidates として扱う場合がある。
+- `by_provider[].status_counts` と `invalid_reason_counts`。
+- `by_provider[].avg_elapsed_ms` と `latency_buckets`。
+- `candidate_distribution.strategy_type_counts` / `confidence_counts` / `pine_feasibility_counts`。
+- `recent_failures` の provider / status / invalid_reason / latency_bucket。
+- `meta.sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`。
+
+trend response に含めてはいけないもの:
+
+- user_hint 全文。
+- raw prompt。
+- raw provider response。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- candidate title / summary / suggested_natural_language_spec。
+
+運用上の読み方:
+
+- `stub` は deterministic baseline として、schema / UI / selection lineage の回帰確認に使う。
+- `local_llm` は opt-in provider として、timeout / invalid_response / candidate_count / latency を見る。
+- success rate は provider 運用品質の指標であり、提案の投資有効性を示さない。
+- selected rate は StrategyLab input へ反映された比率であり、Strategy / StrategyVersion 保存や Pine generation 実行を意味しない。
+- real local_llm 実体依存の評価は manual / optional とし、required check には入れない。
+- trend aggregation は recent runs の read-only 集計であり、benchmark result persistence や provider event log persistence ではない。
 
 ## 6. 記録テンプレート
 

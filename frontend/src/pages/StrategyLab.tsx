@@ -20,6 +20,7 @@ import {
   StrategyProposalData,
   StrategyProposalHistoryDetailData,
   StrategyProposalHistoryListData,
+  StrategyProposalProviderQualityTrendData,
   StrategyProposalSelectData,
   StrategyVersionData,
   StrategyVersionPineGenerateData,
@@ -189,6 +190,80 @@ function buildProposalSelectionErrorMessage(error: unknown): string {
   return '候補の選択履歴を記録できませんでした。';
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function findCount(items: Array<{ value: string; count: number }>, value: string): number {
+  return items.find((item) => item.value === value)?.count ?? 0;
+}
+
+function ProviderQualityTrendNote({
+  data,
+  error,
+  isLoading,
+}: {
+  data?: StrategyProposalProviderQualityTrendData;
+  error?: unknown;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <InlineNotice tone='info'>
+        provider quality trend を読み込み中です。
+      </InlineNotice>
+    );
+  }
+
+  if (error) {
+    return (
+      <InlineNotice tone='warning'>
+        provider quality trend を読み込めませんでした。候補生成と履歴表示は継続できます。
+      </InlineNotice>
+    );
+  }
+
+  if (!data?.summary || data.summary.total_runs === 0) {
+    return (
+      <InlineNotice tone='info'>
+        provider quality trend はまだありません。提案履歴が蓄積されると sanitized metadata だけで集計します。
+      </InlineNotice>
+    );
+  }
+
+  return (
+    <div style={{ display: 'grid', gap: '0.65rem' }}>
+      <InlineNotice tone='info'>
+        provider quality trend は直近 {data.meta.limit} 件の sanitized proposal history から集計します。候補ランキングや投資判断ではありません。
+      </InlineNotice>
+      <KeyValueList className='sm:grid-cols-4'>
+        <KeyValueRow label='runs'>{String(data.summary.total_runs)}</KeyValueRow>
+        <KeyValueRow label='success'>{formatPercent(data.summary.success_rate)}</KeyValueRow>
+        <KeyValueRow label='selected'>{formatPercent(data.summary.selected_rate)}</KeyValueRow>
+        <KeyValueRow label='avg latency'>{`${data.summary.avg_elapsed_ms}ms`}</KeyValueRow>
+      </KeyValueList>
+      {data.by_provider.length > 0 && (
+        <div style={{ display: 'grid', gap: '0.4rem' }}>
+          {data.by_provider.slice(0, 3).map((provider) => (
+            <div key={provider.provider_name} style={{ fontSize: '0.86rem', color: '#475569' }}>
+              <strong>{provider.provider_name}</strong>: {provider.succeeded_runs}/{provider.run_count} success,
+              {' '}selected {formatPercent(provider.selected_rate)},
+              {' '}slow {findCount(provider.latency_buckets, 'slow')},
+              {' '}timeout {findCount(provider.status_counts, 'timeout')},
+              {' '}invalid {findCount(provider.status_counts, 'invalid_response')}
+            </div>
+          ))}
+        </div>
+      )}
+      {data.recent_failures.length > 0 && (
+        <div style={{ fontSize: '0.84rem', color: '#64748b' }}>
+          recent failure: {data.recent_failures[0].provider_name} / {data.recent_failures[0].status} / {data.recent_failures[0].invalid_reason}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function StrategyLab() {
   const [, setLocation] = useLocation();
   const [title, setTitle] = useState('監視銘柄比較ルール');
@@ -236,6 +311,12 @@ export default function StrategyLab() {
     mutate: mutateProposalHistory,
   } = useSWR<StrategyProposalHistoryListData>('/api/strategy-lab/proposals?limit=5', swrFetcher);
   const {
+    data: proposalQualityTrendData,
+    error: proposalQualityTrendError,
+    isLoading: proposalQualityTrendLoading,
+    mutate: mutateProposalQualityTrend,
+  } = useSWR<StrategyProposalProviderQualityTrendData>('/api/strategy-lab/proposals/provider-quality-trend?limit=50', swrFetcher);
+  const {
     data: selectedProposalDetail,
     error: selectedProposalDetailError,
     isLoading: selectedProposalDetailLoading,
@@ -264,11 +345,13 @@ export default function StrategyLab() {
       setProposalData(proposals);
       setSelectedProposalRunId(getProposalRunId(proposals));
       void mutateProposalHistory();
+      void mutateProposalQualityTrend();
     } catch (proposalRequestError: unknown) {
       console.error('Strategy proposal request failed', proposalRequestError);
       setProposalError(buildProposalErrorMessage(proposalRequestError));
       if (getProposalErrorRunId(proposalRequestError)) {
         void mutateProposalHistory();
+        void mutateProposalQualityTrend();
       }
     } finally {
       setProposing(false);
@@ -300,6 +383,7 @@ export default function StrategyLab() {
       await postApi<StrategyProposalSelectData>(`/api/strategy-lab/proposals/${proposalRunId}/select`, body);
       void mutateProposalHistory();
       void mutateSelectedProposalDetail();
+      void mutateProposalQualityTrend();
       return true;
     } catch (selectionError: unknown) {
       console.error('Strategy proposal selection failed', selectionError);
@@ -570,6 +654,12 @@ export default function StrategyLab() {
         className='mt-5'
       >
         <div style={{ display: 'grid', gap: '0.85rem' }}>
+          <ProviderQualityTrendNote
+            data={proposalQualityTrendData}
+            error={proposalQualityTrendError}
+            isLoading={proposalQualityTrendLoading}
+          />
+
           {proposalHistoryLoading && (
             <LoadingState title='提案履歴を読み込み中です' />
           )}

@@ -538,7 +538,8 @@ frontend 最小 UI 実装済み:
 - history detail candidates は、`proposal_candidate_id` で selection API を呼んでから title / natural language rule に反映する。
 - selection API 失敗時は StrategyLab 内の error 表示に留める。
 - proposal 選択から Strategy / StrategyVersion 保存、Pine generation、validation、backtest、AI summary は自動起動しない。
-- filter / pagination / search / bulk delete / retention management / provider quality trend UI は後続にする。
+- provider quality trend は「最近の提案」内の compact read-only note として表示する。
+- filter / pagination / search / bulk delete / retention management / full trend management は後続にする。
 - StrategyVersion lineage relation は初回 UI では扱わず、後続判断とする。
 
 required check 方針:
@@ -726,7 +727,55 @@ optional script 方針:
 - summary は `provider_observation` 相当の status / latency bucket / candidate_count / invalid_reason と、candidate title / strategy_type / confidence / pine_feasibility / caution count に限定する。
 - file 出力は初回実装しない。実測値を残す場合は raw output ではなく sanitized summary の要約だけを progress docs に残す。
 
-## 13. 後続候補
+## 13. provider quality trend aggregation
+
+Strategy proposal provider quality trend aggregation は、保存済み `StrategyProposalRun` / `StrategyProposalCandidate` と sanitized `provider_observation` を使って、provider ごとの品質傾向を read-only に確認するための補助仕様である。投資判断、candidate ranking、売買推奨の評価には使わない。
+
+初回実装範囲:
+
+- 新規 DB migration / Prisma schema 変更は行わない。
+- `StrategyProposalRun.providerObservationJson` と `StrategyProposalCandidate.candidateJson` のうち、enum / count / bucket として扱える項目だけを集計する。
+- `GET /api/strategy-lab/proposals/provider-quality-trend` を read-only endpoint として追加する。
+- StrategyLab の「最近の提案」内に compact trend note を表示する。
+- trend note は proposal UI の主導線を邪魔せず、Pine generation / save / validation / backtest を自動起動しない。
+
+集計してよい項目:
+
+- provider name。
+- status / invalid_reason / validation_error_count / schema_valid。
+- elapsed_ms summary / latency_bucket。
+- candidate_count / zero candidate count。
+- selected count / selected rate。
+- selected_by / provider_mode の count。
+- safe request dimension としての market / strategy_type_bias。
+- candidate の strategy_type / confidence / pine_feasibility distribution。
+
+返さないもの:
+
+- user_hint 全文。
+- raw prompt。
+- raw provider response。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- candidate title / summary / suggested_natural_language_spec などの自由文本文。
+- raw `inputJson` / raw `candidateJson` / raw `providerObservationJson` 全体。
+
+API response は `summary`、`by_provider`、`by_market`、`by_strategy_type_bias`、`candidate_distribution`、`recent_failures`、`meta` を返す。`meta` では `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false` を明示する。
+
+現時点で含めないもの:
+
+- benchmark result recording workflow / sanitized summary records。
+- sanitized provider event log persistence。
+- provider quality trend の DB materialization。
+- p50 / p95 などの本格 percentile。
+- provider cost / rate guard hardening。
+- `openai_api` / Web search / deep research provider。
+- StrategyVersion created-from-proposal relation。
+
+## 14. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -736,12 +785,11 @@ optional script 方針:
 - proposal history export / benchmark records。
 - symbol context から StrategyLab へ遷移する導線。
 - provider cost cap / rate limit / opt-in。
-- provider quality trend aggregation。
-- provider instrumentation 拡張（sanitized provider event / log persistence / trend aggregation）。
+- provider instrumentation 拡張（sanitized provider event / log persistence）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 
-## 14. 参照
+## 15. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`

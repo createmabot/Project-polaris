@@ -455,6 +455,99 @@ describe('StrategyLab', () => {
     expect(html).toContain('候補を見る');
   });
 
+  it('renders sanitized provider quality trend without raw diagnostics', () => {
+    primeDefaultState();
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
+        return {
+          isLoading: false,
+          error: null,
+          data: {
+            summary: {
+              total_runs: 3,
+              succeeded_runs: 2,
+              failed_runs: 1,
+              success_rate: 0.6667,
+              selected_runs: 1,
+              selected_rate: 0.3333,
+              zero_candidate_runs: 1,
+              avg_candidate_count: 1.33,
+              avg_elapsed_ms: 420,
+            },
+            by_provider: [
+              {
+                provider_name: 'local_llm',
+                run_count: 2,
+                succeeded_runs: 1,
+                failed_runs: 1,
+                success_rate: 0.5,
+                selected_runs: 1,
+                selected_rate: 0.5,
+                zero_candidate_runs: 1,
+                avg_candidate_count: 1,
+                avg_elapsed_ms: 600,
+                latency_buckets: [{ value: 'slow', count: 1 }],
+                status_counts: [{ value: 'invalid_response', count: 1 }],
+                invalid_reason_counts: [{ value: 'malformed_json', count: 1 }],
+                selected_by_counts: [{ value: 'env', count: 2 }],
+                provider_mode_counts: [{ value: 'local_llm', count: 1 }],
+              },
+            ],
+            by_market: [],
+            by_strategy_type_bias: [],
+            candidate_distribution: {
+              strategy_type_counts: [],
+              confidence_counts: [],
+              pine_feasibility_counts: [],
+            },
+            recent_failures: [
+              {
+                proposal_run_id: 'proposal-run-2',
+                created_at: '2026-05-17T00:00:00.000Z',
+                provider_name: 'local_llm',
+                status: 'invalid_response',
+                invalid_reason: 'malformed_json',
+                candidate_count: 0,
+                latency_bucket: 'slow',
+              },
+            ],
+            meta: {
+              source: 'strategy_proposal_history',
+              sanitized: true,
+              raw_prompt_included: false,
+              raw_response_included: false,
+              limit: 50,
+            },
+          },
+          mutate: vi.fn(),
+        };
+      }
+      if (key === '/api/strategy-lab/proposals?limit=5') {
+        return { isLoading: false, error: null, data: { proposal_runs: [], limit: 5 }, mutate: vi.fn() };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+    expect(html).toContain('provider quality trend は直近 50 件');
+    expect(html).toContain('候補ランキングや投資判断ではありません');
+    expect(html).toContain('runs:');
+    expect(html).toContain('success:');
+    expect(html).toContain('67%');
+    expect(html).toContain('selected:');
+    expect(html).toContain('33%');
+    expect(html).toContain('avg latency:');
+    expect(html).toContain('420ms');
+    expect(html).toContain('local_llm');
+    expect(html).toContain('recent failure: local_llm / invalid_response / malformed_json');
+    expect(html).not.toContain('raw prompt');
+    expect(html).not.toContain('raw response');
+    expect(html).not.toContain('local-llm.example.test');
+    expect(html).not.toContain('proposal-model-test');
+    expect(html).not.toContain('C:\\');
+    expect(html).not.toContain('stack trace');
+  });
+
   it('applies title and natural language spec from history detail candidate', async () => {
     const setters = primeScenarioState({
       selectedProposalRunId: 'proposal-run-1',

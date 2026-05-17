@@ -461,12 +461,21 @@ vi.mock('../src/db', () => {
         runtime.proposalRuns.set(id, row);
         return row;
       },
-      findMany: async ({ orderBy, take }: any = {}) => {
+      findMany: async ({ orderBy, take, include }: any = {}) => {
         let rows = Array.from(runtime.proposalRuns.values());
         if (orderBy?.createdAt === 'desc') {
           rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         }
-        return rows.slice(0, Number.isInteger(take) ? take : rows.length);
+        rows = rows.slice(0, Number.isInteger(take) ? take : rows.length);
+        if (!include?.candidates) {
+          return rows;
+        }
+        return rows.map((row) => {
+          const candidates = Array.from(runtime.proposalCandidates.values())
+            .filter((candidate) => candidate.proposalRunId === row.id)
+            .sort((a, b) => a.rank - b.rank);
+          return { ...row, candidates };
+        });
       },
       findUnique: async ({ where, include }: any) => {
         const row = runtime.proposalRuns.get(where.id) ?? null;
@@ -805,6 +814,126 @@ describe('strategy lab vertical slice', () => {
     expect(runtime.strategies.size).toBe(0);
     expect(runtime.versions.size).toBe(0);
     expect(runtime.pineScripts.size).toBe(0);
+  });
+
+  it('aggregates sanitized strategy proposal provider quality trends from proposal history', async () => {
+    const app = await createApp();
+
+    const successfulProposal = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 2,
+        user_hint: 'must buy wording with private diagnostics should not appear in trends',
+      },
+    });
+    expect(successfulProposal.statusCode).toBe(200);
+    const successfulBody = successfulProposal.json();
+
+    const selectResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${successfulBody.data.proposal_run_id}/select`,
+      payload: {
+        candidate_id: successfulBody.data.candidates[0].candidate_id,
+      },
+    });
+    expect(selectResponse.statusCode).toBe(200);
+
+    const emptySuccess = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        strategy_type_bias: 'other',
+        proposal_count: 5,
+      },
+    });
+    expect(emptySuccess.statusCode).toBe(200);
+
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT = 'http://local-llm.example.test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL = 'proposal-model-test';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        message: {
+          content: 'not json',
+        },
+      }),
+    }));
+    const failedProposal = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+    expect(failedProposal.statusCode).toBe(502);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals/provider-quality-trend?limit=10',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.summary).toMatchObject({
+      total_runs: 3,
+      succeeded_runs: 2,
+      failed_runs: 1,
+      selected_runs: 1,
+      zero_candidate_runs: 2,
+    });
+    expect(body.data.summary.success_rate).toBe(0.6667);
+    expect(body.data.summary.selected_rate).toBe(0.3333);
+    expect(body.data.summary.avg_candidate_count).toBe(0.67);
+    expect(body.data.by_provider).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider_name: 'stub',
+        run_count: 2,
+        succeeded_runs: 2,
+        failed_runs: 0,
+        selected_runs: 1,
+        zero_candidate_runs: 1,
+      }),
+      expect.objectContaining({
+        provider_name: 'local_llm',
+        run_count: 1,
+        succeeded_runs: 0,
+        failed_runs: 1,
+        selected_runs: 0,
+        zero_candidate_runs: 1,
+      }),
+    ]));
+    const localLlmProvider = body.data.by_provider.find((provider: any) => provider.provider_name === 'local_llm');
+    expect(localLlmProvider.status_counts).toEqual(expect.arrayContaining([
+      { value: 'invalid_response', count: 1 },
+    ]));
+    expect(localLlmProvider.invalid_reason_counts).toEqual(expect.arrayContaining([
+      { value: 'malformed_json', count: 1 },
+    ]));
+    expect(body.data.candidate_distribution.strategy_type_counts.length).toBeGreaterThan(0);
+    expect(body.data.recent_failures).toEqual([
+      expect.objectContaining({
+        provider_name: 'local_llm',
+        status: 'invalid_response',
+        invalid_reason: 'malformed_json',
+        candidate_count: 0,
+      }),
+    ]);
+    expect(body.data.meta).toMatchObject({
+      source: 'strategy_proposal_history',
+      sanitized: true,
+      raw_prompt_included: false,
+      raw_response_included: false,
+      limit: 10,
+    });
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('must buy wording');
+    expect(serialized).not.toContain('private diagnostics');
+    expect(serialized).not.toContain('local-llm.example.test');
+    expect(serialized).not.toContain('proposal-model-test');
+    expect(serialized).not.toContain('not json');
   });
 
   it('uses stub strategy proposal provider by default without calling local llm', async () => {
