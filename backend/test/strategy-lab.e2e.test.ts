@@ -1127,6 +1127,96 @@ describe('strategy lab vertical slice', () => {
     ]);
   });
 
+  it('extracts bare local_llm candidate arrays with nested arrays, objects, and escaped delimiters', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const candidate = validLocalLlmCandidate({
+      title: '記号 { } [ ] と "quote" を含む候補',
+      entry_logic: ['終値が25日移動平均を上回る [確認]'],
+      exit_logic: ['終値が5日移動平均を下回る {手仕舞い}'],
+      risk_management: ['1回の損失を限定し "manual review" を前提にする'],
+      research_basis: [
+        {
+          source_type: 'provider_knowledge',
+          label: 'nested object basis with [brackets]',
+          url: null,
+        },
+      ],
+    });
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseText([
+      'candidate array follows',
+      JSON.stringify([candidate]),
+      'review with backtest',
+    ].join('\n')));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.schema_name).toBe('strategy_proposal_candidates');
+    expect(body.data.candidates).toHaveLength(1);
+    expect(body.data.candidates[0].title).toBe('記号 { } [ ] と "quote" を含む候補');
+    expect(body.data.candidates[0].entry_logic).toEqual(['終値が25日移動平均を上回る [確認]']);
+    expect(body.data.candidates[0].exit_logic).toEqual(['終値が5日移動平均を下回る {手仕舞い}']);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      invalid_reason: 'none',
+      schema_valid: true,
+    });
+    expect(JSON.stringify(body.data.provider_observation)).not.toContain('candidate array follows');
+  });
+
+  it('returns malformed_json for mismatched local_llm JSON delimiters without leaking raw text', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const validCandidateWithTrailingText = JSON.stringify([validLocalLlmCandidate()]);
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseText(
+      `${validCandidateWithTrailingText} extra }`,
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.candidates).toHaveLength(1);
+
+    const truncatedFetch = vi.fn().mockResolvedValue(localLlmResponseText(
+      '[{"candidate_id":"broken","entry_logic":["nested array"}]',
+    ));
+    vi.stubGlobal('fetch', truncatedFetch);
+    const failedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(failedResponse.statusCode).toBe(502);
+    const body = failedResponse.json();
+    expect(body.error.details.provider_observation).toMatchObject({
+      provider_name: 'local_llm',
+      status: 'invalid_response',
+      invalid_reason: 'malformed_json',
+      schema_valid: false,
+    });
+    expect(JSON.stringify(body)).not.toContain('nested array');
+    expect(JSON.stringify(body)).not.toContain('broken');
+  });
+
   it('does not leave partial proposal history when candidate persistence fails', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
     const duplicateCandidate = validLocalLlmCandidate({ candidate_id: 'dup-1' });

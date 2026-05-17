@@ -196,8 +196,7 @@ function extractJsonValues(value: string): string[] {
     if (openChar !== '{' && openChar !== '[') {
       continue;
     }
-    const closeChar = openChar === '{' ? '}' : ']';
-    let depth = 0;
+    const closeStack: string[] = [];
     let inString = false;
     let escaped = false;
     for (let index = start; index < text.length; index += 1) {
@@ -217,13 +216,20 @@ function extractJsonValues(value: string): string[] {
       if (inString) {
         continue;
       }
-      if (char === openChar) {
-        depth += 1;
+      if (char === '{') {
+        closeStack.push('}');
         continue;
       }
-      if (char === closeChar) {
-        depth -= 1;
-        if (depth === 0) {
+      if (char === '[') {
+        closeStack.push(']');
+        continue;
+      }
+      if (char === '}' || char === ']') {
+        if (closeStack.at(-1) !== char) {
+          break;
+        }
+        closeStack.pop();
+        if (closeStack.length === 0) {
           candidates.push(text.slice(start, index + 1));
           break;
         }
@@ -396,21 +402,36 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
 
   private parseJson(rawText: string): unknown {
     try {
+      let parsedInvalidSchema = false;
       for (const candidate of extractJsonValues(rawText)) {
         try {
           const parsed = JSON.parse(candidate);
           if (!parsed || typeof parsed !== 'object') {
-            throw providerFailure('schema_invalid');
-          }
-          if (Array.isArray(parsed) && parsed.some((item) => !item || typeof item !== 'object' || Array.isArray(item))) {
+            parsedInvalidSchema = true;
             continue;
           }
-          return parsed;
+          if (Array.isArray(parsed)) {
+            if (parsed.every((item) => item && typeof item === 'object' && !Array.isArray(item))) {
+              return parsed;
+            }
+            parsedInvalidSchema = true;
+            continue;
+          }
+          if (
+            Array.isArray((parsed as Record<string, unknown>).candidates) ||
+            (parsed as Record<string, unknown>).schema_name === 'strategy_proposal_candidates'
+          ) {
+            return parsed;
+          }
+          parsedInvalidSchema = true;
         } catch (error) {
           if (error instanceof AppError) {
             throw error;
           }
         }
+      }
+      if (parsedInvalidSchema) {
+        throw providerFailure('schema_invalid');
       }
       throw providerFailure('malformed_json');
     } catch (error) {

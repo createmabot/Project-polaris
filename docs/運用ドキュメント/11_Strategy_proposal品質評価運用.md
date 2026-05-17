@@ -167,7 +167,7 @@ local_llm の `provider status: invalid_response / reason: schema_invalid / late
 2. StrategyLab の UI では sanitized provider status / reason / latency だけを確認する。raw response、endpoint、model 実値、stack trace は残さない。
 3. backend 側では mock / fake response tests で、code fence 付き JSON、前後説明文付き JSON、root metadata 欠落、array field の string 返却、enum 表記揺れ、重要 field 欠落を切り分ける。
 4. local_llm prompt は JSON object のみ、英語 key 固定、array field は配列、`source_type=web` 不使用、投資助言ではなく検証候補という前提を要求する。
-5. 実装側は軽量 normalization だけを行う。root metadata 補完、string array の配列化、enum の snake_case 化、`invalidation_condition` alias 補正、空 `research_basis` の `provider_knowledge` 補完に限定する。
+5. 実装側は軽量 normalization だけを行う。root metadata 補完、string array の配列化、enum の snake_case 化、`invalidation_condition` alias 補正、空 `research_basis` の `provider_knowledge` 補完に限定する。JSON 抽出では root object / root array、nested object / array、string、escape sequence を同時に扱う。
 6. title / summary / entry / exit / risk / suggested natural language spec などの重要本文が欠けている場合は、候補内容を勝手に生成せず provider invalid response として扱う。
 7. 再現調査で benchmark script を使う場合も、`--provider=local_llm` は manual optional に留め、stdout / record に raw prompt、raw response、user_hint 全文、candidate 自由文本文を残さない。
 
