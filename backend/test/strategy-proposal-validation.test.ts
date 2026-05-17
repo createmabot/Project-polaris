@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import path from 'node:path';
 import {
   runStrategyProposalBenchmarkScenario,
   sanitizeStrategyProposalBenchmarkText,
 } from '../src/strategy-proposals/benchmark';
+import {
+  buildStrategyProposalBenchmarkSummaryRecord,
+  resolveStrategyProposalBenchmarkOutputPath,
+} from '../src/strategy-proposals/benchmark-record';
 import {
   STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS,
   toStrategyProposalBenchmarkRequest,
@@ -278,6 +283,62 @@ describe('strategy proposal validation', () => {
     expect(sanitized).toContain('[redacted-url]');
     expect(sanitized).toContain('[redacted-sensitive]');
     expect(sanitized).toContain('[redacted-path]');
+  });
+
+  it('keeps benchmark stdout summaries free of candidate free text', async () => {
+    const scenario = STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.find((item) => item.id === 'generic_default');
+    expect(scenario).toBeDefined();
+
+    const result = await runStrategyProposalBenchmarkScenario(scenario!, { providerMode: 'stub' });
+    const serialized = JSON.stringify(result);
+
+    expect(serialized).not.toContain('title');
+    expect(serialized).not.toContain('"summary"');
+    expect(serialized).not.toContain('suggested_natural_language_spec');
+    expect(serialized).toContain('strategy_type');
+    expect(serialized).toContain('pine_feasibility');
+  });
+
+  it('builds sanitized benchmark summary records without raw or free-text fields', async () => {
+    const scenario = STRATEGY_PROPOSAL_BENCHMARK_SCENARIOS.find((item) => item.id === 'advice_like_wording');
+    expect(scenario).toBeDefined();
+
+    const result = await runStrategyProposalBenchmarkScenario(scenario!, { providerMode: 'stub' });
+    const record = buildStrategyProposalBenchmarkSummaryRecord({
+      generatedAt: '2026-05-17T00:00:00.000Z',
+      results: [result],
+    });
+    const serialized = JSON.stringify(record);
+
+    expect(record.schema_name).toBe('strategy_proposal_benchmark_summary_records');
+    expect(record.source.required_check).toBe(false);
+    expect(record.source.provider_real_dependency).toBe(false);
+    expect(record.records[0].quality_notes.manual_review_required).toBe(true);
+    expect(record.records[0].quality_notes.advice_like_wording_observed).toBe(true);
+    expect(record.records[0].safety.raw_prompt_included).toBe(false);
+    expect(record.records[0].safety.raw_response_included).toBe(false);
+    expect(record.records[0].safety.candidate_free_text_included).toBe(false);
+    expect(serialized).not.toContain(String(scenario!.request.user_hint));
+    expect(serialized).not.toContain('title');
+    expect(serialized).not.toContain('suggested_natural_language_spec');
+    expect(serialized).not.toContain('entry_logic');
+    expect(serialized).not.toContain('exit_logic');
+    expect(serialized).not.toContain('risk_management');
+  });
+
+  it('keeps benchmark record output paths inside the ignored record directory', () => {
+    const outputPath = resolveStrategyProposalBenchmarkOutputPath(
+      'generic_default.json',
+      process.cwd(),
+    );
+    const absoluteOutput = path.join(path.parse(process.cwd()).root, 'generic_default.json');
+
+    expect(outputPath).toContain('.benchmark-records');
+    expect(outputPath.endsWith('generic_default.json')).toBe(true);
+    expect(() => resolveStrategyProposalBenchmarkOutputPath('../generic_default.json')).toThrow();
+    expect(() => resolveStrategyProposalBenchmarkOutputPath('nested/../generic_default.json')).not.toThrow();
+    expect(() => resolveStrategyProposalBenchmarkOutputPath('generic_default.txt')).toThrow();
+    expect(() => resolveStrategyProposalBenchmarkOutputPath(absoluteOutput)).toThrow();
   });
 });
 
