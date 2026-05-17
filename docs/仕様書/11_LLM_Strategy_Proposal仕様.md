@@ -262,7 +262,7 @@ prompt / response JSON 方針:
 - response は structured JSON 相当を要求し、route 層で既存 `validateStrategyProposalData` 相当の validation を必ず通してから UI に返す。
 - local_llm には JSON object のみ、markdown code fence / 説明文なし、英語 key 固定、値の日本語は許容、Web search 未実装時は `research_basis.source_type=web` を使わない、という schema 厳守 prompt を使う。
 - local_llm response は、Ollama chat response の `message.content` または互換 response の message content から取り出す。content が空、過大、parse 不可の場合は provider invalid response とする。
-- JSON 抽出では、前後説明文や markdown code fence が混ざる軽微な provider 出力を想定し、最初の JSON object / array を抽出して parse する。ただし raw response は保存・表示・通常 log に出さない。
+- JSON 抽出では、前後説明文や markdown code fence が混ざる軽微な provider 出力を想定し、JSON object / array を抽出して parse する。抽出時は `{}` と `[]` の nesting、string、escape sequence を同時に追跡し、root array 内の candidate object と nested array fields を正しく扱う。ただし raw response は保存・表示・通常 log に出さない。
 - 機械的に安全な normalization だけを行う。欠けた root `schema_name` / `schema_version` / `input` / `disclaimer` の補完、string で返った array field の 1 要素配列化、`trend following` などの enum 表記揺れの snake_case 化、`invalidation_condition` から `invalidation_conditions` への alias 補正、空の `research_basis` への `provider_knowledge` 最小値補完に限定する。
 - candidate の重要本文（title、summary、entry / exit / risk、suggested natural language spec など）を provider なしに生成して補うことはしない。重要 field が欠落した candidate は引き続き validation failure とする。
 - malformed JSON、schema_name / schema_version 不一致、型不正、必須項目欠落、enum 不正、candidate count 不正、空または過度に短い `suggested_natural_language_spec` は provider invalid response とする。
