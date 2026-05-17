@@ -1227,6 +1227,58 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(body)).not.toContain('first response should not leak');
   });
 
+  it('treats non-string required scalar fields as missing diagnostics for retry', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const invalidCandidate = validLocalLlmCandidate({
+      title: 123,
+      summary: { text: 'summary raw value should not leak' },
+      strategy_type: ['trend_following'],
+      confidence: true,
+      pine_feasibility: null,
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(localLlmResponseContent({
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        candidates: [invalidCandidate],
+        disclaimer: '検証候補の提案です。投資助言ではありません。',
+      }))
+      .mockResolvedValueOnce(localLlmResponseContent({
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        candidates: [validLocalLlmCandidate()],
+        disclaimer: '検証候補の提案です。投資助言ではありません。',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(body.data.provider_observation).toMatchObject({
+      status: 'succeeded',
+      retry_used: true,
+      retry_reason: 'required_field_missing',
+      retry_succeeded: true,
+    });
+    const retryRequestBody = JSON.parse(String(fetchMock.mock.calls[1][1].body));
+    expect(retryRequestBody.messages[2].content).toContain('confidence');
+    expect(retryRequestBody.messages[2].content).toContain('pine_feasibility');
+    expect(retryRequestBody.messages[2].content).toContain('strategy_type');
+    expect(retryRequestBody.messages[2].content).toContain('summary');
+    expect(retryRequestBody.messages[2].content).toContain('title');
+    expect(JSON.stringify(retryRequestBody)).not.toContain('summary raw value should not leak');
+    expect(JSON.stringify(body)).not.toContain('summary raw value should not leak');
+  });
+
   it('returns sanitized missing required field diagnostics when local_llm retry still fails', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
     const firstCandidate = validLocalLlmCandidate({
