@@ -153,7 +153,8 @@ local_llm schema_invalid smoke fix の完了範囲:
 - real browser smoke で出た `provider status: invalid_response / reason: schema_invalid / latency: slow` に対し、prompt 強化、JSON mode 相当指定、code fence / 前後説明文からの JSON 抽出、root metadata 補完、string array の配列化、enum 表記揺れの正規化、空 `research_basis` の最小補完を実装する。
 - raw prompt、raw response、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文は UI / API response / docs / PR / benchmark output に出さない方針を維持する。
 - 重要本文の欠落、候補数不正、Web search 未実装時の `source_type=web`、unsupported enum、malformed JSON は引き続き provider invalid response として扱う。
-- bounded retry、advanced repair、silent fallback、request-time provider selection、openai_api、Web search / deep research は後続候補のまま残す。
+- `required_field_missing` に対して、common alias normalization、非中核 metadata fallback、missing field names の sanitized diagnostics、local_llm 最大 1 回の bounded retry を追加済み。retry prompt には raw response を入れない。
+- advanced repair、silent fallback、request-time provider selection、openai_api、Web search / deep research は後続候補のまま残す。
 - local_llm 実体依存 test は required check に入れず、mock / fake response で local_llm schema handling を確認する。
 
 provider expansion PR 1 の docs-only 固定:

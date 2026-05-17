@@ -171,6 +171,16 @@ local_llm の `provider status: invalid_response / reason: schema_invalid / late
 6. title / summary / entry / exit / risk / suggested natural language spec などの重要本文が欠けている場合は、候補内容を勝手に生成せず provider invalid response として扱う。
 7. 再現調査で benchmark script を使う場合も、`--provider=local_llm` は manual optional に留め、stdout / record に raw prompt、raw response、user_hint 全文、candidate 自由文本文を残さない。
 
+local_llm の `provider status: invalid_response / reason: required_field_missing / latency: slow` を確認した場合:
+
+1. JSON extraction と parse は進んでおり、candidate の必須 field が欠けている状態として扱う。
+2. API response または proposal history の `provider_observation` に `missing_required_fields`、`missing_required_field_count`、`affected_candidate_count` がある場合は、field 名だけを確認する。field value、candidate本文、raw response は確認対象にしない。
+3. 現行実装は common alias normalization と非中核 metadata fallback を行う。`entry` / `exit` / `riskManagement` / `strengths` / `weaknesses` / `indicators` / `natural_language_spec` などは exact key に寄せる。
+4. `backtest_cautions`、`uncertainty`、`suggested_pine_constraints` は検証前提を示す固定 fallback を補える。`title`、`summary`、`strategy_type`、`entry_logic`、`exit_logic`、`risk_management`、`suggested_natural_language_spec` は backend が内容を生成して補完しない。
+5. 欠落が残る場合は local_llm のみ最大 1 回 bounded retry を行う。retry prompt には missing field names と affected candidate count だけを渡し、raw provider response は渡さない。
+6. retry 後も失敗する場合は sanitized failure として扱い、`retry_used` / `retry_succeeded` / missing field diagnostics だけを記録する。
+7. model tuning や prompt regression automation は後続判断とし、real local_llm 実体依存の再現確認は required check に入れない。
+
 manual browser smoke:
 
 1. local LLM process が起動していることを確認する。

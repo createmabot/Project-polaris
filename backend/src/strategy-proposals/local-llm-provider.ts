@@ -5,6 +5,7 @@ import type {
   StrategyProposalRequest,
   StrategyProposalProviderObservation,
 } from './types';
+import { validateStrategyProposalCandidate } from './validation';
 
 type LocalLlmResponse = {
   message?: { content?: string };
@@ -37,6 +38,61 @@ const ARRAY_FIELDS = [
   'suggested_pine_constraints',
 ] as const;
 
+const REQUIRED_CANDIDATE_FIELDS = [
+  'title',
+  'summary',
+  'market_assumption',
+  'timeframe_assumption',
+  'strategy_type',
+  'entry_logic',
+  'exit_logic',
+  'risk_management',
+  'invalidation_conditions',
+  'expected_strengths',
+  'expected_weaknesses',
+  'required_indicators',
+  'pine_feasibility',
+  'backtest_cautions',
+  'confidence',
+  'uncertainty',
+  'suggested_natural_language_spec',
+  'suggested_pine_constraints',
+] as const;
+
+const FIELD_ALIASES: Record<string, string[]> = {
+  candidate_id: ['id', 'candidateId'],
+  market_assumption: ['market', 'marketAssumption'],
+  timeframe_assumption: ['timeframe', 'timeframeAssumption'],
+  entry_logic: ['entry', 'entries', 'entry_rules', 'entry_conditions', 'entryLogic'],
+  exit_logic: ['exit', 'exits', 'exit_rules', 'exit_conditions', 'exitLogic'],
+  risk_management: ['risk', 'risk_rules', 'risk_controls', 'riskManagement'],
+  invalidation_conditions: ['invalidation_condition', 'invalidation', 'invalidations', 'invalidationConditions'],
+  expected_strengths: ['strengths', 'expected_strength', 'pros', 'advantages', 'expectedStrengths'],
+  expected_weaknesses: ['weaknesses', 'expected_weakness', 'cons', 'risks', 'expectedWeaknesses'],
+  required_indicators: ['indicators', 'indicator_requirements', 'required_indicator', 'requiredIndicators'],
+  backtest_cautions: ['cautions', 'backtest_caution', 'backtest_notes', 'backtestCautions'],
+  uncertainty: ['uncertainties', 'uncertainty_notes', 'limitations'],
+  suggested_pine_constraints: ['pine_constraints', 'pineConstraints', 'constraints'],
+  suggested_natural_language_spec: ['natural_language_spec', 'suggested_rule', 'rule_description', 'suggestedNaturalLanguageSpec'],
+};
+
+const SAFE_ARRAY_FALLBACKS: Partial<Record<typeof ARRAY_FIELDS[number], string[]>> = {
+  backtest_cautions: ['十分な期間と複数条件でbacktestして確認する。'],
+  uncertainty: ['市場環境や銘柄特性により有効性が変わる可能性がある。'],
+  suggested_pine_constraints: ['Pine生成前にユーザーが条件を確認する。'],
+};
+
+type MissingFieldDiagnostics = {
+  missing_required_fields: string[];
+  missing_required_field_count: number;
+  affected_candidate_count: number;
+};
+
+type NormalizedPayloadResult = {
+  data: Record<string, unknown>;
+  fallbackFieldCount: number;
+};
+
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   if (!value) {
     return fallback;
@@ -47,12 +103,12 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
 
 type LocalLlmFailureReason = StrategyProposalProviderObservation['invalid_reason'];
 
-function providerFailure(reason: LocalLlmFailureReason = 'unknown'): AppError {
+function providerFailure(reason: LocalLlmFailureReason = 'unknown', details: Record<string, unknown> = {}): AppError {
   return new AppError(
     502,
     'PROVIDER_INVALID_RESPONSE',
     'Strategy proposal provider failed to return usable candidates. Please try again later.',
-    { provider_failure_reason: reason },
+    { provider_failure_reason: reason, ...details },
   );
 }
 
@@ -132,11 +188,48 @@ function normalizeResearchBasis(value: unknown): unknown {
   });
 }
 
-function normalizeCandidate(value: unknown, input: StrategyProposalRequest, index: number): unknown {
+function hasUsableValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.trim().length > 0;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasUsableValue(item));
+  }
+  return value !== undefined && value !== null;
+}
+
+function applyFieldAliases(candidate: Record<string, unknown>): number {
+  let aliasCount = 0;
+  for (const [canonical, aliases] of Object.entries(FIELD_ALIASES)) {
+    if (hasUsableValue(candidate[canonical])) {
+      continue;
+    }
+    const alias = aliases.find((field) => hasUsableValue(candidate[field]));
+    if (alias) {
+      candidate[canonical] = candidate[alias];
+      aliasCount += 1;
+    }
+  }
+  return aliasCount;
+}
+
+function applySafeFallbacks(candidate: Record<string, unknown>): number {
+  let fallbackCount = 0;
+  for (const [field, fallback] of Object.entries(SAFE_ARRAY_FALLBACKS)) {
+    if (!hasUsableValue(candidate[field])) {
+      candidate[field] = fallback;
+      fallbackCount += 1;
+    }
+  }
+  return fallbackCount;
+}
+
+function normalizeCandidate(value: unknown, input: StrategyProposalRequest, index: number): { candidate: unknown; fallbackFieldCount: number } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return value;
+    return { candidate: value, fallbackFieldCount: 0 };
   }
   const candidate = { ...(value as Record<string, unknown>) };
+  applyFieldAliases(candidate);
   candidate.candidate_id = typeof candidate.candidate_id === 'string' && candidate.candidate_id.trim()
     ? candidate.candidate_id
     : `candidate-${index + 1}`;
@@ -149,6 +242,7 @@ function normalizeCandidate(value: unknown, input: StrategyProposalRequest, inde
   if (!candidate.invalidation_conditions && candidate.invalidation_condition) {
     candidate.invalidation_conditions = candidate.invalidation_condition;
   }
+  const fallbackFieldCount = applySafeFallbacks(candidate);
   candidate.strategy_type = normalizeStrategyType(candidate.strategy_type);
   candidate.pine_feasibility = normalizeThreeLevel(candidate.pine_feasibility);
   candidate.confidence = normalizeThreeLevel(candidate.confidence);
@@ -156,17 +250,26 @@ function normalizeCandidate(value: unknown, input: StrategyProposalRequest, inde
     candidate[field] = normalizeStringArray(candidate[field]);
   }
   candidate.research_basis = normalizeResearchBasis(candidate.research_basis);
-  return candidate;
+  return { candidate, fallbackFieldCount };
 }
 
-function normalizePayload(value: unknown, input: StrategyProposalRequest): Record<string, unknown> {
+function normalizePayload(value: unknown, input: StrategyProposalRequest): NormalizedPayloadResult {
   if (Array.isArray(value)) {
+    let fallbackFieldCount = 0;
+    const candidates = value.map((candidate, index) => {
+      const normalized = normalizeCandidate(candidate, input, index);
+      fallbackFieldCount += normalized.fallbackFieldCount;
+      return normalized.candidate;
+    });
     return {
-      schema_name: 'strategy_proposal_candidates',
-      schema_version: '1.0',
-      input,
-      candidates: value.map((candidate, index) => normalizeCandidate(candidate, input, index)),
-      disclaimer: DEFAULT_DISCLAIMER,
+      data: {
+        schema_name: 'strategy_proposal_candidates',
+        schema_version: '1.0',
+        input,
+        candidates,
+        disclaimer: DEFAULT_DISCLAIMER,
+      },
+      fallbackFieldCount,
     };
   }
   if (!value || typeof value !== 'object') {
@@ -180,9 +283,15 @@ function normalizePayload(value: unknown, input: StrategyProposalRequest): Recor
     ? data.disclaimer
     : DEFAULT_DISCLAIMER;
   if (Array.isArray(data.candidates)) {
-    data.candidates = data.candidates.map((candidate, index) => normalizeCandidate(candidate, input, index));
+    let fallbackFieldCount = 0;
+    data.candidates = data.candidates.map((candidate, index) => {
+      const normalized = normalizeCandidate(candidate, input, index);
+      fallbackFieldCount += normalized.fallbackFieldCount;
+      return normalized.candidate;
+    });
+    return { data, fallbackFieldCount };
   }
-  return data;
+  return { data, fallbackFieldCount: 0 };
 }
 
 function extractJsonValues(value: string): string[] {
@@ -240,7 +349,7 @@ function extractJsonValues(value: string): string[] {
 }
 
 function normalizeCandidateInput(value: unknown, input: StrategyProposalRequest): StrategyProposalCandidate[] {
-  const normalized = normalizePayload(value, input);
+  const { data: normalized } = normalizePayload(value, input);
   if (!normalized || typeof normalized !== 'object') {
     throw providerFailure('schema_invalid');
   }
@@ -252,6 +361,103 @@ function normalizeCandidateInput(value: unknown, input: StrategyProposalRequest)
     throw providerFailure('schema_invalid');
   }
   return data.candidates as StrategyProposalCandidate[];
+}
+
+function collectMissingRequiredFields(candidates: unknown[]): MissingFieldDiagnostics | null {
+  const missing = new Set<string>();
+  let affectedCandidateCount = 0;
+
+  candidates.forEach((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      for (const field of REQUIRED_CANDIDATE_FIELDS) {
+        missing.add(field);
+      }
+      affectedCandidateCount += 1;
+      return;
+    }
+    const record = candidate as Record<string, unknown>;
+    const candidateMissing = REQUIRED_CANDIDATE_FIELDS.filter((field) => {
+      const value = record[field];
+      if (ARRAY_FIELDS.includes(field as typeof ARRAY_FIELDS[number])) {
+        return !Array.isArray(value) || value.filter((item) => typeof item === 'string' && item.trim()).length === 0;
+      }
+      if (field === 'suggested_natural_language_spec') {
+        return typeof value !== 'string' || value.trim().length < 20;
+      }
+      return !hasUsableValue(value);
+    });
+    if (candidateMissing.length > 0) {
+      affectedCandidateCount += 1;
+      for (const field of candidateMissing) {
+        missing.add(field);
+      }
+    }
+  });
+
+  if (missing.size === 0) {
+    return null;
+  }
+  return {
+    missing_required_fields: Array.from(missing).sort(),
+    missing_required_field_count: missing.size,
+    affected_candidate_count: affectedCandidateCount,
+  };
+}
+
+function classifyValidationFailure(error: AppError): LocalLlmFailureReason {
+  const message = error.message.toLowerCase();
+  if (message.includes('candidate count')) {
+    return 'candidate_count_invalid';
+  }
+  if (message.includes('web research basis')) {
+    return 'web_research_basis_disabled';
+  }
+  if (message.includes('unsupported')) {
+    return 'enum_invalid';
+  }
+  if (
+    message.includes('schema metadata') ||
+    message.includes('provider metadata') ||
+    message.includes('candidates must be an array')
+  ) {
+    return 'schema_invalid';
+  }
+  if (
+    message.includes('must be') ||
+    message.includes('must contain') ||
+    message.includes('must not be empty') ||
+    message.includes('is too short') ||
+    message.includes('is too long')
+  ) {
+    return 'required_field_missing';
+  }
+  return 'unknown';
+}
+
+function sanitizeFailureDetails(details: Record<string, unknown>): Partial<StrategyProposalProviderObservation> {
+  const fields = Array.isArray(details.missing_required_fields)
+    ? details.missing_required_fields
+      .filter((field) => typeof field === 'string' && /^[a-z0-9_]+$/i.test(field))
+      .slice(0, 24)
+    : [];
+  return {
+    ...(fields.length > 0 ? { missing_required_fields: fields } : {}),
+    ...(typeof details.missing_required_field_count === 'number'
+      ? { missing_required_field_count: details.missing_required_field_count }
+      : {}),
+    ...(typeof details.affected_candidate_count === 'number'
+      ? { affected_candidate_count: details.affected_candidate_count }
+      : {}),
+    ...(typeof details.retry_used === 'boolean' ? { retry_used: details.retry_used } : {}),
+    ...(typeof details.retry_reason === 'string' || details.retry_reason === null
+      ? { retry_reason: details.retry_reason as string | null }
+      : {}),
+    ...(typeof details.retry_succeeded === 'boolean' ? { retry_succeeded: details.retry_succeeded } : {}),
+    ...(typeof details.normalization_fallback_used === 'boolean'
+      ? { normalization_fallback_used: details.normalization_fallback_used }
+      : {}),
+    ...(typeof details.fallback_field_count === 'number' ? { fallback_field_count: details.fallback_field_count } : {}),
+  };
 }
 
 export class LocalLlmStrategyProposalProvider implements StrategyProposalProvider {
@@ -281,9 +487,68 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
   }
 
   async generate(input: StrategyProposalRequest) {
-    const rawText = await this.callLocalLlm(input);
+    try {
+      return await this.generateOnce(input);
+    } catch (error) {
+      if (!(error instanceof AppError) || error.details?.provider_failure_reason !== 'required_field_missing') {
+        throw error;
+      }
+      const retryDetails = sanitizeFailureDetails(error.details ?? {});
+      try {
+        const retryResult = await this.generateOnce(input, {
+          missing_required_fields: retryDetails.missing_required_fields ?? [],
+          affected_candidate_count: retryDetails.affected_candidate_count ?? 0,
+        });
+        return {
+          ...retryResult,
+          provider_observation: {
+            ...(retryResult.provider_observation ?? {}),
+            retry_used: true,
+            retry_reason: 'required_field_missing',
+            retry_succeeded: true,
+          },
+        };
+      } catch (retryError) {
+        if (retryError instanceof AppError && retryError.code === 'PROVIDER_INVALID_RESPONSE') {
+          throw providerFailure((retryError.details?.provider_failure_reason as LocalLlmFailureReason) ?? 'unknown', {
+            ...sanitizeFailureDetails(retryError.details ?? {}),
+            retry_used: true,
+            retry_reason: 'required_field_missing',
+            retry_succeeded: false,
+          });
+        }
+        throw retryError;
+      }
+    }
+  }
+
+  private async generateOnce(input: StrategyProposalRequest, retryContext?: {
+    missing_required_fields: string[];
+    affected_candidate_count: number;
+  }) {
+    const rawText = await this.callLocalLlm(input, retryContext);
     const parsed = this.parseJson(rawText);
-    const normalized = normalizePayload(parsed, input);
+    const { data: normalized, fallbackFieldCount } = normalizePayload(parsed, input);
+    const candidates = normalizeCandidateInput(normalized, input);
+    if (candidates.length > input.proposal_count || candidates.length > 10) {
+      throw providerFailure('candidate_count_invalid');
+    }
+    const missingDiagnostics = collectMissingRequiredFields(candidates);
+    if (missingDiagnostics) {
+      throw providerFailure('required_field_missing', missingDiagnostics);
+    }
+    try {
+      candidates.forEach((candidate) => validateStrategyProposalCandidate(candidate));
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw providerFailure(classifyValidationFailure(error), {
+          ...(classifyValidationFailure(error) === 'required_field_missing'
+            ? collectMissingRequiredFields(candidates) ?? {}
+            : {}),
+        });
+      }
+      throw error;
+    }
     return {
       provider: {
         name: 'local_llm',
@@ -291,7 +556,13 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
         web_search: false,
         persisted: false,
       },
-      candidates: normalizeCandidateInput(normalized, input),
+      provider_observation: fallbackFieldCount > 0
+        ? {
+          normalization_fallback_used: true,
+          fallback_field_count: fallbackFieldCount,
+        }
+        : undefined,
+      candidates,
       disclaimer:
         typeof normalized.disclaimer === 'string'
           ? String(normalized.disclaimer)
@@ -299,7 +570,10 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
     };
   }
 
-  private async callLocalLlm(input: StrategyProposalRequest): Promise<string> {
+  private async callLocalLlm(input: StrategyProposalRequest, retryContext?: {
+    missing_required_fields: string[];
+    affected_candidate_count: number;
+  }): Promise<string> {
     let response: Response;
     try {
       response = await fetch(`${this.endpoint}/api/chat`, {
@@ -315,7 +589,10 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
                 'Return one JSON object only. Do not include markdown fences, comments, headings, or explanations.',
                 'Use English schema keys exactly as requested. Japanese text is allowed only inside string values.',
                 'The root object must include schema_name="strategy_proposal_candidates", schema_version="1.0", input, candidates, and disclaimer.',
-                'Each candidate must include every required field. Array fields must be arrays of strings, not a single string.',
+                'Every candidate must include exactly these required keys: candidate_id, title, summary, market_assumption, timeframe_assumption, strategy_type, entry_logic, exit_logic, risk_management, invalidation_conditions, expected_strengths, expected_weaknesses, required_indicators, pine_feasibility, backtest_cautions, research_basis, confidence, uncertainty, suggested_natural_language_spec, suggested_pine_constraints.',
+                'Do not omit any key even if uncertain. Do not use singular aliases or camelCase aliases.',
+                'All array fields must be non-empty arrays of strings, not a single string. If uncertain, put a cautious manual-review item in the array.',
+                'expected_strengths, expected_weaknesses, required_indicators, backtest_cautions, uncertainty, and suggested_pine_constraints must each contain at least one item.',
                 'strategy_type must be one of trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other.',
                 'pine_feasibility and confidence must be one of high, medium, low.',
                 'research_basis.source_type must be one of internal, user_input, provider_knowledge. Do not use web because Web search is disabled.',
@@ -361,6 +638,22 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
                 },
               }),
             },
+            ...(retryContext
+              ? [{
+                role: 'user',
+                content: JSON.stringify({
+                  retry_instruction:
+                    'The previous provider output omitted required fields. Regenerate the full JSON from scratch. Do not patch or reference the previous output.',
+                  missing_required_fields: retryContext.missing_required_fields,
+                  affected_candidate_count: retryContext.affected_candidate_count,
+                  required_behavior: [
+                    'Include every required candidate key.',
+                    'Use non-empty arrays of strings for every array field.',
+                    'Do not include markdown fences or explanations.',
+                  ],
+                }),
+              }]
+              : []),
           ],
           stream: false,
           think: false,

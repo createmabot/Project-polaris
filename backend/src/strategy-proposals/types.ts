@@ -63,6 +63,14 @@ export type StrategyProposalProviderObservation = {
     | 'timeout'
     | 'unknown';
   validation_error_count: number;
+  missing_required_fields?: string[];
+  missing_required_field_count?: number;
+  affected_candidate_count?: number;
+  retry_used?: boolean;
+  retry_reason?: string | null;
+  retry_succeeded?: boolean;
+  normalization_fallback_used?: boolean;
+  fallback_field_count?: number;
   fallback_used: boolean;
   fallback_reason: string | null;
   schema_valid: boolean;
@@ -111,6 +119,7 @@ export type StrategyProposalData = {
 export interface StrategyProposalProvider {
   generate(input: StrategyProposalRequest): Promise<{
     provider: StrategyProposalProviderMetadata;
+    provider_observation?: Partial<StrategyProposalProviderObservation>;
     candidates: StrategyProposalCandidate[];
     disclaimer: string;
   }>;
