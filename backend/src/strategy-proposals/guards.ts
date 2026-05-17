@@ -1,4 +1,5 @@
 import type { StrategyProposalProviderMode } from './provider';
+import crypto from 'crypto';
 
 export function readBoundedPositiveInteger(
   value: string | undefined,
@@ -50,6 +51,7 @@ export function getStrategyProposalLocalLlmGuardConfig() {
 export function getStrategyProposalRateLimitConfig() {
   return {
     enabled: readBooleanFlag(process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED, true),
+    trustForwardedIp: readBooleanFlag(process.env.STRATEGY_PROPOSAL_TRUST_FORWARDED_IP, false),
     maxRequests: readBoundedPositiveInteger(
       process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS,
       60,
@@ -63,6 +65,65 @@ export function getStrategyProposalRateLimitConfig() {
       3_600_000,
     ),
   };
+}
+
+export type StrategyProposalRateLimitKeySource = 'user' | 'forwarded_ip' | 'request_ip' | 'unknown';
+
+export type StrategyProposalRateLimitKeyInput = {
+  userId?: string | null;
+  requestIp?: string | null;
+  forwardedFor?: string | string[];
+  trustedForwardedIp?: boolean;
+};
+
+export type StrategyProposalRateLimitKeyResult = {
+  key: string;
+  source: StrategyProposalRateLimitKeySource;
+};
+
+function readNonEmptyIdentifier(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 256 || /[\r\n]/.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+}
+
+function readForwardedClientIp(value: string | string[] | undefined): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const firstForwardedIp = raw?.split(',')[0];
+  return readNonEmptyIdentifier(firstForwardedIp);
+}
+
+function buildRateLimitKey(source: StrategyProposalRateLimitKeySource, value: string): string {
+  const digest = crypto.createHash('sha256').update(value).digest('hex').slice(0, 32);
+  return `${source}:${digest}`;
+}
+
+export function resolveStrategyProposalRateLimitKey(
+  input: StrategyProposalRateLimitKeyInput,
+): StrategyProposalRateLimitKeyResult {
+  const userId = readNonEmptyIdentifier(input.userId);
+  if (userId) {
+    return { key: buildRateLimitKey('user', userId), source: 'user' };
+  }
+
+  if (input.trustedForwardedIp) {
+    const forwardedIp = readForwardedClientIp(input.forwardedFor);
+    if (forwardedIp) {
+      return { key: buildRateLimitKey('forwarded_ip', forwardedIp), source: 'forwarded_ip' };
+    }
+  }
+
+  const requestIp = readNonEmptyIdentifier(input.requestIp);
+  if (requestIp) {
+    return { key: buildRateLimitKey('request_ip', requestIp), source: 'request_ip' };
+  }
+
+  return { key: buildRateLimitKey('unknown', 'unknown'), source: 'unknown' };
 }
 
 type RateLimitBucket = {

@@ -2,7 +2,11 @@ import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { createStrategyProposalProvider, getStrategyProposalProviderSelection } from '../strategy-proposals/provider';
-import { checkStrategyProposalRateLimit } from '../strategy-proposals/guards';
+import {
+  checkStrategyProposalRateLimit,
+  getStrategyProposalRateLimitConfig,
+  resolveStrategyProposalRateLimitKey,
+} from '../strategy-proposals/guards';
 import {
   buildStrategyProposalObservation,
   classifyStrategyProposalInvalidReason,
@@ -392,8 +396,14 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       input = parseStrategyProposalRequest(request.body ?? {});
+      const rateLimitConfig = getStrategyProposalRateLimitConfig();
+      const rateLimitKey = resolveStrategyProposalRateLimitKey({
+        requestIp: request.ip,
+        forwardedFor: request.headers['x-forwarded-for'],
+        trustedForwardedIp: rateLimitConfig.trustForwardedIp,
+      });
       const rateLimit = checkStrategyProposalRateLimit({
-        key: request.ip ?? 'unknown',
+        key: rateLimitKey.key,
         providerMode: selection.mode,
       });
       if (!rateLimit.allowed) {
@@ -407,6 +417,7 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
             limit: rateLimit.limit,
             window_ms: rateLimit.windowMs,
             provider_mode: selection.mode,
+            rate_limit_key_source: rateLimitKey.source,
           },
         );
       }
