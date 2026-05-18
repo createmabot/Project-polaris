@@ -1,5 +1,6 @@
 import type { StrategyProposalProviderMode } from './provider';
 import crypto from 'crypto';
+import { isIP } from 'net';
 
 export function readBoundedPositiveInteger(
   value: string | undefined,
@@ -92,10 +93,24 @@ function readNonEmptyIdentifier(value: string | null | undefined): string | null
   return trimmed;
 }
 
+function normalizeForwardedIpCandidate(value: string | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  const withoutBrackets = trimmed.startsWith('[') && trimmed.endsWith(']')
+    ? trimmed.slice(1, -1)
+    : trimmed;
+  if (isIP(withoutBrackets) === 0) {
+    return null;
+  }
+  return withoutBrackets.toLowerCase();
+}
+
 function readForwardedClientIp(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
   const firstForwardedIp = raw?.split(',')[0];
-  return readNonEmptyIdentifier(firstForwardedIp);
+  return normalizeForwardedIpCandidate(firstForwardedIp);
 }
 
 function buildRateLimitKey(source: StrategyProposalRateLimitKeySource, value: string): string {
