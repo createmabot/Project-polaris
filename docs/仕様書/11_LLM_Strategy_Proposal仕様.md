@@ -957,7 +957,87 @@ future provider 前提:
 - Web search / deep research 実装。
 - proposal から Pine generation / save / backtest / AI summary への自動連鎖。
 
-## 16. 後続候補
+## 16. Codex CLI manual JSON import
+
+Codex CLI manual JSON import は、ユーザーが ChatGPT Pro / Codex CLI などの外部手動ツールで生成した `strategy_proposal_candidates` JSON を StrategyLab に取り込むための workflow である。これは `openai_api` provider ではなく、backend が Codex CLI を起動する機能でもない。北極星側は手動生成済み JSON の validation、normalization、sanitized proposal history 保存、candidate 表示、selection 記録だけを担当する。
+
+採用する初回 workflow:
+
+1. StrategyLab で Codex CLI 用 prompt を作成する。
+2. ユーザーが prompt を手動で Codex CLI に渡す。
+3. Codex CLI が `strategy_proposal_candidates` JSON object を出力する。
+4. ユーザーが JSON を StrategyLab に貼り付ける。file import を使う場合も frontend で text を読み取り、backend には text として送る。
+5. backend が JSON を parse し、既存 `strategy_proposal_candidates` schema で validation する。
+6. success 時は provider name `codex_cli_manual` / mode `manual_import` として sanitized run / candidates を保存する。
+7. StrategyLab は通常 proposal candidates と同じ card 表示にし、candidate selection は title / natural language spec 反映だけを行う。
+
+初回 API:
+
+- `POST /api/strategy-lab/proposals/codex-cli/request`
+  - StrategyLab の current input から Codex CLI 用 prompt を返す。
+  - backend は Codex CLI を起動しない。
+  - response prompt はユーザーが手動で使う一時 text であり、proposal history には保存しない。
+  - prompt には secret、provider endpoint、model 実値、local path を含めない。
+- `POST /api/strategy-lab/proposals/codex-cli/import`
+  - request body の `result_json_text` を parse / validation する。
+  - `source` は `paste` / `file` の最小 enum とし、file の場合も multipart upload は使わない。
+  - success response は既存 proposal response に寄せ、`proposal_run_id` / `history.proposal_run_id` を optional に返す。
+  - validation failure は sanitized error のみを返し、raw JSON text を echo しない。
+
+import schema:
+
+- root は `schema_name="strategy_proposal_candidates"`、`schema_version="1.0"`、`input`、`candidates`、`disclaimer` を持つ。
+- `candidates` は配列で、最大 10 件まで受け付ける。StrategyLab UI の推奨は 5 件のまま維持する。
+- candidate field は本仕様の proposal schema を使う。
+- `source_type=web` は Web search / deep research 未実装のため、現行 validation 方針に従い invalid とする。
+- candidate free text は normalized candidate JSON として保存されるが、raw Codex output 全体、raw prompt、raw response として保存しない。
+
+provider / observation:
+
+- provider name は `codex_cli_manual` とし、provider mode は `manual_import` とする。
+- `provider_observation` は manual import 用の sanitized metadata として扱う。
+- `status=succeeded`、`candidate_count`、`schema_valid=true`、`invalid_reason=none`、`manual_import=true` 相当の情報を持てる。
+- latency は provider 実行時間ではないため、既存 bucket に合わせる場合は `acceptable` などの安全な値を使い、実測 Codex CLI 時間は保存しない。
+- `codex_cli_manual` は provider quality trend では provider category の一つとして集計できるが、外部 API provider の品質や cost を意味しない。
+
+保存するもの:
+
+- validated / normalized request input。
+- normalized candidates。
+- provider name / mode。
+- sanitized provider observation。
+- selection API による selected candidate。
+
+保存しないもの:
+
+- raw Codex output text。
+- Codex CLI に渡した raw prompt。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文を含む raw dump。
+- validation failure 時の raw JSON text。
+
+画面責務:
+
+- StrategyLab に「Codex CLIで生成した候補JSONを取り込む」最小 section を置く。
+- prompt 作成、prompt 表示 / copy、JSON paste、任意の file text 読み取り、import 実行を扱う。
+- import 成功後は既存 proposal candidate card と同じ選択導線を使う。
+- import 成功後は recent proposal history と provider quality trend を再取得してよい。
+- error 表示は malformed JSON、schema invalid、candidate count invalid、required field missing、unsupported enum などの sanitized reason に留める。
+
+明示的に対象外:
+
+- backend から Codex CLI を自動起動すること。
+- local LLM に Codex CLI 実行判断を任せること。
+- `openai_api` provider 実装。
+- Web search / deep research 実装。
+- Codex CLI raw output の保存。
+- proposal から Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
+
+## 17. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -971,8 +1051,9 @@ future provider 前提:
 - provider instrumentation 拡張（sanitized provider event / log persistence）。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
+- Codex CLI local worker / automation は、backend 自動起動ではなく別設計で要否を判断する。
 
-## 17. 参照
+## 18. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`

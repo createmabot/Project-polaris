@@ -386,6 +386,41 @@ manual / optional 評価時の扱い:
 - rate guard を一時的に無効化して比較する場合は local のみで行い、docs / PR に実測 endpoint や model 実値を残さない。
 - provider quality trend は実利用履歴の read-only 集計、benchmark recording は optional benchmark の一時 record として分ける。
 - guard hardening は投資助言品質の評価ではなく、provider 利用の費用・遅延・失敗境界の確認である。
+
+## 7-1. Codex CLI manual JSON import 確認
+
+Codex CLI manual JSON import は、real provider benchmark ではなく、ユーザーが手動で生成した JSON を北極星へ取り込む workflow として評価する。品質評価では、Codex CLI の実行そのものではなく、import JSON が schema に合うこと、複数候補を取り込めること、raw output を保存しないこと、selection が既存 StrategyLab flow を壊さないことを見る。
+
+manual smoke:
+
+1. StrategyLab を開く。
+2. Codex CLI 用 prompt を作成する。
+3. prompt を手動で Codex CLI に渡す。
+4. 返ってきた `strategy_proposal_candidates` JSON を StrategyLab に貼り付ける。
+5. import を実行する。
+6. candidate cards が表示されることを確認する。
+7. recent proposal history に `codex_cli_manual` の run が表示されることを確認する。
+8. provider quality trend が壊れないことを確認する。
+9. 候補を選び、title / natural language spec に反映されることを確認する。
+10. Pine generation / save / backtest / AI summary が自動起動しないことを確認する。
+
+validation failure の見方:
+
+- malformed JSON は JSON 形式不正として扱う。
+- schema metadata 不一致、`candidates` 不在、candidate count 10 件超過は import failure として扱う。
+- required field missing、unsupported enum、`source_type=web` は既存 provider response validation と同じ境界で扱う。
+- UI / API error は sanitized reason だけを見る。raw JSON text、candidate free text、raw prompt は error に含めない。
+
+記録しないもの:
+
+- raw Codex output。
+- Codex CLI に渡した raw prompt。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- actual Codex CLI output をそのまま貼った docs / fixture。
 ## 8. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。

@@ -33,6 +33,8 @@ LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補
 
 Strategy proposal provider expansion では、まず provider boundary を docs 上で固定する。`local_llm` / `openai_api` を使う場合も、proposal は StrategyLab の一時候補生成に限定し、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を自動起動しない。
 
+Codex CLI manual JSON import は AI provider ではなく、ユーザーが手動で外部生成した `strategy_proposal_candidates` JSON の取り込み workflow として扱う。backend は Codex CLI を起動せず、`openai_api` provider とも扱わない。取り込んだ JSON は既存 schema validation を通し、success 時だけ normalized candidates と sanitized provider observation を proposal history に保存する。raw Codex output、Codex CLI に渡した raw prompt、provider endpoint、model 実値、secret、local path、stack trace は保存・表示しない。
+
 ## 4. job 状態の見方
 
 `ai_jobs.status` は次を正とする。
@@ -281,6 +283,29 @@ failure の扱い:
 - `openai_api` provider。
 - Web search / deep research job。
 - auto Pine generation / auto save。
+
+## 7-6. Codex CLI manual JSON import 運用境界
+
+Codex CLI manual JSON import は、StrategyLab から Codex CLI 用 prompt を作成し、ユーザーが手動で Codex CLI に渡した結果 JSON を StrategyLab に貼り付ける運用である。
+
+運用手順:
+
+1. StrategyLab で market / timeframe / risk preference / strategy type bias / proposal count / user hint を確認する。
+2. Codex CLI 用 prompt を作成する。
+3. prompt を手動で Codex CLI に渡す。
+4. Codex CLI が返した `strategy_proposal_candidates` JSON object を StrategyLab に貼り付ける。file を使う場合も frontend が text として読み取る。
+5. import を実行し、candidate cards と recent history を確認する。
+6. 使用する候補を選択し、title / natural language spec へ反映する。
+7. Pine generation / save / backtest は必要な場合だけ既存 button から手動で行う。
+
+運用上の注意:
+
+- Codex CLI は backend から自動実行しない。
+- Codex CLI の raw output を docs、PR、log、screenshot、DB に残さない。
+- import error の切り分けでは sanitized reason だけを見る。
+- actual Codex CLI output を test fixture や benchmark record として commit しない。
+- real Codex CLI 依存 test は required check に入れない。
+- `codex_cli_manual` は provider quality trend に provider name として現れるが、外部 API provider の latency / cost 品質を示すものではない。
 
 ## 8. 関連 docs
 

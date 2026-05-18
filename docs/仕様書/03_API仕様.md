@@ -116,6 +116,23 @@ Provider quality trend aggregation の最小 API:
 - response には raw `inputJson`、user_hint 全文、candidate title / summary / suggested_natural_language_spec、raw provider response、provider endpoint、model 実値、secret、local path、stack trace を含めない。
 - trend aggregation は provider 運用品質の確認補助であり、投資判断、candidate ranking、Strategy / StrategyVersion 自動保存、Pine generation 自動起動には使わない。
 
+Codex CLI manual JSON import の最小 API:
+
+- `POST /api/strategy-lab/proposals/codex-cli/request`
+  - StrategyLab の current proposal input から、ユーザーが手動で Codex CLI に渡す prompt を返す。
+  - backend は Codex CLI を起動しない。
+  - request は既存 proposal request と同じ `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` を受ける。
+  - response は `provider_name=codex_cli_manual`、`schema_name=strategy_proposal_candidates`、`schema_version=1.0`、`proposal_count`、`prompt` を返す。
+  - prompt は一時的な手動実行用 text であり、proposal history には保存しない。
+- `POST /api/strategy-lab/proposals/codex-cli/import`
+  - ユーザーが貼り付けた、または frontend file picker で text 化した Codex CLI output JSON を import する。
+  - request は `source=paste|file` と `result_json_text` を受ける。multipart upload は使わない。
+  - backend は `result_json_text` を parse し、既存 `strategy_proposal_candidates` schema で validation する。
+  - success 時は `provider.name=codex_cli_manual` / `provider.mode=manual_import` として `StrategyProposalRun` / `StrategyProposalCandidate` に sanitized run / candidates を保存する。
+  - success response は既存 proposal response shape に寄せ、optional `proposal_run_id` / `history.proposal_run_id` を返す。
+  - error response は malformed JSON、schema invalid、required field missing、unsupported enum、candidate count invalid などの sanitized reason に限定し、raw JSON text、raw prompt、provider endpoint、model 実値、secret、local path、stack trace を返さない。
+  - import は StrategyLab input への候補反映と history 保存だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
+
 ## 7-1. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`
