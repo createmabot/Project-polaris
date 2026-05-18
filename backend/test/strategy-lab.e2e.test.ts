@@ -1051,7 +1051,24 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.model).toBe('proposal-model-test');
     expect(requestBody.stream).toBe(false);
     expect(requestBody.think).toBe(false);
-    expect(requestBody.format).toBe('json');
+    expect(requestBody.format).toMatchObject({
+      type: 'object',
+      required: expect.arrayContaining(['schema_name', 'schema_version', 'input', 'candidates', 'disclaimer']),
+      properties: {
+        candidates: expect.objectContaining({
+          maxItems: 10,
+        }),
+      },
+    });
+    expect(requestBody.format.properties.candidates.items.required).toEqual(expect.arrayContaining([
+      'candidate_id',
+      'title',
+      'summary',
+      'entry_logic',
+      'exit_logic',
+      'risk_management',
+      'suggested_natural_language_spec',
+    ]));
     expect(requestBody.options.num_predict).toBe(2000);
   });
 
@@ -1444,6 +1461,64 @@ describe('strategy lab vertical slice', () => {
       fallback_field_count: 3,
     });
     expect(JSON.stringify(body)).not.toContain('raw');
+  });
+
+  it('unwraps common local_llm candidate wrappers and scalar aliases without generating candidate substance', async () => {
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    const wrappedCandidate = {
+      proposal: {
+        id: 'wrapped-1',
+        name: 'ラップされた候補',
+        description: '候補本文がproposal wrapper内にある場合も検証候補として扱う。',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        type: 'trend following',
+        entry_conditions: ['終値が25日移動平均を上回る'],
+        exit_conditions: ['終値が5日移動平均を下回る'],
+        risk_controls: ['1回の損失を限定する'],
+        invalidation_condition: ['出来高が伴わない上抜け'],
+        pros: ['条件が単純で検証しやすい'],
+        cons: ['レンジでダマシが出る'],
+        indicators: ['SMA'],
+        feasibility: 'moderate',
+        backtest_caution: ['十分な期間で検証する'],
+        confidence_level: 'normal',
+        limitations: ['市場環境により有効性が変わる'],
+        natural_language_spec:
+          'JP_STOCK / D を前提に、25日移動平均の上抜けと5日移動平均の下抜けで検証します。',
+        pine_constraints: ['Pine生成前に条件を確認する'],
+      },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(localLlmResponseContent({
+      candidates: [wrappedCandidate],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.candidates[0]).toMatchObject({
+      candidate_id: 'wrapped-1',
+      title: 'ラップされた候補',
+      strategy_type: 'trend_following',
+      pine_feasibility: 'medium',
+      confidence: 'medium',
+      entry_logic: ['終値が25日移動平均を上回る'],
+      exit_logic: ['終値が5日移動平均を下回る'],
+      risk_management: ['1回の損失を限定する'],
+      expected_strengths: ['条件が単純で検証しやすい'],
+      expected_weaknesses: ['レンジでダマシが出る'],
+      required_indicators: ['SMA'],
+    });
+    expect(JSON.stringify(body)).not.toContain('proposal wrapper raw value');
   });
 
   it('retries once when local_llm omits required candidate fields and succeeds with sanitized metadata', async () => {

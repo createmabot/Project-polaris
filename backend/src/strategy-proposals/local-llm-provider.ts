@@ -58,10 +58,77 @@ const REQUIRED_CANDIDATE_FIELDS = [
   'suggested_pine_constraints',
 ] as const;
 
+const LOCAL_LLM_RESPONSE_FORMAT = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['schema_name', 'schema_version', 'input', 'candidates', 'disclaimer'],
+  properties: {
+    schema_name: { const: 'strategy_proposal_candidates' },
+    schema_version: { const: '1.0' },
+    input: { type: 'object' },
+    disclaimer: { type: 'string' },
+    candidates: {
+      type: 'array',
+      minItems: 0,
+      maxItems: 10,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'candidate_id',
+          ...REQUIRED_CANDIDATE_FIELDS,
+          'research_basis',
+        ],
+        properties: {
+          candidate_id: { type: 'string' },
+          title: { type: 'string' },
+          summary: { type: 'string' },
+          market_assumption: { type: 'string' },
+          timeframe_assumption: { type: 'string' },
+          strategy_type: {
+            type: 'string',
+            enum: ['trend_following', 'mean_reversion', 'breakout', 'momentum', 'volatility', 'risk_management', 'other'],
+          },
+          entry_logic: { type: 'array', minItems: 1, items: { type: 'string' } },
+          exit_logic: { type: 'array', minItems: 1, items: { type: 'string' } },
+          risk_management: { type: 'array', minItems: 1, items: { type: 'string' } },
+          invalidation_conditions: { type: 'array', minItems: 1, items: { type: 'string' } },
+          expected_strengths: { type: 'array', minItems: 1, items: { type: 'string' } },
+          expected_weaknesses: { type: 'array', minItems: 1, items: { type: 'string' } },
+          required_indicators: { type: 'array', minItems: 1, items: { type: 'string' } },
+          pine_feasibility: { type: 'string', enum: ['high', 'medium', 'low'] },
+          backtest_cautions: { type: 'array', minItems: 1, items: { type: 'string' } },
+          research_basis: {
+            type: 'array',
+            minItems: 1,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['source_type', 'label', 'url'],
+              properties: {
+                source_type: { type: 'string', enum: ['internal', 'user_input', 'provider_knowledge'] },
+                label: { type: 'string' },
+                url: { type: ['string', 'null'] },
+              },
+            },
+          },
+          confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+          uncertainty: { type: 'array', minItems: 1, items: { type: 'string' } },
+          suggested_natural_language_spec: { type: 'string', minLength: 20 },
+          suggested_pine_constraints: { type: 'array', minItems: 1, items: { type: 'string' } },
+        },
+      },
+    },
+  },
+};
+
 const FIELD_ALIASES: Record<string, string[]> = {
   candidate_id: ['id', 'candidateId'],
+  title: ['name', 'strategy_name', 'strategyName'],
+  summary: ['description', 'overview'],
   market_assumption: ['market', 'marketAssumption'],
   timeframe_assumption: ['timeframe', 'timeframeAssumption'],
+  strategy_type: ['type', 'strategyType', 'category'],
   entry_logic: ['entry', 'entries', 'entry_rules', 'entry_conditions', 'entryLogic'],
   exit_logic: ['exit', 'exits', 'exit_rules', 'exit_conditions', 'exitLogic'],
   risk_management: ['risk', 'risk_rules', 'risk_controls', 'riskManagement'],
@@ -69,11 +136,15 @@ const FIELD_ALIASES: Record<string, string[]> = {
   expected_strengths: ['strengths', 'expected_strength', 'pros', 'advantages', 'expectedStrengths'],
   expected_weaknesses: ['weaknesses', 'expected_weakness', 'cons', 'risks', 'expectedWeaknesses'],
   required_indicators: ['indicators', 'indicator_requirements', 'required_indicator', 'requiredIndicators'],
+  pine_feasibility: ['feasibility', 'pineFeasibility', 'tradingview_feasibility', 'tradingViewFeasibility'],
   backtest_cautions: ['cautions', 'backtest_caution', 'backtest_notes', 'backtestCautions'],
+  confidence: ['confidence_level', 'confidenceLevel'],
   uncertainty: ['uncertainties', 'uncertainty_notes', 'limitations'],
   suggested_pine_constraints: ['pine_constraints', 'pineConstraints', 'constraints'],
   suggested_natural_language_spec: ['natural_language_spec', 'suggested_rule', 'rule_description', 'suggestedNaturalLanguageSpec'],
 };
+
+const CANDIDATE_WRAPPER_FIELDS = ['candidate', 'proposal', 'strategy', 'strategy_proposal', 'strategyProposal'] as const;
 
 const SAFE_ARRAY_FALLBACKS: Partial<Record<typeof ARRAY_FIELDS[number], string[]>> = {
   backtest_cautions: ['十分な期間と複数条件でbacktestして確認する。'],
@@ -193,6 +264,39 @@ function hasRequiredScalar(value: unknown): boolean {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function candidateShapeScore(candidate: Record<string, unknown>): number {
+  let score = 0;
+  for (const field of REQUIRED_CANDIDATE_FIELDS) {
+    if (hasUsableValue(candidate[field])) {
+      score += 1;
+      continue;
+    }
+    if (FIELD_ALIASES[field]?.some((alias) => hasUsableValue(candidate[alias]))) {
+      score += 1;
+    }
+  }
+  return score;
+}
+
+function unwrapCandidateRecord(candidate: Record<string, unknown>): Record<string, unknown> {
+  const baseScore = candidateShapeScore(candidate);
+  let bestCandidate = candidate;
+  let bestScore = baseScore;
+  for (const wrapperField of CANDIDATE_WRAPPER_FIELDS) {
+    const wrapped = candidate[wrapperField];
+    if (!wrapped || typeof wrapped !== 'object' || Array.isArray(wrapped)) {
+      continue;
+    }
+    const wrappedRecord = wrapped as Record<string, unknown>;
+    const wrappedScore = candidateShapeScore(wrappedRecord);
+    if (wrappedScore > bestScore) {
+      bestCandidate = { ...candidate, ...wrappedRecord };
+      bestScore = wrappedScore;
+    }
+  }
+  return bestCandidate;
+}
+
 function applyFieldAliases(candidate: Record<string, unknown>): number {
   let aliasCount = 0;
   for (const [canonical, aliases] of Object.entries(FIELD_ALIASES)) {
@@ -223,7 +327,7 @@ function normalizeCandidate(value: unknown, input: StrategyProposalRequest, inde
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { candidate: value, fallbackFieldCount: 0 };
   }
-  const candidate = { ...(value as Record<string, unknown>) };
+  const candidate = { ...unwrapCandidateRecord(value as Record<string, unknown>) };
   applyFieldAliases(candidate);
   candidate.candidate_id = typeof candidate.candidate_id === 'string' && candidate.candidate_id.trim()
     ? candidate.candidate_id
@@ -649,7 +753,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
           ],
           stream: false,
           think: false,
-          format: 'json',
+          format: LOCAL_LLM_RESPONSE_FORMAT,
           options: {
             temperature: 0.2,
             num_predict: Math.max(256, Math.ceil(this.maxOutputChars / 4)),
