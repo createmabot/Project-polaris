@@ -1051,6 +1051,8 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.model).toBe('proposal-model-test');
     expect(requestBody.stream).toBe(false);
     expect(requestBody.think).toBe(false);
+    expect(requestBody.messages[0].content).toContain('Write all user-facing string values in Japanese');
+    expect(requestBody.messages[0].content).toContain('Only schema keys, enum values, and source_type values must remain in English');
     expect(requestBody.format).toMatchObject({
       type: 'object',
       required: expect.arrayContaining(['schema_name', 'schema_version', 'input', 'candidates', 'disclaimer']),

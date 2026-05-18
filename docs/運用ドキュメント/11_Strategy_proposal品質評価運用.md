@@ -166,7 +166,7 @@ local_llm の `provider status: invalid_response / reason: schema_invalid / late
 1. real local_llm 実体依存の問題として扱い、required test に入れない。
 2. StrategyLab の UI では sanitized provider status / reason / latency だけを確認する。raw response、endpoint、model 実値、stack trace は残さない。
 3. backend 側では mock / fake response tests で、code fence 付き JSON、前後説明文付き JSON、root metadata 欠落、array field の string 返却、enum 表記揺れ、重要 field 欠落を切り分ける。
-4. local_llm prompt は JSON object のみ、英語 key 固定、array field は配列、`source_type=web` 不使用、投資助言ではなく検証候補という前提を要求する。
+4. local_llm prompt は JSON object のみ、英語 key 固定、ユーザー向け string value は日本語、array field は配列、`source_type=web` 不使用、投資助言ではなく検証候補という前提を要求する。
 5. 実装側は軽量 normalization だけを行う。root metadata 補完、string array の配列化、enum の snake_case 化、`invalidation_condition` alias 補正、空 `research_basis` の `provider_knowledge` 補完に限定する。JSON 抽出では root object / root array、nested object / array、string、escape sequence を同時に扱う。
 6. title / summary / entry / exit / risk / suggested natural language spec などの重要本文が欠けている場合は、候補内容を勝手に生成せず provider invalid response として扱う。
 7. 再現調査で benchmark script を使う場合も、`--provider=local_llm` は manual optional に留め、stdout / record に raw prompt、raw response、user_hint 全文、candidate 自由文本文を残さない。
@@ -375,6 +375,7 @@ Strategy proposal provider guard は、品質評価や benchmark を実行する
 - timeout profile を変えた後は backend dev process を再起動し、UI では sanitized `provider status` / `reason` / `latency` のみを見る。endpoint / model 実値や raw response は記録しない。
 - `required_field_missing` が続く場合は、保存済み proposal history の sanitized `missing_required_fields` / count / affected candidate count を見る。raw response や candidate 自由文は確認・保存しない。
 - qwen 系などが candidate を `proposal` / `strategy` wrapper 内に返す場合や、`name` / `description` / `type` などの alias を使う場合は、backend が safe normalization で exact schema key に寄せる。core strategy logic の本文を backend が新規生成して補完することはしない。
+- candidate card に表示される title / summary / logic / caution / suggested spec は日本語であることを確認する。schema key、enum、`source_type` は英語固定値のままでよい。
 - `required_field_missing` retry は最大 1 回であり、raw response を retry prompt に入れないこと。
 - 短時間に proposal を連続実行した場合、rate guard が 429 / `RATE_LIMITED` を返し、proposal history に blocked run を保存しないこと。
 - UI は rate limited を短い再試行案内として表示し、provider endpoint / model 実値 / raw diagnostics は表示しないこと。
