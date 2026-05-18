@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useLocation } from 'wouter';
 import { ApiError, postApi, swrFetcher } from '../api/client';
@@ -16,6 +16,7 @@ import {
   BacktestCreateData,
   BacktestImportData,
   StrategyCreateData,
+  StrategyProposalCodexCliRequestData,
   StrategyProposalCandidate,
   StrategyProposalData,
   StrategyProposalHistoryDetailData,
@@ -121,6 +122,25 @@ export function buildProposalErrorMessage(error: unknown): string {
     return appendProviderObservation('サーバー側で候補取得に失敗しました。時間をおいて再試行してください。');
   }
   return appendProviderObservation(error.message || 'ストラテジー候補の取得に失敗しました。');
+}
+
+function buildCodexImportErrorMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) {
+    return 'Codex CLI JSONの取り込みに失敗しました。JSON形式を確認してください。';
+  }
+  if (error.status === 413) {
+    return 'Codex CLI JSONのサイズが上限を超えています。候補数や不要な出力を減らして再試行してください。';
+  }
+  if (error.status === 400) {
+    const reason = readProviderObservationText(error.details?.invalid_reason) ?? null;
+    return reason
+      ? `Codex CLI JSONがschemaに合いません。reason: ${reason}`
+      : 'Codex CLI JSONがschemaに合いません。必須項目・候補数・enum値を確認してください。';
+  }
+  if (error.status >= 500) {
+    return 'サーバー側でCodex CLI JSONの取り込みに失敗しました。時間をおいて再試行してください。';
+  }
+  return error.message || 'Codex CLI JSONの取り込みに失敗しました。';
 }
 
 function buildCsvParseGuidance(parseError: string | null): string[] {
@@ -283,6 +303,14 @@ export default function StrategyLab() {
   const [selectedProposalRunId, setSelectedProposalRunId] = useState<string | null>(null);
   const [proposalSelectionError, setProposalSelectionError] = useState<string | null>(null);
   const [selectingProposalCandidateId, setSelectingProposalCandidateId] = useState<string | null>(null);
+  const [codexPromptData, setCodexPromptData] = useState<StrategyProposalCodexCliRequestData | null>(null);
+  const [codexPromptError, setCodexPromptError] = useState<string | null>(null);
+  const [codexPrompting, setCodexPrompting] = useState(false);
+  const [codexImportText, setCodexImportText] = useState('');
+  const [codexImportFileName, setCodexImportFileName] = useState<string | null>(null);
+  const [codexImportError, setCodexImportError] = useState<string | null>(null);
+  const [codexImporting, setCodexImporting] = useState(false);
+  const [codexCopyFeedback, setCodexCopyFeedback] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -358,6 +386,79 @@ export default function StrategyLab() {
       }
     } finally {
       setProposing(false);
+    }
+  };
+
+  const onBuildCodexPrompt = async () => {
+    setCodexPrompting(true);
+    setCodexPromptError(null);
+    try {
+      const promptData = await postApi<StrategyProposalCodexCliRequestData>('/api/strategy-lab/proposals/codex-cli/request', {
+        market,
+        timeframe,
+        risk_preference: proposalRiskPreference,
+        strategy_type_bias: proposalStrategyType,
+        proposal_count: 5,
+        user_hint: naturalLanguageRule.trim() || null,
+      });
+      setCodexPromptData(promptData);
+      setCodexCopyFeedback(null);
+    } catch (promptError: unknown) {
+      console.error('Codex CLI prompt request failed', promptError);
+      setCodexPromptError(buildProposalErrorMessage(promptError));
+    } finally {
+      setCodexPrompting(false);
+    }
+  };
+
+  const onCopyCodexPrompt = async () => {
+    if (!codexPromptData?.prompt) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(codexPromptData.prompt);
+      setCodexCopyFeedback('promptをコピーしました。');
+    } catch {
+      setCodexCopyFeedback('promptをコピーできませんでした。textareaから手動でコピーしてください。');
+    }
+  };
+
+  const onImportCodexJson = async () => {
+    setCodexImporting(true);
+    setCodexImportError(null);
+    setProposalError(null);
+    try {
+      const imported = await postApi<StrategyProposalData>('/api/strategy-lab/proposals/codex-cli/import', {
+        source: codexImportFileName ? 'file' : 'paste',
+        result_json_text: codexImportText,
+        file_name: codexImportFileName,
+      });
+      setProposalData(imported);
+      setSelectedProposalRunId(getProposalRunId(imported));
+      setCodexImportText('');
+      setCodexImportFileName(null);
+      void mutateProposalHistory();
+      void mutateProposalQualityTrend();
+    } catch (importError: unknown) {
+      console.error('Codex CLI import failed', importError);
+      setCodexImportError(buildCodexImportErrorMessage(importError));
+    } finally {
+      setCodexImporting(false);
+    }
+  };
+
+  const onCodexImportFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) {
+      return;
+    }
+    try {
+      const text = await file.text();
+      setCodexImportText(text);
+      setCodexImportFileName(file.name);
+      setCodexImportError(null);
+    } catch {
+      setCodexImportError('Codex CLI JSONファイルを読み込めませんでした。ファイルを確認してください。');
     }
   };
 
@@ -567,6 +668,92 @@ export default function StrategyLab() {
           <Button onClick={onRequestProposals} disabled={proposing} variant='primary' className='w-fit'>
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
           </Button>
+
+          <div
+            style={{
+              border: '1px solid #d8dee4',
+              borderRadius: '8px',
+              padding: '0.85rem',
+              display: 'grid',
+              gap: '0.75rem',
+              background: '#f8fafc',
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>Codex CLIで生成した候補JSONを取り込む</h3>
+              <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.9rem' }}>
+                Codex CLIはこの画面から自動実行されません。promptを手動で渡し、返却されたJSONを貼り付けてください。複数候補は candidates 配列で最大10件まで取り込めます。
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <Button onClick={onBuildCodexPrompt} disabled={codexPrompting}>
+                {codexPrompting ? 'prompt作成中...' : 'Codex CLI用プロンプトを作成'}
+              </Button>
+              {codexPromptData?.prompt && (
+                <Button onClick={() => void onCopyCodexPrompt()}>
+                  promptをコピー
+                </Button>
+              )}
+            </div>
+
+            {codexPromptError && (
+              <ErrorState title='Codex CLI prompt作成に失敗しました'>
+                {codexPromptError}
+              </ErrorState>
+            )}
+
+            {codexPromptData?.prompt && (
+              <TextArea
+                label='Codex CLI用プロンプト'
+                value={codexPromptData.prompt}
+                readOnly
+                rows={8}
+                helpText='このpromptをCodex CLIへ手動で渡してください。'
+              />
+            )}
+
+            {codexCopyFeedback && (
+              <InlineNotice tone='info'>
+                {codexCopyFeedback}
+              </InlineNotice>
+            )}
+
+            <TextArea
+              label='Codex CLI出力JSON'
+              value={codexImportText}
+              onChange={(event) => {
+                setCodexImportText(event.target.value);
+                setCodexImportFileName(null);
+              }}
+              rows={8}
+              placeholder='{"schema_name":"strategy_proposal_candidates", ... }'
+              helpText='raw outputは保存されません。validation後のnormalized candidateのみproposal historyへ保存します。'
+            />
+
+            <label className='grid gap-1.5 text-sm font-medium text-slate-800'>
+              <span>JSONファイルから読み込む（任意）</span>
+              <input type='file' accept='.json,application/json' onChange={(event) => void onCodexImportFileChange(event)} />
+              {codexImportFileName && (
+                <span className='text-sm text-slate-600'>読み込み済み: {codexImportFileName}</span>
+              )}
+            </label>
+
+            <Button
+              onClick={() => void onImportCodexJson()}
+              disabled={codexImporting || codexImportText.trim().length === 0}
+              variant='secondary'
+              className='w-fit'
+            >
+              {codexImporting ? 'JSONを取り込み中...' : 'JSONを取り込む'}
+            </Button>
+
+            {codexImportError && (
+              <ErrorState title='Codex CLI JSONの取り込みに失敗しました'>
+                {codexImportError}
+              </ErrorState>
+            )}
+          </div>
 
           {proposalError && (
             <ErrorState title='候補取得に失敗しました'>

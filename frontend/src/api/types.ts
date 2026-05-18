@@ -566,6 +566,7 @@ export type StrategyProposalData = {
     fallback_reason: string | null;
     schema_valid: boolean;
     model_category: 'configured' | 'default' | 'unknown' | string;
+    manual_import?: boolean;
   };
   candidates: Array<{
     candidate_id: string;
@@ -601,6 +602,14 @@ export type StrategyProposalData = {
 };
 
 export type StrategyProposalCandidate = StrategyProposalData['candidates'][number];
+
+export type StrategyProposalCodexCliRequestData = {
+  provider_name: 'codex_cli_manual' | string;
+  schema_name: 'strategy_proposal_candidates' | string;
+  schema_version: string;
+  proposal_count: number;
+  prompt: string;
+};
 
 export type StrategyProposalHistoryRun = {
   id: string;

@@ -75,6 +75,7 @@ export type StrategyProposalProviderObservation = {
   fallback_reason: string | null;
   schema_valid: boolean;
   model_category: 'configured' | 'default' | 'unknown';
+  manual_import?: boolean;
 };
 
 export type StrategyProposalResearchBasis = {
