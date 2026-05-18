@@ -1133,36 +1133,44 @@ describe('strategy lab vertical slice', () => {
   it('resolves strategy proposal rate limit keys without exposing identifier values', () => {
     const userKey = resolveStrategyProposalRateLimitKey({
       userId: 'user-alpha',
-      requestIp: 'request-alpha',
-      forwardedFor: 'forwarded-alpha, proxy-alpha',
+      requestIp: '198.51.100.10',
+      forwardedFor: '203.0.113.10, 198.51.100.1',
       trustedForwardedIp: true,
     });
-    const trustedForwardedKey = resolveStrategyProposalRateLimitKey({
-      requestIp: 'request-alpha',
-      forwardedFor: 'forwarded-alpha, proxy-alpha',
+    const trustedForwardedIpv4Key = resolveStrategyProposalRateLimitKey({
+      requestIp: '198.51.100.10',
+      forwardedFor: '203.0.113.10, 198.51.100.1',
+      trustedForwardedIp: true,
+    });
+    const trustedForwardedIpv6Key = resolveStrategyProposalRateLimitKey({
+      requestIp: '198.51.100.10',
+      forwardedFor: '[2001:db8::1], 198.51.100.1',
       trustedForwardedIp: true,
     });
     const untrustedForwardedKey = resolveStrategyProposalRateLimitKey({
-      requestIp: 'request-alpha',
-      forwardedFor: 'forwarded-alpha, proxy-alpha',
+      requestIp: '198.51.100.10',
+      forwardedFor: '203.0.113.10, 198.51.100.1',
       trustedForwardedIp: false,
     });
-    const emptyForwardedKey = resolveStrategyProposalRateLimitKey({
-      requestIp: 'request-alpha',
-      forwardedFor: ' , forwarded-alpha',
+    const malformedForwardedKey = resolveStrategyProposalRateLimitKey({
+      requestIp: '198.51.100.10',
+      forwardedFor: 'spoof-1, 203.0.113.10',
       trustedForwardedIp: true,
     });
     const unknownKey = resolveStrategyProposalRateLimitKey({});
 
     expect(userKey.source).toBe('user');
-    expect(trustedForwardedKey.source).toBe('forwarded_ip');
+    expect(trustedForwardedIpv4Key.source).toBe('forwarded_ip');
+    expect(trustedForwardedIpv6Key.source).toBe('forwarded_ip');
     expect(untrustedForwardedKey.source).toBe('request_ip');
-    expect(emptyForwardedKey.source).toBe('request_ip');
+    expect(malformedForwardedKey.source).toBe('request_ip');
     expect(unknownKey.source).toBe('unknown');
     expect(userKey.key).not.toContain('user-alpha');
-    expect(trustedForwardedKey.key).not.toContain('forwarded-alpha');
-    expect(untrustedForwardedKey.key).not.toContain('request-alpha');
-    expect(userKey.key).not.toBe(trustedForwardedKey.key);
+    expect(trustedForwardedIpv4Key.key).not.toContain('203.0.113.10');
+    expect(trustedForwardedIpv6Key.key).not.toContain('2001:db8::1');
+    expect(untrustedForwardedKey.key).not.toContain('198.51.100.10');
+    expect(malformedForwardedKey.key).toBe(untrustedForwardedKey.key);
+    expect(userKey.key).not.toBe(trustedForwardedIpv4Key.key);
   });
 
   it('uses trusted forwarded client header for rate limit buckets only when opt-in is enabled', async () => {
@@ -1175,19 +1183,19 @@ describe('strategy lab vertical slice', () => {
     const first = await app.inject({
       method: 'POST',
       url: '/api/strategy-lab/proposals',
-      headers: { 'x-forwarded-for': 'forwarded-alpha, proxy-alpha' },
+      headers: { 'x-forwarded-for': '203.0.113.10, 198.51.100.1' },
       payload: { proposal_count: 1 },
     });
     const second = await app.inject({
       method: 'POST',
       url: '/api/strategy-lab/proposals',
-      headers: { 'x-forwarded-for': 'forwarded-beta, proxy-alpha' },
+      headers: { 'x-forwarded-for': '203.0.113.11, 198.51.100.1' },
       payload: { proposal_count: 1 },
     });
     const third = await app.inject({
       method: 'POST',
       url: '/api/strategy-lab/proposals',
-      headers: { 'x-forwarded-for': 'forwarded-alpha, proxy-alpha' },
+      headers: { 'x-forwarded-for': '203.0.113.10, 198.51.100.1' },
       payload: { proposal_count: 1 },
     });
 
@@ -1199,11 +1207,45 @@ describe('strategy lab vertical slice', () => {
       rate_limited: true,
       rate_limit_key_source: 'forwarded_ip',
     });
-    expect(JSON.stringify(body)).not.toContain('forwarded-alpha');
-    expect(JSON.stringify(body)).not.toContain('proxy-alpha');
+    expect(JSON.stringify(body)).not.toContain('203.0.113.10');
+    expect(JSON.stringify(body)).not.toContain('198.51.100.1');
     expect(JSON.stringify(body)).not.toContain('request_ip:');
     expect(JSON.stringify(body)).not.toContain('forwarded_ip:');
     expect(runtime.proposalRuns.size).toBe(2);
+  });
+
+  it('falls back to request IP when trusted forwarded first hop is malformed', async () => {
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED = 'true';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS = '1';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS = '60000';
+    process.env.STRATEGY_PROPOSAL_TRUST_FORWARDED_IP = 'true';
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'spoof-1, 203.0.113.10' },
+      payload: { proposal_count: 1 },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      headers: { 'x-forwarded-for': 'spoof-2, 203.0.113.10' },
+      payload: { proposal_count: 1 },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    const body = second.json();
+    expect(body.error.details).toMatchObject({
+      rate_limited: true,
+      rate_limit_key_source: 'request_ip',
+    });
+    expect(JSON.stringify(body)).not.toContain('spoof-1');
+    expect(JSON.stringify(body)).not.toContain('spoof-2');
+    expect(JSON.stringify(body)).not.toContain('203.0.113.10');
+    expect(JSON.stringify(body)).not.toContain('request_ip:');
+    expect(runtime.proposalRuns.size).toBe(1);
   });
 
   it('can disable the strategy proposal in-memory rate guard for local checks', async () => {

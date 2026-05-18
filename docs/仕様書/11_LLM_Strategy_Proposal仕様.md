@@ -921,7 +921,7 @@ Strategy proposal provider cost / rate guard hardening は、`openai_api` や We
 - `local_llm` の retry は `required_field_missing` に対する最大 1 回の bounded retry のみ。retry prompt に raw provider response は入れない。
 - `POST /api/strategy-lab/proposals` は in-memory per-process rate guard を持つ。短時間に上限を超えた場合は `RATE_LIMITED` として 429 を返し、proposal run は保存しない。
 - rate guard key は user id が利用可能な場合は user、trusted forwarded IP を明示 opt-in した場合のみ forwarded client IP、通常は request IP、取得不能時は unknown bucket とする。
-- forwarded header は trust boundary が明確な reverse proxy / tunnel 配下でのみ opt-in し、default では信頼しない。
+- forwarded header は trust boundary が明確な reverse proxy / tunnel 配下でのみ opt-in し、default では信頼しない。opt-in 時も先頭値が valid IPv4 / IPv6 として検証できる場合だけ forwarded client IP として扱い、不正値や任意文字列は request IP に fallback する。
 - rate guard の response は retry_after / limit / window / provider mode / key source 程度の sanitized metadata に限定する。actual IP、forwarded header value、内部 key は返さない。
 - silent stub fallback は行わない。fallback を導入する場合は後続で explicit opt-in と metadata 表示を設計する。
 - raw prompt、raw provider response、provider endpoint、model 実値、secret、token、local path、stack trace は response / UI / docs / PR に出さない。
@@ -930,6 +930,7 @@ rate guard の位置づけ:
 
 - 初回は単一 process 内の軽量 guard であり、multi-process / distributed production の厳密な abuse prevention ではない。
 - reverse proxy 配下では、trusted forwarded IP opt-in を有効化しない限り、proxy / load balancer 側の request IP bucket になる可能性がある。
+- trusted forwarded IP opt-in は、proxy が forwarded header を上書きまたは制御している構成でのみ使う。client が backend に直接到達できる構成では有効化しない。
 - local dev の確認を妨げる場合は env で無効化できるが、通常は有効にして連打と accidental load を抑える。
 - UI は 429 を「短時間に候補取得が続いたため、少し時間をおいて再試行」として表示し、内部値や provider 設定は表示しない。
 
