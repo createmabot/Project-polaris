@@ -75,10 +75,15 @@ function primeScenarioState(params: {
   selectedProposalRunId?: string | null;
   proposalSelectionError?: string | null;
   selectingProposalCandidateId?: string | null;
+  codexPromptData?: Record<string, unknown> | null;
+  codexPromptError?: string | null;
+  codexImportText?: string;
+  codexImportFileName?: string | null;
+  codexImportError?: string | null;
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
-  const setters = params.setters ?? Array.from({ length: 22 }).map(() => vi.fn());
+  const setters = params.setters ?? Array.from({ length: 30 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
@@ -92,6 +97,14 @@ function primeScenarioState(params: {
     params.selectedProposalRunId ?? null,
     params.proposalSelectionError ?? null,
     params.selectingProposalCandidateId ?? null,
+    params.codexPromptData ?? null,
+    params.codexPromptError ?? null,
+    false,
+    params.codexImportText ?? '',
+    params.codexImportFileName ?? null,
+    params.codexImportError ?? null,
+    false,
+    null,
     false,
     null,
     params.result ?? null,
@@ -217,6 +230,10 @@ describe('StrategyLab', () => {
     expect(html).toContain('リスク設定');
     expect(html).toContain('戦略タイプ');
     expect(html).toContain('ストラテジーを提案');
+    expect(html).toContain('Codex CLIで生成した候補JSONを取り込む');
+    expect(html).toContain('Codex CLI用プロンプトを作成');
+    expect(html).toContain('Codex CLI出力JSON');
+    expect(html).toContain('JSONを取り込む');
     expect(html).toContain('最近の提案');
     expect(html).toContain('戦略タイトル');
     expect(html).toContain('自然言語ルール');
@@ -225,6 +242,95 @@ describe('StrategyLab', () => {
     expect(html).toContain(DEFAULT_RULE);
     expect(html).toContain('保存してPine生成');
     expect(html).toContain('日本語入力中心 / 日足(D)中心 / long_only');
+  });
+
+  it('requests a Codex CLI manual import prompt without executing providers', async () => {
+    const setters = primeScenarioState({});
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+      prompt: 'Return only one JSON object',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    const promptButton = renderedButtons.find((button) => button.children === 'Codex CLI用プロンプトを作成');
+    await promptButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', {
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      risk_preference: 'balanced',
+      strategy_type_bias: 'any',
+      proposal_count: 5,
+      user_hint: DEFAULT_RULE,
+    });
+    expect(setters[12]).toHaveBeenCalledWith(expect.objectContaining({
+      provider_name: 'codex_cli_manual',
+      prompt: 'Return only one JSON object',
+    }));
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+  });
+
+  it('imports Codex CLI JSON and displays it as proposal candidates', async () => {
+    const historyMutate = vi.fn();
+    const trendMutate = vi.fn();
+    const setters = primeScenarioState({
+      codexImportText: '{"schema_name":"strategy_proposal_candidates"}',
+    });
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === '/api/strategy-lab/proposals?limit=5') {
+        return { isLoading: false, error: null, data: null, mutate: historyMutate };
+      }
+      if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
+        return { isLoading: false, error: null, data: null, mutate: trendMutate };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      proposal_run_id: 'proposal-run-codex',
+      provider: {
+        name: 'codex_cli_manual',
+        mode: 'manual_import',
+        web_search: false,
+        persisted: true,
+      },
+      candidates: [
+        {
+          candidate_id: 'codex-1',
+          title: 'Codex候補',
+          suggested_natural_language_spec: 'Codex候補の自然言語ルール',
+        },
+      ],
+      disclaimer: '検証候補です。',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    const importButton = renderedButtons.find((button) => button.children === 'JSONを取り込む');
+    await importButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/import', {
+      source: 'paste',
+      result_json_text: '{"schema_name":"strategy_proposal_candidates"}',
+      file_name: null,
+    });
+    expect(setters[6]).toHaveBeenCalledWith(expect.objectContaining({
+      proposal_run_id: 'proposal-run-codex',
+    }));
+    expect(setters[9]).toHaveBeenCalledWith('proposal-run-codex');
+    expect(historyMutate).toHaveBeenCalled();
+    expect(trendMutate).toHaveBeenCalled();
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+    expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
   });
 
   it('renders generated result texts when generation has succeeded', () => {

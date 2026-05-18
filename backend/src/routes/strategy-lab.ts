@@ -38,6 +38,44 @@ type ProposalSelectBody = {
   proposal_candidate_id?: unknown;
 };
 
+type CodexCliImportBody = {
+  source?: unknown;
+  result_json_text?: unknown;
+  file_name?: unknown;
+};
+
+const CODEX_CLI_MANUAL_PROVIDER = {
+  name: 'codex_cli_manual',
+  mode: 'manual_import',
+  web_search: false,
+  persisted: true,
+};
+
+const CODEX_CLI_IMPORT_MAX_CHARS = 120_000;
+const CODEX_CLI_IMPORT_DISCLAIMER = 'This is a verification candidate, not investment advice.';
+const CODEX_CLI_REQUIRED_SCALAR_FIELDS = [
+  'candidate_id',
+  'title',
+  'summary',
+  'market_assumption',
+  'timeframe_assumption',
+  'strategy_type',
+  'pine_feasibility',
+  'confidence',
+] as const;
+const CODEX_CLI_REQUIRED_ARRAY_FIELDS = [
+  'entry_logic',
+  'exit_logic',
+  'risk_management',
+  'invalidation_conditions',
+  'expected_strengths',
+  'expected_weaknesses',
+  'required_indicators',
+  'backtest_cautions',
+  'uncertainty',
+  'suggested_pine_constraints',
+] as const;
+
 function parseProposalHistoryLimit(value: unknown): number {
   const parsed = typeof value === 'string' ? Number(value) : 20;
   if (!Number.isInteger(parsed) || parsed < 1) {
@@ -121,6 +159,206 @@ function calculateAverage(values: number[]): number {
     return 0;
   }
   return Number((values.reduce((total, value) => total + value, 0) / values.length).toFixed(2));
+}
+
+function readCodexCliImportSource(value: unknown): 'paste' | 'file' {
+  if (value === undefined || value === null || value === '') {
+    return 'paste';
+  }
+  if (value === 'paste' || value === 'file') {
+    return value;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'Codex CLI import source must be paste or file.', {
+    invalid_reason: 'schema_invalid',
+  });
+}
+
+function readCodexCliImportText(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Codex CLI import JSON text is required.', {
+      invalid_reason: 'required_field_missing',
+    });
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Codex CLI import JSON text is required.', {
+      invalid_reason: 'required_field_missing',
+    });
+  }
+  if (trimmed.length > CODEX_CLI_IMPORT_MAX_CHARS) {
+    throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Codex CLI import JSON is too large.', {
+      invalid_reason: 'candidate_count_invalid',
+      max_chars: CODEX_CLI_IMPORT_MAX_CHARS,
+    });
+  }
+  return trimmed;
+}
+
+function parseCodexCliImportJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new AppError(400, 'VALIDATION_ERROR', 'Codex CLI import JSON is malformed.', {
+      invalid_reason: 'malformed_json',
+    });
+  }
+}
+
+function hasRequiredString(value: unknown, minLength = 1): boolean {
+  return typeof value === 'string' && value.trim().length >= minLength;
+}
+
+function hasRequiredStringArray(value: unknown): boolean {
+  return Array.isArray(value) && value.some((item) => typeof item === 'string' && item.trim().length > 0);
+}
+
+function collectCodexCliMissingRequiredFields(candidates: unknown): string[] {
+  if (!Array.isArray(candidates)) {
+    return [];
+  }
+  const missingFields = new Set<string>();
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      continue;
+    }
+    const record = candidate as Record<string, unknown>;
+    for (const field of CODEX_CLI_REQUIRED_SCALAR_FIELDS) {
+      if (!hasRequiredString(record[field])) {
+        missingFields.add(field);
+      }
+    }
+    for (const field of CODEX_CLI_REQUIRED_ARRAY_FIELDS) {
+      if (!hasRequiredStringArray(record[field])) {
+        missingFields.add(field);
+      }
+    }
+    if (!hasRequiredString(record.suggested_natural_language_spec, 20)) {
+      missingFields.add('suggested_natural_language_spec');
+    }
+    if (!Array.isArray(record.research_basis) || record.research_basis.length === 0) {
+      missingFields.add('research_basis');
+    }
+  }
+  return Array.from(missingFields).sort().slice(0, 24);
+}
+
+function toCodexCliImportValidationError(error: AppError, candidates: unknown): AppError {
+  const invalidReason = classifyStrategyProposalInvalidReason(error);
+  const missingFields = Array.isArray(error.details?.missing_required_fields)
+    ? error.details.missing_required_fields
+    : collectCodexCliMissingRequiredFields(candidates);
+  return new AppError(400, 'VALIDATION_ERROR', 'Codex CLI import JSON did not match the strategy proposal schema.', {
+    invalid_reason: invalidReason,
+    missing_required_fields: missingFields.length > 0 ? missingFields : undefined,
+    missing_required_field_count:
+      typeof error.details?.missing_required_field_count === 'number'
+        ? error.details.missing_required_field_count
+        : missingFields.length || undefined,
+    affected_candidate_count:
+      typeof error.details?.affected_candidate_count === 'number'
+        ? error.details.affected_candidate_count
+        : Array.isArray(candidates) && missingFields.length > 0 ? candidates.length : undefined,
+  });
+}
+
+function buildCodexCliPrompt(input: StrategyProposalRequest): string {
+  const exampleInput = JSON.stringify(input, null, 2);
+  return [
+    'Return only one JSON object. Do not include markdown fences or explanatory text outside JSON.',
+    'The JSON must use schema_name "strategy_proposal_candidates" and schema_version "1.0".',
+    'Use the fixed English schema keys exactly. Japanese prose is allowed only in values.',
+    `Create ${input.proposal_count} strategy proposal candidates. The maximum candidate count is 10.`,
+    'This is not investment advice. Each candidate must be a verification idea that requires backtesting and user review.',
+    'Do not claim guaranteed profit. Do not automatically create Pine code, save a strategy, run backtests, or trigger AI summaries.',
+    'Every candidate must include these required keys:',
+    [
+      'candidate_id',
+      'title',
+      'summary',
+      'market_assumption',
+      'timeframe_assumption',
+      'strategy_type',
+      'entry_logic',
+      'exit_logic',
+      'risk_management',
+      'invalidation_conditions',
+      'expected_strengths',
+      'expected_weaknesses',
+      'required_indicators',
+      'pine_feasibility',
+      'backtest_cautions',
+      'research_basis',
+      'confidence',
+      'uncertainty',
+      'suggested_natural_language_spec',
+      'suggested_pine_constraints',
+    ].join(', '),
+    'Array fields must be non-empty arrays of strings.',
+    'strategy_type must be one of: trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other.',
+    'pine_feasibility and confidence must be one of: high, medium, low.',
+    'research_basis[].source_type must be one of: internal, user_input, provider_knowledge. Do not use web.',
+    'Use this input object exactly as the JSON input field:',
+    exampleInput,
+    'Required root shape:',
+    JSON.stringify({
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      input,
+      candidates: [
+        {
+          candidate_id: 'candidate-1',
+          title: '日本語の候補タイトル',
+          summary: '日本語の要約',
+          market_assumption: 'JP_STOCK',
+          timeframe_assumption: 'D',
+          strategy_type: 'trend_following',
+          entry_logic: ['日本語のエントリー条件'],
+          exit_logic: ['日本語の終了条件'],
+          risk_management: ['日本語のリスク管理'],
+          invalidation_conditions: ['日本語の無効化条件'],
+          expected_strengths: ['日本語の強み'],
+          expected_weaknesses: ['日本語の弱み'],
+          required_indicators: ['SMA'],
+          pine_feasibility: 'medium',
+          backtest_cautions: ['日本語のバックテスト注意点'],
+          research_basis: [
+            {
+              source_type: 'provider_knowledge',
+              label: 'Codex CLI manual generated candidate',
+              url: null,
+            },
+          ],
+          confidence: 'medium',
+          uncertainty: ['日本語の不確実性'],
+          suggested_natural_language_spec: '日本語で20文字以上のStrategyLab用自然言語ルール。',
+          suggested_pine_constraints: ['日本語のPine生成制約'],
+        },
+      ],
+      disclaimer: CODEX_CLI_IMPORT_DISCLAIMER,
+    }, null, 2),
+  ].join('\n\n');
+}
+
+function buildCodexCliManualObservation(params: {
+  startedAtMs: number;
+  candidateCount: number;
+}): StrategyProposalProviderObservation {
+  const elapsedMs = Math.max(0, Date.now() - params.startedAtMs);
+  return {
+    provider_name: CODEX_CLI_MANUAL_PROVIDER.name,
+    selected_by: 'config',
+    elapsed_ms: elapsedMs,
+    latency_bucket: elapsedMs < 1_000 ? 'fast' : 'acceptable',
+    status: 'succeeded',
+    candidate_count: params.candidateCount,
+    invalid_reason: 'none',
+    validation_error_count: 0,
+    fallback_used: false,
+    fallback_reason: null,
+    schema_valid: true,
+    model_category: 'unknown',
+    manual_import: true,
+  };
 }
 
 function formatDateTimeForTrend(value: unknown): string | null {
@@ -489,6 +727,60 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
       }
       throw error;
     }
+  });
+
+  fastify.post<{ Body: ProposalBody }>('/proposals/codex-cli/request', async (request, reply) => {
+    const input = parseStrategyProposalRequest(request.body ?? {});
+    return reply.status(200).send(formatSuccess(request, {
+      provider_name: CODEX_CLI_MANUAL_PROVIDER.name,
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: input.proposal_count,
+      prompt: buildCodexCliPrompt(input),
+    }));
+  });
+
+  fastify.post<{ Body: CodexCliImportBody }>('/proposals/codex-cli/import', async (request, reply) => {
+    const startedAtMs = Date.now();
+    readCodexCliImportSource(request.body?.source);
+    const importText = readCodexCliImportText(request.body?.result_json_text);
+    const parsed = parseCodexCliImportJson(importText);
+    const root = readRecord(parsed);
+    const input = parseStrategyProposalRequest(root.input ?? {});
+    const candidateCount = Array.isArray(root.candidates) ? root.candidates.length : 0;
+    const providerObservation = buildCodexCliManualObservation({ startedAtMs, candidateCount });
+
+    let data: StrategyProposalData;
+    try {
+      data = validateStrategyProposalData({
+        schema_name: root.schema_name,
+        schema_version: root.schema_version,
+        input,
+        provider: CODEX_CLI_MANUAL_PROVIDER,
+        provider_observation: providerObservation,
+        candidates: root.candidates,
+        disclaimer: typeof root.disclaimer === 'string' && root.disclaimer.trim()
+          ? root.disclaimer.trim()
+          : CODEX_CLI_IMPORT_DISCLAIMER,
+      } as StrategyProposalData);
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw toCodexCliImportValidationError(error, root.candidates);
+      }
+      throw error;
+    }
+
+    const run = await createProposalRun({
+      input,
+      status: 'succeeded',
+      providerName: data.provider.name,
+      providerMode: data.provider.mode,
+      selectedBy: providerObservation.selected_by,
+      providerObservation,
+      candidates: data.candidates,
+    });
+
+    return reply.status(200).send(formatSuccess(request, withProposalRunId(data, run.id)));
   });
 
   fastify.get<{ Querystring: { limit?: string } }>('/proposals', async (request, reply) => {

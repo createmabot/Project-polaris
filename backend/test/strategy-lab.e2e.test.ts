@@ -643,6 +643,25 @@ function localLlmResponseText(content: string) {
   };
 }
 
+function codexCliImportPayload(candidates: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
+  return {
+    schema_name: 'strategy_proposal_candidates',
+    schema_version: '1.0',
+    input: {
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      symbol_code: '7203',
+      risk_preference: 'balanced',
+      strategy_type_bias: 'any',
+      proposal_count: candidates.length,
+      user_hint: 'Codex CLI manual import fixture',
+    },
+    candidates,
+    disclaimer: 'This is a verification candidate, not investment advice.',
+    ...overrides,
+  };
+}
+
 describe('strategy lab vertical slice', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -769,6 +788,177 @@ describe('strategy lab vertical slice', () => {
     expect(detailResponse.json().data.candidates[0].candidate).toMatchObject({
       candidate_id: body.data.candidates[0].candidate_id,
     });
+  });
+
+  it('builds a Codex CLI manual import prompt without provider runtime details', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/request',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        symbol_code: '7203',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'breakout',
+        proposal_count: 5,
+        user_hint: '短期スイング候補を日本語で出す',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toMatchObject({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+    });
+    expect(body.data.prompt).toContain('Return only one JSON object');
+    expect(body.data.prompt).toContain('strategy_proposal_candidates');
+    expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
+    expect(body.data.prompt).not.toContain('secret');
+    expect(body.data.prompt).not.toMatch(/[A-Za-z]:\\/);
+  });
+
+  it('imports Codex CLI manual JSON candidates and persists sanitized proposal history', async () => {
+    const app = await createApp();
+    const candidates = Array.from({ length: 5 }, (_, index) => validLocalLlmCandidate({
+      candidate_id: `codex-${index + 1}`,
+      title: `Codex CLI manual candidate ${index + 1}`,
+    }));
+    const importJson = codexCliImportPayload(candidates, {
+      raw_debug: 'raw codex output marker should not be returned or persisted',
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify(importJson),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.provider).toMatchObject({
+      name: 'codex_cli_manual',
+      mode: 'manual_import',
+      web_search: false,
+      persisted: true,
+    });
+    expect(body.data.provider_observation).toMatchObject({
+      provider_name: 'codex_cli_manual',
+      selected_by: 'config',
+      status: 'succeeded',
+      candidate_count: 5,
+      invalid_reason: 'none',
+      schema_valid: true,
+      manual_import: true,
+    });
+    expect(body.data.candidates).toHaveLength(5);
+    expect(body.data.proposal_run_id).toBe('proposal-run-1');
+    expect(JSON.stringify(body)).not.toContain('raw codex output marker');
+
+    const storedRun = runtime.proposalRuns.get(body.data.proposal_run_id);
+    expect(storedRun).toMatchObject({
+      providerName: 'codex_cli_manual',
+      providerMode: 'manual_import',
+      selectedBy: 'config',
+      candidateCount: 5,
+    });
+    expect(JSON.stringify(storedRun)).not.toContain('raw codex output marker');
+    const storedCandidates = Array.from(runtime.proposalCandidates.values())
+      .filter((candidate) => candidate.proposalRunId === body.data.proposal_run_id);
+    expect(storedCandidates).toHaveLength(5);
+
+    const selectResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${body.data.proposal_run_id}/select`,
+      payload: {
+        candidate_id: 'codex-2',
+      },
+    });
+    expect(selectResponse.statusCode).toBe(200);
+    expect(selectResponse.json().data.selected_candidate.candidate.candidate_id).toBe('codex-2');
+  });
+
+  it('rejects invalid Codex CLI import JSON without echoing raw output', async () => {
+    const app = await createApp();
+    const malformedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: '{"schema_name":"strategy_proposal_candidates", "raw":"must not leak"',
+      },
+    });
+    expect(malformedResponse.statusCode).toBe(400);
+    expect(malformedResponse.json().error.details.invalid_reason).toBe('malformed_json');
+    expect(JSON.stringify(malformedResponse.json())).not.toContain('must not leak');
+
+    const missingCandidate = validLocalLlmCandidate({ candidate_id: 'codex-missing' }) as Record<string, unknown>;
+    delete missingCandidate.title;
+    const missingResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify(codexCliImportPayload([missingCandidate])),
+      },
+    });
+    expect(missingResponse.statusCode).toBe(400);
+    expect(missingResponse.json().error.details.invalid_reason).toBe('required_field_missing');
+    expect(missingResponse.json().error.details.missing_required_fields).toContain('title');
+    expect(JSON.stringify(missingResponse.json())).not.toContain('codex-missing');
+    expect(runtime.proposalRuns.size).toBe(0);
+  });
+
+  it('rejects Codex CLI imports that exceed candidate or research source boundaries', async () => {
+    const app = await createApp();
+    const tooManyCandidates = Array.from({ length: 11 }, (_, index) => validLocalLlmCandidate({
+      candidate_id: `codex-many-${index + 1}`,
+    }));
+    const tooManyResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'file',
+        result_json_text: JSON.stringify(codexCliImportPayload(tooManyCandidates, {
+          input: {
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            risk_preference: 'balanced',
+            strategy_type_bias: 'any',
+            proposal_count: 10,
+            user_hint: null,
+          },
+        })),
+      },
+    });
+    expect(tooManyResponse.statusCode).toBe(400);
+    expect(tooManyResponse.json().error.details.invalid_reason).toBe('candidate_count_invalid');
+
+    const webCandidate = validLocalLlmCandidate({
+      candidate_id: 'codex-web',
+      research_basis: [{ source_type: 'web', label: 'not imported', url: null }],
+    });
+    const webResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify(codexCliImportPayload([webCandidate])),
+      },
+    });
+    expect(webResponse.statusCode).toBe(400);
+    expect(webResponse.json().error.details.invalid_reason).toBe('web_research_basis_disabled');
+    expect(JSON.stringify(webResponse.json())).not.toContain('not imported');
+    expect(runtime.proposalRuns.size).toBe(0);
   });
 
   it('records selected proposal candidate without creating strategy artifacts', async () => {
