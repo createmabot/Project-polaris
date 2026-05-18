@@ -5,6 +5,7 @@ import { strategyRoutes } from '../src/routes/strategies';
 import { strategyLabRoutes } from '../src/routes/strategy-lab';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
 import {
+  getStrategyProposalLocalLlmGuardConfig,
   resetStrategyProposalRateLimitForTests,
   resolveStrategyProposalRateLimitKey,
 } from '../src/strategy-proposals/guards';
@@ -649,6 +650,7 @@ describe('strategy lab vertical slice', () => {
     delete process.env.STRATEGY_PROPOSAL_PROVIDER;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
@@ -662,6 +664,7 @@ describe('strategy lab vertical slice', () => {
     delete process.env.STRATEGY_PROPOSAL_PROVIDER;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL;
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS;
     delete process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED;
@@ -1084,6 +1087,36 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(response.json())).not.toContain('999999');
     expect(JSON.stringify(response.json())).not.toContain('proposal-model-test');
     expect(JSON.stringify(response.json())).not.toContain('local-llm.example.test');
+  });
+
+  it('keeps the default local_llm timeout cap conservative and allows long context opt-in', () => {
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '999999';
+    expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
+      timeoutProfile: 'default',
+      timeoutMs: 120000,
+      maxOutputChars: 20000,
+    });
+
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE = 'long_context';
+    expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
+      timeoutProfile: 'long_context',
+      timeoutMs: 300000,
+      maxOutputChars: 20000,
+    });
+
+    delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
+    expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
+      timeoutProfile: 'long_context',
+      timeoutMs: 180000,
+      maxOutputChars: 20000,
+    });
+
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE = 'unknown';
+    expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
+      timeoutProfile: 'default',
+      timeoutMs: 90000,
+      maxOutputChars: 20000,
+    });
   });
 
   it('rate limits repeated strategy proposal provider calls without persisting blocked runs', async () => {

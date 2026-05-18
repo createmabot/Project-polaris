@@ -183,7 +183,9 @@ response / UI:
 Strategy proposal provider guard hardening 後の運用境界:
 
 - `STRATEGY_PROPOSAL_PROVIDER` 未指定時は `stub`。`local_llm` は明示 opt-in のみ。
-- `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` と `STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` は backend 側で下限・上限に丸める。極端な値を設定しても raw 設定値は response / UI / docs に出さない。
+- `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE` は default / long_context を扱う。default は通常の local model 向け、long_context は重い local model や長文 context model の manual smoke 向けの明示 opt-in。
+- `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` と `STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` は backend 側で下限・上限に丸める。timeout の上限は profile により変わる。極端な値を設定しても raw 設定値は response / UI / docs に出さない。
+- UI に `provider status: timeout / reason: timeout / latency: timeout` が出る場合は、local LLM process の起動状況、provider 専用 timeout profile、timeout、max output を確認し、必要なら long_context profile を local env で明示して backend を再起動する。endpoint / model 実値は docs、PR、screenshot、log に残さない。
 - `local_llm` の retry は `required_field_missing` に対する最大 1 回だけ。retry prompt は missing field names だけを使い、raw response は含めない。
 - `POST /api/strategy-lab/proposals` は in-memory per-process rate guard を持つ。上限超過時は 429 / `RATE_LIMITED` とし、proposal history は保存しない。
 - rate guard は accidental load と連打抑止が目的であり、multi-process 環境の厳密な abuse prevention ではない。
