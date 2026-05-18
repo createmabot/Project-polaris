@@ -371,7 +371,8 @@ Strategy proposal provider guard は、品質評価や benchmark を実行する
 - `stub` が default provider のままになっていること。
 - `local_llm` は `STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示 opt-in でだけ使うこと。
 - proposal_count は最大 10 件に制限され、通常 UI は 5 件を要求すること。
-- `local_llm` の timeout / max output は env で調整できるが、backend 側の guard 上限に丸められること。
+- `local_llm` の timeout / max output は env で調整できるが、backend 側の guard 上限に丸められること。重い local model や長文 context model を manual smoke する場合だけ、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE=long_context` を明示して timeout 上限を広げる。
+- timeout profile を変えた後は backend dev process を再起動し、UI では sanitized `provider status` / `reason` / `latency` のみを見る。endpoint / model 実値や raw response は記録しない。
 - `required_field_missing` retry は最大 1 回であり、raw response を retry prompt に入れないこと。
 - 短時間に proposal を連続実行した場合、rate guard が 429 / `RATE_LIMITED` を返し、proposal history に blocked run を保存しないこと。
 - UI は rate limited を短い再試行案内として表示し、provider endpoint / model 実値 / raw diagnostics は表示しないこと。

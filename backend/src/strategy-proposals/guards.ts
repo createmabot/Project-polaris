@@ -32,13 +32,29 @@ export function readBooleanFlag(value: string | undefined, fallback: boolean): b
   return fallback;
 }
 
+export type StrategyProposalLocalLlmTimeoutProfile = 'default' | 'long_context';
+
+function readLocalLlmTimeoutProfile(value: string | undefined): StrategyProposalLocalLlmTimeoutProfile {
+  const normalized = value?.trim().toLowerCase().replace(/-/g, '_');
+  return normalized === 'long_context' ? 'long_context' : 'default';
+}
+
 export function getStrategyProposalLocalLlmGuardConfig() {
+  const timeoutProfile = readLocalLlmTimeoutProfile(
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE,
+  );
+  const timeoutLimits =
+    timeoutProfile === 'long_context'
+      ? { fallback: 180_000, min: 5_000, max: 300_000 }
+      : { fallback: 90_000, min: 5_000, max: 120_000 };
+
   return {
+    timeoutProfile,
     timeoutMs: readBoundedPositiveInteger(
       process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS,
-      90_000,
-      5_000,
-      120_000,
+      timeoutLimits.fallback,
+      timeoutLimits.min,
+      timeoutLimits.max,
     ),
     maxOutputChars: readBoundedPositiveInteger(
       process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS,

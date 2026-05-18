@@ -244,13 +244,16 @@ env / config 方針:
 
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を proposal 専用 provider selector とする。
 - 未指定、空、未知値の場合は `stub` を使う。
-- local_llm endpoint、model、timeout、max output は proposal 専用 env で切れる。`STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT`、`STRATEGY_PROPOSAL_LOCAL_LLM_MODEL`、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS`、`STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` を使う。
+- local_llm endpoint、model、timeout、max output は proposal 専用 env で切れる。`STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT`、`STRATEGY_PROPOSAL_LOCAL_LLM_MODEL`、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE`、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS`、`STRATEGY_PROPOSAL_LOCAL_LLM_MAX_OUTPUT_CHARS` を使う。
 - endpoint / model は proposal 専用 env がなければ既存 local LLM env の値を使い、最後に実装 default へ fallback する。
 - endpoint や model の実値は docs / PR / UI / client response に出さない。運用確認では設定有無と sanitized status のみを扱う。
 
 timeout / max output / fallback 方針:
 
-- local_llm 選択時は短い timeout を provider adapter 境界で必ず設定する。
+- local_llm 選択時は provider adapter 境界で timeout を必ず設定する。
+- timeout profile は default / long_context の 2 種類とする。default は通常の local model 向けに短めの上限を維持し、long_context は大きい local model や長文 context model の manual smoke 用に明示 opt-in で使う。
+- `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` は profile ごとの下限・上限に丸める。極端な値や実際の設定値は client response、UI、docs、PR本文に出さない。
+- long_context profile は timeout を延ばすだけであり、Web search、deep research、request-time provider selection、auto Pine generation を有効化しない。
 - max output は既存 schema と `proposal_count` 最大 10 に収まる上限を設け、過大 response は parse 前または validation 前に失敗として扱う。
 - local_llm 実装では、timeout、provider unavailable、malformed JSON、schema invalid、candidate count invalid、Web search 未実装時の web research basis を provider error として扱う。
 - local_llm 実装では silent stub fallback を行わない。`STRATEGY_PROPOSAL_PROVIDER=local_llm` を選んだ場合の失敗は proposal section の generic failure として返す。
@@ -317,7 +320,7 @@ failure policy:
 
 ### 5-4. timeout / fallback / cost / rate limit
 
-- external provider を使う場合は、短い timeout を route または provider adapter 境界で必ず設定する。
+- external provider を使う場合は、route または provider adapter 境界で必ず timeout を設定する。local_llm は default profile を基本とし、重い local model の manual smoke では long_context profile を明示 opt-in で使う。
 - timeout 時は retry 連打を避けるため、UI では短い失敗表示に留める。自動 retry / polling は行わない。
 - `openai_api` 等の有料 provider は明示 opt-in でのみ利用する。
 - cost cap、rate limit、per-user / per-session の制御は、stub 以外を広げる前に運用設計を固定する。
