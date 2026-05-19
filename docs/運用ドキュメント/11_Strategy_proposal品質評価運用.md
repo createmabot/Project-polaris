@@ -434,7 +434,7 @@ Proposal history full management は、保存済み `StrategyProposalRun` / `Str
 2. provider filter で `stub` / `local_llm` / `codex_cli_manual` を切り替え、該当 provider の run だけが表示されることを確認する。
 3. status filter で succeeded / failed を切り替え、failed run の sanitized status / reason を確認する。
 4. selected filter で選択済み / 未選択を切り替え、selected candidate の有無を確認する。
-5. search は candidate title / summary / strategy_type などの normalized field を対象にする。検索語そのものや user_hint 全文を履歴 list response に echo しない。
+5. search は run id / provider / input metadata など、DB query に pushdown できる範囲を対象にする。candidate title / summary / suggested natural language spec の自由文検索は、full-table / full-candidate read を避けるため後続候補とする。
 6. pagination の前後移動で detail / selection flow が壊れないことを確認する。
 7. detail から候補を選択した場合も、title / natural language spec への反映だけで、Pine generation / save / backtest / AI summary は自動起動しない。
 8. list response では raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
