@@ -1052,7 +1052,7 @@ Proposal history full management は、`StrategyProposalRun` / `StrategyProposal
 - `status` は初回では `succeeded` / `failed` の保存済み run status を対象にする。
 - `selected=true|false` は `selected_candidate_id` の有無で判定する。
 - `market` / `timeframe` は保存済み input snapshot からの exact match とする。
-- `q` は run id、provider metadata、input metadata を DB query に pushdown できる範囲で検索対象にする。candidate title / summary / suggested natural language spec などの candidate 自由文検索は、full-table / full-candidate read を避けるため初回対象外とし、専用 index / read model を設計する後続候補にする。
+- `q` は run id、provider metadata、input metadata を DB query に pushdown できる範囲で検索対象にする。metadata search は `symbol_code=AAPL` を `q=aapl` で拾えるように、大文字 / 小文字差で取りこぼさない境界を維持する。candidate title / summary / suggested natural language spec などの candidate 自由文検索は、full-table / full-candidate read を避けるため初回対象外とし、専用 index / read model を設計する後続候補にする。
 - list query は Prisma の `where` / `orderBy` / `skip` / `take` / `count` に pushdown し、通常の list request では candidates relation を include しない。
 - list response は `proposal_runs`、`limit` に加え、`filters`、`pagination`、`meta` を返す。`meta` は `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`candidate_free_text_included=false`、`user_hint_full_text_included=false` を明示する。
 - list item の `input.user_hint` は全文を返さず、`user_hint_present` / `user_hint_length` だけを返す。

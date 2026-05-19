@@ -241,6 +241,11 @@ function buildInputJsonSearch(field: string, value: string) {
   return { inputJson: { path: [field], string_contains: value } };
 }
 
+function buildCaseInsensitiveInputJsonSearches(field: string, value: string) {
+  const variants = Array.from(new Set([value, value.toLowerCase(), value.toUpperCase()]));
+  return variants.map((variant) => buildInputJsonSearch(field, variant));
+}
+
 function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistoryQuery>) {
   const and: any[] = [];
   if (query.providerName) {
@@ -267,11 +272,11 @@ function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistory
         { providerName: { contains: query.q, mode: 'insensitive' } },
         { providerMode: { contains: query.q, mode: 'insensitive' } },
         { selectedBy: { contains: query.q, mode: 'insensitive' } },
-        buildInputJsonSearch('market', query.q),
-        buildInputJsonSearch('timeframe', query.q),
-        buildInputJsonSearch('symbol_code', query.q),
-        buildInputJsonSearch('risk_preference', query.q),
-        buildInputJsonSearch('strategy_type_bias', query.q),
+        ...buildCaseInsensitiveInputJsonSearches('market', query.q),
+        ...buildCaseInsensitiveInputJsonSearches('timeframe', query.q),
+        ...buildCaseInsensitiveInputJsonSearches('symbol_code', query.q),
+        ...buildCaseInsensitiveInputJsonSearches('risk_preference', query.q),
+        ...buildCaseInsensitiveInputJsonSearches('strategy_type_bias', query.q),
       ],
     });
   }
