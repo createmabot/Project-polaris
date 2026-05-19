@@ -15,7 +15,7 @@ PR #365〜#366 で、prompt regression / provider benchmark の design、fixed s
 
 PR #368〜#370 で、proposal history / selected proposal lineage の backend persistence / API と StrategyLab minimal UI は完了扱いにする。品質評価では sanitized history と selection 記録を確認できるが、raw prompt / raw response / endpoint / secret / local path は記録しない。
 
-Proposal history full management では、StrategyLab の履歴 section から provider / status / selected / search / pagination で保存済み run を探せる。これは provider 品質や selection lineage を確認するための read-only 管理導線であり、archive / hard delete / retention job / export は後続判断とする。
+Proposal history full management では、StrategyLab の履歴 section から provider / status / selected / search / pagination で保存済み run を探せる。Soft archive では不要な run を削除せず通常一覧から隠せる。hard delete / retention job / export は後続判断とする。
 
 ## 2. 前提
 
@@ -439,7 +439,9 @@ Proposal history full management は、保存済み `StrategyProposalRun` / `Str
 7. detail から候補を選択した場合も、title / natural language spec への反映だけで、Pine generation / save / backtest / AI summary は自動起動しない。
 8. list response では raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
 
-履歴が増えた場合の archive / retention / hard delete / export は別設計とする。特に hard delete は、selected proposal lineage や将来の StrategyVersion relation と衝突する可能性があるため、初回 full management では実装しない。
+履歴が増えた場合は、不要な run を soft archive して通常一覧から隠す。archived filter を `archived` または `all` に切り替えると再確認でき、unarchive で通常一覧に戻せる。archive は削除ではなく、archived run でも detail と candidate selection は可能である。selection は自動 unarchive しない。
+
+hard delete / retention job / export は別設計とする。特に hard delete は、selected proposal lineage や将来の StrategyVersion relation と衝突する可能性があるため、初回 soft archive では実装しない。
 
 ## 7-3. sanitized provider event log の確認
 

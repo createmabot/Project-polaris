@@ -100,20 +100,27 @@ Proposal history / selected proposal lineage の最小 API:
 - success response には optional `proposal_run_id` と `history.proposal_run_id` を追加する。
 - `GET /api/strategy-lab/proposals` は proposal run 一覧を filter / pagination 付きで返す。
   - 後方互換として `limit` を維持する。
-  - query: `page`、`limit`、`provider_name`、`status=succeeded|failed`、`selected=true|false`、`market`、`timeframe`、`q`、`sort=created_at`、`order=asc|desc`。
+  - query: `page`、`limit`、`provider_name`、`status=succeeded|failed`、`selected=true|false`、`market`、`timeframe`、`archived=active|archived|all`、`q`、`sort=created_at`、`order=asc|desc`。
+  - `archived` 未指定時は `active` とし、`archived_at=null` の run だけを通常 list に返す。
+  - `archived=archived` は archived run のみ、`archived=all` は active / archived の両方を返す。
   - filter / pagination は DB query の `where` / `skip` / `take` / `count` に pushdown し、通常の list request では candidates relation を読み込まない。
   - response: `proposal_runs`、`limit`、`filters`、`pagination`、`meta`。
   - `pagination` は `page`、`limit`、`total_count`、`has_next`、`has_previous` を返す。
   - `meta` は `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`candidate_free_text_included=false`、`user_hint_full_text_included=false` を返す。
   - list item の `input.user_hint` は全文を返さず、`user_hint_present` / `user_hint_length` だけを返す。
+  - list item は `is_archived` と `archived_at` を返す。
   - `q` は run id、provider metadata、input metadata の DB query に pushdown できる範囲に限定し、metadata search は大文字 / 小文字差で取りこぼさないように扱う。candidate title / summary / suggested natural language spec の自由文検索は初回対象外とし、response に match snippet、candidate free text、raw provider diagnostics を返さない。
 - `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する。
 - select request は `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。`candidate_id` は provider candidate id または internal candidate id、`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal candidate id として扱う。
 - selection API は StrategyLab input 反映の履歴だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
+- archived run でも detail と selection は許可する。selection は自動 unarchive しない。
+- `POST /api/strategy-lab/proposals/:proposalRunId/archive` は proposal run を soft archive する action endpoint とする。既に archived の場合も idempotent success とし、`proposal_run.id`、`is_archived=true`、`archived_at` を返す。hard delete は行わない。
+- `POST /api/strategy-lab/proposals/:proposalRunId/unarchive` は proposal run を active に戻す action endpoint とする。既に active の場合も idempotent success とし、`proposal_run.id`、`is_archived=false`、`archived_at=null` を返す。
+- archive / unarchive は provider event log に影響しない。`StrategyProposalProviderEvent` は proposal run の archive 状態とは独立した運用観測ログとして扱う。
 
 - `POST /api/strategy-lab/proposals` は短時間の連続実行に対して in-memory per-process rate guard を適用する。上限超過時は HTTP 429 / `RATE_LIMITED` を返し、proposal run は保存しない。error details は retry_after / limit / window / provider mode / key source 程度の sanitized metadata に限定し、actual IP、forwarded header value、internal key、raw prompt / raw provider response / endpoint / model 実値は返さない。
-- archive / retention / hard delete / large management screen は後続判断とし、初回 full management は StrategyLab 内の compact filter / pagination UI に留める。
+- retention / hard delete / export / large management screen は後続判断とし、soft archive は StrategyLab 内の compact history management に留める。
 
 Provider quality trend aggregation の最小 API:
 

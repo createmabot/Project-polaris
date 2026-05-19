@@ -316,13 +316,16 @@ failure の扱い:
 
 - history は provider quality と user selection lineage の補助であり、投資判断や automatic ranking には使わない。
 - real local_llm 実体依存 test は required check に入れない。
-- history UI は StrategyLab の compact proposal history management として扱う。provider / status / selected / search / pagination で保存済み run を探せるが、archive / retention job / hard delete / export / materialized trend aggregation は後続判断とする。
+- history UI は StrategyLab の compact proposal history management として扱う。provider / status / selected / search / pagination / archived filter で保存済み run を探せる。
+- soft archive は proposal run を削除せず通常一覧から隠すだけの状態である。archived run も detail 確認と candidate selection は可能で、selection しても自動 unarchive はしない。
+- provider event log は archive しない。event log は運用観測ログであり、proposal run の archive と独立して保持する。
+- retention job / hard delete / export / materialized trend aggregation は後続判断とする。
 - selection は StrategyLab input 反映の記録であり、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 
 後続候補:
 
 - StrategyVersion created-from-proposal relation。
-- proposal history archive / retention / hard delete / export。
+- proposal history retention / hard delete / export。
 - provider quality trend の range / filter / percentile / materialized aggregation。
 - provider event log based quality trend upgrade。
 - proposal history export / benchmark records。

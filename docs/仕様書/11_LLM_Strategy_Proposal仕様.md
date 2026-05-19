@@ -1075,7 +1075,53 @@ retention / lifecycle 方針:
 - hard delete は selected candidate、future StrategyVersion created-from-proposal relation、provider quality trend、manual benchmark / history comparison と衝突し得るため、別フェーズで設計する。
 - archive を実装する場合は additive nullable field などの DB / Prisma schema change が必要になるため、別 design PR とする。
 
-## 18. Sanitized provider event log persistence
+## 18. Proposal history soft archive
+
+Proposal history soft archive は、保存済み proposal run を削除せず、通常の提案履歴 list から隠すための lifecycle state である。proposal history は検証候補と selection lineage を残す責務を持つため、初回では hard delete ではなく soft archive を採用する。
+
+Data model:
+
+- `StrategyProposalRun.archivedAt` 相当の nullable field を追加する。
+- 既存 run は `archivedAt=null` の active run として扱う。
+- archive reason は初回では持たない。自由文保存の privacy / validation 境界が増えるため後続判断とする。
+- `StrategyProposalCandidate` は run に従属し、candidate 単位の archive は初回対象外とする。
+- `StrategyProposalProviderEvent` は archive しない。provider event log は運用観測ログであり、proposal run の archive と独立させる。
+
+API:
+
+- `GET /api/strategy-lab/proposals` は `archived=active|archived|all` を受ける。
+- default は `archived=active` とし、通常 list では archived run を返さない。
+- response の run summary は `is_archived` / `archived_at` を返す。
+- `POST /api/strategy-lab/proposals/:proposalRunId/archive` は run を archived にする。既に archived の場合も idempotent success とする。
+- `POST /api/strategy-lab/proposals/:proposalRunId/unarchive` は run を active に戻す。既に active の場合も idempotent success とする。
+- `GET /api/strategy-lab/proposals/:proposalRunId` は archived run でも detail を返す。
+- `POST /api/strategy-lab/proposals/:proposalRunId/select` は archived run でも許可する。archive は通常 list から隠す状態であり、candidate 利用禁止ではないため。ただし selection は自動 unarchive しない。
+
+StrategyLab UI:
+
+- 提案履歴 controls に archived filter を追加する。
+- active run には `アーカイブ`、archived run には `戻す` action を表示する。
+- archived run は `アーカイブ済み` badge を表示する。
+- archive は削除ではなく通常一覧から隠す操作であり、archived filter から戻せることを短く説明する。
+- hard delete、bulk archive、retention、export、大規模管理画面は追加しない。
+
+Safety:
+
+- archive / unarchive は raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace を返さない。
+- list response は引き続き user_hint 全文と candidate 自由文本文を返さない。
+- archive / unarchive は Pine generation、Strategy / StrategyVersion 保存、backtest、AI summary を自動起動しない。
+
+対象外:
+
+- hard delete。
+- retention job。
+- export。
+- archive reason。
+- provider event log archive。
+- StrategyVersion created-from-proposal relation。
+- archive 状態を provider quality trend の集計条件に反映すること。必要なら後続で別設計する。
+
+## 19. Sanitized provider event log persistence
 
 Sanitized provider event log persistence は、Strategy proposal の provider call、manual import、retry、rate limit、validation failure を、raw 情報を残さず運用観測用 event として保存するための設計である。Proposal history は生成結果と候補の履歴、provider quality trend は history 由来の集計、benchmark record は optional benchmark の local summary であり、event log はそれらより低レイヤーの発生事象を追う。
 
@@ -1135,17 +1181,17 @@ Sanitized provider event log persistence は、Strategy proposal の provider ca
 - p50 / p95 などの percentile。
 - prompt regression automation。
 - benchmark result DB table。
-- archive / retention / hard delete。
+- retention / hard delete。
 - event log を使った candidate ranking / 投資判断。
 - Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
 
-## 19. 後続候補
+## 20. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
 - citation / freshness 表示。
 - StrategyVersion created-from-proposal relation。
-- proposal history archive / retention / hard delete / export。
+- proposal history retention / hard delete / export。
 - benchmark result DB table / prompt regression automation。
 - proposal history export。
 - symbol context から StrategyLab へ遷移する導線。
@@ -1155,7 +1201,7 @@ Sanitized provider event log persistence は、Strategy proposal の provider ca
 - browser smoke / visual regression 対象化。
 - Codex CLI local worker / automation は、backend 自動起動ではなく別設計で要否を判断する。
 
-## 20. 参照
+## 21. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
