@@ -101,11 +101,12 @@ Proposal history / selected proposal lineage の最小 API:
 - `GET /api/strategy-lab/proposals` は proposal run 一覧を filter / pagination 付きで返す。
   - 後方互換として `limit` を維持する。
   - query: `page`、`limit`、`provider_name`、`status=succeeded|failed`、`selected=true|false`、`market`、`timeframe`、`q`、`sort=created_at`、`order=asc|desc`。
+  - filter / pagination は DB query の `where` / `skip` / `take` / `count` に pushdown し、通常の list request では candidates relation を読み込まない。
   - response: `proposal_runs`、`limit`、`filters`、`pagination`、`meta`。
   - `pagination` は `page`、`limit`、`total_count`、`has_next`、`has_previous` を返す。
   - `meta` は `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`candidate_free_text_included=false`、`user_hint_full_text_included=false` を返す。
   - list item の `input.user_hint` は全文を返さず、`user_hint_present` / `user_hint_length` だけを返す。
-  - `q` は検索条件としてのみ扱い、response に match snippet、candidate title / summary / suggested natural language spec、raw provider diagnostics を返さない。
+  - `q` は run id、provider metadata、input metadata の DB query に pushdown できる範囲に限定する。candidate title / summary / suggested natural language spec の自由文検索は初回対象外とし、response に match snippet、candidate free text、raw provider diagnostics を返さない。
 - `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する。
 - select request は `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。`candidate_id` は provider candidate id または internal candidate id、`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal candidate id として扱う。

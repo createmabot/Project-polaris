@@ -966,7 +966,7 @@ export default function StrategyLab() {
                 label='履歴検索'
                 value={historySearchDraft}
                 onChange={(event) => setHistorySearchDraft(event.target.value)}
-                placeholder='run id / provider / candidate'
+                placeholder='run id / provider / metadata'
               />
               <SelectField
                 label='provider'
@@ -1015,7 +1015,7 @@ export default function StrategyLab() {
               )}
             </div>
             <InlineNotice tone='info'>
-              履歴検索は normalized metadata と candidate fields を対象にします。providerやCodexの生出力、内部診断、秘密値は表示しません。
+              履歴検索は run id / provider / input metadata を対象にします。candidate本文、providerやCodexの生出力、内部診断、秘密値は表示しません。
             </InlineNotice>
           </div>
 

@@ -137,6 +137,8 @@ type Runtime = {
   }>;
   proposalRuns: Map<string, StrategyProposalRunRow>;
   proposalCandidates: Map<string, StrategyProposalCandidateRow>;
+  proposalRunFindManyCalls: any[];
+  proposalRunCountCalls: any[];
 };
 
 let runtime: Runtime;
@@ -155,7 +157,78 @@ function createRuntime(): Runtime {
     pineRevisionInputs: new Map(),
     proposalRuns: new Map(),
     proposalCandidates: new Map(),
+    proposalRunFindManyCalls: [],
+    proposalRunCountCalls: [],
   };
+}
+
+function readJsonPath(value: unknown, path: string[]): unknown {
+  let current = value;
+  for (const key of path) {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function stringMatches(value: unknown, filter: any): boolean {
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const needle = String(filter.contains ?? filter.string_contains ?? '');
+  const haystack = filter.mode === 'insensitive' ? value.toLowerCase() : value;
+  const normalizedNeedle = filter.mode === 'insensitive' ? needle.toLowerCase() : needle;
+  return haystack.includes(normalizedNeedle);
+}
+
+function proposalRunMatchesWhere(row: StrategyProposalRunRow, where: any): boolean {
+  if (!where || Object.keys(where).length === 0) {
+    return true;
+  }
+  if (Array.isArray(where.AND)) {
+    return where.AND.every((condition: any) => proposalRunMatchesWhere(row, condition));
+  }
+  if (Array.isArray(where.OR)) {
+    return where.OR.some((condition: any) => proposalRunMatchesWhere(row, condition));
+  }
+  if (where.providerName !== undefined) {
+    if (typeof where.providerName === 'string' && row.providerName !== where.providerName) {
+      return false;
+    }
+    if (typeof where.providerName === 'object' && !stringMatches(row.providerName, where.providerName)) {
+      return false;
+    }
+  }
+  if (where.providerMode !== undefined && !stringMatches(row.providerMode, where.providerMode)) {
+    return false;
+  }
+  if (where.selectedBy !== undefined && !stringMatches(row.selectedBy, where.selectedBy)) {
+    return false;
+  }
+  if (where.id !== undefined && !stringMatches(row.id, where.id)) {
+    return false;
+  }
+  if (where.status !== undefined && row.status !== where.status) {
+    return false;
+  }
+  if (where.selectedCandidateId === null && row.selectedCandidateId !== null) {
+    return false;
+  }
+  if (where.selectedCandidateId?.not === null && row.selectedCandidateId === null) {
+    return false;
+  }
+  if (where.inputJson?.path) {
+    const value = readJsonPath(row.inputJson, where.inputJson.path);
+    if ('equals' in where.inputJson && value !== where.inputJson.equals) {
+      return false;
+    }
+    if ('string_contains' in where.inputJson && !stringMatches(value, where.inputJson)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 vi.mock('../src/db', () => {
@@ -466,12 +539,23 @@ vi.mock('../src/db', () => {
         runtime.proposalRuns.set(id, row);
         return row;
       },
-      findMany: async ({ orderBy, take, include }: any = {}) => {
-        let rows = Array.from(runtime.proposalRuns.values());
+      count: async ({ where }: any = {}) => {
+        runtime.proposalRunCountCalls.push({ where });
+        return Array.from(runtime.proposalRuns.values())
+          .filter((row) => proposalRunMatchesWhere(row, where))
+          .length;
+      },
+      findMany: async ({ where, orderBy, skip, take, include }: any = {}) => {
+        runtime.proposalRunFindManyCalls.push({ where, orderBy, skip, take, include });
+        let rows = Array.from(runtime.proposalRuns.values())
+          .filter((row) => proposalRunMatchesWhere(row, where));
         if (orderBy?.createdAt === 'desc') {
           rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        } else if (orderBy?.createdAt === 'asc') {
+          rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
         }
-        rows = rows.slice(0, Number.isInteger(take) ? take : rows.length);
+        const offset = Number.isInteger(skip) ? skip : 0;
+        rows = rows.slice(offset, Number.isInteger(take) ? offset + take : rows.length);
         if (!include?.candidates) {
           return rows;
         }
@@ -857,6 +941,13 @@ describe('strategy lab vertical slice', () => {
       user_hint_full_text_included: false,
     });
     expect(JSON.stringify(pageOne.json().data.proposal_runs)).not.toContain('privatealpha privatebeta');
+    const pageOneListCall = runtime.proposalRunFindManyCalls.find((call) => (
+      call.take === 2 && call.skip === 0 && call.orderBy?.createdAt === 'desc' && !call.include
+    ));
+    expect(pageOneListCall).toBeTruthy();
+    expect(runtime.proposalRunCountCalls.some((call) => (
+      JSON.stringify(call.where) === JSON.stringify(pageOneListCall?.where)
+    ))).toBe(true);
 
     const userHintSearch = await app.inject({
       method: 'GET',
@@ -902,7 +993,7 @@ describe('strategy lab vertical slice', () => {
 
     const searchResponse = await app.inject({
       method: 'GET',
-      url: '/api/strategy-lab/proposals?q=Unique%20history%20management%20candidate%20marker',
+      url: '/api/strategy-lab/proposals?q=codex_cli_manual',
     });
     expect(searchResponse.statusCode).toBe(200);
     expect(searchResponse.json().data.pagination.total_count).toBe(1);
@@ -913,6 +1004,14 @@ describe('strategy lab vertical slice', () => {
     expect(serializedSearchBody).not.toContain('Unique history management candidate marker');
     expect(serializedSearchBody).not.toContain('suggested_natural_language_spec');
     expect(serializedSearchBody).not.toContain('not-json');
+
+    const candidateTextSearch = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?q=Unique%20history%20management%20candidate%20marker',
+    });
+    expect(candidateTextSearch.statusCode).toBe(200);
+    expect(candidateTextSearch.json().data.pagination.total_count).toBe(0);
+    expect(JSON.stringify(candidateTextSearch.json())).not.toContain('Unique history management candidate marker');
 
     const invalidSort = await app.inject({
       method: 'GET',

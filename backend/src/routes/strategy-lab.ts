@@ -233,61 +233,53 @@ function parseProposalHistoryQuery(query: ProposalHistoryQuery) {
   };
 }
 
-function readSearchText(value: unknown): string {
-  if (typeof value === 'string') {
-    return value;
-  }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  return '';
+function buildInputJsonEquals(field: string, value: string) {
+  return { inputJson: { path: [field], equals: value } };
 }
 
-function strategyProposalRunMatchesQuery(row: any, query: ReturnType<typeof parseProposalHistoryQuery>): boolean {
-  const input = readRecord(row.inputJson);
-  if (query.providerName && row.providerName !== query.providerName) {
-    return false;
-  }
-  if (query.status && row.status !== query.status) {
-    return false;
-  }
-  if (query.selected !== null && Boolean(row.selectedCandidateId) !== query.selected) {
-    return false;
-  }
-  if (query.market && input.market !== query.market) {
-    return false;
-  }
-  if (query.timeframe && input.timeframe !== query.timeframe) {
-    return false;
-  }
-  if (!query.q) {
-    return true;
-  }
+function buildInputJsonSearch(field: string, value: string) {
+  return { inputJson: { path: [field], string_contains: value } };
+}
 
-  const needle = query.q.toLowerCase();
-  const runSearchFields = [
-    row.id,
-    row.providerName,
-    row.providerMode,
-    row.selectedBy,
-    input.market,
-    input.timeframe,
-    input.symbol_code,
-    input.risk_preference,
-    input.strategy_type_bias,
-  ].map(readSearchText);
-  const candidateSearchFields = (row.candidates ?? []).flatMap((candidate: any) => {
-    const candidateJson = readRecord(candidate.candidateJson);
-    return [
-      candidate.providerCandidateId,
-      candidateJson.candidate_id,
-      candidateJson.title,
-      candidateJson.summary,
-      candidateJson.strategy_type,
-      candidateJson.suggested_natural_language_spec,
-    ].map(readSearchText);
-  });
-  return [...runSearchFields, ...candidateSearchFields].some((value) => value.toLowerCase().includes(needle));
+function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistoryQuery>) {
+  const and: any[] = [];
+  if (query.providerName) {
+    and.push({ providerName: query.providerName });
+  }
+  if (query.status) {
+    and.push({ status: query.status });
+  }
+  if (query.selected === true) {
+    and.push({ selectedCandidateId: { not: null } });
+  } else if (query.selected === false) {
+    and.push({ selectedCandidateId: null });
+  }
+  if (query.market) {
+    and.push(buildInputJsonEquals('market', query.market));
+  }
+  if (query.timeframe) {
+    and.push(buildInputJsonEquals('timeframe', query.timeframe));
+  }
+  if (query.q) {
+    and.push({
+      OR: [
+        { id: { contains: query.q, mode: 'insensitive' } },
+        { providerName: { contains: query.q, mode: 'insensitive' } },
+        { providerMode: { contains: query.q, mode: 'insensitive' } },
+        { selectedBy: { contains: query.q, mode: 'insensitive' } },
+        buildInputJsonSearch('market', query.q),
+        buildInputJsonSearch('timeframe', query.q),
+        buildInputJsonSearch('symbol_code', query.q),
+        buildInputJsonSearch('risk_preference', query.q),
+        buildInputJsonSearch('strategy_type_bias', query.q),
+      ],
+    });
+  }
+  return and.length > 0 ? { AND: and } : {};
+}
+
+function buildProposalHistoryOrderBy(query: ReturnType<typeof parseProposalHistoryQuery>) {
+  return { createdAt: query.order };
 }
 
 function readSafeToken(value: unknown, fallback = 'unknown'): string {
@@ -962,16 +954,21 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get<{ Querystring: ProposalHistoryQuery }>('/proposals', async (request, reply) => {
     const query = parseProposalHistoryQuery(request.query);
-    const runs = await (prisma as any).strategyProposalRun.findMany({
-      orderBy: { createdAt: query.order },
-      include: { candidates: { orderBy: { rank: 'asc' } } },
-    });
-    const filteredRuns = runs.filter((run: any) => strategyProposalRunMatchesQuery(run, query));
     const offset = (query.page - 1) * query.limit;
-    const paginatedRuns = filteredRuns.slice(offset, offset + query.limit);
+    const where = buildProposalHistoryWhere(query);
+    const orderBy = buildProposalHistoryOrderBy(query);
+    const [totalCount, runs] = await Promise.all([
+      (prisma as any).strategyProposalRun.count({ where }),
+      (prisma as any).strategyProposalRun.findMany({
+        where,
+        orderBy,
+        skip: offset,
+        take: query.limit,
+      }),
+    ]);
 
     return reply.status(200).send(formatSuccess(request, {
-      proposal_runs: paginatedRuns.map(serializeRun),
+      proposal_runs: runs.map(serializeRun),
       limit: query.limit,
       filters: {
         provider_name: query.providerName,
@@ -986,8 +983,8 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
       pagination: {
         page: query.page,
         limit: query.limit,
-        total_count: filteredRuns.length,
-        has_next: offset + query.limit < filteredRuns.length,
+        total_count: totalCount,
+        has_next: offset + query.limit < totalCount,
         has_previous: query.page > 1,
       },
       meta: {
