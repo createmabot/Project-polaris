@@ -124,14 +124,14 @@ Strategy proposal quality evaluation は、required check ではなく manual ru
 - diversity、user_hint alignment、market / timeframe assumption、entry / exit、risk management、invalidation condition、Pine feasibility、backtest caution、uncertainty、unsupported claim risk は手動評価する。
 - 投資助言風 wording は一律 reject しない。proposal が売買推奨ではなく、backtest / user review 前提の検証候補として提示されているかを見る。
 - latency、timeout、invalid JSON、schema invalid、provider unavailable は provider ごとに記録する。
-- 現行 StrategyLab proposal flow には構造化 provider log はないため、quality evaluation は UI / API から観測できる success / empty / provider_error / validation_error と手動 latency bucket を記録する。
+- 現行 StrategyLab proposal flow は `provider_observation`、proposal history、provider quality trend、sanitized provider event log で観測する。quality evaluation では UI / API から観測できる success / empty / provider_error / validation_error と latency bucket を確認し、低レイヤーの failure / retry / rate limit は provider event log で確認する。
 - 評価記録には raw prompt、raw response、endpoint、model 実値、credential、local path、stack trace を残さない。
 
 詳細手順と記録テンプレートは `docs/運用ドキュメント/11_Strategy_proposal品質評価運用.md` を参照する。
 
 ## 7-3. LLM strategy proposal instrumentation / cost guard
 
-現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata、proposal history の sanitized DB 保存、provider quality trend aggregation の read-only 集計で扱う。job 化、sanitized provider event log persistence、benchmark result persistence は行わない。
+現行 instrumentation は、`POST /api/strategy-lab/proposals` の optional `provider_observation` metadata、proposal history の sanitized DB 保存、provider quality trend aggregation の read-only 集計、sanitized provider event log persistence で扱う。job 化、benchmark result DB persistence、provider quality trend materialization は行わない。
 
 記録してよい sanitized metadata:
 
@@ -177,7 +177,7 @@ response / UI:
 - request-time provider selection は cost / abuse / consistency の観点から、別設計を経て導入判断する。
 - Web search / deep research は同期 API ではなく job 化候補として扱う。
 - CI は mock / fake response で metadata 分類を検査し、real local_llm endpoint 依存 test は required check に入れない。
-- provider quality trend aggregation は既存 history の read-only 集計として完了済み。DB materialization、event log persistence、p50 / p95 は後続判断とする。
+- provider quality trend aggregation は既存 history の read-only 集計として完了済み。sanitized provider event log persistence は低レイヤー event 保存として完了済み。DB materialization、event-log based trend upgrade、p50 / p95 は後続判断とする。
 
 
 ### 7-3-1. Strategy proposal provider guard hardening
@@ -279,7 +279,7 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 - Web search / deep research job 化。
 - StrategyVersion created-from-proposal relation。
 - proposal history archive / retention / hard delete / export。
-- sanitized provider event log persistence。
+- provider event log based quality trend upgrade。
 - prompt regression automation。
 - auto Pine / auto save は引き続き out of scope。
 
@@ -324,7 +324,7 @@ failure の扱い:
 - StrategyVersion created-from-proposal relation。
 - proposal history archive / retention / hard delete / export。
 - provider quality trend の range / filter / percentile / materialized aggregation。
-- provider event log persistence。
+- provider event log based quality trend upgrade。
 - proposal history export / benchmark records。
 - `openai_api` provider。
 - Web search / deep research job。
