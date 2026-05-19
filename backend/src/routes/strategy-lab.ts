@@ -14,6 +14,11 @@ import {
   statusForInvalidReason,
 } from '../strategy-proposals/instrumentation';
 import {
+  recordStrategyProposalProviderEvent,
+  serializeStrategyProposalProviderEvent,
+  type StrategyProposalProviderEventType,
+} from '../strategy-proposals/provider-events';
+import {
   parseStrategyProposalRequest,
   validateStrategyProposalData,
 } from '../strategy-proposals/validation';
@@ -57,6 +62,17 @@ type ProposalHistoryQuery = {
   timeframe?: string;
   sort?: string;
   order?: string;
+};
+
+type ProviderEventQuery = {
+  limit?: string;
+  page?: string;
+  provider_name?: string;
+  event_type?: string;
+  status?: string;
+  proposal_run_id?: string;
+  created_from?: string;
+  created_to?: string;
 };
 
 const CODEX_CLI_MANUAL_PROVIDER = {
@@ -233,6 +249,35 @@ function parseProposalHistoryQuery(query: ProposalHistoryQuery) {
   };
 }
 
+function parseProviderEventQuery(query: ProviderEventQuery) {
+  const limit = parseProposalHistoryLimit(query.limit);
+  const page = parsePositiveInteger(query.page, 'page', 1, 10_000);
+  return {
+    page,
+    limit,
+    providerName: readSafeFilterToken(query.provider_name, 'provider_name'),
+    eventType: readSafeFilterToken(query.event_type, 'event_type'),
+    status: readSafeFilterToken(query.status, 'status'),
+    proposalRunId: readSafeFilterToken(query.proposal_run_id, 'proposal_run_id'),
+    createdFrom: parseOptionalDate(query.created_from, 'created_from'),
+    createdTo: parseOptionalDate(query.created_to, 'created_to'),
+  };
+}
+
+function parseOptionalDate(value: unknown, fieldName: string): Date | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be an ISO datetime string.`);
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be an ISO datetime string.`);
+  }
+  return date;
+}
+
 function buildInputJsonEquals(field: string, value: string) {
   return { inputJson: { path: [field], equals: value } };
 }
@@ -285,6 +330,31 @@ function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistory
 
 function buildProposalHistoryOrderBy(query: ReturnType<typeof parseProposalHistoryQuery>) {
   return { createdAt: query.order };
+}
+
+function buildProviderEventWhere(query: ReturnType<typeof parseProviderEventQuery>) {
+  const and: any[] = [];
+  if (query.providerName) {
+    and.push({ providerName: query.providerName });
+  }
+  if (query.eventType) {
+    and.push({ eventType: query.eventType });
+  }
+  if (query.status) {
+    and.push({ status: query.status });
+  }
+  if (query.proposalRunId) {
+    and.push({ proposalRunId: query.proposalRunId });
+  }
+  if (query.createdFrom || query.createdTo) {
+    and.push({
+      occurredAt: {
+        ...(query.createdFrom ? { gte: query.createdFrom } : {}),
+        ...(query.createdTo ? { lte: query.createdTo } : {}),
+      },
+    });
+  }
+  return and.length > 0 ? { AND: and } : {};
 }
 
 function readSafeToken(value: unknown, fallback = 'unknown'): string {
@@ -527,9 +597,16 @@ function buildCodexCliManualObservation(params: {
   };
 }
 
-function assertStrategyProposalRateLimit(
+async function assertStrategyProposalRateLimit(
   request: FastifyRequest,
   providerMode: StrategyProposalRateLimitMode,
+  params: {
+    eventType: StrategyProposalProviderEventType;
+    providerName: string;
+    selectedBy?: StrategyProposalProviderObservation['selected_by'] | null;
+    manualImport?: boolean;
+    metadata?: Record<string, unknown>;
+  },
 ) {
   const rateLimitConfig = getStrategyProposalRateLimitConfig();
   const rateLimitKey = resolveStrategyProposalRateLimitKey({
@@ -542,6 +619,22 @@ function assertStrategyProposalRateLimit(
     providerMode,
   });
   if (!rateLimit.allowed) {
+    await recordStrategyProposalProviderEvent({
+      eventType: params.eventType,
+      providerName: params.providerName,
+      providerMode,
+      selectedBy: params.selectedBy ?? null,
+      status: 'rate_limited',
+      invalidReason: 'none',
+      rateLimited: true,
+      rateLimitKeySource: rateLimitKey.source,
+      manualImport: params.manualImport ?? false,
+      metadata: {
+        ...params.metadata,
+        rate_limit_limit: rateLimit.limit,
+        rate_limit_window_ms: rateLimit.windowMs,
+      },
+    });
     throw new AppError(
       429,
       'RATE_LIMITED',
@@ -810,6 +903,95 @@ async function createProposalRun(params: {
   });
 }
 
+function buildProviderEventMetadata(
+  observation: StrategyProposalProviderObservation,
+  extra?: Record<string, unknown>,
+) {
+  return {
+    schema_valid: observation.schema_valid,
+    fallback_used: observation.fallback_used,
+    fallback_reason: observation.fallback_reason,
+    missing_required_field_count: observation.missing_required_field_count,
+    affected_candidate_count: observation.affected_candidate_count,
+    normalization_fallback_used: observation.normalization_fallback_used,
+    fallback_field_count: observation.fallback_field_count,
+    ...extra,
+  };
+}
+
+function providerObservationModeForEvent(providerName: string, fallbackMode: string) {
+  if (providerName === 'local_llm') {
+    return 'local';
+  }
+  if (providerName === 'stub') {
+    return 'deterministic';
+  }
+  if (providerName === CODEX_CLI_MANUAL_PROVIDER.name) {
+    return CODEX_CLI_MANUAL_PROVIDER.mode;
+  }
+  return fallbackMode;
+}
+
+async function recordProposalGenerateEvent(params: {
+  eventType: StrategyProposalProviderEventType;
+  proposalRunId?: string | null;
+  providerName: string;
+  providerMode: string;
+  selectedBy: StrategyProposalProviderObservation['selected_by'];
+  providerObservation: StrategyProposalProviderObservation;
+  metadata?: Record<string, unknown>;
+}) {
+  await recordStrategyProposalProviderEvent({
+    proposalRunId: params.proposalRunId ?? null,
+    eventType: params.eventType,
+    providerName: params.providerName,
+    providerMode: params.providerMode,
+    selectedBy: params.selectedBy,
+    status: params.providerObservation.status,
+    invalidReason: params.providerObservation.invalid_reason,
+    latencyBucket: params.providerObservation.latency_bucket,
+    elapsedMs: params.providerObservation.elapsed_ms,
+    candidateCount: params.providerObservation.candidate_count,
+    validationErrorCount: params.providerObservation.validation_error_count,
+    retryUsed: params.providerObservation.retry_used ?? false,
+    retryReason: params.providerObservation.retry_reason ?? null,
+    retrySucceeded: params.providerObservation.retry_succeeded ?? null,
+    metadata: buildProviderEventMetadata(params.providerObservation, params.metadata),
+  });
+}
+
+async function recordRetryEventIfNeeded(params: {
+  proposalRunId?: string | null;
+  providerName: string;
+  providerMode: string;
+  selectedBy: StrategyProposalProviderObservation['selected_by'];
+  providerObservation: StrategyProposalProviderObservation;
+}) {
+  if (!params.providerObservation.retry_used) {
+    return;
+  }
+  await recordStrategyProposalProviderEvent({
+    proposalRunId: params.proposalRunId ?? null,
+    eventType: 'proposal_generate_retry',
+    providerName: params.providerName,
+    providerMode: params.providerMode,
+    selectedBy: params.selectedBy,
+    status: params.providerObservation.retry_succeeded ? 'succeeded' : 'failed',
+    invalidReason: params.providerObservation.invalid_reason,
+    latencyBucket: params.providerObservation.latency_bucket,
+    elapsedMs: params.providerObservation.elapsed_ms,
+    candidateCount: params.providerObservation.candidate_count,
+    validationErrorCount: params.providerObservation.validation_error_count,
+    retryUsed: true,
+    retryReason: params.providerObservation.retry_reason ?? null,
+    retrySucceeded: params.providerObservation.retry_succeeded ?? null,
+    metadata: {
+      missing_required_field_count: params.providerObservation.missing_required_field_count,
+      affected_candidate_count: params.providerObservation.affected_candidate_count,
+    },
+  });
+}
+
 function withProposalRunId(data: StrategyProposalData, proposalRunId: string): StrategyProposalData & {
   proposal_run_id: string;
   history: { proposal_run_id: string };
@@ -831,7 +1013,12 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       input = parseStrategyProposalRequest(request.body ?? {});
-      assertStrategyProposalRateLimit(request, selection.mode);
+      await assertStrategyProposalRateLimit(request, selection.mode, {
+        eventType: 'proposal_generate_rate_limited',
+        providerName: selection.mode,
+        selectedBy: selection.selectedBy,
+        metadata: { candidate_count_requested: input.proposal_count, source: 'strategy_lab' },
+      });
       const provider = createStrategyProposalProvider(selection.mode);
       const generated = await provider.generate(input);
       const providerObservation = buildStrategyProposalObservation({
@@ -861,6 +1048,22 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
         selectedBy: providerObservation.selected_by,
         providerObservation,
         candidates: data.candidates,
+      });
+      await recordProposalGenerateEvent({
+        eventType: 'proposal_generate',
+        proposalRunId: run.id,
+        providerName: data.provider.name,
+        providerMode: data.provider.mode,
+        selectedBy: providerObservation.selected_by,
+        providerObservation,
+        metadata: { candidate_count_requested: input.proposal_count, source: 'strategy_lab' },
+      });
+      await recordRetryEventIfNeeded({
+        proposalRunId: run.id,
+        providerName: data.provider.name,
+        providerMode: data.provider.mode,
+        selectedBy: providerObservation.selected_by,
+        providerObservation,
       });
 
       return reply.status(200).send(formatSuccess(request, withProposalRunId(data, run.id)));
@@ -893,6 +1096,25 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
           });
           proposalRunId = run.id;
         }
+        await recordProposalGenerateEvent({
+          eventType: 'proposal_generate_failed',
+          proposalRunId,
+          providerName: providerObservation.provider_name,
+          providerMode: providerObservationModeForEvent(providerObservation.provider_name, selection.mode),
+          selectedBy: providerObservation.selected_by,
+          providerObservation,
+          metadata: {
+            candidate_count_requested: input?.proposal_count,
+            source: 'strategy_lab',
+          },
+        });
+        await recordRetryEventIfNeeded({
+          proposalRunId,
+          providerName: providerObservation.provider_name,
+          providerMode: providerObservationModeForEvent(providerObservation.provider_name, selection.mode),
+          selectedBy: providerObservation.selected_by,
+          providerObservation,
+        });
         throw new AppError(error.statusCode, error.code, error.message, {
           provider_observation: providerObservation,
           ...(proposalRunId ? { proposal_run_id: proposalRunId, history: { proposal_run_id: proposalRunId } } : {}),
@@ -915,46 +1137,108 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: CodexCliImportBody }>('/proposals/codex-cli/import', async (request, reply) => {
     const startedAtMs = Date.now();
-    assertStrategyProposalRateLimit(request, CODEX_CLI_MANUAL_PROVIDER.mode as StrategyProposalRateLimitMode);
-    readCodexCliImportSource(request.body?.source);
-    const importText = readCodexCliImportText(request.body?.result_json_text);
-    const parsed = parseCodexCliImportJson(importText);
-    const root = readRecord(parsed);
-    const input = parseStrategyProposalRequest(root.input ?? {});
-    const candidateCount = Array.isArray(root.candidates) ? root.candidates.length : 0;
-    const providerObservation = buildCodexCliManualObservation({ startedAtMs, candidateCount });
+    let importSource: 'paste' | 'file' = 'paste';
+    let input: StrategyProposalRequest | null = null;
+    let providerObservation: StrategyProposalProviderObservation | null = null;
+    let data: StrategyProposalData | null = null;
 
-    let data: StrategyProposalData;
     try {
-      data = validateStrategyProposalData({
-        schema_name: root.schema_name,
-        schema_version: root.schema_version,
+      await assertStrategyProposalRateLimit(request, CODEX_CLI_MANUAL_PROVIDER.mode as StrategyProposalRateLimitMode, {
+        eventType: 'codex_cli_import_rate_limited',
+        providerName: CODEX_CLI_MANUAL_PROVIDER.name,
+        selectedBy: 'config',
+        manualImport: true,
+        metadata: { source: 'strategy_lab' },
+      });
+      importSource = readCodexCliImportSource(request.body?.source);
+      const importText = readCodexCliImportText(request.body?.result_json_text);
+      const parsed = parseCodexCliImportJson(importText);
+      const root = readRecord(parsed);
+      input = parseStrategyProposalRequest(root.input ?? {});
+      const candidateCount = Array.isArray(root.candidates) ? root.candidates.length : 0;
+      providerObservation = buildCodexCliManualObservation({ startedAtMs, candidateCount });
+
+      try {
+        data = validateStrategyProposalData({
+          schema_name: root.schema_name,
+          schema_version: root.schema_version,
+          input,
+          provider: CODEX_CLI_MANUAL_PROVIDER,
+          provider_observation: providerObservation,
+          candidates: root.candidates,
+          disclaimer: typeof root.disclaimer === 'string' && root.disclaimer.trim()
+            ? root.disclaimer.trim()
+            : CODEX_CLI_IMPORT_DISCLAIMER,
+        } as StrategyProposalData);
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw toCodexCliImportValidationError(error, root.candidates);
+        }
+        throw error;
+      }
+      const validatedData = data as StrategyProposalData;
+
+      const run = await createProposalRun({
         input,
-        provider: CODEX_CLI_MANUAL_PROVIDER,
-        provider_observation: providerObservation,
-        candidates: root.candidates,
-        disclaimer: typeof root.disclaimer === 'string' && root.disclaimer.trim()
-          ? root.disclaimer.trim()
-          : CODEX_CLI_IMPORT_DISCLAIMER,
-      } as StrategyProposalData);
+        status: 'succeeded',
+        providerName: validatedData.provider.name,
+        providerMode: validatedData.provider.mode,
+        selectedBy: providerObservation.selected_by,
+        providerObservation,
+        candidates: validatedData.candidates,
+      });
+      await recordStrategyProposalProviderEvent({
+        proposalRunId: run.id,
+        eventType: 'codex_cli_import',
+        providerName: validatedData.provider.name,
+        providerMode: validatedData.provider.mode,
+        selectedBy: providerObservation.selected_by,
+        status: 'succeeded',
+        invalidReason: 'none',
+        latencyBucket: providerObservation.latency_bucket,
+        elapsedMs: providerObservation.elapsed_ms,
+        candidateCount: validatedData.candidates.length,
+        validationErrorCount: 0,
+        manualImport: true,
+        metadata: {
+          schema_valid: true,
+          candidate_count_requested: input.proposal_count,
+          manual_import_source: importSource,
+          source: 'strategy_lab',
+        },
+      });
+
+      return reply.status(200).send(formatSuccess(request, withProposalRunId(validatedData, run.id)));
     } catch (error) {
-      if (error instanceof AppError) {
-        throw toCodexCliImportValidationError(error, root.candidates);
+      if (error instanceof AppError && error.code !== 'RATE_LIMITED') {
+        const invalidReason = readSafeToken(error.details?.invalid_reason, 'unknown');
+        await recordStrategyProposalProviderEvent({
+          eventType: 'codex_cli_import_failed',
+          providerName: CODEX_CLI_MANUAL_PROVIDER.name,
+          providerMode: CODEX_CLI_MANUAL_PROVIDER.mode,
+          selectedBy: 'config',
+          status: invalidReason === 'timeout' ? 'timeout' : 'invalid_response',
+          invalidReason,
+          latencyBucket: 'acceptable',
+          elapsedMs: Date.now() - startedAtMs,
+          candidateCount: 0,
+          validationErrorCount:
+            typeof error.details?.missing_required_field_count === 'number'
+              ? error.details.missing_required_field_count
+              : 1,
+          manualImport: true,
+          metadata: {
+            schema_valid: false,
+            missing_required_field_count: error.details?.missing_required_field_count,
+            affected_candidate_count: error.details?.affected_candidate_count,
+            candidate_count_requested: input?.proposal_count,
+            manual_import_source: importSource,
+            source: 'strategy_lab',
+          },
+        });
       }
       throw error;
     }
-
-    const run = await createProposalRun({
-      input,
-      status: 'succeeded',
-      providerName: data.provider.name,
-      providerMode: data.provider.mode,
-      selectedBy: providerObservation.selected_by,
-      providerObservation,
-      candidates: data.candidates,
-    });
-
-    return reply.status(200).send(formatSuccess(request, withProposalRunId(data, run.id)));
   });
 
   fastify.get<{ Querystring: ProposalHistoryQuery }>('/proposals', async (request, reply) => {
@@ -1012,6 +1296,51 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
     });
 
     return reply.status(200).send(formatSuccess(request, buildStrategyProposalQualityTrend(runs, limit)));
+  });
+
+  fastify.get<{ Querystring: ProviderEventQuery }>('/proposals/provider-events', async (request, reply) => {
+    const query = parseProviderEventQuery(request.query);
+    const offset = (query.page - 1) * query.limit;
+    const where = buildProviderEventWhere(query);
+    const [totalCount, events] = await Promise.all([
+      (prisma as any).strategyProposalProviderEvent.count({ where }),
+      (prisma as any).strategyProposalProviderEvent.findMany({
+        where,
+        orderBy: { occurredAt: 'desc' },
+        skip: offset,
+        take: query.limit,
+      }),
+    ]);
+
+    return reply.status(200).send(formatSuccess(request, {
+      events: events.map(serializeStrategyProposalProviderEvent),
+      filters: {
+        provider_name: query.providerName,
+        event_type: query.eventType,
+        status: query.status,
+        proposal_run_id: query.proposalRunId,
+        created_from: query.createdFrom?.toISOString() ?? null,
+        created_to: query.createdTo?.toISOString() ?? null,
+      },
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total_count: totalCount,
+        has_next: offset + query.limit < totalCount,
+        has_previous: query.page > 1,
+      },
+      meta: {
+        source: 'strategy_proposal_provider_events',
+        sanitized: true,
+        raw_prompt_included: false,
+        raw_response_included: false,
+        raw_codex_output_included: false,
+        endpoint_included: false,
+        model_value_included: false,
+        user_hint_full_text_included: false,
+        candidate_free_text_included: false,
+      },
+    }));
   });
 
   fastify.get<{ Params: { proposalRunId: string } }>('/proposals/:proposalRunId', async (request, reply) => {

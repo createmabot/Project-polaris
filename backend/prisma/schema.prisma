@@ -479,6 +479,7 @@ model StrategyProposalRun {
 
   candidates StrategyProposalCandidate[]
   selectedCandidate StrategyProposalCandidate? @relation("StrategyProposalRunSelectedCandidate", fields: [selectedCandidateId], references: [id], onDelete: SetNull)
+  providerEvents StrategyProposalProviderEvent[]
 
   @@index([createdAt])
   @@index([status, createdAt])
@@ -503,6 +504,39 @@ model StrategyProposalCandidate {
   @@index([proposalRunId, rank])
   @@index([selectedAt])
   @@map("strategy_proposal_candidates")
+}
+
+model StrategyProposalProviderEvent {
+  id                   String   @id @default(uuid())
+  proposalRunId         String?  @map("proposal_run_id")
+  proposalRun           StrategyProposalRun? @relation(fields: [proposalRunId], references: [id], onDelete: SetNull)
+  eventType             String   @map("event_type")
+  providerName          String   @map("provider_name")
+  providerMode          String?  @map("provider_mode")
+  selectedBy            String?  @map("selected_by")
+  status                String
+  invalidReason         String?  @map("invalid_reason")
+  latencyBucket         String?  @map("latency_bucket")
+  elapsedMs             Int?     @map("elapsed_ms")
+  candidateCount        Int?     @map("candidate_count")
+  validationErrorCount  Int?     @map("validation_error_count")
+  retryUsed             Boolean  @default(false) @map("retry_used")
+  retryReason           String?  @map("retry_reason")
+  retrySucceeded        Boolean? @map("retry_succeeded")
+  rateLimited           Boolean  @default(false) @map("rate_limited")
+  rateLimitKeySource    String?  @map("rate_limit_key_source")
+  manualImport          Boolean  @default(false) @map("manual_import")
+  benchmark             Boolean  @default(false)
+  metadataJson          Json?    @map("metadata_json")
+  occurredAt            DateTime @default(now()) @map("occurred_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@index([occurredAt])
+  @@index([providerName, occurredAt])
+  @@index([eventType, occurredAt])
+  @@index([status, occurredAt])
+  @@index([proposalRunId])
+  @@map("strategy_proposal_provider_events")
 }
 
 model PineScript {

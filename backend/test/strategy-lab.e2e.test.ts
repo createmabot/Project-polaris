@@ -114,6 +114,31 @@ type StrategyProposalCandidateRow = {
   updatedAt: Date;
 };
 
+type StrategyProposalProviderEventRow = {
+  id: string;
+  proposalRunId: string | null;
+  eventType: string;
+  providerName: string;
+  providerMode: string | null;
+  selectedBy: string | null;
+  status: string;
+  invalidReason: string | null;
+  latencyBucket: string | null;
+  elapsedMs: number | null;
+  candidateCount: number | null;
+  validationErrorCount: number | null;
+  retryUsed: boolean;
+  retryReason: string | null;
+  retrySucceeded: boolean | null;
+  rateLimited: boolean;
+  rateLimitKeySource: string | null;
+  manualImport: boolean;
+  benchmark: boolean;
+  metadataJson: unknown;
+  occurredAt: Date;
+  createdAt: Date;
+};
+
 type Runtime = {
   strategySeq: number;
   versionSeq: number;
@@ -121,6 +146,7 @@ type Runtime = {
   revisionSeq: number;
   proposalRunSeq: number;
   proposalCandidateSeq: number;
+  proposalProviderEventSeq: number;
   strategies: Map<string, StrategyRuleRow>;
   versions: Map<string, StrategyRuleVersionRow>;
   pineScripts: Map<string, PineScriptRow>;
@@ -137,8 +163,11 @@ type Runtime = {
   }>;
   proposalRuns: Map<string, StrategyProposalRunRow>;
   proposalCandidates: Map<string, StrategyProposalCandidateRow>;
+  proposalProviderEvents: Map<string, StrategyProposalProviderEventRow>;
   proposalRunFindManyCalls: any[];
   proposalRunCountCalls: any[];
+  proposalProviderEventFindManyCalls: any[];
+  proposalProviderEventCountCalls: any[];
 };
 
 let runtime: Runtime;
@@ -151,15 +180,27 @@ function createRuntime(): Runtime {
     revisionSeq: 1,
     proposalRunSeq: 1,
     proposalCandidateSeq: 1,
+    proposalProviderEventSeq: 1,
     strategies: new Map(),
     versions: new Map(),
     pineScripts: new Map(),
     pineRevisionInputs: new Map(),
     proposalRuns: new Map(),
     proposalCandidates: new Map(),
+    proposalProviderEvents: new Map(),
     proposalRunFindManyCalls: [],
     proposalRunCountCalls: [],
+    proposalProviderEventFindManyCalls: [],
+    proposalProviderEventCountCalls: [],
   };
+}
+
+function findProviderEvent(
+  eventType: string,
+  predicate: (event: StrategyProposalProviderEventRow) => boolean = () => true,
+) {
+  return Array.from(runtime.proposalProviderEvents.values())
+    .find((event) => event.eventType === eventType && predicate(event));
 }
 
 function readJsonPath(value: unknown, path: string[]): unknown {
@@ -227,6 +268,34 @@ function proposalRunMatchesWhere(row: StrategyProposalRunRow, where: any): boole
     if ('string_contains' in where.inputJson && !stringMatches(value, where.inputJson)) {
       return false;
     }
+  }
+  return true;
+}
+
+function providerEventMatchesWhere(row: StrategyProposalProviderEventRow, where: any): boolean {
+  if (!where || Object.keys(where).length === 0) {
+    return true;
+  }
+  if (Array.isArray(where.AND)) {
+    return where.AND.every((condition: any) => providerEventMatchesWhere(row, condition));
+  }
+  if (where.providerName !== undefined && row.providerName !== where.providerName) {
+    return false;
+  }
+  if (where.eventType !== undefined && row.eventType !== where.eventType) {
+    return false;
+  }
+  if (where.status !== undefined && row.status !== where.status) {
+    return false;
+  }
+  if (where.proposalRunId !== undefined && row.proposalRunId !== where.proposalRunId) {
+    return false;
+  }
+  if (where.occurredAt?.gte && row.occurredAt < where.occurredAt.gte) {
+    return false;
+  }
+  if (where.occurredAt?.lte && row.occurredAt > where.occurredAt.lte) {
+    return false;
   }
   return true;
 }
@@ -647,20 +716,75 @@ vi.mock('../src/db', () => {
         return next;
       },
     },
+    strategyProposalProviderEvent: {
+      create: async ({ data }: any) => {
+        const id = `proposal-event-${runtime.proposalProviderEventSeq++}`;
+        const now = new Date();
+        const row: StrategyProposalProviderEventRow = {
+          id,
+          proposalRunId: data.proposalRunId ?? null,
+          eventType: data.eventType,
+          providerName: data.providerName,
+          providerMode: data.providerMode ?? null,
+          selectedBy: data.selectedBy ?? null,
+          status: data.status,
+          invalidReason: data.invalidReason ?? null,
+          latencyBucket: data.latencyBucket ?? null,
+          elapsedMs: data.elapsedMs ?? null,
+          candidateCount: data.candidateCount ?? null,
+          validationErrorCount: data.validationErrorCount ?? null,
+          retryUsed: data.retryUsed ?? false,
+          retryReason: data.retryReason ?? null,
+          retrySucceeded: data.retrySucceeded ?? null,
+          rateLimited: data.rateLimited ?? false,
+          rateLimitKeySource: data.rateLimitKeySource ?? null,
+          manualImport: data.manualImport ?? false,
+          benchmark: data.benchmark ?? false,
+          metadataJson: data.metadataJson ?? null,
+          occurredAt: data.occurredAt ?? now,
+          createdAt: data.createdAt ?? now,
+        };
+        runtime.proposalProviderEvents.set(id, row);
+        return row;
+      },
+      count: async ({ where }: any = {}) => {
+        runtime.proposalProviderEventCountCalls.push({ where });
+        return Array.from(runtime.proposalProviderEvents.values())
+          .filter((row) => providerEventMatchesWhere(row, where))
+          .length;
+      },
+      findMany: async ({ where, orderBy, skip, take }: any = {}) => {
+        runtime.proposalProviderEventFindManyCalls.push({ where, orderBy, skip, take });
+        let rows = Array.from(runtime.proposalProviderEvents.values())
+          .filter((row) => providerEventMatchesWhere(row, where));
+        if (orderBy?.occurredAt === 'desc') {
+          rows.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+        } else if (orderBy?.occurredAt === 'asc') {
+          rows.sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+        }
+        const offset = Number.isInteger(skip) ? skip : 0;
+        rows = rows.slice(offset, Number.isInteger(take) ? offset + take : rows.length);
+        return rows;
+      },
+    },
     $transaction: async (callback: any) => {
       const snapshot = {
         proposalRunSeq: runtime.proposalRunSeq,
         proposalCandidateSeq: runtime.proposalCandidateSeq,
+        proposalProviderEventSeq: runtime.proposalProviderEventSeq,
         proposalRuns: new Map(Array.from(runtime.proposalRuns.entries()).map(([key, value]) => [key, { ...value }])),
         proposalCandidates: new Map(Array.from(runtime.proposalCandidates.entries()).map(([key, value]) => [key, { ...value }])),
+        proposalProviderEvents: new Map(Array.from(runtime.proposalProviderEvents.entries()).map(([key, value]) => [key, { ...value }])),
       };
       try {
         return await callback(prisma);
       } catch (error) {
         runtime.proposalRunSeq = snapshot.proposalRunSeq;
         runtime.proposalCandidateSeq = snapshot.proposalCandidateSeq;
+        runtime.proposalProviderEventSeq = snapshot.proposalProviderEventSeq;
         runtime.proposalRuns = snapshot.proposalRuns;
         runtime.proposalCandidates = snapshot.proposalCandidates;
+        runtime.proposalProviderEvents = snapshot.proposalProviderEvents;
         throw error;
       }
     },
@@ -873,6 +997,30 @@ describe('strategy lab vertical slice', () => {
     expect(detailResponse.json().data.candidates[0].candidate).toMatchObject({
       candidate_id: body.data.candidates[0].candidate_id,
     });
+
+    const event = findProviderEvent('proposal_generate');
+    expect(event).toMatchObject({
+      proposalRunId: body.data.proposal_run_id,
+      eventType: 'proposal_generate',
+      providerName: 'stub',
+      providerMode: 'deterministic',
+      selectedBy: 'default',
+      status: 'succeeded',
+      invalidReason: 'none',
+      candidateCount: 1,
+      validationErrorCount: 0,
+      retryUsed: false,
+      rateLimited: false,
+      manualImport: false,
+    });
+    expect(event?.metadataJson).toMatchObject({
+      schema_valid: true,
+      fallback_used: false,
+      candidate_count_requested: 1,
+      source: 'strategy_lab',
+    });
+    expect(JSON.stringify(event)).not.toContain('出来高を重視したい');
+    expect(JSON.stringify(event)).not.toContain(body.data.candidates[0].title);
   });
 
   it('filters, paginates, and searches proposal history without returning candidate free text', async () => {
@@ -1148,6 +1296,28 @@ describe('strategy lab vertical slice', () => {
     const storedCandidates = Array.from(runtime.proposalCandidates.values())
       .filter((candidate) => candidate.proposalRunId === body.data.proposal_run_id);
     expect(storedCandidates).toHaveLength(5);
+    const event = findProviderEvent('codex_cli_import');
+    expect(event).toMatchObject({
+      proposalRunId: body.data.proposal_run_id,
+      eventType: 'codex_cli_import',
+      providerName: 'codex_cli_manual',
+      providerMode: 'manual_import',
+      selectedBy: 'config',
+      status: 'succeeded',
+      invalidReason: 'none',
+      candidateCount: 5,
+      validationErrorCount: 0,
+      manualImport: true,
+      rateLimited: false,
+    });
+    expect(event?.metadataJson).toMatchObject({
+      schema_valid: true,
+      candidate_count_requested: 5,
+      manual_import_source: 'paste',
+      source: 'strategy_lab',
+    });
+    expect(JSON.stringify(event)).not.toContain('raw codex output marker');
+    expect(JSON.stringify(event)).not.toContain('Codex CLI manual candidate');
 
     const selectResponse = await app.inject({
       method: 'POST',
@@ -1212,6 +1382,22 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(body)).not.toContain('203.0.113.10');
     expect(JSON.stringify(body)).not.toContain('request_ip:');
     expect(JSON.stringify(body)).not.toContain('manual_import:');
+
+    const rateLimitedEvent = findProviderEvent('codex_cli_import_rate_limited');
+    expect(rateLimitedEvent).toMatchObject({
+      proposalRunId: null,
+      providerName: 'codex_cli_manual',
+      providerMode: 'manual_import',
+      selectedBy: 'config',
+      status: 'rate_limited',
+      invalidReason: 'none',
+      rateLimited: true,
+      rateLimitKeySource: 'request_ip',
+      manualImport: true,
+    });
+    expect(JSON.stringify(rateLimitedEvent)).not.toContain('blocked raw import payload should not leak');
+    expect(JSON.stringify(rateLimitedEvent)).not.toContain('another-spoofed-client');
+    expect(JSON.stringify(rateLimitedEvent)).not.toContain('203.0.113.10');
   });
 
   it('rejects invalid Codex CLI import JSON without echoing raw output', async () => {
@@ -1227,6 +1413,18 @@ describe('strategy lab vertical slice', () => {
     expect(malformedResponse.statusCode).toBe(400);
     expect(malformedResponse.json().error.details.invalid_reason).toBe('malformed_json');
     expect(JSON.stringify(malformedResponse.json())).not.toContain('must not leak');
+    const malformedEvent = findProviderEvent('codex_cli_import_failed', (event) => (
+      event.invalidReason === 'malformed_json'
+    ));
+    expect(malformedEvent).toMatchObject({
+      proposalRunId: null,
+      providerName: 'codex_cli_manual',
+      providerMode: 'manual_import',
+      status: 'invalid_response',
+      invalidReason: 'malformed_json',
+      manualImport: true,
+    });
+    expect(JSON.stringify(malformedEvent)).not.toContain('must not leak');
 
     const missingCandidate = validLocalLlmCandidate({ candidate_id: 'codex-missing' }) as Record<string, unknown>;
     delete missingCandidate.title;
@@ -1243,6 +1441,23 @@ describe('strategy lab vertical slice', () => {
     expect(missingResponse.json().error.details.missing_required_fields).toContain('title');
     expect(JSON.stringify(missingResponse.json())).not.toContain('codex-missing');
     expect(runtime.proposalRuns.size).toBe(0);
+    const missingEvent = findProviderEvent('codex_cli_import_failed', (event) => (
+      event.invalidReason === 'required_field_missing'
+    ));
+    expect(missingEvent).toMatchObject({
+      proposalRunId: null,
+      providerName: 'codex_cli_manual',
+      status: 'invalid_response',
+      invalidReason: 'required_field_missing',
+      manualImport: true,
+    });
+    expect(missingEvent?.metadataJson).toMatchObject({
+      schema_valid: false,
+      missing_required_field_count: 1,
+      affected_candidate_count: 1,
+      source: 'strategy_lab',
+    });
+    expect(JSON.stringify(missingEvent)).not.toContain('codex-missing');
   });
 
   it('rejects Codex CLI imports that exceed candidate or research source boundaries', async () => {
@@ -1474,6 +1689,117 @@ describe('strategy lab vertical slice', () => {
     expect(serialized).not.toContain('not json');
   });
 
+  it('lists sanitized provider events with pagination and filters', async () => {
+    const app = await createApp();
+
+    const stubResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        proposal_count: 1,
+        user_hint: 'private provider event hint should not be listed',
+      },
+    });
+    expect(stubResponse.statusCode).toBe(200);
+
+    const codexResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify(codexCliImportPayload([
+          validLocalLlmCandidate({
+            candidate_id: 'event-codex-1',
+            title: 'Provider event free text marker',
+          }),
+        ])),
+      },
+    });
+    expect(codexResponse.statusCode).toBe(200);
+
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT = 'http://local-llm.example.test';
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_MODEL = 'proposal-model-test';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(localLlmResponseText('raw provider text should not be listed')));
+    const failedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1 },
+    });
+    expect(failedResponse.statusCode).toBe(502);
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals/provider-events?page=1&limit=2',
+    });
+    expect(listResponse.statusCode).toBe(200);
+    const body = listResponse.json();
+    expect(body.data.events).toHaveLength(2);
+    expect(body.data.pagination).toMatchObject({
+      page: 1,
+      limit: 2,
+      total_count: 3,
+      has_next: true,
+      has_previous: false,
+    });
+    expect(body.data.meta).toMatchObject({
+      source: 'strategy_proposal_provider_events',
+      sanitized: true,
+      raw_prompt_included: false,
+      raw_response_included: false,
+      raw_codex_output_included: false,
+      endpoint_included: false,
+      model_value_included: false,
+      user_hint_full_text_included: false,
+      candidate_free_text_included: false,
+    });
+    const listCall = runtime.proposalProviderEventFindManyCalls.find((call) => (
+      call.take === 2 && call.skip === 0 && call.orderBy?.occurredAt === 'desc'
+    ));
+    expect(listCall).toBeTruthy();
+    expect(runtime.proposalProviderEventCountCalls.some((call) => (
+      JSON.stringify(call.where) === JSON.stringify(listCall?.where)
+    ))).toBe(true);
+
+    const providerFilter = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals/provider-events?provider_name=codex_cli_manual&event_type=codex_cli_import&status=succeeded',
+    });
+    expect(providerFilter.statusCode).toBe(200);
+    expect(providerFilter.json().data.events).toHaveLength(1);
+    expect(providerFilter.json().data.events[0]).toMatchObject({
+      proposal_run_id: codexResponse.json().data.proposal_run_id,
+      event_type: 'codex_cli_import',
+      provider_name: 'codex_cli_manual',
+      provider_mode: 'manual_import',
+      status: 'succeeded',
+      invalid_reason: 'none',
+      candidate_count: 1,
+      manual_import: true,
+    });
+
+    const runFilter = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-lab/proposals/provider-events?proposal_run_id=${stubResponse.json().data.proposal_run_id}`,
+    });
+    expect(runFilter.statusCode).toBe(200);
+    expect(runFilter.json().data.events).toHaveLength(1);
+    expect(runFilter.json().data.events[0]).toMatchObject({
+      proposal_run_id: stubResponse.json().data.proposal_run_id,
+      event_type: 'proposal_generate',
+      provider_name: 'stub',
+    });
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('private provider event hint should not be listed');
+    expect(serialized).not.toContain('Provider event free text marker');
+    expect(serialized).not.toContain('raw provider text should not be listed');
+    expect(serialized).not.toContain('local-llm.example.test');
+    expect(serialized).not.toContain('proposal-model-test');
+    expect(serialized).not.toContain('C:\\');
+    expect(serialized).not.toContain('stack');
+  });
+
   it('uses stub strategy proposal provider by default without calling local llm', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -1697,6 +2023,27 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(body)).not.toContain('http://');
     expect(JSON.stringify(body)).not.toContain('C:\\');
     expect(JSON.stringify(body)).not.toContain('stack');
+
+    const rateLimitedEvent = findProviderEvent('proposal_generate_rate_limited');
+    expect(rateLimitedEvent).toMatchObject({
+      proposalRunId: null,
+      providerName: 'stub',
+      providerMode: 'stub',
+      selectedBy: 'default',
+      status: 'rate_limited',
+      invalidReason: 'none',
+      rateLimited: true,
+      rateLimitKeySource: 'request_ip',
+      manualImport: false,
+    });
+    expect(rateLimitedEvent?.metadataJson).toMatchObject({
+      candidate_count_requested: 1,
+      rate_limit_limit: 1,
+      rate_limit_window_ms: 60000,
+      source: 'strategy_lab',
+    });
+    expect(JSON.stringify(rateLimitedEvent)).not.toContain('forwarded-alpha');
+    expect(JSON.stringify(rateLimitedEvent)).not.toContain('forwarded-beta');
   });
 
   it('resolves strategy proposal rate limit keys without exposing identifier values', () => {
@@ -2083,6 +2430,19 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(retryRequestBody)).toContain('entry_logic');
     expect(JSON.stringify(retryRequestBody)).not.toContain('first response should not leak');
     expect(JSON.stringify(body)).not.toContain('first response should not leak');
+    const retryEvent = findProviderEvent('proposal_generate_retry');
+    expect(retryEvent).toMatchObject({
+      proposalRunId: body.data.proposal_run_id,
+      providerName: 'local_llm',
+      providerMode: 'local',
+      selectedBy: 'env',
+      status: 'succeeded',
+      invalidReason: 'none',
+      retryUsed: true,
+      retryReason: 'required_field_missing',
+      retrySucceeded: true,
+    });
+    expect(JSON.stringify(retryEvent)).not.toContain('first response should not leak');
   });
 
   it('treats non-string required scalar fields as missing diagnostics for retry', async () => {
@@ -2135,6 +2495,15 @@ describe('strategy lab vertical slice', () => {
     expect(retryRequestBody.messages[2].content).toContain('title');
     expect(JSON.stringify(retryRequestBody)).not.toContain('summary raw value should not leak');
     expect(JSON.stringify(body)).not.toContain('summary raw value should not leak');
+    const retryEvent = findProviderEvent('proposal_generate_retry');
+    expect(retryEvent).toMatchObject({
+      providerName: 'local_llm',
+      status: 'succeeded',
+      retryUsed: true,
+      retryReason: 'required_field_missing',
+      retrySucceeded: true,
+    });
+    expect(JSON.stringify(retryEvent)).not.toContain('summary raw value should not leak');
   });
 
   it('returns sanitized missing required field diagnostics when local_llm retry still fails', async () => {
@@ -2182,6 +2551,31 @@ describe('strategy lab vertical slice', () => {
     });
     expect(JSON.stringify(body)).not.toContain('first missing candidate should not leak');
     expect(JSON.stringify(body)).not.toContain('second missing candidate should not leak');
+    const failedEvent = findProviderEvent('proposal_generate_failed');
+    expect(failedEvent).toMatchObject({
+      providerName: 'local_llm',
+      providerMode: 'local',
+      selectedBy: 'env',
+      status: 'invalid_response',
+      invalidReason: 'required_field_missing',
+      candidateCount: 0,
+      retryUsed: true,
+      retryReason: 'required_field_missing',
+      retrySucceeded: false,
+    });
+    const retryEvent = findProviderEvent('proposal_generate_retry');
+    expect(retryEvent).toMatchObject({
+      providerName: 'local_llm',
+      status: 'failed',
+      invalidReason: 'required_field_missing',
+      retryUsed: true,
+      retryReason: 'required_field_missing',
+      retrySucceeded: false,
+    });
+    expect(JSON.stringify(failedEvent)).not.toContain('first missing candidate should not leak');
+    expect(JSON.stringify(failedEvent)).not.toContain('second missing candidate should not leak');
+    expect(JSON.stringify(retryEvent)).not.toContain('first missing candidate should not leak');
+    expect(JSON.stringify(retryEvent)).not.toContain('second missing candidate should not leak');
   });
 
   it('extracts bare local_llm candidate arrays with nested arrays, objects, and escaped delimiters', async () => {
