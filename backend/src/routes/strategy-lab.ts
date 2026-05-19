@@ -45,6 +45,20 @@ type CodexCliImportBody = {
   file_name?: unknown;
 };
 
+type ProposalHistoryQuery = {
+  limit?: string;
+  page?: string;
+  q?: string;
+  provider?: string;
+  provider_name?: string;
+  status?: string;
+  selected?: string;
+  market?: string;
+  timeframe?: string;
+  sort?: string;
+  order?: string;
+};
+
 const CODEX_CLI_MANUAL_PROVIDER = {
   name: 'codex_cli_manual',
   mode: 'manual_import',
@@ -77,12 +91,22 @@ const CODEX_CLI_REQUIRED_ARRAY_FIELDS = [
   'suggested_pine_constraints',
 ] as const;
 
-function parseProposalHistoryLimit(value: unknown): number {
-  const parsed = typeof value === 'string' ? Number(value) : 20;
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    return 20;
+function parsePositiveInteger(value: unknown, fieldName: string, defaultValue: number, maxValue: number): number {
+  if (value === undefined || value === null || value === '') {
+    return defaultValue;
   }
-  return Math.min(parsed, 50);
+  const parsed = typeof value === 'string' ? Number(value) : defaultValue;
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a positive integer.`);
+  }
+  if (parsed > maxValue) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be ${maxValue} or less.`);
+  }
+  return parsed;
+}
+
+function parseProposalHistoryLimit(value: unknown): number {
+  return parsePositiveInteger(value, 'limit', 20, 50);
 }
 
 function parseProposalQualityTrendLimit(value: unknown): number {
@@ -105,6 +129,22 @@ function serializeCandidate(row: any) {
   };
 }
 
+function sanitizeProposalRunInput(input: unknown) {
+  const data = readRecord(input);
+  const userHint = typeof data.user_hint === 'string' ? data.user_hint : null;
+  return {
+    market: typeof data.market === 'string' ? data.market : 'JP_STOCK',
+    timeframe: typeof data.timeframe === 'string' ? data.timeframe : 'D',
+    symbol_code: typeof data.symbol_code === 'string' ? data.symbol_code : null,
+    risk_preference: typeof data.risk_preference === 'string' ? data.risk_preference : 'balanced',
+    strategy_type_bias: typeof data.strategy_type_bias === 'string' ? data.strategy_type_bias : 'any',
+    proposal_count: readSafeNumber(data.proposal_count) ?? 5,
+    user_hint: null,
+    user_hint_present: Boolean(userHint?.trim()),
+    user_hint_length: userHint?.length ?? 0,
+  };
+}
+
 function serializeRun(row: any) {
   return {
     id: row.id,
@@ -112,7 +152,7 @@ function serializeRun(row: any) {
     provider_name: row.providerName,
     provider_mode: row.providerMode,
     selected_by: row.selectedBy,
-    input: row.inputJson,
+    input: sanitizeProposalRunInput(row.inputJson),
     provider_observation: row.providerObservationJson,
     candidate_count: row.candidateCount,
     selected_candidate_id: row.selectedCandidateId ?? null,
@@ -120,6 +160,134 @@ function serializeRun(row: any) {
     created_at: row.createdAt?.toISOString?.() ?? row.createdAt,
     updated_at: row.updatedAt?.toISOString?.() ?? row.updatedAt,
   };
+}
+
+function readSafeFilterToken(value: unknown, fieldName: string): string {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a string.`);
+  }
+  const trimmed = value.trim();
+  if (!/^[a-z0-9_.:-]+$/i.test(trimmed) || trimmed.length > 80) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} is invalid.`);
+  }
+  return trimmed;
+}
+
+function parseProposalHistorySelected(value: unknown): boolean | null {
+  if (value === undefined || value === null || value === '' || value === 'all') {
+    return null;
+  }
+  if (value === 'true' || value === 'selected') {
+    return true;
+  }
+  if (value === 'false' || value === 'unselected') {
+    return false;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'selected must be true or false.');
+}
+
+function parseProposalHistorySearch(value: unknown): string {
+  if (value === undefined || value === null || value === '') {
+    return '';
+  }
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'q must be a string.');
+  }
+  const trimmed = value.trim();
+  if (trimmed.length > 200) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'q must be 200 characters or less.');
+  }
+  return trimmed;
+}
+
+function parseProposalHistoryQuery(query: ProposalHistoryQuery) {
+  const limit = parseProposalHistoryLimit(query.limit);
+  const page = parsePositiveInteger(query.page, 'page', 1, 10_000);
+  const sort = query.sort ?? 'created_at';
+  if (sort !== 'created_at') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'sort must be created_at.');
+  }
+  const order = query.order ?? 'desc';
+  if (order !== 'asc' && order !== 'desc') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'order must be asc or desc.');
+  }
+  const providerName = readSafeFilterToken(query.provider_name ?? query.provider, 'provider_name');
+  const status = readSafeFilterToken(query.status, 'status');
+  if (status && status !== 'succeeded' && status !== 'failed') {
+    throw new AppError(400, 'VALIDATION_ERROR', 'status must be succeeded or failed.');
+  }
+  return {
+    page,
+    limit,
+    q: parseProposalHistorySearch(query.q),
+    providerName,
+    status,
+    selected: parseProposalHistorySelected(query.selected),
+    market: readSafeFilterToken(query.market, 'market'),
+    timeframe: readSafeFilterToken(query.timeframe, 'timeframe'),
+    sort,
+    order,
+  };
+}
+
+function readSearchText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
+}
+
+function strategyProposalRunMatchesQuery(row: any, query: ReturnType<typeof parseProposalHistoryQuery>): boolean {
+  const input = readRecord(row.inputJson);
+  if (query.providerName && row.providerName !== query.providerName) {
+    return false;
+  }
+  if (query.status && row.status !== query.status) {
+    return false;
+  }
+  if (query.selected !== null && Boolean(row.selectedCandidateId) !== query.selected) {
+    return false;
+  }
+  if (query.market && input.market !== query.market) {
+    return false;
+  }
+  if (query.timeframe && input.timeframe !== query.timeframe) {
+    return false;
+  }
+  if (!query.q) {
+    return true;
+  }
+
+  const needle = query.q.toLowerCase();
+  const runSearchFields = [
+    row.id,
+    row.providerName,
+    row.providerMode,
+    row.selectedBy,
+    input.market,
+    input.timeframe,
+    input.symbol_code,
+    input.risk_preference,
+    input.strategy_type_bias,
+  ].map(readSearchText);
+  const candidateSearchFields = (row.candidates ?? []).flatMap((candidate: any) => {
+    const candidateJson = readRecord(candidate.candidateJson);
+    return [
+      candidate.providerCandidateId,
+      candidateJson.candidate_id,
+      candidateJson.title,
+      candidateJson.summary,
+      candidateJson.strategy_type,
+      candidateJson.suggested_natural_language_spec,
+    ].map(readSearchText);
+  });
+  return [...runSearchFields, ...candidateSearchFields].some((value) => value.toLowerCase().includes(needle));
 }
 
 function readSafeToken(value: unknown, fallback = 'unknown'): string {
@@ -792,16 +960,44 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send(formatSuccess(request, withProposalRunId(data, run.id)));
   });
 
-  fastify.get<{ Querystring: { limit?: string } }>('/proposals', async (request, reply) => {
-    const limit = parseProposalHistoryLimit(request.query.limit);
+  fastify.get<{ Querystring: ProposalHistoryQuery }>('/proposals', async (request, reply) => {
+    const query = parseProposalHistoryQuery(request.query);
     const runs = await (prisma as any).strategyProposalRun.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: limit,
+      orderBy: { createdAt: query.order },
+      include: { candidates: { orderBy: { rank: 'asc' } } },
     });
+    const filteredRuns = runs.filter((run: any) => strategyProposalRunMatchesQuery(run, query));
+    const offset = (query.page - 1) * query.limit;
+    const paginatedRuns = filteredRuns.slice(offset, offset + query.limit);
 
     return reply.status(200).send(formatSuccess(request, {
-      proposal_runs: runs.map(serializeRun),
-      limit,
+      proposal_runs: paginatedRuns.map(serializeRun),
+      limit: query.limit,
+      filters: {
+        provider_name: query.providerName,
+        status: query.status,
+        selected: query.selected,
+        market: query.market,
+        timeframe: query.timeframe,
+        q_present: Boolean(query.q),
+        sort: query.sort,
+        order: query.order,
+      },
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total_count: filteredRuns.length,
+        has_next: offset + query.limit < filteredRuns.length,
+        has_previous: query.page > 1,
+      },
+      meta: {
+        source: 'strategy_proposal_history',
+        sanitized: true,
+        raw_prompt_included: false,
+        raw_response_included: false,
+        candidate_free_text_included: false,
+        user_hint_full_text_included: false,
+      },
     }));
   });
 

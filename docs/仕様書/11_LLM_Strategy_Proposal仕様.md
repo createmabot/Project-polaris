@@ -1040,13 +1040,46 @@ provider / observation:
 - Codex CLI raw output の保存。
 - proposal から Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
 
-## 17. 後続候補
+## 17. Proposal history full management
+
+Proposal history full management は、`StrategyProposalRun` / `StrategyProposalCandidate` に蓄積された proposal run を、履歴が増えても StrategyLab から探せるようにする最小管理導線である。
+
+実装範囲:
+
+- `GET /api/strategy-lab/proposals` は後方互換として `limit` を維持しつつ、`page` / `provider_name` / `status` / `selected` / `market` / `timeframe` / `q` / `sort=created_at` / `order=asc|desc` を受け付ける。
+- `page` は 1 起点、`limit` は上限付きとする。response は `pagination.page`、`pagination.limit`、`pagination.total_count`、`pagination.has_next`、`pagination.has_previous` を返す。
+- `provider_name` は `stub` / `local_llm` / `codex_cli_manual` などの保存済み provider name を exact match で扱う。
+- `status` は初回では `succeeded` / `failed` の保存済み run status を対象にする。
+- `selected=true|false` は `selected_candidate_id` の有無で判定する。
+- `market` / `timeframe` は保存済み input snapshot からの exact match とする。
+- `q` は run id、provider metadata、input metadata、candidate id / title / summary / strategy_type / suggested natural language spec を検索対象にできる。ただし list response には match snippet や candidate free text を返さない。
+- list response は `proposal_runs`、`limit` に加え、`filters`、`pagination`、`meta` を返す。`meta` は `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`candidate_free_text_included=false`、`user_hint_full_text_included=false` を明示する。
+- list item の `input.user_hint` は全文を返さず、`user_hint_present` / `user_hint_length` だけを返す。
+- detail API は既存 `GET /api/strategy-lab/proposals/:proposalRunId` を維持し、候補本文確認と selection flow を担当する。
+- selection API は既存通り title / natural language spec 反映の履歴記録だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を自動起動しない。
+
+StrategyLab UI:
+
+- 既存の「最近の提案」section を「提案履歴」の最小管理導線へ拡張する。
+- provider / status / selected / search / pagination を compact controls として置く。
+- provider quality trend note は維持するが、履歴 filter と trend aggregation を混同しない。
+- filter 変更時は page を 1 に戻し、detail 表示は再選択を必要とする。
+- 履歴 detail の候補選択は既存の「この候補を使う」を維持し、title / natural language spec 反映だけを行う。
+- raw diagnostics、raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace は表示しない。
+
+retention / lifecycle 方針:
+
+- 初回 full management では archive / hard delete / retention job / bulk delete を実装しない。
+- hard delete は selected candidate、future StrategyVersion created-from-proposal relation、provider quality trend、manual benchmark / history comparison と衝突し得るため、別フェーズで設計する。
+- archive を実装する場合は additive nullable field などの DB / Prisma schema change が必要になるため、別 design PR とする。
+
+## 18. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
 - citation / freshness 表示。
 - StrategyVersion created-from-proposal relation。
-- proposal history filter / pagination / search / retention / full management。
+- proposal history archive / retention / hard delete / export。
 - benchmark result DB table / prompt regression automation。
 - proposal history export。
 - symbol context から StrategyLab へ遷移する導線。
@@ -1056,7 +1089,7 @@ provider / observation:
 - browser smoke / visual regression 対象化。
 - Codex CLI local worker / automation は、backend 自動起動ではなく別設計で要否を判断する。
 
-## 18. 参照
+## 19. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`

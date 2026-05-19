@@ -790,6 +790,144 @@ describe('strategy lab vertical slice', () => {
     });
   });
 
+  it('filters, paginates, and searches proposal history without returning candidate free text', async () => {
+    const app = await createApp();
+
+    const stubResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'trend_following',
+        proposal_count: 1,
+        user_hint: 'privatealpha privatebeta',
+      },
+    });
+    expect(stubResponse.statusCode).toBe(200);
+
+    const codexCandidate = validLocalLlmCandidate({
+      candidate_id: 'codex-history-1',
+      title: 'Unique history management candidate marker',
+    });
+    const codexResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify(codexCliImportPayload([codexCandidate])),
+      },
+    });
+    expect(codexResponse.statusCode).toBe(200);
+
+    const selectResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${codexResponse.json().data.proposal_run_id}/select`,
+      payload: { candidate_id: 'codex-history-1' },
+    });
+    expect(selectResponse.statusCode).toBe(200);
+
+    process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(localLlmResponseText('not-json')));
+    const failedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1 },
+    });
+    expect(failedResponse.statusCode).toBe(502);
+
+    const pageOne = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?page=1&limit=2&sort=created_at&order=desc',
+    });
+    expect(pageOne.statusCode).toBe(200);
+    expect(pageOne.json().data.proposal_runs).toHaveLength(2);
+    expect(pageOne.json().data.pagination).toMatchObject({
+      page: 1,
+      limit: 2,
+      total_count: 3,
+      has_next: true,
+      has_previous: false,
+    });
+    expect(pageOne.json().data.meta).toMatchObject({
+      raw_prompt_included: false,
+      raw_response_included: false,
+      candidate_free_text_included: false,
+      user_hint_full_text_included: false,
+    });
+    expect(JSON.stringify(pageOne.json().data.proposal_runs)).not.toContain('privatealpha privatebeta');
+
+    const userHintSearch = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?q=history%20filter%20hint',
+    });
+    expect(userHintSearch.statusCode).toBe(200);
+    expect(userHintSearch.json().data.pagination.total_count).toBe(0);
+    expect(JSON.stringify(userHintSearch.json())).not.toContain('privatealpha privatebeta');
+
+    const pageTwo = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?page=2&limit=2&sort=created_at&order=desc',
+    });
+    expect(pageTwo.statusCode).toBe(200);
+    expect(pageTwo.json().data.proposal_runs).toHaveLength(1);
+    expect(pageTwo.json().data.pagination).toMatchObject({
+      page: 2,
+      has_next: false,
+      has_previous: true,
+    });
+
+    const providerFilter = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?provider_name=codex_cli_manual&selected=true',
+    });
+    expect(providerFilter.statusCode).toBe(200);
+    expect(providerFilter.json().data.proposal_runs).toHaveLength(1);
+    expect(providerFilter.json().data.proposal_runs[0]).toMatchObject({
+      provider_name: 'codex_cli_manual',
+      selected_candidate_id: expect.any(String),
+    });
+
+    const failedFilter = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?status=failed',
+    });
+    expect(failedFilter.statusCode).toBe(200);
+    expect(failedFilter.json().data.proposal_runs).toHaveLength(1);
+    expect(failedFilter.json().data.proposal_runs[0]).toMatchObject({
+      status: 'failed',
+      provider_name: 'local_llm',
+    });
+
+    const searchResponse = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?q=Unique%20history%20management%20candidate%20marker',
+    });
+    expect(searchResponse.statusCode).toBe(200);
+    expect(searchResponse.json().data.pagination.total_count).toBe(1);
+    expect(searchResponse.json().data.filters).toMatchObject({
+      q_present: true,
+    });
+    const serializedSearchBody = JSON.stringify(searchResponse.json());
+    expect(serializedSearchBody).not.toContain('Unique history management candidate marker');
+    expect(serializedSearchBody).not.toContain('suggested_natural_language_spec');
+    expect(serializedSearchBody).not.toContain('not-json');
+
+    const invalidSort = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?sort=updated_at',
+    });
+    expect(invalidSort.statusCode).toBe(400);
+
+    const longSearch = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-lab/proposals?q=${'x'.repeat(201)}`,
+    });
+    expect(longSearch.statusCode).toBe(400);
+    expect(JSON.stringify(longSearch.json())).not.toContain('x'.repeat(201));
+  });
+
   it('builds a Codex CLI manual import prompt without provider runtime details', async () => {
     const app = await createApp();
 

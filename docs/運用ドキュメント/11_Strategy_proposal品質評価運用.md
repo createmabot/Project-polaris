@@ -15,6 +15,8 @@ PR #365〜#366 で、prompt regression / provider benchmark の design、fixed s
 
 PR #368〜#370 で、proposal history / selected proposal lineage の backend persistence / API と StrategyLab minimal UI は完了扱いにする。品質評価では sanitized history と selection 記録を確認できるが、raw prompt / raw response / endpoint / secret / local path は記録しない。
 
+Proposal history full management では、StrategyLab の履歴 section から provider / status / selected / search / pagination で保存済み run を探せる。これは provider 品質や selection lineage を確認するための read-only 管理導線であり、archive / hard delete / retention job / export は後続判断とする。
+
 ## 2. 前提
 
 - `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を利用できる。
@@ -421,6 +423,23 @@ validation failure の見方:
 - local path。
 - stack trace。
 - actual Codex CLI output をそのまま貼った docs / fixture。
+
+## 7-2. proposal history full management の確認
+
+Proposal history full management は、保存済み `StrategyProposalRun` / `StrategyProposalCandidate` から、検証候補の生成履歴と選択履歴を探すための運用導線である。投資判断や自動 ranking ではなく、provider 別の傾向、failed run、selected candidate の確認に使う。
+
+確認手順:
+
+1. StrategyLab の提案履歴 section を開く。
+2. provider filter で `stub` / `local_llm` / `codex_cli_manual` を切り替え、該当 provider の run だけが表示されることを確認する。
+3. status filter で succeeded / failed を切り替え、failed run の sanitized status / reason を確認する。
+4. selected filter で選択済み / 未選択を切り替え、selected candidate の有無を確認する。
+5. search は candidate title / summary / strategy_type などの normalized field を対象にする。検索語そのものや user_hint 全文を履歴 list response に echo しない。
+6. pagination の前後移動で detail / selection flow が壊れないことを確認する。
+7. detail から候補を選択した場合も、title / natural language spec への反映だけで、Pine generation / save / backtest / AI summary は自動起動しない。
+8. list response では raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
+
+履歴が増えた場合の archive / retention / hard delete / export は別設計とする。特に hard delete は、selected proposal lineage や将来の StrategyVersion relation と衝突する可能性があるため、初回 full management では実装しない。
 ## 8. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。
