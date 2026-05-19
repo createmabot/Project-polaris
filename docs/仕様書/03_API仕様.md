@@ -127,9 +127,11 @@ Codex CLI manual JSON import の最小 API:
 - `POST /api/strategy-lab/proposals/codex-cli/import`
   - ユーザーが貼り付けた、または frontend file picker で text 化した Codex CLI output JSON を import する。
   - request は `source=paste|file` と `result_json_text` を受ける。multipart upload は使わない。
+  - client input を proposal history へ保存し得る write endpoint であるため、parse / validation / persistence 前に in-memory per-process rate guard を適用する。
   - backend は `result_json_text` を parse し、既存 `strategy_proposal_candidates` schema で validation する。
   - success 時は `provider.name=codex_cli_manual` / `provider.mode=manual_import` として `StrategyProposalRun` / `StrategyProposalCandidate` に sanitized run / candidates を保存する。
   - success response は既存 proposal response shape に寄せ、optional `proposal_run_id` / `history.proposal_run_id` を返す。
+  - rate guard 超過時は HTTP 429 / `RATE_LIMITED` を返し、proposal run / candidate rows は保存しない。error details は retry_after / limit / window / provider mode / key source 程度に限定し、actual IP、forwarded header value、internal key、raw JSON text は返さない。
   - error response は malformed JSON、schema invalid、required field missing、unsupported enum、candidate count invalid などの sanitized reason に限定し、raw JSON text、raw prompt、provider endpoint、model 実値、secret、local path、stack trace を返さない。
   - import は StrategyLab input への候補反映と history 保存だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 

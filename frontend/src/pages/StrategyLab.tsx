@@ -137,6 +137,9 @@ function buildCodexImportErrorMessage(error: unknown): string {
       ? `Codex CLI JSONがschemaに合いません。reason: ${reason}`
       : 'Codex CLI JSONがschemaに合いません。必須項目・候補数・enum値を確認してください。';
   }
+  if (error.status === 429) {
+    return '短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。';
+  }
   if (error.status >= 500) {
     return 'サーバー側でCodex CLI JSONの取り込みに失敗しました。時間をおいて再試行してください。';
   }

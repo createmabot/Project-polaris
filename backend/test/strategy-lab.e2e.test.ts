@@ -887,6 +887,60 @@ describe('strategy lab vertical slice', () => {
     expect(selectResponse.json().data.selected_candidate.candidate.candidate_id).toBe('codex-2');
   });
 
+  it('rate limits repeated Codex CLI manual imports before persistence', async () => {
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_ENABLED = 'true';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_MAX_REQUESTS = '1';
+    process.env.STRATEGY_PROPOSAL_RATE_LIMIT_WINDOW_MS = '60000';
+    const app = await createApp();
+    const importJson = JSON.stringify(codexCliImportPayload([
+      validLocalLlmCandidate({ candidate_id: 'codex-rate-1' }),
+    ]));
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      headers: { 'x-forwarded-for': 'spoofed-client, 203.0.113.10' },
+      payload: {
+        source: 'paste',
+        result_json_text: importJson,
+      },
+    });
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/import',
+      headers: { 'x-forwarded-for': 'another-spoofed-client, 203.0.113.10' },
+      payload: {
+        source: 'paste',
+        result_json_text: JSON.stringify({
+          ...codexCliImportPayload([
+            validLocalLlmCandidate({ candidate_id: 'codex-rate-2' }),
+          ]),
+          raw_marker: 'blocked raw import payload should not leak',
+        }),
+      },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+    const body = second.json();
+    expect(body.error.code).toBe('RATE_LIMITED');
+    expect(body.error.details).toMatchObject({
+      rate_limited: true,
+      limit: 1,
+      window_ms: 60000,
+      provider_mode: 'manual_import',
+      rate_limit_key_source: 'request_ip',
+    });
+    expect(typeof body.error.details.retry_after_ms).toBe('number');
+    expect(runtime.proposalRuns.size).toBe(1);
+    expect(Array.from(runtime.proposalCandidates.values())).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toContain('blocked raw import payload should not leak');
+    expect(JSON.stringify(body)).not.toContain('another-spoofed-client');
+    expect(JSON.stringify(body)).not.toContain('203.0.113.10');
+    expect(JSON.stringify(body)).not.toContain('request_ip:');
+    expect(JSON.stringify(body)).not.toContain('manual_import:');
+  });
+
   it('rejects invalid Codex CLI import JSON without echoing raw output', async () => {
     const app = await createApp();
     const malformedResponse = await app.inject({

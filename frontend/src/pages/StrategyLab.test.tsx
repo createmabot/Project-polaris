@@ -333,6 +333,44 @@ describe('StrategyLab', () => {
     expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
   });
 
+  it('shows generic retry guidance when Codex CLI import is rate limited', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const setters = primeScenarioState({
+      codexImportText: '{"schema_name":"strategy_proposal_candidates"}',
+    });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockRejectedValue(new ApiError(
+      'rate limited with raw payload marker',
+      'RATE_LIMITED',
+      {
+        rate_limited: true,
+        retry_after_ms: 60000,
+        provider_mode: 'manual_import',
+        rate_limit_key_source: 'request_ip',
+      },
+      429,
+    ));
+
+    try {
+      renderToStaticMarkup(<StrategyLab />);
+      const importButton = renderedButtons.find((button) => button.children === 'JSONを取り込む');
+      await importButton?.onClick?.();
+      await flushPromises();
+
+      expect(setters[17]).toHaveBeenCalledWith('短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。');
+      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('raw payload marker'));
+      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('manual_import'));
+      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('60000'));
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it('renders generated result texts when generation has succeeded', () => {
     primeScenarioState({
       strategyId: 'str-1',

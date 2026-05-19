@@ -2,6 +2,8 @@ import type { StrategyProposalProviderMode } from './provider';
 import crypto from 'crypto';
 import { isIP } from 'net';
 
+export type StrategyProposalRateLimitMode = StrategyProposalProviderMode | 'manual_import';
+
 export function readBoundedPositiveInteger(
   value: string | undefined,
   fallback: number,
@@ -166,7 +168,7 @@ const strategyProposalRateLimitBuckets = new Map<string, RateLimitBucket>();
 
 export function checkStrategyProposalRateLimit(params: {
   key: string;
-  providerMode: StrategyProposalProviderMode;
+  providerMode: StrategyProposalRateLimitMode;
   nowMs?: number;
 }): {
   allowed: boolean;
