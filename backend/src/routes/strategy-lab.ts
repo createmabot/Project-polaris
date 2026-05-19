@@ -1,4 +1,4 @@
-import { FastifyPluginAsync } from 'fastify';
+import { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { createStrategyProposalProvider, getStrategyProposalProviderSelection } from '../strategy-proposals/provider';
@@ -6,6 +6,7 @@ import {
   checkStrategyProposalRateLimit,
   getStrategyProposalRateLimitConfig,
   resolveStrategyProposalRateLimitKey,
+  type StrategyProposalRateLimitMode,
 } from '../strategy-proposals/guards';
 import {
   buildStrategyProposalObservation,
@@ -361,6 +362,37 @@ function buildCodexCliManualObservation(params: {
   };
 }
 
+function assertStrategyProposalRateLimit(
+  request: FastifyRequest,
+  providerMode: StrategyProposalRateLimitMode,
+) {
+  const rateLimitConfig = getStrategyProposalRateLimitConfig();
+  const rateLimitKey = resolveStrategyProposalRateLimitKey({
+    requestIp: request.ip,
+    forwardedFor: request.headers['x-forwarded-for'],
+    trustedForwardedIp: rateLimitConfig.trustForwardedIp,
+  });
+  const rateLimit = checkStrategyProposalRateLimit({
+    key: rateLimitKey.key,
+    providerMode,
+  });
+  if (!rateLimit.allowed) {
+    throw new AppError(
+      429,
+      'RATE_LIMITED',
+      '短時間に候補取得が続いたため、少し時間をおいて再試行してください。',
+      {
+        rate_limited: true,
+        retry_after_ms: rateLimit.retryAfterMs,
+        limit: rateLimit.limit,
+        window_ms: rateLimit.windowMs,
+        provider_mode: providerMode,
+        rate_limit_key_source: rateLimitKey.source,
+      },
+    );
+  }
+}
+
 function formatDateTimeForTrend(value: unknown): string | null {
   const date = value instanceof Date ? value : new Date(String(value ?? ''));
   if (Number.isNaN(date.getTime())) {
@@ -634,31 +666,7 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       input = parseStrategyProposalRequest(request.body ?? {});
-      const rateLimitConfig = getStrategyProposalRateLimitConfig();
-      const rateLimitKey = resolveStrategyProposalRateLimitKey({
-        requestIp: request.ip,
-        forwardedFor: request.headers['x-forwarded-for'],
-        trustedForwardedIp: rateLimitConfig.trustForwardedIp,
-      });
-      const rateLimit = checkStrategyProposalRateLimit({
-        key: rateLimitKey.key,
-        providerMode: selection.mode,
-      });
-      if (!rateLimit.allowed) {
-        throw new AppError(
-          429,
-          'RATE_LIMITED',
-          '短時間に候補取得が続いたため、少し時間をおいて再試行してください。',
-          {
-            rate_limited: true,
-            retry_after_ms: rateLimit.retryAfterMs,
-            limit: rateLimit.limit,
-            window_ms: rateLimit.windowMs,
-            provider_mode: selection.mode,
-            rate_limit_key_source: rateLimitKey.source,
-          },
-        );
-      }
+      assertStrategyProposalRateLimit(request, selection.mode);
       const provider = createStrategyProposalProvider(selection.mode);
       const generated = await provider.generate(input);
       const providerObservation = buildStrategyProposalObservation({
@@ -742,6 +750,7 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: CodexCliImportBody }>('/proposals/codex-cli/import', async (request, reply) => {
     const startedAtMs = Date.now();
+    assertStrategyProposalRateLimit(request, CODEX_CLI_MANUAL_PROVIDER.mode as StrategyProposalRateLimitMode);
     readCodexCliImportSource(request.body?.source);
     const importText = readCodexCliImportText(request.body?.result_json_text);
     const parsed = parseCodexCliImportJson(importText);
