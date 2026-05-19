@@ -1087,8 +1087,9 @@ describe('strategy lab vertical slice', () => {
       schema_version: '1.0',
       proposal_count: 5,
     });
-    expect(body.data.prompt).toContain('Return only one JSON object');
+    expect(body.data.prompt).toContain('JSON objectを1つだけ返してください');
     expect(body.data.prompt).toContain('strategy_proposal_candidates');
+    expect(body.data.prompt).toContain('ユーザーに見える値の文章は日本語で書いてください');
     expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');

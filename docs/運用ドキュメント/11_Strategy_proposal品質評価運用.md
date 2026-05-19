@@ -397,7 +397,7 @@ manual smoke:
 
 1. StrategyLab を開く。
 2. Codex CLI 用 prompt を作成する。
-3. prompt を手動で Codex CLI に渡す。
+3. 日本語で作成された prompt を手動で Codex CLI に渡す。schema key / enum は英語固定、candidate title / summary / logic / caution / suggested spec などユーザーに見える値は日本語で出ることを確認する。
 4. 返ってきた `strategy_proposal_candidates` JSON を StrategyLab に貼り付ける。
 5. import を実行する。
 6. candidate cards が表示されることを確認する。
