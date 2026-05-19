@@ -786,6 +786,7 @@ describe('strategy lab vertical slice', () => {
       payload: {
         market: 'JP_STOCK',
         timeframe: 'D',
+        symbol_code: 'AAPL',
         risk_preference: 'balanced',
         strategy_type_bias: 'trend_following',
         proposal_count: 1,
@@ -900,7 +901,17 @@ describe('strategy lab vertical slice', () => {
       url: '/api/strategy-lab/proposals/codex-cli/import',
       payload: {
         source: 'paste',
-        result_json_text: JSON.stringify(codexCliImportPayload([codexCandidate])),
+        result_json_text: JSON.stringify(codexCliImportPayload([codexCandidate], {
+          input: {
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            symbol_code: 'AAPL',
+            risk_preference: 'balanced',
+            strategy_type_bias: 'any',
+            proposal_count: 1,
+            user_hint: 'Codex CLI manual import fixture',
+          },
+        })),
       },
     });
     expect(codexResponse.statusCode).toBe(200);
@@ -956,6 +967,30 @@ describe('strategy lab vertical slice', () => {
     expect(userHintSearch.statusCode).toBe(200);
     expect(userHintSearch.json().data.pagination.total_count).toBe(0);
     expect(JSON.stringify(userHintSearch.json())).not.toContain('privatealpha privatebeta');
+
+    for (const q of ['aapl', 'AAPL', 'aApL']) {
+      const symbolSearch = await app.inject({
+        method: 'GET',
+        url: `/api/strategy-lab/proposals?q=${q}`,
+      });
+      expect(symbolSearch.statusCode).toBe(200);
+      expect(symbolSearch.json().data.pagination.total_count).toBe(1);
+      expect(JSON.stringify(symbolSearch.json())).not.toContain('privatealpha privatebeta');
+    }
+
+    const lowerMarketSearch = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?q=jp_stock',
+    });
+    expect(lowerMarketSearch.statusCode).toBe(200);
+    expect(lowerMarketSearch.json().data.pagination.total_count).toBe(3);
+
+    const lowerTimeframeSearch = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?q=d',
+    });
+    expect(lowerTimeframeSearch.statusCode).toBe(200);
+    expect(lowerTimeframeSearch.json().data.pagination.total_count).toBe(3);
 
     const pageTwo = await app.inject({
       method: 'GET',
