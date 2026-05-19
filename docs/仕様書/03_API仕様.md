@@ -124,6 +124,17 @@ Provider quality trend aggregation の最小 API:
 - response には raw `inputJson`、user_hint 全文、candidate title / summary / suggested_natural_language_spec、raw provider response、provider endpoint、model 実値、secret、local path、stack trace を含めない。
 - trend aggregation は provider 運用品質の確認補助であり、投資判断、candidate ranking、Strategy / StrategyVersion 自動保存、Pine generation 自動起動には使わない。
 
+Provider event log の最小 API:
+
+- `GET /api/strategy-lab/proposals/provider-events` は、保存済み `StrategyProposalProviderEvent` を運用確認用に read-only 取得する endpoint として設計する。
+- query: `page`、`limit`、`provider_name`、`event_type`、`status`、`proposal_run_id`、`created_from`、`created_to`。
+- response: `events`、`pagination`、`filters`、`meta`。
+- `events[]` は `id`、`proposal_run_id`、`event_type`、`provider_name`、`provider_mode`、`selected_by`、`status`、`invalid_reason`、`latency_bucket`、`elapsed_ms`、`candidate_count`、`validation_error_count`、`retry_used`、`retry_reason`、`retry_succeeded`、`rate_limited`、`rate_limit_key_source`、`manual_import`、`benchmark`、sanitized `metadata`、`occurred_at`、`created_at` に限定する。
+- `metadata` を返す場合も、保存時に sanitizer を通した enum / count / bucket のみを返す。
+- `meta` は `source=strategy_proposal_provider_events`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`raw_codex_output_included=false`、`endpoint_included=false`、`model_value_included=false`、`user_hint_full_text_included=false`、`candidate_free_text_included=false` を返す。
+- provider event log は provider 運用観測用であり、投資判断、candidate ranking、Strategy / StrategyVersion 自動保存、Pine generation 自動起動には使わない。
+- 初回では StrategyLab UI に event log 管理 UI を追加しない。運用確認は read API / DB inspection / tests に寄せる。
+
 Codex CLI manual JSON import の最小 API:
 
 - `POST /api/strategy-lab/proposals/codex-cli/request`
