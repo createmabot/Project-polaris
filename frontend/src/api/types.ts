@@ -627,6 +627,8 @@ export type StrategyProposalHistoryRun = {
   provider_observation?: StrategyProposalData['provider_observation'] | Record<string, unknown> | null;
   candidate_count: number;
   selected_candidate_id: string | null;
+  archived_at: string | null;
+  is_archived: boolean;
   completed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -651,6 +653,7 @@ export type StrategyProposalHistoryListData = {
     selected: boolean | null;
     market: string;
     timeframe: string;
+    archived: 'active' | 'archived' | 'all' | string;
     q_present: boolean;
     sort: string;
     order: string;

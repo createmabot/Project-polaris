@@ -63,6 +63,11 @@ const HISTORY_SELECTED_OPTIONS = [
   { value: 'selected', label: 'selected' },
   { value: 'unselected', label: 'unselected' },
 ];
+const HISTORY_ARCHIVED_OPTIONS = [
+  { value: 'active', label: 'active' },
+  { value: 'archived', label: 'archived' },
+  { value: 'all', label: 'all' },
+];
 
 export function buildProposalHistoryPath({
   page = 1,
@@ -71,6 +76,7 @@ export function buildProposalHistoryPath({
   provider = 'all',
   status = 'all',
   selected = 'all',
+  archived = 'active',
 }: {
   page?: number;
   limit?: number;
@@ -78,6 +84,7 @@ export function buildProposalHistoryPath({
   provider?: string;
   status?: string;
   selected?: string;
+  archived?: string;
 } = {}): string {
   const params = new URLSearchParams({
     page: String(Math.max(1, page)),
@@ -100,6 +107,9 @@ export function buildProposalHistoryPath({
   }
   if (selected === 'unselected') {
     params.set('selected', 'false');
+  }
+  if (archived && archived !== 'active') {
+    params.set('archived', archived);
   }
   return `/api/strategy-lab/proposals?${params.toString()}`;
 }
@@ -378,6 +388,7 @@ export default function StrategyLab() {
   const [historyProvider, setHistoryProvider] = useState('all');
   const [historyStatus, setHistoryStatus] = useState('all');
   const [historySelected, setHistorySelected] = useState('all');
+  const [historyArchived, setHistoryArchived] = useState('active');
   const [historyPage, setHistoryPage] = useState(1);
 
   const [submitting, setSubmitting] = useState(false);
@@ -415,6 +426,7 @@ export default function StrategyLab() {
     provider: historyProvider,
     status: historyStatus,
     selected: historySelected,
+    archived: historyArchived,
   }), swrFetcher);
   const {
     data: proposalQualityTrendData,
@@ -600,6 +612,21 @@ export default function StrategyLab() {
     applyProposalCandidate(candidate);
   };
 
+  const onArchiveProposalRun = async (proposalRunId: string, archive: boolean) => {
+    try {
+      await postApi<{ proposal_run: StrategyProposalHistoryDetailData['proposal_run'] }>(
+        `/api/strategy-lab/proposals/${proposalRunId}/${archive ? 'archive' : 'unarchive'}`,
+        {},
+      );
+      void mutateProposalHistory();
+      void mutateSelectedProposalDetail();
+      resetHistoryDetail();
+    } catch (archiveError: unknown) {
+      console.error('Strategy proposal archive state change failed', archiveError);
+      setProposalSelectionError('提案履歴のアーカイブ状態を更新できませんでした。時間をおいて再試行してください。');
+    }
+  };
+
   const resetHistoryDetail = () => {
     setSelectedProposalRunId(null);
   };
@@ -616,6 +643,7 @@ export default function StrategyLab() {
     setHistoryProvider('all');
     setHistoryStatus('all');
     setHistorySelected('all');
+    setHistoryArchived('active');
     setHistoryPage(1);
     resetHistoryDetail();
   };
@@ -624,7 +652,8 @@ export default function StrategyLab() {
     Boolean(historyQuery.trim()) ||
     historyProvider !== 'all' ||
     historyStatus !== 'all' ||
-    historySelected !== 'all';
+    historySelected !== 'all' ||
+    historyArchived !== 'active';
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -1007,6 +1036,19 @@ export default function StrategyLab() {
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </SelectField>
+              <SelectField
+                label='archive'
+                value={historyArchived}
+                onChange={(event) => {
+                  setHistoryArchived(event.target.value);
+                  setHistoryPage(1);
+                  resetHistoryDetail();
+                }}
+              >
+                {HISTORY_ARCHIVED_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </SelectField>
             </div>
             <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
               <Button variant='secondary' onClick={applyHistorySearch}>履歴を絞り込む</Button>
@@ -1015,7 +1057,7 @@ export default function StrategyLab() {
               )}
             </div>
             <InlineNotice tone='info'>
-              履歴検索は run id / provider / input metadata を対象にします。candidate本文、providerやCodexの生出力、内部診断、秘密値は表示しません。
+              archive は削除ではなく通常一覧から隠す操作です。履歴検索は run id / provider / input metadata を対象にし、candidate本文、providerやCodexの生出力、内部診断、秘密値は表示しません。
             </InlineNotice>
           </div>
 
@@ -1053,14 +1095,25 @@ export default function StrategyLab() {
                   <KeyValueRow label='provider'>{run.provider_name}</KeyValueRow>
                   <KeyValueRow label='candidate count'>{String(run.candidate_count)}</KeyValueRow>
                   <KeyValueRow label='selected'>{run.selected_candidate_id ? 'あり' : 'なし'}</KeyValueRow>
+                  <KeyValueRow label='archive'>{run.is_archived ? 'アーカイブ済み' : 'active'}</KeyValueRow>
                 </KeyValueList>
-                <Button onClick={() => setSelectedProposalRunId(run.id)}>
-                  候補を見る
-                </Button>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <Button onClick={() => setSelectedProposalRunId(run.id)}>
+                    候補を見る
+                  </Button>
+                  <Button variant='secondary' onClick={() => void onArchiveProposalRun(run.id, !run.is_archived)}>
+                    {run.is_archived ? '戻す' : 'アーカイブ'}
+                  </Button>
+                </div>
               </div>
 
               {selectedProposalRunId === run.id && (
                 <div style={{ display: 'grid', gap: '0.65rem' }}>
+                  {selectedProposalDetail?.proposal_run?.is_archived && (
+                    <InlineNotice tone='info'>
+                      この proposal run はアーカイブ済みです。候補選択は可能ですが、自動で通常一覧へ戻しません。
+                    </InlineNotice>
+                  )}
                   {selectedProposalDetailLoading && (
                     <LoadingState title='候補 detail を読み込み中です' />
                   )}
