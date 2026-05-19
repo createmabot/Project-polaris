@@ -60,6 +60,7 @@ type ProposalHistoryQuery = {
   selected?: string;
   market?: string;
   timeframe?: string;
+  archived?: string;
   sort?: string;
   order?: string;
 };
@@ -172,6 +173,8 @@ function serializeRun(row: any) {
     provider_observation: row.providerObservationJson,
     candidate_count: row.candidateCount,
     selected_candidate_id: row.selectedCandidateId ?? null,
+    archived_at: row.archivedAt?.toISOString?.() ?? row.archivedAt ?? null,
+    is_archived: Boolean(row.archivedAt),
     completed_at: row.completedAt?.toISOString?.() ?? row.completedAt ?? null,
     created_at: row.createdAt?.toISOString?.() ?? row.createdAt,
     updated_at: row.updatedAt?.toISOString?.() ?? row.updatedAt,
@@ -203,6 +206,16 @@ function parseProposalHistorySelected(value: unknown): boolean | null {
     return false;
   }
   throw new AppError(400, 'VALIDATION_ERROR', 'selected must be true or false.');
+}
+
+function parseProposalHistoryArchived(value: unknown): 'active' | 'archived' | 'all' {
+  if (value === undefined || value === null || value === '') {
+    return 'active';
+  }
+  if (value === 'active' || value === 'archived' || value === 'all') {
+    return value;
+  }
+  throw new AppError(400, 'VALIDATION_ERROR', 'archived must be active, archived, or all.');
 }
 
 function parseProposalHistorySearch(value: unknown): string {
@@ -244,6 +257,7 @@ function parseProposalHistoryQuery(query: ProposalHistoryQuery) {
     selected: parseProposalHistorySelected(query.selected),
     market: readSafeFilterToken(query.market, 'market'),
     timeframe: readSafeFilterToken(query.timeframe, 'timeframe'),
+    archived: parseProposalHistoryArchived(query.archived),
     sort,
     order,
   };
@@ -303,6 +317,11 @@ function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistory
     and.push({ selectedCandidateId: { not: null } });
   } else if (query.selected === false) {
     and.push({ selectedCandidateId: null });
+  }
+  if (query.archived === 'active') {
+    and.push({ archivedAt: null });
+  } else if (query.archived === 'archived') {
+    and.push({ archivedAt: { not: null } });
   }
   if (query.market) {
     and.push(buildInputJsonEquals('market', query.market));
@@ -1265,6 +1284,7 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
         selected: query.selected,
         market: query.market,
         timeframe: query.timeframe,
+        archived: query.archived,
         q_present: Boolean(query.q),
         sort: query.sort,
         order: query.order,
@@ -1340,6 +1360,46 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
         user_hint_full_text_included: false,
         candidate_free_text_included: false,
       },
+    }));
+  });
+
+  fastify.post<{ Params: { proposalRunId: string } }>('/proposals/:proposalRunId/archive', async (request, reply) => {
+    const run = await (prisma as any).strategyProposalRun.findUnique({
+      where: { id: request.params.proposalRunId },
+    });
+    if (!run) {
+      throw new AppError(404, 'NOT_FOUND', 'Strategy proposal run was not found.');
+    }
+
+    const updatedRun = run.archivedAt
+      ? run
+      : await (prisma as any).strategyProposalRun.update({
+        where: { id: run.id },
+        data: { archivedAt: new Date() },
+      });
+
+    return reply.status(200).send(formatSuccess(request, {
+      proposal_run: serializeRun(updatedRun),
+    }));
+  });
+
+  fastify.post<{ Params: { proposalRunId: string } }>('/proposals/:proposalRunId/unarchive', async (request, reply) => {
+    const run = await (prisma as any).strategyProposalRun.findUnique({
+      where: { id: request.params.proposalRunId },
+    });
+    if (!run) {
+      throw new AppError(404, 'NOT_FOUND', 'Strategy proposal run was not found.');
+    }
+
+    const updatedRun = run.archivedAt
+      ? await (prisma as any).strategyProposalRun.update({
+        where: { id: run.id },
+        data: { archivedAt: null },
+      })
+      : run;
+
+    return reply.status(200).send(formatSuccess(request, {
+      proposal_run: serializeRun(updatedRun),
     }));
   });
 

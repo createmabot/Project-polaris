@@ -98,6 +98,7 @@ type StrategyProposalRunRow = {
   providerObservationJson: unknown;
   candidateCount: number;
   selectedCandidateId: string | null;
+  archivedAt: Date | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -258,6 +259,12 @@ function proposalRunMatchesWhere(row: StrategyProposalRunRow, where: any): boole
     return false;
   }
   if (where.selectedCandidateId?.not === null && row.selectedCandidateId === null) {
+    return false;
+  }
+  if (where.archivedAt === null && row.archivedAt !== null) {
+    return false;
+  }
+  if (where.archivedAt?.not === null && row.archivedAt === null) {
     return false;
   }
   if (where.inputJson?.path) {
@@ -601,6 +608,7 @@ vi.mock('../src/db', () => {
           providerObservationJson: data.providerObservationJson ?? null,
           candidateCount: data.candidateCount ?? 0,
           selectedCandidateId: data.selectedCandidateId ?? null,
+          archivedAt: data.archivedAt ?? null,
           completedAt: data.completedAt ?? null,
           createdAt: now,
           updatedAt: now,
@@ -956,6 +964,7 @@ describe('strategy lab vertical slice', () => {
     expect(storedRun).toBeTruthy();
     expect(storedRun?.status).toBe('succeeded');
     expect(storedRun?.candidateCount).toBe(1);
+    expect(storedRun?.archivedAt).toBeNull();
     expect(storedRun?.inputJson).toMatchObject({
       market: 'JP_STOCK',
       timeframe: 'D',
@@ -986,6 +995,8 @@ describe('strategy lab vertical slice', () => {
       status: 'succeeded',
       provider_name: 'stub',
       candidate_count: 1,
+      is_archived: false,
+      archived_at: null,
     });
 
     const detailResponse = await app.inject({
@@ -1208,6 +1219,142 @@ describe('strategy lab vertical slice', () => {
     });
     expect(longSearch.statusCode).toBe(400);
     expect(JSON.stringify(longSearch.json())).not.toContain('x'.repeat(201));
+  });
+
+  it('soft archives proposal runs without deleting detail, candidates, or provider events', async () => {
+    const app = await createApp();
+
+    const activeResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1 },
+    });
+    expect(activeResponse.statusCode).toBe(200);
+    const archivedResponse = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: { proposal_count: 1, strategy_type_bias: 'breakout' },
+    });
+    expect(archivedResponse.statusCode).toBe(200);
+    const archivedRunId = archivedResponse.json().data.proposal_run_id as string;
+    const providerEventCountBeforeArchive = runtime.proposalProviderEvents.size;
+
+    const archiveResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${archivedRunId}/archive`,
+    });
+    expect(archiveResponse.statusCode).toBe(200);
+    expect(archiveResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: true,
+    });
+    expect(archiveResponse.json().data.proposal_run.archived_at).toBeTruthy();
+    expect(runtime.proposalRuns.get(archivedRunId)?.archivedAt).toBeInstanceOf(Date);
+    expect(runtime.proposalProviderEvents.size).toBe(providerEventCountBeforeArchive);
+
+    const archiveAgainResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${archivedRunId}/archive`,
+    });
+    expect(archiveAgainResponse.statusCode).toBe(200);
+    expect(archiveAgainResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: true,
+    });
+
+    const defaultList = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?limit=10',
+    });
+    expect(defaultList.statusCode).toBe(200);
+    expect(defaultList.json().data.proposal_runs.map((run: any) => run.id)).toEqual([
+      activeResponse.json().data.proposal_run_id,
+    ]);
+    expect(defaultList.json().data.pagination.total_count).toBe(1);
+    expect(defaultList.json().data.filters.archived).toBe('active');
+
+    const archivedList = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?archived=archived&limit=10',
+    });
+    expect(archivedList.statusCode).toBe(200);
+    expect(archivedList.json().data.proposal_runs).toEqual([
+      expect.objectContaining({
+        id: archivedRunId,
+        is_archived: true,
+        archived_at: expect.any(String),
+      }),
+    ]);
+    expect(archivedList.json().data.pagination.total_count).toBe(1);
+
+    const allList = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?archived=all&limit=10',
+    });
+    expect(allList.statusCode).toBe(200);
+    expect(allList.json().data.proposal_runs.map((run: any) => run.id).sort()).toEqual([
+      activeResponse.json().data.proposal_run_id,
+      archivedRunId,
+    ].sort());
+    expect(allList.json().data.pagination.total_count).toBe(2);
+
+    const detailResponse = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-lab/proposals/${archivedRunId}`,
+    });
+    expect(detailResponse.statusCode).toBe(200);
+    expect(detailResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: true,
+    });
+    expect(detailResponse.json().data.candidates).toHaveLength(1);
+
+    const selectArchivedResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${archivedRunId}/select`,
+      payload: {
+        candidate_id: archivedResponse.json().data.candidates[0].candidate_id,
+      },
+    });
+    expect(selectArchivedResponse.statusCode).toBe(200);
+    expect(selectArchivedResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: true,
+    });
+    expect(runtime.proposalRuns.get(archivedRunId)?.archivedAt).toBeInstanceOf(Date);
+    expect(runtime.strategies.size).toBe(0);
+    expect(runtime.versions.size).toBe(0);
+    expect(runtime.pineScripts.size).toBe(0);
+
+    const unarchiveResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${archivedRunId}/unarchive`,
+    });
+    expect(unarchiveResponse.statusCode).toBe(200);
+    expect(unarchiveResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: false,
+      archived_at: null,
+    });
+    expect(runtime.proposalRuns.get(archivedRunId)?.archivedAt).toBeNull();
+
+    const unarchiveAgainResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-lab/proposals/${archivedRunId}/unarchive`,
+    });
+    expect(unarchiveAgainResponse.statusCode).toBe(200);
+    expect(unarchiveAgainResponse.json().data.proposal_run).toMatchObject({
+      id: archivedRunId,
+      is_archived: false,
+      archived_at: null,
+    });
+
+    const invalidArchiveFilter = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?archived=deleted',
+    });
+    expect(invalidArchiveFilter.statusCode).toBe(400);
+    expect(JSON.stringify(invalidArchiveFilter.json())).not.toContain('raw');
   });
 
   it('builds a Codex CLI manual import prompt without provider runtime details', async () => {

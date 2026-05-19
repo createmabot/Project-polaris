@@ -473,6 +473,7 @@ model StrategyProposalRun {
   providerObservationJson Json?    @map("provider_observation_json")
   candidateCount          Int      @default(0) @map("candidate_count")
   selectedCandidateId     String?  @map("selected_candidate_id")
+  archivedAt              DateTime? @map("archived_at")
   completedAt             DateTime? @map("completed_at")
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
@@ -482,6 +483,7 @@ model StrategyProposalRun {
   providerEvents StrategyProposalProviderEvent[]
 
   @@index([createdAt])
+  @@index([archivedAt, createdAt])
   @@index([status, createdAt])
   @@index([selectedCandidateId])
   @@map("strategy_proposal_runs")

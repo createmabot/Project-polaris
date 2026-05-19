@@ -86,6 +86,7 @@ function primeScenarioState(params: {
   historyProvider?: string;
   historyStatus?: string;
   historySelected?: string;
+  historyArchived?: string;
   historyPage?: number;
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
@@ -117,6 +118,7 @@ function primeScenarioState(params: {
     params.historyProvider ?? 'all',
     params.historyStatus ?? 'all',
     params.historySelected ?? 'all',
+    params.historyArchived ?? 'active',
     params.historyPage ?? 1,
     false,
     null,
@@ -195,8 +197,10 @@ describe('StrategyLab', () => {
       provider: 'codex_cli_manual',
       status: 'succeeded',
       selected: 'selected',
-    })).toBe('/api/strategy-lab/proposals?page=2&limit=10&sort=created_at&order=desc&q=breakout&provider_name=codex_cli_manual&status=succeeded&selected=true');
+      archived: 'archived',
+    })).toBe('/api/strategy-lab/proposals?page=2&limit=10&sort=created_at&order=desc&q=breakout&provider_name=codex_cli_manual&status=succeeded&selected=true&archived=archived');
     expect(buildProposalHistoryPath({ selected: 'unselected' })).toContain('selected=false');
+    expect(buildProposalHistoryPath({ archived: 'all' })).toContain('archived=all');
   });
 
   it.each([
@@ -619,6 +623,8 @@ describe('StrategyLab', () => {
                 provider_observation: null,
                 candidate_count: 2,
                 selected_candidate_id: 'proposal-candidate-1',
+                archived_at: null,
+                is_archived: false,
                 completed_at: '2026-05-17T00:00:00.000Z',
                 created_at: '2026-05-17T00:00:00.000Z',
                 updated_at: '2026-05-17T00:00:00.000Z',
@@ -652,8 +658,110 @@ describe('StrategyLab', () => {
     expect(html).toContain('2');
     expect(html).toContain('selected:');
     expect(html).toContain('あり');
+    expect(html).toContain('archive:');
+    expect(html).toContain('active');
+    expect(html).toContain('アーカイブ');
     expect(html).toContain('候補を見る');
     expect(html).toContain('page 1 / total 12');
+  });
+
+  it('archives and unarchives proposal history runs through sanitized action endpoints', async () => {
+    const historyMutate = vi.fn();
+    primeScenarioState({ historyArchived: 'archived' });
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === '/api/strategy-lab/proposals?page=1&limit=10&sort=created_at&order=desc&archived=archived') {
+        return {
+          isLoading: false,
+          error: null,
+          data: {
+            proposal_runs: [
+              {
+                id: 'proposal-run-archived',
+                status: 'succeeded',
+                provider_name: 'codex_cli_manual',
+                provider_mode: 'manual_import',
+                selected_by: 'manual_import',
+                input: {},
+                provider_observation: null,
+                candidate_count: 1,
+                selected_candidate_id: null,
+                archived_at: '2026-05-17T00:00:00.000Z',
+                is_archived: true,
+                completed_at: null,
+                created_at: '2026-05-17T00:00:00.000Z',
+                updated_at: '2026-05-17T00:00:00.000Z',
+              },
+            ],
+            limit: 10,
+          },
+          mutate: historyMutate,
+        };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      proposal_run: {
+        id: 'proposal-run-archived',
+        is_archived: false,
+        archived_at: null,
+      },
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+    expect(html).toContain('アーカイブ済み');
+    expect(html).toContain('戻す');
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/strategy-lab/proposals?page=1&limit=10&sort=created_at&order=desc&archived=archived',
+      expect.any(Function),
+    );
+
+    const unarchiveButton = renderedButtons.find((button) => button.children === '戻す');
+    await unarchiveButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/proposal-run-archived/unarchive', {});
+    expect(historyMutate).toHaveBeenCalled();
+
+    renderedButtons.length = 0;
+    vi.mocked(postApi).mockClear();
+    primeDefaultState();
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === DEFAULT_HISTORY_PATH) {
+        return {
+          isLoading: false,
+          error: null,
+          data: {
+            proposal_runs: [
+              {
+                id: 'proposal-run-active',
+                status: 'succeeded',
+                provider_name: 'stub',
+                provider_mode: 'deterministic',
+                selected_by: 'default',
+                input: {},
+                provider_observation: null,
+                candidate_count: 1,
+                selected_candidate_id: null,
+                archived_at: null,
+                is_archived: false,
+                completed_at: null,
+                created_at: '2026-05-17T00:00:00.000Z',
+                updated_at: '2026-05-17T00:00:00.000Z',
+              },
+            ],
+            limit: 10,
+          },
+          mutate: historyMutate,
+        };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    renderToStaticMarkup(<StrategyLab />);
+    const archiveButton = renderedButtons.find((button) => button.children === 'アーカイブ');
+    await archiveButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/proposal-run-active/archive', {});
   });
 
   it('uses filtered proposal history path without changing provider trend key', () => {
@@ -793,6 +901,8 @@ describe('StrategyLab', () => {
                 provider_observation: null,
                 candidate_count: 1,
                 selected_candidate_id: null,
+                archived_at: '2026-05-17T00:00:00.000Z',
+                is_archived: true,
                 completed_at: null,
                 created_at: '2026-05-17T00:00:00.000Z',
                 updated_at: '2026-05-17T00:00:00.000Z',
@@ -811,6 +921,8 @@ describe('StrategyLab', () => {
             proposal_run: {
               id: 'proposal-run-1',
               status: 'succeeded',
+              archived_at: '2026-05-17T00:00:00.000Z',
+              is_archived: true,
             },
             candidates: [
               {
