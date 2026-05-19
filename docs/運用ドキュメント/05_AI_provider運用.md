@@ -201,6 +201,52 @@ future provider の前提:
 - `openai_api` provider は未実装。実装前に explicit opt-in、prompt length guard、max candidates、max output、rate limit、cost cap、retry policy を固定する。
 - Web search / deep research は同期 proposal API ではなく job 化候補とし、citation / freshness / timeout / cancellation / cost を別設計する。
 - request-time provider selection は今回対象外であり、cost / abuse / consistency を別途設計してから判断する。
+
+### 7-3-2. Strategy proposal provider event log 運用
+
+Sanitized provider event log は、provider call / manual import / retry / rate limit / validation failure の発生を低レイヤーの運用観測として残す。Proposal history は生成された候補と selection lineage、provider quality trend は history からの集計、benchmark record は manual optional benchmark の local summary であり、event log はこれらと責務を分ける。
+
+確認対象:
+
+- proposal generation success / failure。
+- local_llm timeout / schema_invalid / required_field_missing。
+- bounded retry attempted / succeeded / failed。
+- proposal generation rate limited。
+- Codex CLI manual import success / failure / rate limited。
+
+event で見る値:
+
+- event type。
+- provider name / mode / selected_by。
+- status / invalid reason。
+- latency bucket / rounded elapsed ms。
+- candidate count / validation error count。
+- retry used / reason / succeeded。
+- rate limited flag / rate limit key source。
+- manual import flag。
+- sanitized metadata の count / enum / bucket。
+
+event に残してはいけない値:
+
+- raw prompt。
+- raw provider response。
+- raw Codex output。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec / entry_logic / exit_logic / risk_management などの自由文本文。
+- actual IP / forwarded header value / internal rate-limit key。
+
+運用方針:
+
+- event log は投資判断や candidate ranking には使わない。
+- read API を使う場合も sanitized event summary と pagination / filter のみを見る。
+- event write が失敗しても、proposal generation / manual import 本体を不要に失敗させない。実装では sanitized warning に留め、raw error object や stack trace を response / UI / docs / PR に出さない。
+- rate limited event は proposal run が存在しないため、`proposal_run_id` なしの event として扱う。
+- provider quality trend を event log based に拡張する場合は後続設計とし、初回では history based trend を維持する。
 ## 7-4. LLM strategy proposal benchmark 運用境界
 
 Strategy proposal prompt regression / provider benchmark は、required check ではなく manual / optional 運用として扱う。

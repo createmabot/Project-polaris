@@ -440,6 +440,48 @@ Proposal history full management は、保存済み `StrategyProposalRun` / `Str
 8. list response では raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace、user_hint 全文、candidate 自由文本文を出さない。
 
 履歴が増えた場合の archive / retention / hard delete / export は別設計とする。特に hard delete は、selected proposal lineage や将来の StrategyVersion relation と衝突する可能性があるため、初回 full management では実装しない。
+
+## 7-3. sanitized provider event log の確認
+
+Sanitized provider event log は、provider / manual import の発生事象を確認するための運用観測である。Proposal history は候補と selection lineage、provider quality trend は history からの read-only 集計、benchmark record は optional benchmark の local summary として扱い、event log は failure / retry / rate limit の発生確認に使う。
+
+確認観点:
+
+- proposal generation が success / failed / rate_limited のどれになったか。
+- local_llm の timeout / schema_invalid / required_field_missing がどの程度発生しているか。
+- `required_field_missing` retry が attempted / succeeded / failed のどれか。
+- Codex CLI manual import が success / failed / rate_limited のどれか。
+- proposal run が作成された event は `proposal_run_id` で history と紐づくこと。
+- rate limited event は run がないため `proposal_run_id=null` で残ること。
+
+品質評価での使い方:
+
+- event log は provider 運用品質の切り分けに使う。
+- 投資判断、candidate ranking、候補採用判断には使わない。
+- provider quality trend を event log based にするかは後続判断とし、初回は history based trend を維持する。
+
+event log に残してよいもの:
+
+- event type / provider / status / invalid reason。
+- latency bucket / elapsed ms bucket。
+- candidate count / validation error count。
+- retry metadata。
+- rate limited metadata。
+- manual import flag。
+- missing required field count などの sanitized count。
+
+event log に残してはいけないもの:
+
+- raw prompt。
+- raw provider response。
+- raw Codex output。
+- endpoint / model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec / entry_logic / exit_logic / risk_management などの自由文本文。
+
 ## 8. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。

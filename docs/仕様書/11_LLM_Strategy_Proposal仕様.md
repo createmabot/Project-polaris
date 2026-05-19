@@ -1075,7 +1075,71 @@ retention / lifecycle 方針:
 - hard delete は selected candidate、future StrategyVersion created-from-proposal relation、provider quality trend、manual benchmark / history comparison と衝突し得るため、別フェーズで設計する。
 - archive を実装する場合は additive nullable field などの DB / Prisma schema change が必要になるため、別 design PR とする。
 
-## 18. 後続候補
+## 18. Sanitized provider event log persistence
+
+Sanitized provider event log persistence は、Strategy proposal の provider call、manual import、retry、rate limit、validation failure を、raw 情報を残さず運用観測用 event として保存するための設計である。Proposal history は生成結果と候補の履歴、provider quality trend は history 由来の集計、benchmark record は optional benchmark の local summary であり、event log はそれらより低レイヤーの発生事象を追う。
+
+初回実装方針:
+
+- additive table `StrategyProposalProviderEvent` 相当を追加する。
+- `StrategyProposalRun` への relation は nullable とし、run が作成された success / failure / manual import は `proposal_run_id` で紐づける。rate limited など run が作られない event は `proposal_run_id=null` で保存できる。
+- event write failure は proposal generation / import 本体を不要に失敗させない。実装では sanitized warning に留め、raw error object / stack trace は保存・返却しない。
+- 初回 UI は追加しない。運用確認は read API、DB inspection、tests、runbook に寄せる。
+
+初回 event type 候補:
+
+- `proposal_generate`: stub / local_llm の proposal generation 成功。
+- `proposal_generate_failed`: provider invalid / unavailable / timeout / validation failure。
+- `proposal_generate_retry`: local_llm bounded retry の試行結果。
+- `proposal_generate_rate_limited`: proposal generation の 429。
+- `codex_cli_import`: Codex CLI manual JSON import 成功。
+- `codex_cli_import_failed`: malformed JSON / schema invalid / required field missing など import failure。
+- `codex_cli_import_rate_limited`: Codex CLI manual import の 429。
+
+保存する sanitized fields:
+
+- provider name / mode / selected_by。
+- event type。
+- status / invalid reason / latency bucket / rounded elapsed ms。
+- candidate count / validation error count。
+- retry used / reason / succeeded。
+- rate limited flag / rate limit key source。
+- manual import flag / benchmark flag。
+- sanitized metadata: schema_valid、fallback_used、fallback_reason、missing_required_field_count、affected_candidate_count、candidate_count_requested、manual_import_source など enum / count / bucket のみ。
+
+保存しないもの:
+
+- raw prompt。
+- raw provider response。
+- raw Codex output。
+- provider endpoint。
+- model 実値。
+- secret / token / credential。
+- local path。
+- stack trace。
+- user_hint 全文。
+- candidate title / summary / suggested_natural_language_spec / entry_logic / exit_logic / risk_management などの自由文本文。
+- raw `inputJson` / raw `candidateJson` / raw `providerObservationJson` 全体。
+- actual IP / forwarded header value / internal rate-limit key。
+
+最小 read API:
+
+- `GET /api/strategy-lab/proposals/provider-events` を運用確認用 read-only endpoint とする。
+- query は `page` / `limit` / `provider_name` / `event_type` / `status` / `proposal_run_id` / `created_from` / `created_to` の最小 filter とする。
+- response は sanitized event summary、pagination、filters、meta を返す。
+- `meta` は `source=strategy_proposal_provider_events`、`sanitized=true`、raw prompt / raw response / raw Codex output / endpoint / model value / user_hint full text / candidate free text を含まないことを示す。
+
+明示的に対象外:
+
+- provider quality trend の materialized aggregation。
+- p50 / p95 などの percentile。
+- prompt regression automation。
+- benchmark result DB table。
+- archive / retention / hard delete。
+- event log を使った candidate ranking / 投資判断。
+- Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
+
+## 19. 後続候補
 
 - `openai_api` strategy proposal provider。
 - Web search / deep research option。
@@ -1086,12 +1150,12 @@ retention / lifecycle 方針:
 - proposal history export。
 - symbol context から StrategyLab へ遷移する導線。
 - distributed rate limit / hard cost cap / per-user billing。
-- provider instrumentation 拡張（sanitized provider event / log persistence）。
+- provider quality trend の event-log based upgrade。
 - prompt versioning と regression tests。
 - browser smoke / visual regression 対象化。
 - Codex CLI local worker / automation は、backend 自動起動ではなく別設計で要否を判断する。
 
-## 19. 参照
+## 20. 参照
 
 - StrategyLab 画面責務: `docs/仕様書/05_画面仕様.md`
 - 画面導線: `docs/仕様書/04_画面導線_IA.md`
