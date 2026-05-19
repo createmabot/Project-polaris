@@ -232,7 +232,7 @@ PR #365 の benchmark design / fixed scenario set と PR #366 の code fixture /
 - `openai_api` provider。
 - Web search / deep research job 化。
 - StrategyVersion created-from-proposal relation。
-- proposal history filter / pagination / search / retention / full management。
+- proposal history archive / retention / hard delete / export。
 - sanitized provider event log persistence。
 - prompt regression automation。
 - auto Pine / auto save は引き続き out of scope。
@@ -270,13 +270,13 @@ failure の扱い:
 
 - history は provider quality と user selection lineage の補助であり、投資判断や automatic ranking には使わない。
 - real local_llm 実体依存 test は required check に入れない。
-- history UI は recent list と compact trend note までとし、filter / pagination / retention job / hard delete / materialized trend aggregation は後続判断とする。
+- history UI は StrategyLab の compact proposal history management として扱う。provider / status / selected / search / pagination で保存済み run を探せるが、archive / retention job / hard delete / export / materialized trend aggregation は後続判断とする。
 - selection は StrategyLab input 反映の記録であり、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 
 後続候補:
 
 - StrategyVersion created-from-proposal relation。
-- proposal history filter / pagination / search / retention / full management。
+- proposal history archive / retention / hard delete / export。
 - provider quality trend の range / filter / percentile / materialized aggregation。
 - provider event log persistence。
 - proposal history export / benchmark records。

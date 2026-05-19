@@ -49,10 +49,11 @@ vi.mock('../api/client', async () => {
 
 import StrategyLab from './StrategyLab';
 import { ApiError, postApi } from '../api/client';
-import { buildProposalErrorMessage } from './StrategyLab';
+import { buildProposalErrorMessage, buildProposalHistoryPath } from './StrategyLab';
 
 const DEFAULT_RULE =
   '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。';
+const DEFAULT_HISTORY_PATH = '/api/strategy-lab/proposals?page=1&limit=10&sort=created_at&order=desc';
 
 async function flushPromises() {
   await Promise.resolve();
@@ -80,10 +81,16 @@ function primeScenarioState(params: {
   codexImportText?: string;
   codexImportFileName?: string | null;
   codexImportError?: string | null;
+  historySearchDraft?: string;
+  historyQuery?: string;
+  historyProvider?: string;
+  historyStatus?: string;
+  historySelected?: string;
+  historyPage?: number;
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
-  const setters = params.setters ?? Array.from({ length: 30 }).map(() => vi.fn());
+  const setters = params.setters ?? Array.from({ length: 40 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
@@ -105,6 +112,12 @@ function primeScenarioState(params: {
     params.codexImportError ?? null,
     false,
     null,
+    params.historySearchDraft ?? '',
+    params.historyQuery ?? '',
+    params.historyProvider ?? 'all',
+    params.historyStatus ?? 'all',
+    params.historySelected ?? 'all',
+    params.historyPage ?? 1,
     false,
     null,
     params.result ?? null,
@@ -173,6 +186,19 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('internal details');
   });
 
+  it('builds proposal history paths with sanitized filters', () => {
+    expect(buildProposalHistoryPath()).toBe(DEFAULT_HISTORY_PATH);
+    expect(buildProposalHistoryPath({
+      page: 2,
+      limit: 10,
+      q: '  breakout  ',
+      provider: 'codex_cli_manual',
+      status: 'succeeded',
+      selected: 'selected',
+    })).toBe('/api/strategy-lab/proposals?page=2&limit=10&sort=created_at&order=desc&q=breakout&provider_name=codex_cli_manual&status=succeeded&selected=true');
+    expect(buildProposalHistoryPath({ selected: 'unselected' })).toContain('selected=false');
+  });
+
   it.each([
     ['proposal_run_id', { proposal_run_id: 'failed-proposal-run-1' }],
     ['history.proposal_run_id', { history: { proposal_run_id: 'failed-proposal-run-1' } }],
@@ -181,7 +207,7 @@ describe('StrategyLab', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     primeDefaultState();
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return {
           isLoading: false,
           error: null,
@@ -234,7 +260,7 @@ describe('StrategyLab', () => {
     expect(html).toContain('Codex CLI用プロンプトを作成');
     expect(html).toContain('Codex CLI出力JSON');
     expect(html).toContain('JSONを取り込む');
-    expect(html).toContain('最近の提案');
+    expect(html).toContain('提案履歴');
     expect(html).toContain('戦略タイトル');
     expect(html).toContain('自然言語ルール');
     expect(html).toContain('市場');
@@ -287,7 +313,7 @@ describe('StrategyLab', () => {
       codexImportText: '{"schema_name":"strategy_proposal_candidates"}',
     });
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: false, error: null, data: null, mutate: historyMutate };
       }
       if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
@@ -577,7 +603,7 @@ describe('StrategyLab', () => {
   it('renders history list', () => {
     primeDefaultState();
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return {
           isLoading: false,
           error: null,
@@ -598,7 +624,14 @@ describe('StrategyLab', () => {
                 updated_at: '2026-05-17T00:00:00.000Z',
               },
             ],
-            limit: 5,
+            limit: 10,
+            pagination: {
+              page: 1,
+              limit: 10,
+              total_count: 12,
+              has_next: true,
+              has_previous: false,
+            },
           },
           mutate: vi.fn(),
         };
@@ -607,7 +640,12 @@ describe('StrategyLab', () => {
     });
 
     const html = renderToStaticMarkup(<StrategyLab />);
-    expect(html).toContain('最近の提案');
+    expect(html).toContain('提案履歴');
+    expect(html).toContain('履歴検索');
+    expect(html).toContain('provider');
+    expect(html).toContain('status');
+    expect(html).toContain('selected');
+    expect(html).toContain('履歴を絞り込む');
     expect(html).toContain('succeeded');
     expect(html).toContain('stub');
     expect(html).toContain('candidate count:');
@@ -615,6 +653,30 @@ describe('StrategyLab', () => {
     expect(html).toContain('selected:');
     expect(html).toContain('あり');
     expect(html).toContain('候補を見る');
+    expect(html).toContain('page 1 / total 12');
+  });
+
+  it('uses filtered proposal history path without changing provider trend key', () => {
+    primeScenarioState({
+      historySearchDraft: 'breakout',
+      historyQuery: 'breakout',
+      historyProvider: 'codex_cli_manual',
+      historyStatus: 'succeeded',
+      historySelected: 'selected',
+      historyPage: 2,
+    });
+    mockUseSWR.mockReturnValue({ isLoading: false, error: null, data: null, mutate: vi.fn() });
+
+    renderToStaticMarkup(<StrategyLab />);
+
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/strategy-lab/proposals?page=2&limit=10&sort=created_at&order=desc&q=breakout&provider_name=codex_cli_manual&status=succeeded&selected=true',
+      expect.any(Function),
+    );
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/strategy-lab/proposals/provider-quality-trend?limit=50',
+      expect.any(Function),
+    );
   });
 
   it('renders sanitized provider quality trend without raw diagnostics', () => {
@@ -684,7 +746,7 @@ describe('StrategyLab', () => {
           mutate: vi.fn(),
         };
       }
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: false, error: null, data: { proposal_runs: [], limit: 5 }, mutate: vi.fn() };
       }
       return { isLoading: false, error: null, data: null, mutate: vi.fn() };
@@ -715,7 +777,7 @@ describe('StrategyLab', () => {
       selectedProposalRunId: 'proposal-run-1',
     });
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return {
           isLoading: false,
           error: null,
@@ -793,17 +855,17 @@ describe('StrategyLab', () => {
   it('renders history empty, error, and loading states', () => {
     primeDefaultState();
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: false, error: null, data: { proposal_runs: [], limit: 5 }, mutate: vi.fn() };
       }
       return { isLoading: false, error: null, data: null, mutate: vi.fn() };
     });
-    expect(renderToStaticMarkup(<StrategyLab />)).toContain('最近の提案はありません');
+    expect(renderToStaticMarkup(<StrategyLab />)).toContain('提案履歴はありません');
 
     renderedButtons.length = 0;
     primeDefaultState();
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: false, error: new Error('failed'), data: null, mutate: vi.fn() };
       }
       return { isLoading: false, error: null, data: null, mutate: vi.fn() };
@@ -813,7 +875,7 @@ describe('StrategyLab', () => {
     renderedButtons.length = 0;
     primeDefaultState();
     mockUseSWR.mockImplementation((key: string | null) => {
-      if (key === '/api/strategy-lab/proposals?limit=5') {
+      if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: true, error: null, data: null, mutate: vi.fn() };
       }
       return { isLoading: false, error: null, data: null, mutate: vi.fn() };

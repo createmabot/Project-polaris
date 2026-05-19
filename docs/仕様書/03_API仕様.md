@@ -98,14 +98,21 @@ Proposal history / selected proposal lineage の最小 API:
 - `POST /api/strategy-lab/proposals` は後方互換を維持する。
 - history 保存を実装する場合も、既存 response の `schema_name` / `schema_version` / `input` / `provider` / `provider_observation` / `candidates` / `disclaimer` は壊さない。
 - success response には optional `proposal_run_id` と `history.proposal_run_id` を追加する。
-- `GET /api/strategy-lab/proposals` は最近の proposal run 一覧を limit 上限付きで返す。
+- `GET /api/strategy-lab/proposals` は proposal run 一覧を filter / pagination 付きで返す。
+  - 後方互換として `limit` を維持する。
+  - query: `page`、`limit`、`provider_name`、`status=succeeded|failed`、`selected=true|false`、`market`、`timeframe`、`q`、`sort=created_at`、`order=asc|desc`。
+  - response: `proposal_runs`、`limit`、`filters`、`pagination`、`meta`。
+  - `pagination` は `page`、`limit`、`total_count`、`has_next`、`has_previous` を返す。
+  - `meta` は `source=strategy_proposal_history`、`sanitized=true`、`raw_prompt_included=false`、`raw_response_included=false`、`candidate_free_text_included=false`、`user_hint_full_text_included=false` を返す。
+  - list item の `input.user_hint` は全文を返さず、`user_hint_present` / `user_hint_length` だけを返す。
+  - `q` は検索条件としてのみ扱い、response に match snippet、candidate title / summary / suggested natural language spec、raw provider diagnostics を返さない。
 - `GET /api/strategy-lab/proposals/:proposalRunId` は run detail と candidates を返す。
 - `POST /api/strategy-lab/proposals/:proposalRunId/select` は selected candidate を記録する。
 - select request は `candidate_id` を優先し、未指定の場合は `proposal_candidate_id` を読む。`candidate_id` は provider candidate id または internal candidate id、`proposal_candidate_id` は detail API の `candidates[].id` に対応する internal candidate id として扱う。
 - selection API は StrategyLab input 反映の履歴だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 
 - `POST /api/strategy-lab/proposals` は短時間の連続実行に対して in-memory per-process rate guard を適用する。上限超過時は HTTP 429 / `RATE_LIMITED` を返し、proposal run は保存しない。error details は retry_after / limit / window / provider mode / key source 程度の sanitized metadata に限定し、actual IP、forwarded header value、internal key、raw prompt / raw provider response / endpoint / model 実値は返さない。
-- filter / pagination / large history management は後続判断とし、初回 UI は recent list 程度に留める。
+- archive / retention / hard delete / large management screen は後続判断とし、初回 full management は StrategyLab 内の compact filter / pagination UI に留める。
 
 Provider quality trend aggregation の最小 API:
 

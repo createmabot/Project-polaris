@@ -9,6 +9,7 @@ import { SelectField, TextArea, TextInput } from '../components/ui/FormFields';
 import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
+import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -44,6 +45,64 @@ const STRATEGY_TYPE_OPTIONS = [
   { value: 'volatility', label: 'volatility' },
   { value: 'risk_management', label: 'risk management' },
 ];
+
+const PROPOSAL_HISTORY_LIMIT = 10;
+const HISTORY_PROVIDER_OPTIONS = [
+  { value: 'all', label: 'all providers' },
+  { value: 'stub', label: 'stub' },
+  { value: 'local_llm', label: 'local_llm' },
+  { value: 'codex_cli_manual', label: 'codex_cli_manual' },
+];
+const HISTORY_STATUS_OPTIONS = [
+  { value: 'all', label: 'all statuses' },
+  { value: 'succeeded', label: 'succeeded' },
+  { value: 'failed', label: 'failed' },
+];
+const HISTORY_SELECTED_OPTIONS = [
+  { value: 'all', label: 'all selections' },
+  { value: 'selected', label: 'selected' },
+  { value: 'unselected', label: 'unselected' },
+];
+
+export function buildProposalHistoryPath({
+  page = 1,
+  limit = PROPOSAL_HISTORY_LIMIT,
+  q = '',
+  provider = 'all',
+  status = 'all',
+  selected = 'all',
+}: {
+  page?: number;
+  limit?: number;
+  q?: string;
+  provider?: string;
+  status?: string;
+  selected?: string;
+} = {}): string {
+  const params = new URLSearchParams({
+    page: String(Math.max(1, page)),
+    limit: String(limit),
+    sort: 'created_at',
+    order: 'desc',
+  });
+  const trimmedQuery = q.trim();
+  if (trimmedQuery) {
+    params.set('q', trimmedQuery);
+  }
+  if (provider && provider !== 'all') {
+    params.set('provider_name', provider);
+  }
+  if (status && status !== 'all') {
+    params.set('status', status);
+  }
+  if (selected === 'selected') {
+    params.set('selected', 'true');
+  }
+  if (selected === 'unselected') {
+    params.set('selected', 'false');
+  }
+  return `/api/strategy-lab/proposals?${params.toString()}`;
+}
 
 function buildCsvImportErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
@@ -314,6 +373,12 @@ export default function StrategyLab() {
   const [codexImportError, setCodexImportError] = useState<string | null>(null);
   const [codexImporting, setCodexImporting] = useState(false);
   const [codexCopyFeedback, setCodexCopyFeedback] = useState<string | null>(null);
+  const [historySearchDraft, setHistorySearchDraft] = useState('');
+  const [historyQuery, setHistoryQuery] = useState('');
+  const [historyProvider, setHistoryProvider] = useState('all');
+  const [historyStatus, setHistoryStatus] = useState('all');
+  const [historySelected, setHistorySelected] = useState('all');
+  const [historyPage, setHistoryPage] = useState(1);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -343,7 +408,14 @@ export default function StrategyLab() {
     error: proposalHistoryError,
     isLoading: proposalHistoryLoading,
     mutate: mutateProposalHistory,
-  } = useSWR<StrategyProposalHistoryListData>('/api/strategy-lab/proposals?limit=5', swrFetcher);
+  } = useSWR<StrategyProposalHistoryListData>(buildProposalHistoryPath({
+    page: historyPage,
+    limit: PROPOSAL_HISTORY_LIMIT,
+    q: historyQuery,
+    provider: historyProvider,
+    status: historyStatus,
+    selected: historySelected,
+  }), swrFetcher);
   const {
     data: proposalQualityTrendData,
     error: proposalQualityTrendError,
@@ -527,6 +599,32 @@ export default function StrategyLab() {
     }
     applyProposalCandidate(candidate);
   };
+
+  const resetHistoryDetail = () => {
+    setSelectedProposalRunId(null);
+  };
+
+  const applyHistorySearch = () => {
+    setHistoryQuery(historySearchDraft.trim());
+    setHistoryPage(1);
+    resetHistoryDetail();
+  };
+
+  const clearHistoryFilters = () => {
+    setHistorySearchDraft('');
+    setHistoryQuery('');
+    setHistoryProvider('all');
+    setHistoryStatus('all');
+    setHistorySelected('all');
+    setHistoryPage(1);
+    resetHistoryDetail();
+  };
+
+  const hasHistoryFilter =
+    Boolean(historyQuery.trim()) ||
+    historyProvider !== 'all' ||
+    historyStatus !== 'all' ||
+    historySelected !== 'all';
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -842,8 +940,8 @@ export default function StrategyLab() {
       </SectionCard>
 
       <SectionCard
-        title='最近の提案'
-        description='直近の strategy proposal run を最小表示します。候補を使う操作は title と自然言語ルールへの反映に留めます。'
+        title='提案履歴'
+        description='保存済み strategy proposal run を provider / status / selected / search で絞り込みます。候補を使う操作は title と自然言語ルールへの反映に留めます。'
         className='mt-5'
       >
         <div style={{ display: 'grid', gap: '0.85rem' }}>
@@ -852,6 +950,74 @@ export default function StrategyLab() {
             error={proposalQualityTrendError}
             isLoading={proposalQualityTrendLoading}
           />
+
+          <div
+            style={{
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              padding: '0.85rem',
+              display: 'grid',
+              gap: '0.75rem',
+              background: '#f8fafc',
+            }}
+          >
+            <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+              <TextInput
+                label='履歴検索'
+                value={historySearchDraft}
+                onChange={(event) => setHistorySearchDraft(event.target.value)}
+                placeholder='run id / provider / candidate'
+              />
+              <SelectField
+                label='provider'
+                value={historyProvider}
+                onChange={(event) => {
+                  setHistoryProvider(event.target.value);
+                  setHistoryPage(1);
+                  resetHistoryDetail();
+                }}
+              >
+                {HISTORY_PROVIDER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </SelectField>
+              <SelectField
+                label='status'
+                value={historyStatus}
+                onChange={(event) => {
+                  setHistoryStatus(event.target.value);
+                  setHistoryPage(1);
+                  resetHistoryDetail();
+                }}
+              >
+                {HISTORY_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </SelectField>
+              <SelectField
+                label='selected'
+                value={historySelected}
+                onChange={(event) => {
+                  setHistorySelected(event.target.value);
+                  setHistoryPage(1);
+                  resetHistoryDetail();
+                }}
+              >
+                {HISTORY_SELECTED_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </SelectField>
+            </div>
+            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <Button variant='secondary' onClick={applyHistorySearch}>履歴を絞り込む</Button>
+              {hasHistoryFilter && (
+                <Button variant='secondary' onClick={clearHistoryFilters}>絞り込みをクリア</Button>
+              )}
+            </div>
+            <InlineNotice tone='info'>
+              履歴検索は normalized metadata と candidate fields を対象にします。providerやCodexの生出力、内部診断、秘密値は表示しません。
+            </InlineNotice>
+          </div>
 
           {proposalHistoryLoading && (
             <LoadingState title='提案履歴を読み込み中です' />
@@ -864,8 +1030,8 @@ export default function StrategyLab() {
           )}
 
           {!proposalHistoryLoading && !proposalHistoryError && proposalHistoryData?.proposal_runs?.length === 0 && (
-            <EmptyState title='最近の提案はありません'>
-              候補を生成するとここに履歴が表示されます。
+            <EmptyState title='提案履歴はありません'>
+              条件に合う履歴がないか、まだ候補が生成されていません。
             </EmptyState>
           )}
 
@@ -903,12 +1069,12 @@ export default function StrategyLab() {
                       時間をおいて再試行してください。
                     </ErrorState>
                   )}
-                  {selectedProposalDetail?.candidates.length === 0 && (
+                  {selectedProposalDetail?.proposal_run?.id === run.id && selectedProposalDetail.candidates.length === 0 && (
                     <EmptyState title='履歴候補はありません'>
                       failed run または候補なしの run です。
                     </EmptyState>
                   )}
-                  {selectedProposalDetail?.candidates.map((historyCandidate) => (
+                  {selectedProposalDetail?.proposal_run?.id === run.id && selectedProposalDetail.candidates.map((historyCandidate) => (
                     <div
                       key={historyCandidate.id}
                       style={{
@@ -942,6 +1108,25 @@ export default function StrategyLab() {
               )}
             </div>
           ))}
+
+          {proposalHistoryData?.pagination && (
+            <PaginationControls
+              page={proposalHistoryData.pagination.page}
+              hasPrev={proposalHistoryData.pagination.has_previous}
+              hasNext={proposalHistoryData.pagination.has_next}
+              onPrev={() => {
+                setHistoryPage((page) => Math.max(1, page - 1));
+                resetHistoryDetail();
+              }}
+              onNext={() => {
+                setHistoryPage((page) => page + 1);
+                resetHistoryDetail();
+              }}
+              summaryLabel={`page {page} / total ${proposalHistoryData.pagination.total_count}`}
+              previousLabel='前へ'
+              nextLabel='次へ'
+            />
+          )}
         </div>
       </SectionCard>
 

@@ -611,13 +611,19 @@ export type StrategyProposalCodexCliRequestData = {
   prompt: string;
 };
 
+export type StrategyProposalHistoryInput = Omit<StrategyProposalData['input'], 'user_hint'> & {
+  user_hint: null;
+  user_hint_present?: boolean;
+  user_hint_length?: number;
+};
+
 export type StrategyProposalHistoryRun = {
   id: string;
   status: string;
   provider_name: string;
   provider_mode: string;
   selected_by: string;
-  input: StrategyProposalData['input'];
+  input: StrategyProposalHistoryInput;
   provider_observation?: StrategyProposalData['provider_observation'] | Record<string, unknown> | null;
   candidate_count: number;
   selected_candidate_id: string | null;
@@ -639,6 +645,31 @@ export type StrategyProposalHistoryCandidate = {
 export type StrategyProposalHistoryListData = {
   proposal_runs: StrategyProposalHistoryRun[];
   limit: number;
+  filters?: {
+    provider_name: string;
+    status: string;
+    selected: boolean | null;
+    market: string;
+    timeframe: string;
+    q_present: boolean;
+    sort: string;
+    order: string;
+  };
+  pagination?: {
+    page: number;
+    limit: number;
+    total_count: number;
+    has_next: boolean;
+    has_previous: boolean;
+  };
+  meta?: {
+    source: string;
+    sanitized: boolean;
+    raw_prompt_included: boolean;
+    raw_response_included: boolean;
+    candidate_free_text_included: boolean;
+    user_hint_full_text_included: boolean;
+  };
 };
 
 export type StrategyProposalHistoryDetailData = {
