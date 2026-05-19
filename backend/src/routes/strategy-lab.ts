@@ -67,7 +67,7 @@ const CODEX_CLI_MANUAL_PROVIDER = {
 };
 
 const CODEX_CLI_IMPORT_MAX_CHARS = 120_000;
-const CODEX_CLI_IMPORT_DISCLAIMER = 'This is a verification candidate, not investment advice.';
+const CODEX_CLI_IMPORT_DISCLAIMER = 'これは投資助言ではなく、バックテストとユーザー確認を前提にした検証候補です。';
 const CODEX_CLI_REQUIRED_SCALAR_FIELDS = [
   'candidate_id',
   'title',
@@ -430,13 +430,13 @@ function toCodexCliImportValidationError(error: AppError, candidates: unknown): 
 function buildCodexCliPrompt(input: StrategyProposalRequest): string {
   const exampleInput = JSON.stringify(input, null, 2);
   return [
-    'Return only one JSON object. Do not include markdown fences or explanatory text outside JSON.',
-    'The JSON must use schema_name "strategy_proposal_candidates" and schema_version "1.0".',
-    'Use the fixed English schema keys exactly. Japanese prose is allowed only in values.',
-    `Create ${input.proposal_count} strategy proposal candidates. The maximum candidate count is 10.`,
-    'This is not investment advice. Each candidate must be a verification idea that requires backtesting and user review.',
-    'Do not claim guaranteed profit. Do not automatically create Pine code, save a strategy, run backtests, or trigger AI summaries.',
-    'Every candidate must include these required keys:',
+    'JSON objectを1つだけ返してください。markdown fenceやJSON外の説明文は含めないでください。',
+    'JSONは schema_name "strategy_proposal_candidates" と schema_version "1.0" を必ず使ってください。',
+    'schema key と enum 値は英語の固定値を完全一致で使ってください。title、summary、logic、caution、disclaimer などユーザーに見える値の文章は日本語で書いてください。',
+    `${input.proposal_count} 件のストラテジー検証候補を作成してください。候補数の上限は10件です。`,
+    'これは投資助言ではありません。各候補は、実運用前にバックテストとユーザー確認が必要な検証アイデアとして書いてください。',
+    '利益保証や断定的な売買推奨は書かないでください。Pine code作成、strategy保存、backtest実行、AI summary起動は行わないでください。',
+    'すべてのcandidateには、次のrequired keysを必ず含めてください:',
     [
       'candidate_id',
       'title',
@@ -459,13 +459,13 @@ function buildCodexCliPrompt(input: StrategyProposalRequest): string {
       'suggested_natural_language_spec',
       'suggested_pine_constraints',
     ].join(', '),
-    'Array fields must be non-empty arrays of strings.',
-    'strategy_type must be one of: trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other.',
-    'pine_feasibility and confidence must be one of: high, medium, low.',
-    'research_basis[].source_type must be one of: internal, user_input, provider_knowledge. Do not use web.',
-    'Use this input object exactly as the JSON input field:',
+    'array field は必ず空でない string 配列にしてください。',
+    'strategy_type は次のいずれかだけです: trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other。',
+    'pine_feasibility と confidence は次のいずれかだけです: high, medium, low。',
+    'research_basis[].source_type は次のいずれかだけです: internal, user_input, provider_knowledge。web は使わないでください。',
+    'JSONの input field には、次のinput objectをそのまま使ってください:',
     exampleInput,
-    'Required root shape:',
+    '必須のroot shapeは次の通りです:',
     JSON.stringify({
       schema_name: 'strategy_proposal_candidates',
       schema_version: '1.0',
