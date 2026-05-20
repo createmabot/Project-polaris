@@ -3,6 +3,8 @@ import useSWR from 'swr';
 import { useLocation } from 'wouter';
 import { ApiError, postApi, swrFetcher } from '../api/client';
 import Button from '../components/ui/Button';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import { SelectField, TextArea, TextInput } from '../components/ui/FormFields';
@@ -752,30 +754,30 @@ export default function StrategyLab() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem' }}>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <TextLink href='/' className='text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
-          <TextLink href='/backtests' className='text-slate-600 no-underline hover:underline'>履歴一覧を見る</TextLink>
-        </div>
-      </div>
-
-      <h1>ルール検証ラボ（MVP）</h1>
-      <p style={{ color: '#666' }}>
-        自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。
-      </p>
+    <AppLayout>
+      <div className='mx-auto max-w-5xl'>
+        <PageHeader
+          title='ルール検証ラボ（MVP）'
+          description='自然言語ルールから Pine を生成し、その後 TradingView の検証CSVを取り込んで parse 状態を確認します。'
+          actions={
+            <>
+              <TextLink href='/' className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 no-underline shadow-sm hover:bg-slate-50'>ホームへ戻る</TextLink>
+              <TextLink href='/backtests' className='rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 no-underline shadow-sm hover:bg-slate-50'>履歴一覧を見る</TextLink>
+            </>
+          }
+        />
 
       <SectionCard
         title='ストラテジー候補の提案'
         description='AIによる検証候補を取得し、選択した候補を自然言語ルールへ反映します。投資助言ではなく、backtest前提のたたき台です。'
         className='mt-5'
       >
-        <div style={{ display: 'grid', gap: '1rem' }}>
+        <div className='grid gap-4'>
           <InlineNotice tone='warning'>
             候補は検証用のたたき台です。売買推奨ではありません。選択後に内容を確認し、Pine生成とbacktestで検証してください。
           </InlineNotice>
 
-          <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: '1fr 1fr' }}>
+          <div className='grid gap-4 lg:grid-cols-2'>
             <SelectField
               label='リスク設定'
               value={proposalRiskPreference}
@@ -801,25 +803,16 @@ export default function StrategyLab() {
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
           </Button>
 
-          <div
-            style={{
-              border: '1px solid #d8dee4',
-              borderRadius: '8px',
-              padding: '0.85rem',
-              display: 'grid',
-              gap: '0.75rem',
-              background: '#f8fafc',
-            }}
-          >
+          <div className='grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm'>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem' }}>Codex CLIで生成した候補JSONを取り込む</h3>
-              <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.9rem' }}>
+              <p className='mt-1 text-sm leading-6 text-slate-600'>
                 Codex CLIはこの画面から自動実行されません。promptを手動で渡し、返却されたJSONを貼り付けてください。複数候補は candidates 配列で最大10件まで取り込めます。
               </p>
             </div>
 
             <label className='grid gap-1.5 text-sm font-medium text-slate-800'>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span className='flex items-center gap-2'>
                 <input
                   type='checkbox'
                   checked={codexWebSearchPrompt}
@@ -832,7 +825,7 @@ export default function StrategyLab() {
               </span>
             </label>
 
-            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div className='flex flex-wrap gap-3'>
               <Button onClick={onBuildCodexPrompt} disabled={codexPrompting}>
                 {codexPrompting ? 'prompt作成中...' : 'Codex CLI用プロンプトを作成'}
               </Button>
@@ -914,7 +907,7 @@ export default function StrategyLab() {
           )}
 
           {proposalData && (
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
+            <div className='grid gap-3'>
               <KeyValueList className='sm:grid-cols-2'>
                 <KeyValueRow label='provider'>{proposalData.provider.name} / {proposalData.provider.mode}</KeyValueRow>
                 <KeyValueRow label='web search'>{proposalData.provider.web_search ? 'enabled' : 'disabled'}</KeyValueRow>
@@ -938,18 +931,12 @@ export default function StrategyLab() {
                 proposalData.candidates.map((candidate) => (
                   <div
                     key={candidate.candidate_id}
-                    style={{
-                      border: '1px solid #d8dee4',
-                      borderRadius: '8px',
-                      padding: '0.85rem',
-                      display: 'grid',
-                      gap: '0.55rem',
-                    }}
+                    className='grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm'
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div className='flex flex-wrap justify-between gap-3'>
                       <div>
-                        <h3 style={{ margin: 0, fontSize: '1rem' }}>{candidate.title}</h3>
-                        <p style={{ margin: '0.25rem 0 0', color: '#475569' }}>{candidate.summary}</p>
+                        <h3 className='text-base font-semibold text-slate-950'>{candidate.title}</h3>
+                        <p className='mt-1 text-sm leading-6 text-slate-600'>{candidate.summary}</p>
                       </div>
                       <Button
                         onClick={() => void onUseProposal(candidate)}
@@ -963,13 +950,13 @@ export default function StrategyLab() {
                       <KeyValueRow label='confidence'>{candidate.confidence}</KeyValueRow>
                       <KeyValueRow label='Pine feasibility'>{candidate.pine_feasibility}</KeyValueRow>
                     </KeyValueList>
-                    <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                    <div className='text-sm leading-6 text-slate-700'>
                       <strong>entry:</strong> {candidate.entry_logic.join(' / ')}
                     </div>
-                    <div style={{ fontSize: '0.9rem', color: '#334155' }}>
+                    <div className='text-sm leading-6 text-slate-700'>
                       <strong>risk:</strong> {candidate.risk_management.join(' / ')}
                     </div>
-                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                    <div className='rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500'>
                       caution: {candidate.backtest_cautions.join(' / ')}
                     </div>
                   </div>
@@ -989,24 +976,15 @@ export default function StrategyLab() {
         description='保存済み strategy proposal run を provider / status / selected / search で絞り込みます。候補を使う操作は title と自然言語ルールへの反映に留めます。'
         className='mt-5'
       >
-        <div style={{ display: 'grid', gap: '0.85rem' }}>
+        <div className='grid gap-4'>
           <ProviderQualityTrendNote
             data={proposalQualityTrendData}
             error={proposalQualityTrendError}
             isLoading={proposalQualityTrendLoading}
           />
 
-          <div
-            style={{
-              border: '1px solid #e2e8f0',
-              borderRadius: '8px',
-              padding: '0.85rem',
-              display: 'grid',
-              gap: '0.75rem',
-              background: '#f8fafc',
-            }}
-          >
-            <div style={{ display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
+          <div className='grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm'>
+            <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
               <TextInput
                 label='履歴検索'
                 value={historySearchDraft}
@@ -1066,7 +1044,7 @@ export default function StrategyLab() {
                 ))}
               </SelectField>
             </div>
-            <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+            <div className='flex flex-wrap gap-2'>
               <Button variant='secondary' onClick={applyHistorySearch}>履歴を絞り込む</Button>
               {hasHistoryFilter && (
                 <Button variant='secondary' onClick={clearHistoryFilters}>絞り込みをクリア</Button>
@@ -1432,6 +1410,7 @@ export default function StrategyLab() {
           </div>
         </SectionCard>
       )}
-    </div>
+      </div>
+    </AppLayout>
   );
 }

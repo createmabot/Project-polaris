@@ -13,7 +13,7 @@ type PageHeaderProps = {
 
 export default function PageHeader({ title, description, actions, backLink }: PageHeaderProps) {
   return (
-    <div className="mb-6">
+    <div className="mb-6 rounded-2xl border border-white/70 bg-white/75 p-5 shadow-sm shadow-slate-200/70 backdrop-blur">
       {backLink ? (
         <div className="mb-4">
           <TextLink href={backLink.href} className="text-sm text-slate-600 no-underline hover:underline">
@@ -23,8 +23,8 @@ export default function PageHeader({ title, description, actions, backLink }: Pa
       ) : null}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1>{title}</h1>
-          {description ? <div className="mt-2 text-sm text-slate-600">{description}</div> : null}
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-950">{title}</h1>
+          {description ? <div className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{description}</div> : null}
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-3">{actions}</div> : null}
       </div>

@@ -1,6 +1,6 @@
 # 北極星 残課題 Backlog
 
-更新日: 2026-05-20
+更新日: 2026-05-21
 分類: 作業進捗管理
 
 ## 1. 目的
@@ -17,10 +17,12 @@
 
 ## 3. UI / UX
 
-- StrategyVersionDetail、StrategyLab、SymbolDetail filter への小さな UI component 適用を判断する。
+- UI/UX production readiness phase 1 では AppLayout / Navigation / SideRail / Home / SymbolDetail / StrategyLab の見た目と情報階層を改善する。後続では ApplicationDetail / BacktestDetail / StrategyDetail / StrategyVersionDetail / BacktestComparisonDetail を段階的に扱う。
+- StrategyVersionDetail、BacktestDetail、ApplicationDetail の高頻度 section への小さな UI component 適用を判断する。
 - DataList / SimpleTable / DataTable の導入可否を、実際に重複が増えた場所から判断する。
 - BacktestDetail 全面 redesign は急がず、高頻度 section の小改善に留める。
 - responsive UX の余白、情報密度、導線優先度を画面単位で整理する。
+- Visual regression 対象拡大は optional pilot の実行負荷と snapshot churn を見てから判断し、required check 化しない。
 
 ## 4. Daily operation UX stabilization 後続候補
 

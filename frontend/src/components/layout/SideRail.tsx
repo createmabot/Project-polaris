@@ -408,7 +408,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
     return (
       <div className="space-y-2">
         {data.watchlist_symbols.map((symbol: any, index: number) => (
-          <div key={symbol.symbol_id ?? `watch-${index}`} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+          <div key={symbol.symbol_id ?? `watch-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40">
             <div className="flex items-start justify-between gap-3">
               <TextLink
                 href={symbol.symbol_id ? `/symbols/${symbol.symbol_id}` : '/watchlist'}
@@ -416,7 +416,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
               >
                 {symbol.display_name ?? symbol.symbol_id ?? '不明'}
               </TextLink>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-1.5">
                 <Button
                   onClick={() => openEditWatchlistModal(symbol)}
                   disabled={!watchlistActionsReady}
@@ -434,7 +434,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 </Button>
               </div>
             </div>
-            <div className="mt-1 text-xs text-slate-500">
+            <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
               価格: {formatNumber(symbol.latest_price, 2)} / 変化率:{' '}
               {symbol.change_rate === null || symbol.change_rate === undefined
                 ? '-'
@@ -459,7 +459,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
     return (
       <div className="space-y-2">
         {data.positions.map((position: any, index: number) => (
-          <div key={position.position_id ?? `position-${index}`} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+          <div key={position.position_id ?? `position-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40">
             <div className="flex items-start justify-between gap-3">
               <TextLink
                 href={position.symbol_id ? `/symbols/${position.symbol_id}` : '/positions'}
@@ -467,7 +467,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
               >
                 {buildPositionDisplayName(position, watchlistDisplayNameById)}
               </TextLink>
-              <div className="flex shrink-0 gap-2">
+              <div className="flex shrink-0 gap-1.5">
                 <Button
                   onClick={() => openEditPositionModal(position)}
                   disabled={!positionActionsReady}
@@ -485,10 +485,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 </Button>
               </div>
             </div>
-            <div className="mt-1 text-xs text-slate-500">
+            <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
               数量: {formatNumber(position.quantity, 0)} / 現在値: {formatNumber(position.latest_price, 2)}
             </div>
-            <div className="mt-1 text-xs text-slate-500">評価損益: {formatNumber(position.unrealized_pnl, 2)}</div>
+            <div className="mt-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">評価損益: {formatNumber(position.unrealized_pnl, 2)}</div>
             {!positionActionsReady && isPositionsLoading ? (
               <div className="mt-2">
                 <LoadingState title="保有銘柄の操作情報を読み込み中..." className="p-2 text-xs shadow-none" />
@@ -530,10 +530,10 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
     <>
       <aside
         aria-label="共通サイドメニュー"
-        className={collapsed ? 'sticky top-6 w-20 shrink-0 self-start' : 'sticky top-6 w-72 shrink-0 self-start'}
+        className={collapsed ? 'sticky top-24 w-20 shrink-0 self-start' : 'sticky top-24 w-72 shrink-0 self-start'}
       >
-        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-4">
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/70">
+          <div className="border-b border-slate-100 p-4">
             <div className="flex items-center justify-between gap-2">
               {!collapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
               <Button
@@ -582,12 +582,12 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                 ) : null}
               </div>
 
-              <div className="mb-4 flex rounded-md bg-slate-100 p-1">
+            <div className="mb-4 flex rounded-xl bg-slate-100 p-1">
                 <button
                   type="button"
                   onClick={() => setTab('watchlist')}
                   className={`flex-1 rounded px-3 py-2 text-sm ${
-                    tab === 'watchlist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    tab === 'watchlist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   監視
@@ -596,7 +596,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                   type="button"
                   onClick={() => setTab('positions')}
                   className={`flex-1 rounded px-3 py-2 text-sm ${
-                    tab === 'positions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                    tab === 'positions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   保有
@@ -633,7 +633,7 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
                     </TextLink>
                   </div>
                 )}
-                <p className="mt-2 text-xs leading-5 text-slate-500">
+                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
                   詳細管理は移行期の補助画面です。通常の追加・編集・削除はこの SideRail で行います。
                 </p>
               </div>
