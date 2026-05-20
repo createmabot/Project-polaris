@@ -378,6 +378,7 @@ export default function StrategyLab() {
   const [codexPromptData, setCodexPromptData] = useState<StrategyProposalCodexCliRequestData | null>(null);
   const [codexPromptError, setCodexPromptError] = useState<string | null>(null);
   const [codexPrompting, setCodexPrompting] = useState(false);
+  const [codexWebSearchPrompt, setCodexWebSearchPrompt] = useState(false);
   const [codexImportText, setCodexImportText] = useState('');
   const [codexImportFileName, setCodexImportFileName] = useState<string | null>(null);
   const [codexImportError, setCodexImportError] = useState<string | null>(null);
@@ -487,6 +488,7 @@ export default function StrategyLab() {
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,
         user_hint: naturalLanguageRule.trim() || null,
+        web_search_prompt: codexWebSearchPrompt,
       });
       setCodexPromptData(promptData);
       setCodexCopyFeedback(null);
@@ -815,6 +817,20 @@ export default function StrategyLab() {
                 Codex CLIはこの画面から自動実行されません。promptを手動で渡し、返却されたJSONを貼り付けてください。複数候補は candidates 配列で最大10件まで取り込めます。
               </p>
             </div>
+
+            <label className='grid gap-1.5 text-sm font-medium text-slate-800'>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input
+                  type='checkbox'
+                  checked={codexWebSearchPrompt}
+                  onChange={(event) => setCodexWebSearchPrompt(event.target.checked)}
+                />
+                Codex CLI側でWeb検索を使う前提のpromptにする
+              </span>
+              <span className='text-sm text-slate-600' style={{ fontWeight: 400 }}>
+                Codex CLIがWeb検索を利用できる環境の場合のみ有効です。北極星はWeb検索を自動実行せず、取り込み時にもWeb検索済みかどうかは判定しません。
+              </span>
+            </label>
 
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
               <Button onClick={onBuildCodexPrompt} disabled={codexPrompting}>

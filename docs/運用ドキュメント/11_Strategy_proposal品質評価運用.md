@@ -396,7 +396,7 @@ Codex CLI manual JSON import は、real provider benchmark ではなく、ユー
 manual smoke:
 
 1. StrategyLab を開く。
-2. Codex CLI 用 prompt を作成する。
+2. Codex CLI 用 prompt を作成する。Codex CLI 側でユーザーが手動 Web 検索を使える場合だけ、Web検索付き prompt option を有効にしてよい。
 3. 日本語で作成された prompt を手動で Codex CLI に渡す。schema key / enum は英語固定、candidate title / summary / logic / caution / suggested spec などユーザーに見える値は日本語で出ることを確認する。
 4. 返ってきた `strategy_proposal_candidates` JSON を StrategyLab に貼り付ける。
 5. import を実行する。
@@ -411,6 +411,7 @@ validation failure の見方:
 - malformed JSON は JSON 形式不正として扱う。
 - schema metadata 不一致、`candidates` 不在、candidate count 10 件超過は import failure として扱う。
 - required field missing、unsupported enum、`source_type=web` は既存 provider response validation と同じ境界で扱う。
+- Web検索付き prompt option を使った場合も、北極星側では Web 検索済みかどうかを判定しない。JSON import schema は通常の `codex_cli_manual` と同じであり、URL / citation / Web source badge は保存しない。
 - UI / API error は sanitized reason だけを見る。raw JSON text、candidate free text、raw prompt は error に含めない。
 
 記録しないもの:

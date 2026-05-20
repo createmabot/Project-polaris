@@ -78,6 +78,7 @@ function primeScenarioState(params: {
   selectingProposalCandidateId?: string | null;
   codexPromptData?: Record<string, unknown> | null;
   codexPromptError?: string | null;
+  codexWebSearchPrompt?: boolean;
   codexImportText?: string;
   codexImportFileName?: string | null;
   codexImportError?: string | null;
@@ -108,6 +109,7 @@ function primeScenarioState(params: {
     params.codexPromptData ?? null,
     params.codexPromptError ?? null,
     false,
+    params.codexWebSearchPrompt ?? false,
     params.codexImportText ?? '',
     params.codexImportFileName ?? null,
     params.codexImportError ?? null,
@@ -262,6 +264,8 @@ describe('StrategyLab', () => {
     expect(html).toContain('ストラテジーを提案');
     expect(html).toContain('Codex CLIで生成した候補JSONを取り込む');
     expect(html).toContain('Codex CLI用プロンプトを作成');
+    expect(html).toContain('Codex CLI側でWeb検索を使う前提のpromptにする');
+    expect(html).toContain('北極星はWeb検索を自動実行せず');
     expect(html).toContain('Codex CLI出力JSON');
     expect(html).toContain('JSONを取り込む');
     expect(html).toContain('提案履歴');
@@ -302,12 +306,40 @@ describe('StrategyLab', () => {
       strategy_type_bias: 'any',
       proposal_count: 5,
       user_hint: DEFAULT_RULE,
+      web_search_prompt: false,
     });
     expect(setters[12]).toHaveBeenCalledWith(expect.objectContaining({
       provider_name: 'codex_cli_manual',
       prompt: 'Return only one JSON object',
     }));
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+  });
+
+  it('requests a Codex CLI Web search prompt option when checked', async () => {
+    primeScenarioState({ codexWebSearchPrompt: true });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+      web_search_prompt: true,
+      prompt: 'Web search guidance. Return only one JSON object',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    const promptButton = renderedButtons.find((button) => button.children === 'Codex CLI用プロンプトを作成');
+    await promptButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
+      web_search_prompt: true,
+    }));
   });
 
   it('imports Codex CLI JSON and displays it as proposal candidates', async () => {
@@ -392,10 +424,10 @@ describe('StrategyLab', () => {
       await importButton?.onClick?.();
       await flushPromises();
 
-      expect(setters[17]).toHaveBeenCalledWith('短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。');
-      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('raw payload marker'));
-      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('manual_import'));
-      expect(setters[17]).not.toHaveBeenCalledWith(expect.stringContaining('60000'));
+      expect(setters[18]).toHaveBeenCalledWith('短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。');
+      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('raw payload marker'));
+      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('manual_import'));
+      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('60000'));
     } finally {
       consoleError.mockRestore();
     }

@@ -147,8 +147,9 @@ Codex CLI manual JSON import の最小 API:
 - `POST /api/strategy-lab/proposals/codex-cli/request`
   - StrategyLab の current proposal input から、ユーザーが手動で Codex CLI に渡す prompt を返す。
   - backend は Codex CLI を起動しない。
-  - request は既存 proposal request と同じ `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` を受ける。
-  - response は `provider_name=codex_cli_manual`、`schema_name=strategy_proposal_candidates`、`schema_version=1.0`、`proposal_count`、`prompt` を返す。
+  - request は既存 proposal request と同じ `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` に加え、optional `web_search_prompt` を受ける。
+  - `web_search_prompt=true` の場合だけ、Codex CLI 側でユーザーが手動 Web 検索を使える場合の確認事項を prompt に追加する。
+  - response は `provider_name=codex_cli_manual`、`schema_name=strategy_proposal_candidates`、`schema_version=1.0`、`proposal_count`、`web_search_prompt`、`prompt` を返す。
   - prompt は一時的な手動実行用 text であり、proposal history には保存しない。
 - `POST /api/strategy-lab/proposals/codex-cli/import`
   - ユーザーが貼り付けた、または frontend file picker で text 化した Codex CLI output JSON を import する。
