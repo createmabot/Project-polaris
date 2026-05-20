@@ -41,7 +41,7 @@ function formatDate(value: string | null): string {
 }
 
 function InfoCard({ children }: { children: ReactNode }) {
-  return <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">{children}</div>;
+  return <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-200/50">{children}</div>;
 }
 
 export default function Home() {
@@ -97,12 +97,20 @@ export default function Home() {
 
         <div className="grid gap-5">
           <SectionCard title="日次確認の見方">
-            <InfoCard>
-              <p className="text-sm leading-6 text-slate-600">
-                監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。
-                Home 本体ではマーケット概況、AIデイリーサマリー、最新アラート、注目イベントを優先表示します。
-              </p>
-            </InfoCard>
+            <div className="grid gap-3 xl:grid-cols-[1.4fr_1fr]">
+              <InfoCard>
+                <p className="text-sm leading-6 text-slate-600">
+                  監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。
+                  Home 本体ではマーケット概況、AIデイリーサマリー、最新アラート、注目イベントを優先表示します。
+                </p>
+              </InfoCard>
+              <InfoCard>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Daily workspace</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  まず概況とサマリーを読み、気になる銘柄は SideRail から詳細へ進む構成です。
+                </p>
+              </InfoCard>
+            </div>
           </SectionCard>
 
           <SectionCard title="マーケット概況">
@@ -112,7 +120,7 @@ export default function Home() {
               asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
                 <EmptyState title="マーケット概況データはまだありません。" />
               ) : (
-                <div className="grid gap-3">
+                <div className="grid gap-3 xl:grid-cols-3">
                   {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
                     <InfoCard key={`index-${index}`}>
                       <KeyValueList>
@@ -194,7 +202,7 @@ export default function Home() {
             ) : (
               <div className="grid gap-3">
                 {data.recent_alerts.map((alert) => (
-                  <article key={alert.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                  <article key={alert.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/30">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div className="min-w-0">
                         <strong className="block text-slate-900">
@@ -217,7 +225,7 @@ export default function Home() {
                       </div>
                     </div>
                     {alert.related_ai_summary ? (
-                      <div className="mt-3 rounded-md border-l-4 border-sky-600 bg-slate-50 p-3">
+                      <div className="mt-3 rounded-lg border-l-4 border-sky-600 bg-slate-50 p-3">
                         <div className="font-medium text-slate-900">
                           {alert.related_ai_summary.title || 'AI要約'}
                         </div>

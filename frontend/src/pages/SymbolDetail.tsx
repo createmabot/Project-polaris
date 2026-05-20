@@ -25,6 +25,7 @@ import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
+import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -1099,8 +1100,8 @@ function SavedStrategyApplicationsPanel({
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
       ) : (
         <>
-          <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/70 pb-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsStatusFilter}</span>
               {statusFilterOptions.map((option) => (
                 <Button
@@ -1165,7 +1166,7 @@ function SavedStrategyApplicationsPanel({
                 </Button>
               ))}
             </div>
-            <div className="mt-2 grid gap-2 md:grid-cols-2">
+            <div className="mt-3 grid gap-2 md:grid-cols-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {LABELS.savedApplicationsStrategyFilter}
                 <input
@@ -1189,7 +1190,7 @@ function SavedStrategyApplicationsPanel({
                 />
               </label>
             </div>
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-white px-3 py-2 text-xs text-slate-500">
               <span>
                 {LABELS.savedApplicationsSummary
                   .replace('{status}', getApplicationStatusLabel(applicationStatusFilter))
@@ -1618,7 +1619,7 @@ export default function SymbolDetail() {
   if (isLoading) {
     return (
       <AppLayout showSideRail>
-        <div className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">{LABELS.loadSymbol}</div>
+        <LoadingState title={LABELS.loadSymbol} className="w-full" />
       </AppLayout>
     );
   }

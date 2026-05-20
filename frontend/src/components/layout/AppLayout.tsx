@@ -22,15 +22,15 @@ export default function AppLayout({
   sideRailMutateHome,
 }: AppLayoutProps) {
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto max-w-7xl px-4 py-3">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_#e0f2fe_0,_transparent_32rem),linear-gradient(180deg,_#f8fafc_0%,_#eef2f7_100%)] text-slate-900">
+      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/50 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-5 py-3">
           <Navigation />
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-7xl px-5 py-7">
         {showSideRail ? (
-          <div className="grid items-start gap-6 md:grid-cols-[18rem_minmax(0,1fr)]">
+          <div className="grid items-start gap-6 lg:grid-cols-[19rem_minmax(0,1fr)]">
             <SideRail
               homeData={sideRailHomeData}
               homeError={sideRailHomeError}
