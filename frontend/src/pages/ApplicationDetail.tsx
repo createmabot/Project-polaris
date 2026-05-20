@@ -262,7 +262,7 @@ export default function ApplicationDetail() {
 
         <div id="runs">
           <SectionCard title={LABELS.runs}>
-            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm shadow-slate-200/60">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsFilter}</h3>
               <FilterGroup
                 label={LABELS.runsTypeFilter}
@@ -289,7 +289,7 @@ export default function ApplicationDetail() {
             ) : (
               <div className="grid gap-3">
               {runsData.runs.map((run) => (
-                <article key={run.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <article key={run.id} className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">{run.run_type}</h3>
@@ -306,7 +306,7 @@ export default function ApplicationDetail() {
                     ) : null}
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
                       <strong className="block text-slate-700">linked backtest</strong>
                       {run.linked_backtest ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -318,7 +318,7 @@ export default function ApplicationDetail() {
                         <p className="mt-2">-</p>
                       )}
                     </div>
-                    <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
                       <strong className="block text-slate-700">linked import</strong>
                       {run.linked_backtest_import ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -329,7 +329,7 @@ export default function ApplicationDetail() {
                         <p className="mt-2">-</p>
                       )}
                     </div>
-                    <div className="rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
                       <strong className="block text-slate-700">linked execution</strong>
                       {run.linked_internal_backtest_execution ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -361,7 +361,7 @@ export default function ApplicationDetail() {
 
         <div id="reports">
           <SectionCard title={LABELS.reports}>
-            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm shadow-slate-200/60">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsFilter}</h3>
               <FilterGroup
                 label={LABELS.reportsSourceFilter}
@@ -401,7 +401,7 @@ export default function ApplicationDetail() {
               <div className="grid gap-3">
               <div className="text-xs text-slate-500">{LABELS.reportCount}: {reportsData.application.report_count}</div>
               {reportsData.reports.map((report) => (
-                <article key={report.id} className="rounded-lg border border-slate-200 bg-white p-4">
+                <article key={report.id} className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">{report.title}</h3>
@@ -421,7 +421,7 @@ export default function ApplicationDetail() {
                     </div>
                   </div>
                   {report.metrics ? (
-                    <KeyValueList className="mt-3 gap-x-4 gap-y-1 rounded-md border border-slate-100 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-3">
+                    <KeyValueList className="mt-3 gap-x-4 gap-y-1 rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600 sm:grid-cols-3">
                       <KeyValueRow label="period">{report.metrics.period_from ?? '-'} / {report.metrics.period_to ?? '-'}</KeyValueRow>
                       <KeyValueRow label="trade_count">{formatNumber(report.metrics.trade_count)}</KeyValueRow>
                       <KeyValueRow label="total_return_percent">{formatNumber(report.metrics.total_return_percent)}</KeyValueRow>

@@ -2,6 +2,8 @@ import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { swrFetcher } from '../api/client';
 import { BacktestComparisonData } from '../api/types';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
@@ -25,58 +27,72 @@ export default function BacktestComparisonDetail() {
 
   if (isLoading) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <LoadingState title='比較結果を読み込み中...' />
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <LoadingState title='比較結果を読み込み中...' />
+        </div>
+      </AppLayout>
     );
   }
   if (error) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <ErrorState title='比較結果の取得に失敗しました'>
-          エラー: {error.message}
-        </ErrorState>
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <ErrorState title='比較結果の取得に失敗しました'>
+            エラー: {error.message}
+          </ErrorState>
+        </div>
+      </AppLayout>
     );
   }
   if (!data) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <EmptyState title='比較結果が見つかりません' />
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <EmptyState title='比較結果が見つかりません' />
+        </div>
+      </AppLayout>
     );
   }
 
   const metrics = data.comparison.metrics_diff;
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <TextLink href='/' className='text-slate-600 no-underline hover:underline'>ホーム</TextLink>
-        <TextLink href={`/backtests/${data.comparison.base_backtest_id}?comparisonId=${data.comparison.comparison_id}`} className='text-slate-600 no-underline hover:underline'>
-          比較元backtestへ
-        </TextLink>
-        <TextLink href={`/backtests/${data.comparison.target_backtest_id}?comparisonId=${data.comparison.comparison_id}`} className='text-slate-600 no-underline hover:underline'>
-          比較先backtestへ
-        </TextLink>
-      </div>
+    <AppLayout>
+      <div className='mx-auto max-w-5xl space-y-5'>
+        <PageHeader
+          title='保存済みバックテスト比較'
+          description={
+            <>
+              <p>
+                比較ID: <code>{data.comparison.comparison_id}</code>
+              </p>
+              <p className='mt-1'>
+                保存済み pairwise comparison の再訪画面です。本格比較画面候補として、既存の比較 summary / metrics / AI summary を確認できます。
+              </p>
+            </>
+          }
+          actions={
+            <>
+              <TextLink href='/' className='text-sm text-slate-600 no-underline hover:underline'>ホーム</TextLink>
+              <TextLink href={`/backtests/${data.comparison.base_backtest_id}?comparisonId=${data.comparison.comparison_id}`} className='text-sm text-slate-600 no-underline hover:underline'>
+                比較元backtestへ
+              </TextLink>
+              <TextLink href={`/backtests/${data.comparison.target_backtest_id}?comparisonId=${data.comparison.comparison_id}`} className='text-sm text-slate-600 no-underline hover:underline'>
+                比較先backtestへ
+              </TextLink>
+            </>
+          }
+        />
 
-      <h1>保存済みバックテスト比較</h1>
-      <p style={{ color: '#666' }}>
-        比較ID: <code>{data.comparison.comparison_id}</code>
-      </p>
-      <p style={{ color: '#666', lineHeight: 1.6 }}>
-        保存済み pairwise comparison の再訪画面です。本格比較画面候補として、既存の比較 summary / metrics / AI summary を確認できます。
-      </p>
-
-      <SectionCard title='比較対象' className='mt-4'>
+      <SectionCard title='比較対象'>
         <KeyValueList>
           <KeyValueRow label='比較元'><code>{data.comparison.base_backtest_id}</code> / <code>{data.comparison.base_import_id}</code></KeyValueRow>
           <KeyValueRow label='比較先'><code>{data.comparison.target_backtest_id}</code> / <code>{data.comparison.target_import_id}</code></KeyValueRow>
         </KeyValueList>
       </SectionCard>
 
-      <SectionCard title='主要差分' className='mt-4'>
+      <SectionCard title='主要差分'>
         <KeyValueList>
           <KeyValueRow label='総取引数差分'>{formatDiff(metrics.total_trades_diff, '', 0)}</KeyValueRow>
           <KeyValueRow label='勝率差分'>{formatDiff(metrics.win_rate_diff_pt, 'pt')}</KeyValueRow>
@@ -86,21 +102,26 @@ export default function BacktestComparisonDetail() {
         </KeyValueList>
       </SectionCard>
 
-      <SectionCard title='tradeoff 要約' className='mt-4'>
-        <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{data.comparison.tradeoff_summary}</pre>
+      <SectionCard title='tradeoff 要約'>
+        <pre className='m-0 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm leading-6 text-slate-700'>
+          {data.comparison.tradeoff_summary}
+        </pre>
       </SectionCard>
 
-      <SectionCard title='AI比較総評' className='mt-4'>
-        <p style={{ marginTop: 0, color: '#666', fontSize: '0.9rem', lineHeight: 1.6 }}>
+      <SectionCard title='AI比較総評'>
+        <p className='mt-0 text-sm leading-6 text-slate-600'>
           ここに表示するのは保存済み pairwise comparison の AI summary です。個別 report の AI summary 同士の自動比較や artifact diff は後続判断です。
         </p>
         {data.comparison.ai_summary ? (
-          <div style={{ whiteSpace: 'pre-wrap' }}>{data.comparison.ai_summary}</div>
+          <div className='mt-3 whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700'>
+            {data.comparison.ai_summary}
+          </div>
         ) : (
           <EmptyState title='AI比較総評は保存されていません。' />
         )}
       </SectionCard>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 

@@ -2,6 +2,8 @@
 import useSWR from 'swr';
 import { useLocation } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -1007,51 +1009,61 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   if (isLoading) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <LoadingState title='rule version を読み込み中...' />
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <LoadingState title='rule version を読み込み中...' />
+        </div>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <ErrorState title='rule version の取得に失敗しました'>
-          エラー: {error.message}
-        </ErrorState>
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <ErrorState title='rule version の取得に失敗しました'>
+            エラー: {error.message}
+          </ErrorState>
+        </div>
+      </AppLayout>
     );
   }
 
   if (!version) {
     return (
-      <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-        <EmptyState title='rule version が見つかりません' />
-      </div>
+      <AppLayout>
+        <div className='mx-auto max-w-5xl'>
+          <EmptyState title='rule version が見つかりません' />
+        </div>
+      </AppLayout>
     );
   }
   const resolvedReturnPath = returnPath ?? buildDefaultVersionsReturnPath(version.strategy_id);
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '920px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-        <TextLink href='/' className='text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
-        <TextLink href='/strategy-lab' className='text-slate-600 no-underline hover:underline'>ルール検証ラボへ戻る</TextLink>
-        <TextLink href={resolvedReturnPath} className='text-slate-600 no-underline hover:underline'>
-          version 一覧へ
-        </TextLink>
-        {nextPriorityDetailUrl && (
-          <TextLink href={nextPriorityDetailUrl} className='font-semibold text-rose-800 no-underline hover:underline'>
-            次の最優先確認へ
-          </TextLink>
-        )}
-      </div>
-
-      <h1>rule version 詳細</h1>
+    <AppLayout>
+      <div className='mx-auto max-w-5xl space-y-5'>
+        <PageHeader
+          title='rule version 詳細'
+          description='自然言語ルール、Pine、検証、内製バックテスト導線を同じ version 文脈で確認します。'
+          actions={
+            <>
+              <TextLink href='/' className='text-sm text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
+              <TextLink href='/strategy-lab' className='text-sm text-slate-600 no-underline hover:underline'>ルール検証ラボへ戻る</TextLink>
+              <TextLink href={resolvedReturnPath} className='text-sm text-slate-600 no-underline hover:underline'>
+                version 一覧へ
+              </TextLink>
+              {nextPriorityDetailUrl && (
+                <TextLink href={nextPriorityDetailUrl} className='text-sm font-semibold text-rose-800 no-underline hover:underline'>
+                  次の最優先確認へ
+                </TextLink>
+              )}
+            </>
+          }
+        />
       <SectionCard
         title='基本情報'
         description='strategy version の ID、対象、状態、更新時刻を確認します。'
-        className='mt-4'
       >
         <KeyValueList>
           <KeyValueRow label='version_id'><code>{version.id}</code></KeyValueRow>
@@ -2250,7 +2262,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </EmptyState>
         )}
       </SectionCard>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
 

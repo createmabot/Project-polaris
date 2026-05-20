@@ -3,6 +3,8 @@ import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
 import { BacktestComparisonData, BacktestDetailData } from '../api/types';
+import AppLayout from '../components/layout/AppLayout';
+import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -695,16 +697,20 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
   if (isLoading) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <LoadingState title="読み込み中..." />
-      </div>
+      <AppLayout>
+        <div className="mx-auto max-w-5xl">
+          <LoadingState title="読み込み中..." />
+        </div>
+      </AppLayout>
     );
   }
   if (error) {
     return (
-      <div style={{ padding: '2rem' }}>
-        <ErrorState title={`エラー: ${error.message}`} />
-      </div>
+      <AppLayout>
+        <div className="mx-auto max-w-5xl">
+          <ErrorState title={`エラー: ${error.message}`} />
+        </div>
+      </AppLayout>
     );
   }
   if (!data) return null;
@@ -769,20 +775,22 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem' }}>
-        <Link href='/' style={{ color: '#666', textDecoration: 'none' }}>ホームへ戻る</Link>
-        <Link href='/strategy-lab' style={{ color: '#666', textDecoration: 'none' }}>ルール検証ラボへ戻る</Link>
-        <Link href={returnPath} style={{ color: '#666', textDecoration: 'none' }}>履歴一覧へ</Link>
-      </div>
+    <AppLayout>
+      <div className="mx-auto max-w-5xl space-y-5">
+        <PageHeader
+          title="検証レポート（詳細）"
+          description="まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。"
+          actions={
+            <>
+              <Link href='/' className="text-sm text-slate-600 no-underline hover:underline">ホームへ戻る</Link>
+              <Link href='/strategy-lab' className="text-sm text-slate-600 no-underline hover:underline">ルール検証ラボへ戻る</Link>
+              <Link href={returnPath} className="text-sm text-slate-600 no-underline hover:underline">履歴一覧へ</Link>
+            </>
+          }
+        />
 
-      <h1>検証レポート（詳細）</h1>
-      <p style={{ marginTop: '-0.35rem', marginBottom: '1rem', color: '#666', fontSize: '0.9rem' }}>
-        まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。
-      </p>
-
-      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-        <h2 style={{ marginTop: 0 }}>基本情報</h2>
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70">
+        <h2 className="mt-0 text-lg font-semibold text-slate-900">基本情報</h2>
         <KeyValueList>
           <KeyValueRow label="backtest ID"><code>{data.backtest.id}</code></KeyValueRow>
           <KeyValueRow label="strategy version"><code>{data.backtest.strategy_version_id}</code></KeyValueRow>
@@ -794,8 +802,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         </KeyValueList>
       </section>
 
-      <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-        <h2 style={{ marginTop: 0 }}>使用した Strategy</h2>
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70">
+        <h2 className="mt-0 text-lg font-semibold text-slate-900">使用した Strategy</h2>
         <div><strong>Strategy ID:</strong> <code>{usedStrategy.strategy_id ?? '-'}</code></div>
         <div><strong>Strategy Version ID:</strong> <code>{usedStrategy.strategy_version_id ?? '-'}</code></div>
         {snapshot ? (
@@ -1125,6 +1133,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           </ul>
         )}
       </section>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
