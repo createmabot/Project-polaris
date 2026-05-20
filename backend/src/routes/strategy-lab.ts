@@ -37,6 +37,7 @@ type ProposalBody = {
   strategy_type_bias?: unknown;
   proposal_count?: unknown;
   user_hint?: unknown;
+  web_search_prompt?: unknown;
 };
 
 type ProposalSelectBody = {
@@ -132,6 +133,16 @@ function parseProposalQualityTrendLimit(value: unknown): number {
     return 100;
   }
   return Math.min(parsed, 500);
+}
+
+function parseOptionalBoolean(value: unknown, fieldName: string): boolean {
+  if (value === undefined || value === null || value === '') {
+    return false;
+  }
+  if (typeof value !== 'boolean') {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a boolean.`);
+  }
+  return value;
 }
 
 function serializeCandidate(row: any) {
@@ -516,9 +527,9 @@ function toCodexCliImportValidationError(error: AppError, candidates: unknown): 
   });
 }
 
-function buildCodexCliPrompt(input: StrategyProposalRequest): string {
+function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearchPrompt?: boolean } = {}): string {
   const exampleInput = JSON.stringify(input, null, 2);
-  return [
+  const promptSections = [
     'JSON objectを1つだけ返してください。markdown fenceやJSON外の説明文は含めないでください。',
     'JSONは schema_name "strategy_proposal_candidates" と schema_version "1.0" を必ず使ってください。',
     'schema key と enum 値は英語の固定値を完全一致で使ってください。title、summary、logic、caution、disclaimer などユーザーに見える値の文章は日本語で書いてください。',
@@ -552,6 +563,18 @@ function buildCodexCliPrompt(input: StrategyProposalRequest): string {
     'strategy_type は次のいずれかだけです: trend_following, mean_reversion, breakout, momentum, volatility, risk_management, other。',
     'pine_feasibility と confidence は次のいずれかだけです: high, medium, low。',
     'research_basis[].source_type は次のいずれかだけです: internal, user_input, provider_knowledge。web は使わないでください。',
+  ];
+
+  if (options.webSearchPrompt) {
+    promptSections.push(
+      'Codex CLI側でWeb検索が利用できる場合は、候補作成前の確認に使ってよいです。ただし、北極星側はWeb検索を自動実行せず、取り込み時にもWeb検索済みかどうかを判定しません。',
+      'Web検索結果、URL、引用、長い本文抜粋をJSONに含めないでください。research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください。',
+      'Webで確認した情報は、候補内容の妥当性確認と uncertainty / backtest_cautions の補強にだけ使ってください。根拠が弱い、最新性が不明、または確認できない点は uncertainty に日本語で記載してください。',
+      'URLを捏造しないでください。利益保証や売買推奨はせず、出力は投資助言ではなく検証候補として扱ってください。',
+    );
+  }
+
+  promptSections.push(
     'JSONの input field には、次のinput objectをそのまま使ってください:',
     exampleInput,
     '必須のroot shapeは次の通りです:',
@@ -591,7 +614,8 @@ function buildCodexCliPrompt(input: StrategyProposalRequest): string {
       ],
       disclaimer: CODEX_CLI_IMPORT_DISCLAIMER,
     }, null, 2),
-  ].join('\n\n');
+  );
+  return promptSections.join('\n\n');
 }
 
 function buildCodexCliManualObservation(params: {
@@ -1145,12 +1169,14 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: ProposalBody }>('/proposals/codex-cli/request', async (request, reply) => {
     const input = parseStrategyProposalRequest(request.body ?? {});
+    const webSearchPrompt = parseOptionalBoolean(request.body?.web_search_prompt, 'web_search_prompt');
     return reply.status(200).send(formatSuccess(request, {
       provider_name: CODEX_CLI_MANUAL_PROVIDER.name,
       schema_name: 'strategy_proposal_candidates',
       schema_version: '1.0',
       proposal_count: input.proposal_count,
-      prompt: buildCodexCliPrompt(input),
+      web_search_prompt: webSearchPrompt,
+      prompt: buildCodexCliPrompt(input, { webSearchPrompt }),
     }));
   });
 

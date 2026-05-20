@@ -1381,11 +1381,51 @@ describe('strategy lab vertical slice', () => {
       schema_name: 'strategy_proposal_candidates',
       schema_version: '1.0',
       proposal_count: 5,
+      web_search_prompt: false,
     });
     expect(body.data.prompt).toContain('JSON objectを1つだけ返してください');
     expect(body.data.prompt).toContain('strategy_proposal_candidates');
     expect(body.data.prompt).toContain('ユーザーに見える値の文章は日本語で書いてください');
     expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
+    expect(body.data.prompt).not.toContain('Codex CLI側でWeb検索が利用できる場合');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
+    expect(body.data.prompt).not.toContain('secret');
+    expect(body.data.prompt).not.toMatch(/[A-Za-z]:\\/);
+  });
+
+  it('builds a Codex CLI manual import prompt with optional Web search guidance', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/request',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        symbol_code: 'AAPL',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'any',
+        proposal_count: 5,
+        user_hint: 'Web確認できる場合でもJSON schemaを守る',
+        web_search_prompt: true,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toMatchObject({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+      web_search_prompt: true,
+    });
+    expect(body.data.prompt).toContain('Codex CLI側でWeb検索が利用できる場合');
+    expect(body.data.prompt).toContain('JSON objectを1つだけ返してください');
+    expect(body.data.prompt).toContain('research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください');
+    expect(body.data.prompt).toContain('URL、引用、長い本文抜粋をJSONに含めないでください');
+    expect(body.data.prompt).toContain('URLを捏造しないでください');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');

@@ -608,6 +608,7 @@ export type StrategyProposalCodexCliRequestData = {
   schema_name: 'strategy_proposal_candidates' | string;
   schema_version: string;
   proposal_count: number;
+  web_search_prompt?: boolean;
   prompt: string;
 };
 
