@@ -18,7 +18,7 @@ import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
 
-const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
+const PANEL_CLASS = 'rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
 type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 

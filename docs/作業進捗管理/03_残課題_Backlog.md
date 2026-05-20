@@ -17,8 +17,9 @@
 
 ## 3. UI / UX
 
-- UI/UX production readiness phase 1 では AppLayout / Navigation / SideRail / Home / SymbolDetail / StrategyLab の見た目と情報階層を改善する。後続では ApplicationDetail / BacktestDetail / StrategyDetail / StrategyVersionDetail / BacktestComparisonDetail を段階的に扱う。
-- StrategyVersionDetail、BacktestDetail、ApplicationDetail の高頻度 section への小さな UI component 適用を判断する。
+- UI/UX production readiness phase 1 では AppLayout / Navigation / SideRail / Home / SymbolDetail / StrategyLab の見た目と情報階層を改善済みである。
+- UI/UX production readiness phase 2 では ApplicationDetail / BacktestDetail / StrategyDetail / StrategyVersionDetail / BacktestComparisonDetail の検証・履歴系画面を改善済みである。
+- Phase 3 では、Phase 1 / Phase 2 の実装で実際に重複した表現だけを対象に、必要な共通部品の追加整理を判断する。
 - DataList / SimpleTable / DataTable の導入可否を、実際に重複が増えた場所から判断する。
 - BacktestDetail 全面 redesign は急がず、高頻度 section の小改善に留める。
 - responsive UX の余白、情報密度、導線優先度を画面単位で整理する。
