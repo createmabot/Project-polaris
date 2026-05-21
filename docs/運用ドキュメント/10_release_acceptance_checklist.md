@@ -143,6 +143,35 @@
 - AI summary 自動比較生成。
 - Visual regression required check 化。
 
+## 7-2. 2026-05-22 UI/UX production readiness acceptance smoke 確認結果
+
+UI/UX production readiness phase 1 / phase 2 / phase 3 後の acceptance smoke では、既存機能追加ではなく主要画面の見え方と安全境界を確認した。
+
+確認済み:
+
+- Home / SideRail / SymbolDetail / StrategyLab / ApplicationDetail / BacktestDetail / StrategyDetail / StrategyVersionDetail / BacktestComparisonDetail の主要画面を browser smoke 観点で確認した。
+- AppLayout / Navigation / SideRail / PageHeader / SectionCard / Surface / Button / TextLink / StatusBadge / InlineNotice の使い分けに、リリースを止める大きな UI 退行は見つからなかった。
+- filter / pagination / proposal history card / report history card / compact metadata の密度は、Phase 1 / 2 / 3 の改善境界と矛盾していない。
+- loading / error / empty state は既存テストで固定されており、今回の smoke で主要画面の初期表示が汎用 error 画面に崩れる事象は確認されなかった。
+- Strategy proposal selection は title / natural language spec への反映だけに留まり、Pine generation / save / backtest / AI summary は自動実行しない既存方針を維持する。
+- Artifact metadata は path 系 metadata を UI に出さない既存境界を維持する。
+- raw prompt / raw provider response / raw Codex output / endpoint / model 実値 / secret / local path / stack trace を UI / docs / PR に出さない境界を維持する。
+- Visual regression は optional pilot のまま維持し、required check 化しない。
+
+今回見送ったもの:
+
+- 高機能 DataTable、virtual scroll、column resize、modal framework 全面導入。
+- mobile-first responsive redesign。
+- artifact download / signed URL / file token。
+- AI summary 自動比較生成。
+- proposal から Pine / save / backtest / AI summary への自動連鎖。
+
+後続へ残すもの:
+
+- 実運用で table-like layout の重複が増えた場合のみ、DataList / SimpleTable / lightweight DataTable を小さく検討する。
+- Visual regression 対象拡大は optional pilot の安定性を見て判断する。
+- responsive UX の細部調整は画面単位で判断する。
+
 ## 8. 関連 docs
 
 - `README.md`
