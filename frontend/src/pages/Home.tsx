@@ -10,6 +10,7 @@ import ErrorState from '../components/ui/ErrorState';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
+import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
@@ -41,7 +42,7 @@ function formatDate(value: string | null): string {
 }
 
 function InfoCard({ children }: { children: ReactNode }) {
-  return <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm shadow-slate-200/50">{children}</div>;
+  return <Surface variant="muted" className="p-4 shadow-slate-200/50">{children}</Surface>;
 }
 
 export default function Home() {

@@ -29,6 +29,7 @@ import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
 
 const LABELS = {
@@ -620,7 +621,7 @@ function ApplicationLatestRunCard({
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+    <Surface variant="nested">
       <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
       {application.latest_run ? (
         <div>
@@ -648,7 +649,7 @@ function ApplicationLatestRunCard({
       ) : (
         <EmptyText>{LABELS.noLatestRun}</EmptyText>
       )}
-    </div>
+    </Surface>
   );
 }
 
@@ -661,7 +662,7 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
   const hasReportPair = reportPairItems.some((item) => item.report);
 
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+    <Surface variant="nested">
       <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
       {application.latest_backtest_report ? (
         <div>
@@ -701,7 +702,7 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
           </div>
         </div>
       ) : null}
-    </div>
+    </Surface>
   );
 }
 

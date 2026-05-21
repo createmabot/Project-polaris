@@ -17,6 +17,7 @@ import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
 
 const LABELS = {
@@ -262,7 +263,7 @@ export default function ApplicationDetail() {
 
         <div id="runs">
           <SectionCard title={LABELS.runs}>
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm shadow-slate-200/60">
+            <Surface variant="muted" className="mb-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.runsFilter}</h3>
               <FilterGroup
                 label={LABELS.runsTypeFilter}
@@ -283,13 +284,13 @@ export default function ApplicationDetail() {
                   .replace('{shown}', String(runsData.runs.length))
                   .replace('{total}', String(runsData.pagination.total))}
               </div>
-            </div>
+            </Surface>
             {runsData.runs.length === 0 ? (
               <EmptyState title={LABELS.noRuns} />
             ) : (
               <div className="grid gap-3">
               {runsData.runs.map((run) => (
-                <article key={run.id} className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
+                <Surface key={run.id} as="article" variant="card">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">{run.run_type}</h3>
@@ -306,7 +307,7 @@ export default function ApplicationDetail() {
                     ) : null}
                   </div>
                   <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
+                    <Surface variant="nested">
                       <strong className="block text-slate-700">linked backtest</strong>
                       {run.linked_backtest ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -317,8 +318,8 @@ export default function ApplicationDetail() {
                       ) : (
                         <p className="mt-2">-</p>
                       )}
-                    </div>
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
+                    </Surface>
+                    <Surface variant="nested">
                       <strong className="block text-slate-700">linked import</strong>
                       {run.linked_backtest_import ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -328,8 +329,8 @@ export default function ApplicationDetail() {
                       ) : (
                         <p className="mt-2">-</p>
                       )}
-                    </div>
-                    <div className="rounded-lg border border-slate-100 bg-slate-50/80 p-3 text-xs text-slate-600">
+                    </Surface>
+                    <Surface variant="nested">
                       <strong className="block text-slate-700">linked execution</strong>
                       {run.linked_internal_backtest_execution ? (
                         <KeyValueList className="mt-2 gap-1">
@@ -340,9 +341,9 @@ export default function ApplicationDetail() {
                       ) : (
                         <p className="mt-2">-</p>
                       )}
-                    </div>
+                    </Surface>
                   </div>
-                </article>
+                </Surface>
               ))}
               </div>
             )}
@@ -361,7 +362,7 @@ export default function ApplicationDetail() {
 
         <div id="reports">
           <SectionCard title={LABELS.reports}>
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm shadow-slate-200/60">
+            <Surface variant="muted" className="mb-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportsFilter}</h3>
               <FilterGroup
                 label={LABELS.reportsSourceFilter}
@@ -384,7 +385,7 @@ export default function ApplicationDetail() {
                     .replace('{total}', String(reportsData.pagination.total))
                   : LABELS.reportsSummary.replace('{shown}', '-').replace('{total}', '-')}
               </div>
-            </div>
+            </Surface>
             <InlineNotice tone="warning" className="mb-3 text-xs leading-5">
               <p>{LABELS.metricsMissingNote}</p>
               <p>{LABELS.metricsMissingDetail}</p>
@@ -401,7 +402,7 @@ export default function ApplicationDetail() {
               <div className="grid gap-3">
               <div className="text-xs text-slate-500">{LABELS.reportCount}: {reportsData.application.report_count}</div>
               {reportsData.reports.map((report) => (
-                <article key={report.id} className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm shadow-slate-200/60">
+                <Surface key={report.id} as="article" variant="card">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-slate-900">{report.title}</h3>
@@ -432,7 +433,7 @@ export default function ApplicationDetail() {
                       <KeyValueRow label="metrics_source"><code>{report.metrics.source}</code></KeyValueRow>
                     </KeyValueList>
                   ) : null}
-                </article>
+                </Surface>
               ))}
               </div>
             )}

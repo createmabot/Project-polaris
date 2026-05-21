@@ -9,6 +9,7 @@ import ErrorState from '../components/ui/ErrorState';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
+import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
 
 function formatDiff(value: number | null | undefined, suffix = '', digits = 2): string {
@@ -103,9 +104,9 @@ export default function BacktestComparisonDetail() {
       </SectionCard>
 
       <SectionCard title='tradeoff 要約'>
-        <pre className='m-0 whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50/80 p-4 text-sm leading-6 text-slate-700'>
+        <Surface as='pre' variant='readable' className='m-0 whitespace-pre-wrap'>
           {data.comparison.tradeoff_summary}
-        </pre>
+        </Surface>
       </SectionCard>
 
       <SectionCard title='AI比較総評'>
@@ -113,9 +114,9 @@ export default function BacktestComparisonDetail() {
           ここに表示するのは保存済み pairwise comparison の AI summary です。個別 report の AI summary 同士の自動比較や artifact diff は後続判断です。
         </p>
         {data.comparison.ai_summary ? (
-          <div className='mt-3 whitespace-pre-wrap rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700'>
+          <Surface variant='card' className='mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700'>
             {data.comparison.ai_summary}
-          </div>
+          </Surface>
         ) : (
           <EmptyState title='AI比較総評は保存されていません。' />
         )}
