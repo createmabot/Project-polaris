@@ -1201,6 +1201,16 @@ Sanitized provider event log persistence は、Strategy proposal の provider ca
 - event log を使った candidate ranking / 投資判断。
 - Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
 
+## 19-1. Pine generation market / timeframe 境界
+
+StrategyLab は proposal / Codex CLI import と同じ画面に Pine generation 入力を持つが、proposal selection から Pine generation へ自動連鎖しない境界を維持する。
+
+- Pine generation の初回 market / timeframe 拡張対象は `JP_STOCK` / `US_STOCK` と `D` / `1D` / `4H` / `1H` に限定する。
+- StrategyLab の default は `JP_STOCK` / `D` のまま維持する。
+- 生成した Pine は TradingView の chart symbol / timeframe 上で検証する前提であり、internal backtest engine の対応範囲拡張ではない。
+- unsupported market / timeframe は Pine generation warning / assumption で明示し、FX / CRYPTO、15M / 30M、market data provider 拡張、TradingView compile 自動実行は後続判断にする。
+- proposal / manual import / history / provider event log はこの拡張で schema や保存責務を変えない。raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace は引き続き出さない。
+
 ## 20. 後続候補
 
 - `openai_api` strategy proposal provider。

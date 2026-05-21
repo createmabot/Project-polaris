@@ -435,6 +435,8 @@ describe('StrategyVersionDetail', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('rule version 詳細');
+    expect(html).toContain('Pine生成対象は JP_STOCK / US_STOCK、D / 1D / 4H / 1H');
+    expect(html).toContain('internal backtestの対応範囲拡張ではありません');
     expect(html).toContain('比較元との差分（最小）');
     expect(html).toContain('比較サマリ');
     expect(html).toContain('全体: 変更あり');

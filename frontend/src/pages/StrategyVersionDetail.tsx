@@ -1127,6 +1127,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
           保存はルール本文のみ更新します。再生成ボタンで更新済みルールから Pine を作り直します。
         </div>
+        <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
+          Pine生成対象は JP_STOCK / US_STOCK、D / 1D / 4H / 1H です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+        </div>
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
           <div style={{ display: 'grid', gap: '0.55rem' }}>

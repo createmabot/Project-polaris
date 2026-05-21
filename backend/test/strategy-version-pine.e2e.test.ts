@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { strategyVersionRoutes } from '../src/routes/strategy-versions';
+import { generatePineDeterministic } from '../src/strategy/pine';
 import { errorHandler } from '../src/utils/response';
 
 type StrategyRuleVersionRow = {
@@ -216,6 +217,41 @@ async function createApp() {
   return app;
 }
 
+describe('deterministic pine market / timeframe scope', () => {
+  const supportedRule =
+    '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が25日移動平均線を下回ったら手仕舞い。';
+
+  it('accepts US_STOCK and intraday timeframe without JP_STOCK/D fallback warnings', () => {
+    const output = generatePineDeterministic({
+      naturalLanguageSpec: supportedRule,
+      normalizedRuleJson: null,
+      targetMarket: 'US_STOCK',
+      targetTimeframe: '1H',
+    });
+
+    expect(output.status).toBe('generated');
+    expect(output.warnings.join(' ')).not.toContain('Fallback assumes JP_STOCK');
+    expect(output.warnings.join(' ')).not.toContain('Fallback assumes D');
+    expect(output.assumptions).toContain('target_market is interpreted as US_STOCK');
+    expect(output.assumptions).toContain('target_timeframe is interpreted as 1H');
+    expect(output.assumptions).toContain('generated Pine follows the active TradingView chart timeframe');
+  });
+
+  it('keeps explicit fallback warnings for unsupported market and timeframe', () => {
+    const output = generatePineDeterministic({
+      naturalLanguageSpec: supportedRule,
+      normalizedRuleJson: null,
+      targetMarket: 'CRYPTO',
+      targetTimeframe: '15M',
+    });
+
+    expect(output.warnings).toContain('market=CRYPTO is outside Pine generation scope. Fallback assumes JP_STOCK.');
+    expect(output.warnings).toContain('timeframe=15M is outside Pine generation scope. Fallback assumes D.');
+    expect(output.assumptions).toContain('target_market is interpreted as JP_STOCK');
+    expect(output.assumptions).toContain('target_timeframe is interpreted as D');
+  });
+});
+
 describe('strategy version pine endpoints', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -257,6 +293,49 @@ describe('strategy version pine endpoints', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.json().data.status).toBe('available');
     expect(typeof fetched.json().data.generated_script).toBe('string');
+
+    await app.close();
+  });
+
+  it('passes expanded market and timeframe through pine generation context', async () => {
+    const row = runtime.versions.get('ver-1');
+    if (!row) throw new Error('seed row missing');
+    runtime.versions.set('ver-1', {
+      ...row,
+      market: 'US_STOCK',
+      timeframe: '4H',
+    });
+
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: '//@version=6\nstrategy("ok", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+
+    expect(generated.statusCode).toBe(200);
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(1);
+    expect(generatePineScriptMock.mock.calls[0][0]).toMatchObject({
+      targetMarket: 'US_STOCK',
+      targetTimeframe: '4H',
+    });
 
     await app.close();
   });

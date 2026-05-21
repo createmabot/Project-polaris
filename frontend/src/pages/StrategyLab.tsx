@@ -32,8 +32,8 @@ import {
   StrategyVersionListData,
 } from '../api/types';
 
-const MARKET_OPTIONS = ['JP_STOCK'];
-const TIMEFRAME_OPTIONS = ['D'];
+const MARKET_OPTIONS = ['JP_STOCK', 'US_STOCK'];
+const TIMEFRAME_OPTIONS = ['D', '1D', '4H', '1H'];
 const RISK_PREFERENCE_OPTIONS = [
   { value: 'balanced', label: 'balanced' },
   { value: 'conservative', label: 'conservative' },
@@ -1220,7 +1220,10 @@ export default function StrategyLab() {
           </div>
 
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
-            MVP制約: 日本語入力中心 / 日足(D)中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
+            Pine生成対象: JP_STOCK / US_STOCK、D / 1D / 4H / 1H。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#666' }}>
+            MVP制約: 日本語入力中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
           </div>
 
           {error && (

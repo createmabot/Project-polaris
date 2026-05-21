@@ -162,6 +162,14 @@ Codex CLI manual JSON import の最小 API:
   - error response は malformed JSON、schema invalid、required field missing、unsupported enum、candidate count invalid などの sanitized reason に限定し、raw JSON text、raw prompt、provider endpoint、model 実値、secret、local path、stack trace を返さない。
   - import は StrategyLab input への候補反映と history 保存だけを扱い、Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary を起動しない。
 
+StrategyVersion Pine generation の market / timeframe:
+
+- `POST /api/strategy-versions/:versionId/pine/generate` と `POST /api/strategy-versions/:versionId/pine/regenerate` は、保存済み StrategyVersion の `market` / `timeframe` を Pine provider context に渡す。
+- Pine generation の初回拡張対象は `market=JP_STOCK|US_STOCK`、`timeframe=D|1D|4H|1H` とする。
+- generated Pine のロジックは TradingView chart の symbol / timeframe 上で検証する前提とし、日足 / 時間足別の本格ロジック分岐や market data provider 拡張は行わない。
+- unsupported market / timeframe は Pine generation note の warning / assumption で明示し、既存 fallback 境界を維持する。
+- internal backtest engine の対応範囲拡張、TradingView compile 自動実行、auto Pine / auto save / auto backtest / AI summary 自動生成はこの API 変更に含めない。
+
 ## 7-1. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`

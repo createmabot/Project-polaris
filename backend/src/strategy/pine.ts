@@ -33,8 +33,8 @@ export type PineAssessmentResult = {
   invalidReasonCodes: PineInvalidReasonCode[];
 };
 
-const SUPPORTED_MARKETS = new Set(['JP_STOCK']);
-const SUPPORTED_TIMEFRAMES = new Set(['D']);
+const SUPPORTED_MARKETS = new Set(['JP_STOCK', 'US_STOCK']);
+const SUPPORTED_TIMEFRAMES = new Set(['D', '1D', '4H', '1H']);
 
 function toConditionText(lines: string[]): string {
   if (lines.length === 0) return 'false';
@@ -202,13 +202,18 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
   }
 
   if (!SUPPORTED_MARKETS.has(input.targetMarket)) {
-    warnings.push(`market=${input.targetMarket} is outside MVP scope. Fallback assumes JP_STOCK.`);
+    warnings.push(`market=${input.targetMarket} is outside Pine generation scope. Fallback assumes JP_STOCK.`);
     assumptions.push('target_market is interpreted as JP_STOCK');
+  } else if (input.targetMarket !== 'JP_STOCK') {
+    assumptions.push(`target_market is interpreted as ${input.targetMarket}`);
   }
 
   if (!SUPPORTED_TIMEFRAMES.has(input.targetTimeframe)) {
-    warnings.push(`timeframe=${input.targetTimeframe} is outside MVP scope. Fallback assumes D.`);
+    warnings.push(`timeframe=${input.targetTimeframe} is outside Pine generation scope. Fallback assumes D.`);
     assumptions.push('target_timeframe is interpreted as D');
+  } else if (input.targetTimeframe !== 'D') {
+    assumptions.push(`target_timeframe is interpreted as ${input.targetTimeframe}`);
+    assumptions.push('generated Pine follows the active TradingView chart timeframe');
   }
 
   const unsupportedPatterns = [
