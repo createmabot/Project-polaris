@@ -330,6 +330,17 @@ failure policy:
 - `proposal_count` は最大 10 のまま維持し、長文 user_hint や過大 prompt を受けた場合の truncation / rejection 方針を provider 実装前に固定する。
 - fallback を有効にする場合でも、品質評価ではなく疎通確保として扱い、provider metadata と UI 文言で stub fallback であることを隠さない。
 
+AI quality / cost operations の現行判断:
+
+- `stub` は deterministic / local / test baseline として維持する。
+- `local_llm` は明示 opt-in provider とし、real local_llm 依存 test は required check に入れない。
+- Codex CLI manual import は external/manual generated result import であり、`openai_api` provider ではない。
+- sanitized provider event log は provider call / retry / rate limit / validation failure の運用観測用であり、candidate ranking や投資判断には使わない。
+- provider quality trend は proposal history 由来の read-only 集計として維持し、event-log based materialized aggregation / percentile dashboard は後続設計とする。
+- future `openai_api` は explicit opt-in、secret handling、prompt length guard、rate limit、cost cap、retry upper bound を設計してから判断する。
+- Web search / deep research は同期 proposal API ではなく job 化候補とし、citation / freshness / source retention / timeout / cost を別設計する。
+- request-time provider selection は cost / abuse / consistency の観点から別設計を経て判断する。
+
 ### 5-5. safety boundary
 
 - proposal は「検証候補」であり、売買推奨、利益保証、銘柄推奨ではない。

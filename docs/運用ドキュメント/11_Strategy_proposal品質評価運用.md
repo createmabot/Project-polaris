@@ -485,6 +485,41 @@ event log に残してはいけないもの:
 - user_hint 全文。
 - candidate title / summary / suggested_natural_language_spec / entry_logic / exit_logic / risk_management などの自由文本文。
 
+## 7-4. AI quality / cost operations との関係
+
+Strategy proposal の品質評価は、候補の投資有効性を判定するものではなく、provider 運用品質と schema / safety 境界を確認するための運用である。
+
+すでに使える観測軸:
+
+- `provider_observation`: 同期 API response / proposal history に残る sanitized status、latency bucket、candidate count、invalid reason。
+- provider quality trend: proposal history からの read-only 集計。success rate / selected rate は provider 運用品質と利用状況の補助であり、投資成果を示さない。
+- sanitized provider event log: provider call / retry / rate limit / manual import failure の低レイヤー運用観測。
+- optional benchmark sanitized record: manual benchmark の local summary。required check ではない。
+
+維持する方針:
+
+- `stub` は deterministic baseline として schema / UI / selection flow の回帰確認に使う。
+- `local_llm` は opt-in provider として manual smoke / quality evaluation で使う。real local_llm 依存 test は required check に入れない。
+- Codex CLI manual import は external/manual generated result import であり、外部 API provider の latency / cost 品質を示さない。
+- provider failure は sanitized failed run / event として扱い、silent stub fallback に読み替えない。
+- proposal selection は StrategyLab input 反映だけで、Pine generation、save、backtest、AI summary を自動実行しない。
+
+継続見送り:
+
+- `openai_api` provider。
+- Web search / deep research job。
+- Codex CLI local worker / automatic spawn。
+- prompt regression automation。
+- benchmark result DB table。
+- provider quality trend の materialized aggregation、range / percentile / p50 / p95 dashboard。
+- request-time provider selection。
+
+追加設計が必要:
+
+- event log を provider quality trend に接続する場合の集計粒度、retention、重複 event、rate limited event の扱い。
+- 有料 provider を比較対象にする場合の cost cap、rate limit、prompt length guard、retry upper bound。
+- Web search / deep research を扱う場合の citation / freshness / source retention / cost / timeout。
+
 ## 8. 記録テンプレート
 
 評価結果は当面、`docs/作業進捗管理/03_残課題_Backlog.md` の prompt regression / provider quality benchmark records 後続項目に要約する。まとまった比較を残す場合は、別 PR で作業進捗管理配下に日付付きの小さな評価記録を追加する。actual benchmark record は commit しない。
