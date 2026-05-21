@@ -4,6 +4,7 @@ import {
   StrategyProposalRequest,
   StrategyType,
 } from './types';
+import { getStrategyProposalTimeframeProfile } from '../strategy/timeframe';
 
 type ProposalTemplate = {
   strategyType: StrategyType;
@@ -109,6 +110,7 @@ const TEMPLATES: ProposalTemplate[] = [
 
 function buildNaturalLanguageSpec(template: ProposalTemplate, params: StrategyProposalRequest): string {
   const target = params.symbol_code ? `対象銘柄は ${params.symbol_code}、` : '';
+  const timeframeProfile = getStrategyProposalTimeframeProfile(params.timeframe);
   const riskText = params.risk_preference === 'conservative'
     ? '損切りを早めにし、エントリー条件を厳しめにします。'
     : params.risk_preference === 'aggressive'
@@ -116,33 +118,36 @@ function buildNaturalLanguageSpec(template: ProposalTemplate, params: StrategyPr
       : 'エントリー条件と損切り条件のバランスを重視します。';
   const hintText = params.user_hint ? `補足条件: ${params.user_hint}` : '';
   return [
-    `${target}${params.market} / ${params.timeframe} を前提に、${template.title}を検証します。`,
+    `${target}${params.market} / ${timeframeProfile.label} を前提に、${template.title}を検証します。`,
+    `時間足前提: ${timeframeProfile.assumption}`,
     `エントリー条件: ${template.entryLogic.join('。')}。`,
     `手仕舞い条件: ${template.exitLogic.join('。')}。`,
     `リスク管理: ${template.riskManagement.join('。')}。${riskText}`,
     `無効化条件: ${template.invalidationConditions.join('。')}。`,
+    `バックテスト注意点: ${timeframeProfile.caution}`,
     hintText,
   ].filter(Boolean).join('\n');
 }
 
 function buildCandidate(template: ProposalTemplate, index: number, input: StrategyProposalRequest): StrategyProposalCandidate {
   const confidence = template.pineFeasibility === 'high' && input.risk_preference !== 'aggressive' ? 'medium' : 'low';
+  const timeframeProfile = getStrategyProposalTimeframeProfile(input.timeframe);
   return {
     candidate_id: `stub-${index + 1}`,
     title: template.title,
-    summary: template.summary,
+    summary: `${template.summary} ${timeframeProfile.label}では ${timeframeProfile.focus} を主な検証前提にする。`,
     market_assumption: input.market,
     timeframe_assumption: input.timeframe,
     strategy_type: template.strategyType,
     entry_logic: template.entryLogic,
     exit_logic: template.exitLogic,
-    risk_management: template.riskManagement,
+    risk_management: [...template.riskManagement, timeframeProfile.assumption],
     invalidation_conditions: template.invalidationConditions,
     expected_strengths: template.expectedStrengths,
     expected_weaknesses: template.expectedWeaknesses,
     required_indicators: template.requiredIndicators,
     pine_feasibility: template.pineFeasibility,
-    backtest_cautions: template.backtestCautions,
+    backtest_cautions: [...template.backtestCautions, timeframeProfile.caution],
     research_basis: [
       {
         source_type: 'internal',
@@ -154,9 +159,10 @@ function buildCandidate(template: ProposalTemplate, index: number, input: Strate
     uncertainty: [
       '市場環境や銘柄固有材料は未評価です。',
       'Pine生成後にbacktestとユーザー確認が必要です。',
+      timeframeProfile.caution,
     ],
     suggested_natural_language_spec: buildNaturalLanguageSpec(template, input),
-    suggested_pine_constraints: ['long_only', 'daily first', 'no automatic execution'],
+    suggested_pine_constraints: ['long_only', timeframeProfile.suggestedConstraint, 'no automatic execution'],
   };
 }
 

@@ -44,6 +44,13 @@ type StrategyVersionDetailProps = {
   params: { versionId: string };
 };
 
+function formatTimeframeLabel(value: string): string {
+  if (value === '1D' || value === 'D') return '日足（D）';
+  if (value === '4H') return '4時間足（4H）';
+  if (value === '1H') return '1時間足（1H）';
+  return value;
+}
+
 type DiffLine = {
   type: 'equal' | 'removed' | 'added';
   text: string;
@@ -1070,7 +1077,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           <KeyValueRow label='strategy_id'><code>{version.strategy_id}</code></KeyValueRow>
           <KeyValueRow label='clone元 version'><code>{version.cloned_from_version_id ?? '-'}</code></KeyValueRow>
           <KeyValueRow label='市場'>{version.market}</KeyValueRow>
-          <KeyValueRow label='時間足'>{version.timeframe}</KeyValueRow>
+          <KeyValueRow label='時間足'>{formatTimeframeLabel(version.timeframe)}</KeyValueRow>
           <KeyValueRow label='status'>
             <StatusBadge status={version.status}>
               <code>{version.status}</code>
@@ -1128,7 +1135,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           保存はルール本文のみ更新します。再生成ボタンで更新済みルールから Pine を作り直します。
         </div>
         <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
-          Pine生成対象は JP_STOCK / US_STOCK、D / 1D / 4H / 1H です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+          Pine生成対象は JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
         </div>
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>

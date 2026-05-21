@@ -38,7 +38,7 @@ pnpm run dev
 
 1. 同画面または version 作成導線で strategy version を作成する。
 2. `POST /api/strategies/:strategyId/versions` が成功することを確認する。
-3. `market` と `timeframe` が version に保存されていることを確認する。Pine generation の初回対象は `JP_STOCK` / `US_STOCK` と `D` / `1D` / `4H` / `1H` で、default は `JP_STOCK` / `D` のまま維持する。
+3. `market` と `timeframe` が version に保存されていることを確認する。Pine generation の初回対象は `JP_STOCK` / `US_STOCK` と canonical `D` / `4H` / `1H` で、default は `JP_STOCK` / `D` のまま維持する。`1D` が入力された場合は `D` として正規化される。
 
 ## 3. 自然言語 -> Pine 生成
 

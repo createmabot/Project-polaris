@@ -275,12 +275,14 @@ describe('StrategyLab', () => {
     expect(html).toContain('市場');
     expect(html).toContain('時間足');
     expect(html).toContain('US_STOCK');
-    expect(html).toContain('1D');
-    expect(html).toContain('4H');
-    expect(html).toContain('1H');
+    expect(html).toContain('日足（D）');
+    expect(html).toContain('4時間足（4H）');
+    expect(html).toContain('1時間足（1H）');
+    expect(html).not.toContain('value="1D"');
     expect(html).toContain(DEFAULT_RULE);
     expect(html).toContain('保存してPine生成');
-    expect(html).toContain('Pine生成対象: JP_STOCK / US_STOCK、D / 1D / 4H / 1H');
+    expect(html).toContain('Pine生成対象: JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）');
+    expect(html).toContain('時間足により提案される戦略候補の前提・注意点が変わります');
     expect(html).toContain('internal backtestの対応範囲拡張ではありません');
     expect(html).toContain('日本語入力中心 / long_only');
   });

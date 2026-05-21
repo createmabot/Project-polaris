@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
 import { assessGeneratedPineScript } from '../strategy/pine';
+import { normalizeTimeframeAlias } from '../strategy/timeframe';
 import { AppError, formatSuccess } from '../utils/response';
 
 type StrategyVersionRecord = {
@@ -37,7 +38,7 @@ function toStrategyVersionResponse(version: StrategyVersionRecord) {
     warnings: Array.isArray(version.warningsJson) ? version.warningsJson : [],
     assumptions: Array.isArray(version.assumptionsJson) ? version.assumptionsJson : [],
     market: version.market,
-    timeframe: version.timeframe,
+    timeframe: normalizeTimeframeAlias(version.timeframe),
     created_at: version.createdAt,
     updated_at: version.updatedAt,
   };
@@ -248,7 +249,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           naturalLanguageSpec: params.version.naturalLanguageRule,
           normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson),
           targetMarket: params.version.market,
-          targetTimeframe: params.version.timeframe,
+          targetTimeframe: normalizeTimeframeAlias(params.version.timeframe),
           regenerationInput: params.revisionInput
             ? {
                 sourcePineScriptId: params.revisionInput.sourcePineScriptId,
@@ -406,7 +407,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       ? request.body.natural_language_rule!.trim()
       : version.naturalLanguageRule;
     const nextMarket = hasMarket ? request.body.market!.trim() : version.market;
-    const nextTimeframe = hasTimeframe ? request.body.timeframe!.trim() : version.timeframe;
+    const nextTimeframe = hasTimeframe ? normalizeTimeframeAlias(request.body.timeframe!) : normalizeTimeframeAlias(version.timeframe);
     const nextForwardValidationNote = hasForwardValidationNote
       ? request.body.forward_validation_note!.trim() || null
       : version.forwardValidationNote;
@@ -668,7 +669,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         warningsJson: (sourceVersion.warningsJson ?? undefined) as Prisma.InputJsonValue | undefined,
         assumptionsJson: (sourceVersion.assumptionsJson ?? undefined) as Prisma.InputJsonValue | undefined,
         market: sourceVersion.market,
-        timeframe: sourceVersion.timeframe,
+        timeframe: normalizeTimeframeAlias(sourceVersion.timeframe),
         status: sourceVersion.status,
       },
     });
