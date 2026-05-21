@@ -180,6 +180,41 @@ provider cost / latency policy:
 - latency は `duration_ms` の read-only visibility に留め、slow job を画面起点で再実行しない。
 - polling / live update は今回実装しない。将来実装する場合も、無制限 polling は禁止し、回数・間隔・停止条件を docs と実装で同時に固定する。
 
+## 9-2. AI quality / cost operations 境界
+
+現行の AI summary auto-generation は、生成対象を増やすフェーズではなく、既に自動化した入口を安全に運用するフェーズである。
+
+完了済み:
+
+- CSV import parsed report と internal backtest report conversion の auto enqueue。
+- 同一 input snapshot hash に対する succeeded / queued / running / failed の duplicate guard。
+- BacktestDetail の latest job status read-only visibility。
+- provider failure を `ai_jobs.status=failed` として扱い、report / import 保存自体を壊さない運用。
+
+継続する方針:
+
+- BacktestDetail / ApplicationDetail の表示起点では enqueue しない。
+- failed job は自動 retry せず、既存の手動生成 / 再生成導線で扱う。
+- `latest_ai_summary_job` は snapshot 表示であり、polling / live update ではない。
+- `openai_api` は明示設定時のみの future provider とし、対象拡大前に cost cap、rate limit、prompt length guard、retry policy を設計する。
+- real provider 依存の確認は manual / optional とし、required check には入れない。
+
+継続見送り:
+
+- failed job auto retry。
+- polling / live update。
+- batch / scheduled AI summary generation。
+- display-triggered enqueue。
+- AI summary 同士の自動比較生成。
+- provider billing、distributed rate limit、hard cost cap。
+
+実装前に追加設計が必要:
+
+- scheduled / batch generation の対象範囲、trigger、重複防止、停止条件、cost control。
+- polling / live update の interval、上限回数、停止条件、UI 表示密度。
+- `openai_api` provider の secret handling、opt-in、prompt length guard、cost cap、retry upper bound。
+- failed job retry を導入する場合の retry 対象 reason、最大回数、manual override、費用上限。
+
 ## 10. 関連 docs
 
 - `docs/仕様書/09_AI_summary_artifact仕様.md`
