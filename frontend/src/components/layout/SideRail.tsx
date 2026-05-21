@@ -35,10 +35,12 @@ const WATCHLIST_API_PATH = '/api/watchlist-items';
 const POSITIONS_API_PATH = '/api/positions';
 
 type SideRailProps = {
+  collapsed?: boolean;
   homeData?: HomeData;
   homeError?: unknown;
   homeIsLoading?: boolean;
   mutateHome?: KeyedMutator<HomeData>;
+  onCollapsedChange?: (collapsed: boolean) => void;
 };
 
 const EMPTY_WATCHLIST_DRAFT: WatchlistDraft = {
@@ -114,9 +116,16 @@ function getFriendlyMutationMessage(error: any, fallback: string): string {
   return fallback;
 }
 
-export default function SideRail({ homeData, homeError, homeIsLoading, mutateHome: mutateProvidedHome }: SideRailProps) {
+export default function SideRail({
+  collapsed,
+  homeData,
+  homeError,
+  homeIsLoading,
+  mutateHome: mutateProvidedHome,
+  onCollapsedChange,
+}: SideRailProps) {
   const [tab, setTab] = useState<SideRailTab>('watchlist');
-  const [collapsed, setCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
   const [message, setMessage] = useState<MessageState>(null);
   const [watchlistModalMode, setWatchlistModalMode] = useState<'create' | 'edit' | 'delete' | null>(null);
   const [positionModalMode, setPositionModalMode] = useState<'create' | 'edit' | 'delete' | null>(null);
@@ -525,27 +534,34 @@ export default function SideRail({ homeData, homeError, homeIsLoading, mutateHom
       : positionModalMode === 'edit'
         ? '保有銘柄を編集'
         : '保有銘柄を削除';
+  const isCollapsed = collapsed ?? internalCollapsed;
+
+  const toggleCollapsed = () => {
+    const nextCollapsed = !isCollapsed;
+    setInternalCollapsed(nextCollapsed);
+    onCollapsedChange?.(nextCollapsed);
+  };
 
   return (
     <>
       <aside
         aria-label="共通サイドメニュー"
-        className={collapsed ? 'sticky top-24 w-20 shrink-0 self-start' : 'sticky top-24 w-72 shrink-0 self-start'}
+        className="sticky top-24 max-h-[calc(100vh-7rem)] w-full shrink-0 self-start overflow-y-auto pr-1"
       >
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/70">
           <div className="border-b border-slate-100 p-4">
             <div className="flex items-center justify-between gap-2">
-              {!collapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
+              {!isCollapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
               <Button
-                onClick={() => setCollapsed((value) => !value)}
+                onClick={toggleCollapsed}
                 className="px-2 py-1 text-xs"
               >
-                {collapsed ? '開く' : '折りたたむ'}
+                {isCollapsed ? '開く' : '折りたたむ'}
               </Button>
             </div>
           </div>
 
-          {collapsed ? (
+          {isCollapsed ? (
             <div className="space-y-3 p-3 text-center text-xs text-slate-500">
               <button
                 type="button"
