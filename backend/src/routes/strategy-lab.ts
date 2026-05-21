@@ -1,6 +1,12 @@
 import { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
+import {
+  getStrategyProposalTimeframeProfile,
+  normalizeTimeframeAlias,
+  readTimeframe,
+  timeframeSearchAliases,
+} from '../strategy/timeframe';
 import { createStrategyProposalProvider, getStrategyProposalProviderSelection } from '../strategy-proposals/provider';
 import {
   checkStrategyProposalRateLimit,
@@ -162,7 +168,7 @@ function sanitizeProposalRunInput(input: unknown) {
   const userHint = typeof data.user_hint === 'string' ? data.user_hint : null;
   return {
     market: typeof data.market === 'string' ? data.market : 'JP_STOCK',
-    timeframe: typeof data.timeframe === 'string' ? data.timeframe : 'D',
+    timeframe: readTimeframe(data.timeframe),
     symbol_code: typeof data.symbol_code === 'string' ? data.symbol_code : null,
     risk_preference: typeof data.risk_preference === 'string' ? data.risk_preference : 'balanced',
     strategy_type_bias: typeof data.strategy_type_bias === 'string' ? data.strategy_type_bias : 'any',
@@ -267,7 +273,7 @@ function parseProposalHistoryQuery(query: ProposalHistoryQuery) {
     status,
     selected: parseProposalHistorySelected(query.selected),
     market: readSafeFilterToken(query.market, 'market'),
-    timeframe: readSafeFilterToken(query.timeframe, 'timeframe'),
+    timeframe: normalizeTimeframeAlias(readSafeFilterToken(query.timeframe, 'timeframe')),
     archived: parseProposalHistoryArchived(query.archived),
     sort,
     order,
@@ -307,6 +313,14 @@ function buildInputJsonEquals(field: string, value: string) {
   return { inputJson: { path: [field], equals: value } };
 }
 
+function buildInputJsonEqualsAny(field: string, values: string[]) {
+  const uniqueValues = Array.from(new Set(values.filter(Boolean)));
+  if (uniqueValues.length === 1) {
+    return buildInputJsonEquals(field, uniqueValues[0]);
+  }
+  return { OR: uniqueValues.map((value) => buildInputJsonEquals(field, value)) };
+}
+
 function buildInputJsonSearch(field: string, value: string) {
   return { inputJson: { path: [field], string_contains: value } };
 }
@@ -338,9 +352,10 @@ function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistory
     and.push(buildInputJsonEquals('market', query.market));
   }
   if (query.timeframe) {
-    and.push(buildInputJsonEquals('timeframe', query.timeframe));
+    and.push(buildInputJsonEqualsAny('timeframe', timeframeSearchAliases(query.timeframe)));
   }
   if (query.q) {
+    const timeframeQueryAliases = timeframeSearchAliases(query.q);
     and.push({
       OR: [
         { id: { contains: query.q, mode: 'insensitive' } },
@@ -349,6 +364,7 @@ function buildProposalHistoryWhere(query: ReturnType<typeof parseProposalHistory
         { selectedBy: { contains: query.q, mode: 'insensitive' } },
         ...buildCaseInsensitiveInputJsonSearches('market', query.q),
         ...buildCaseInsensitiveInputJsonSearches('timeframe', query.q),
+        ...timeframeQueryAliases.flatMap((alias) => buildCaseInsensitiveInputJsonSearches('timeframe', alias)),
         ...buildCaseInsensitiveInputJsonSearches('symbol_code', query.q),
         ...buildCaseInsensitiveInputJsonSearches('risk_preference', query.q),
         ...buildCaseInsensitiveInputJsonSearches('strategy_type_bias', query.q),
@@ -529,11 +545,14 @@ function toCodexCliImportValidationError(error: AppError, candidates: unknown): 
 
 function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearchPrompt?: boolean } = {}): string {
   const exampleInput = JSON.stringify(input, null, 2);
+  const timeframeProfile = getStrategyProposalTimeframeProfile(input.timeframe);
   const promptSections = [
     'JSON objectを1つだけ返してください。markdown fenceやJSON外の説明文は含めないでください。',
     'JSONは schema_name "strategy_proposal_candidates" と schema_version "1.0" を必ず使ってください。',
     'schema key と enum 値は英語の固定値を完全一致で使ってください。title、summary、logic、caution、disclaimer などユーザーに見える値の文章は日本語で書いてください。',
     `${input.proposal_count} 件のストラテジー検証候補を作成してください。候補数の上限は10件です。`,
+    `時間足は ${timeframeProfile.label} です。各候補の timeframe_assumption、entry_logic、exit_logic、risk_management、backtest_cautions、uncertainty、suggested_natural_language_spec にはこの時間足前提を反映してください。`,
+    `時間足の戦略傾向: ${timeframeProfile.focus}。前提: ${timeframeProfile.assumption} 注意点: ${timeframeProfile.caution}`,
     'これは投資助言ではありません。各候補は、実運用前にバックテストとユーザー確認が必要な検証アイデアとして書いてください。',
     '利益保証や断定的な売買推奨は書かないでください。Pine code作成、strategy保存、backtest実行、AI summary起動は行わないでください。',
     'すべてのcandidateには、次のrequired keysを必ず含めてください:',
@@ -587,8 +606,8 @@ function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearc
           candidate_id: 'candidate-1',
           title: '日本語の候補タイトル',
           summary: '日本語の要約',
-          market_assumption: 'JP_STOCK',
-          timeframe_assumption: 'D',
+          market_assumption: input.market,
+          timeframe_assumption: input.timeframe,
           strategy_type: 'trend_following',
           entry_logic: ['日本語のエントリー条件'],
           exit_logic: ['日本語の終了条件'],

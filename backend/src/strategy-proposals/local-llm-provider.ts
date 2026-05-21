@@ -7,6 +7,7 @@ import type {
 } from './types';
 import { getStrategyProposalLocalLlmGuardConfig } from './guards';
 import { validateStrategyProposalCandidate } from './validation';
+import { getStrategyProposalTimeframeProfile } from '../strategy/timeframe';
 
 type LocalLlmResponse = {
   message?: { content?: string };
@@ -670,6 +671,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
     missing_required_fields: string[];
     affected_candidate_count: number;
   }): Promise<string> {
+    const timeframeProfile = getStrategyProposalTimeframeProfile(input.timeframe);
     let response: Response;
     try {
       response = await fetch(`${this.endpoint}/api/chat`, {
@@ -696,6 +698,7 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
                 'research_basis.source_type must be one of internal, user_input, provider_knowledge. Do not use web because Web search is disabled.',
                 'Do not claim web research, cite URLs, or rely on current news.',
                 'Make suggested_natural_language_spec a concrete Japanese rule description long enough for manual Pine generation.',
+                'Reflect input.timeframe in every candidate. D should focus on swing, trend following, breakout, lower trade frequency, volume, moving average, RSI, sample period, earnings/events, and gaps. 4H should focus on short swing, momentum, pullback, breakout confirmation, more noise and false breakouts than daily, overnight/session gap, liquidity, and shorter invalidation. 1H should focus on intraday, short-term momentum, mean reversion, volatility breakout, whipsaw, transaction cost, slippage, overtrading, tighter stops, and shorter holding assumptions.',
                 'Treat proposals as verification candidates, not investment advice.',
                 'Do not guarantee profit or present the candidates as buy/sell recommendations.',
               ].join(' '),
@@ -704,6 +707,12 @@ export class LocalLlmStrategyProposalProvider implements StrategyProposalProvide
               role: 'user',
               content: JSON.stringify({
                 input,
+                timeframe_guidance: {
+                  label: timeframeProfile.label,
+                  focus: timeframeProfile.focus,
+                  assumption: timeframeProfile.assumption,
+                  caution: timeframeProfile.caution,
+                },
                 output_schema: {
                   schema_name: 'strategy_proposal_candidates',
                   schema_version: '1.0',

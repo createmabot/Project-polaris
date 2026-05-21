@@ -237,6 +237,19 @@ describe('deterministic pine market / timeframe scope', () => {
     expect(output.assumptions).toContain('generated Pine follows the active TradingView chart timeframe');
   });
 
+  it('canonicalizes 1D to D without D fallback warnings', () => {
+    const output = generatePineDeterministic({
+      naturalLanguageSpec: supportedRule,
+      normalizedRuleJson: null,
+      targetMarket: 'JP_STOCK',
+      targetTimeframe: '1D',
+    });
+
+    expect(output.status).toBe('generated');
+    expect(output.warnings.join(' ')).not.toContain('Fallback assumes D');
+    expect(output.assumptions).not.toContain('target_timeframe is interpreted as 1D');
+  });
+
   it('keeps explicit fallback warnings for unsupported market and timeframe', () => {
     const output = generatePineDeterministic({
       naturalLanguageSpec: supportedRule,
@@ -336,6 +349,47 @@ describe('strategy version pine endpoints', () => {
       targetMarket: 'US_STOCK',
       targetTimeframe: '4H',
     });
+
+    await app.close();
+  });
+
+  it('canonicalizes 1D strategy version timeframe before pine generation', async () => {
+    const row = runtime.versions.get('ver-1');
+    if (!row) throw new Error('seed row missing');
+    runtime.versions.set('ver-1', {
+      ...row,
+      timeframe: '1D',
+    });
+
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: '//@version=6\nstrategy("ok", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+
+    expect(generated.statusCode).toBe(200);
+    expect(generatePineScriptMock.mock.calls[0][0]).toMatchObject({
+      targetTimeframe: 'D',
+    });
+    expect(generated.json().data.strategy_version.timeframe).toBe('D');
 
     await app.close();
   });

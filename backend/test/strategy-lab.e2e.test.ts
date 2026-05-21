@@ -2891,6 +2891,42 @@ describe('strategy lab vertical slice', () => {
     await app.close();
   });
 
+  it('canonicalizes 1D proposal requests and preserves timeframe-specific stub guidance', async () => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: '1D',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'trend_following',
+        proposal_count: 1,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data.input.timeframe).toBe('D');
+    expect(body.data.candidates[0].timeframe_assumption).toBe('D');
+    expect(body.data.candidates[0].suggested_natural_language_spec).toContain('日足（D）');
+    expect(body.data.candidates[0].backtest_cautions.join(' ')).toContain('ギャップ');
+
+    const storedRun = runtime.proposalRuns.get(body.data.proposal_run_id);
+    expect(storedRun?.inputJson).toMatchObject({ timeframe: 'D' });
+
+    const listResponse = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-lab/proposals?timeframe=1D&limit=10',
+    });
+    expect(listResponse.statusCode).toBe(200);
+    expect(listResponse.json().data.proposal_runs[0].input.timeframe).toBe('D');
+    expect(listResponse.json().data.filters.timeframe).toBe('D');
+
+    await app.close();
+  });
+
   it('returns safe provider error when local_llm returns malformed JSON', async () => {
     process.env.STRATEGY_PROPOSAL_PROVIDER = 'local_llm';
     const fetchMock = vi.fn().mockResolvedValue({

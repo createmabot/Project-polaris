@@ -165,7 +165,7 @@ Codex CLI manual JSON import の最小 API:
 StrategyVersion Pine generation の market / timeframe:
 
 - `POST /api/strategy-versions/:versionId/pine/generate` と `POST /api/strategy-versions/:versionId/pine/regenerate` は、保存済み StrategyVersion の `market` / `timeframe` を Pine provider context に渡す。
-- Pine generation の初回拡張対象は `market=JP_STOCK|US_STOCK`、`timeframe=D|1D|4H|1H` とする。
+- Pine generation の初回拡張対象は `market=JP_STOCK|US_STOCK`、canonical `timeframe=D|4H|1H` とする。`1D` が API / 既存データ / 外部入力から来た場合は `D` と同義として正規化する。
 - generated Pine のロジックは TradingView chart の symbol / timeframe 上で検証する前提とし、日足 / 時間足別の本格ロジック分岐や market data provider 拡張は行わない。
 - unsupported market / timeframe は Pine generation note の warning / assumption で明示し、既存 fallback 境界を維持する。
 - internal backtest engine の対応範囲拡張、TradingView compile 自動実行、auto Pine / auto save / auto backtest / AI summary 自動生成はこの API 変更に含めない。

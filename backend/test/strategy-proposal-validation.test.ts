@@ -198,6 +198,20 @@ describe('strategy proposal validation', () => {
     expect(parsed.user_hint).toHaveLength(1000);
   });
 
+  it('canonicalizes strategy proposal timeframe aliases during request parsing', () => {
+    expect(parseStrategyProposalRequest({ timeframe: '1D' }).timeframe).toBe('D');
+    expect(parseStrategyProposalRequest({ timeframe: ' 4h ' }).timeframe).toBe('4H');
+    expect(parseStrategyProposalRequest({ timeframe: ' 1h ' }).timeframe).toBe('1H');
+  });
+
+  it('canonicalizes candidate timeframe assumption aliases without loosening schema validation', () => {
+    const candidate = validateStrategyProposalCandidate(validCandidate({
+      timeframe_assumption: '1D',
+    }));
+
+    expect(candidate.timeframe_assumption).toBe('D');
+  });
+
   it('allows investment advice style wording in user hints while bounding text', () => {
     const english = parseStrategyProposalRequest({
       user_hint: 'must buy this setup',

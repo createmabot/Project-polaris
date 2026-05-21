@@ -33,7 +33,11 @@ import {
 } from '../api/types';
 
 const MARKET_OPTIONS = ['JP_STOCK', 'US_STOCK'];
-const TIMEFRAME_OPTIONS = ['D', '1D', '4H', '1H'];
+const TIMEFRAME_OPTIONS = [
+  { value: 'D', label: '日足（D）' },
+  { value: '4H', label: '4時間足（4H）' },
+  { value: '1H', label: '1時間足（1H）' },
+];
 const RISK_PREFERENCE_OPTIONS = [
   { value: 'balanced', label: 'balanced' },
   { value: 'conservative', label: 'conservative' },
@@ -71,6 +75,11 @@ const HISTORY_ARCHIVED_OPTIONS = [
   { value: 'archived', label: 'archived' },
   { value: 'all', label: 'all' },
 ];
+
+function formatTimeframeLabel(value: string): string {
+  const normalized = value === '1D' ? 'D' : value;
+  return TIMEFRAME_OPTIONS.find((option) => option.value === normalized)?.label ?? normalized;
+}
 
 export function buildProposalHistoryPath({
   page = 1,
@@ -1214,13 +1223,16 @@ export default function StrategyLab() {
               onChange={(event) => setTimeframe(event.target.value)}
             >
               {TIMEFRAME_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </SelectField>
           </div>
 
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
-            Pine生成対象: JP_STOCK / US_STOCK、D / 1D / 4H / 1H。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+            Pine生成対象: JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+          </div>
+          <div style={{ fontSize: '0.9rem', color: '#666' }}>
+            時間足により提案される戦略候補の前提・注意点が変わります。APIや既存履歴から 1D が来た場合は D と同義に扱います。
           </div>
           <div style={{ fontSize: '0.9rem', color: '#666' }}>
             MVP制約: 日本語入力中心 / long_only の基本条件（移動平均・RSI・出来高）を対象
@@ -1328,7 +1340,7 @@ export default function StrategyLab() {
           <KeyValueList className='sm:grid-cols-2'>
             <KeyValueRow label='id'><code>{latestVersion.id}</code></KeyValueRow>
             <KeyValueRow label='市場'>{latestVersion.market}</KeyValueRow>
-            <KeyValueRow label='時間足'>{latestVersion.timeframe}</KeyValueRow>
+            <KeyValueRow label='時間足'>{formatTimeframeLabel(latestVersion.timeframe)}</KeyValueRow>
             <KeyValueRow label='状態'><StatusBadge status={latestVersion.status}><code>{latestVersion.status}</code></StatusBadge></KeyValueRow>
             <KeyValueRow label='warnings'>{latestVersion.has_warnings ? 'あり' : 'なし'}</KeyValueRow>
           </KeyValueList>

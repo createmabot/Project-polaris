@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { detectMojibake } from '../utils/encoding';
+import { normalizeTimeframeAlias } from '../strategy/timeframe';
 
 type CreateStrategyBody = {
   title?: string;
@@ -76,7 +77,7 @@ function toStrategySymbolApplicationResponse(application: any) {
     strategy_version: {
       id: application.strategyRuleVersion.id,
       market: application.strategyRuleVersion.market,
-      timeframe: application.strategyRuleVersion.timeframe,
+      timeframe: normalizeTimeframeAlias(application.strategyRuleVersion.timeframe),
       status: application.strategyRuleVersion.status,
       created_at: application.strategyRuleVersion.createdAt,
       updated_at: application.strategyRuleVersion.updatedAt,
@@ -208,7 +209,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
             ? {
                 id: latestVersion.id,
                 market: latestVersion.market,
-                timeframe: latestVersion.timeframe,
+                timeframe: normalizeTimeframeAlias(latestVersion.timeframe),
                 status: latestVersion.status,
                 created_at: latestVersion.createdAt,
                 updated_at: latestVersion.updatedAt,
@@ -457,7 +458,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
             (version.generatedPine ?? '') !== (version.clonedFromVersion.generatedPine ?? '')
           : null,
         market: version.market,
-        timeframe: version.timeframe,
+        timeframe: normalizeTimeframeAlias(version.timeframe),
         status: version.status,
         has_warnings: Array.isArray(version.warningsJson) && version.warningsJson.length > 0,
         created_at: version.createdAt,
@@ -487,7 +488,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       ? request.body.natural_language_rule.trim()
       : '';
     const market = typeof request.body.market === 'string' ? request.body.market.trim() : '';
-    const timeframe = typeof request.body.timeframe === 'string' ? request.body.timeframe.trim() : '';
+    const timeframe = typeof request.body.timeframe === 'string' ? normalizeTimeframeAlias(request.body.timeframe) : '';
 
     if (!naturalLanguageRule) {
       throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule is required.');
@@ -529,7 +530,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         cloned_from_version_id: version.clonedFromVersionId,
         natural_language_rule: version.naturalLanguageRule,
         market: version.market,
-        timeframe: version.timeframe,
+        timeframe: normalizeTimeframeAlias(version.timeframe),
         status: version.status,
         normalized_rule_json: version.normalizedRuleJson,
         generated_pine: version.generatedPine,

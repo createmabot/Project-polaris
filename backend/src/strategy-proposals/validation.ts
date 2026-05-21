@@ -1,4 +1,5 @@
 import { AppError } from '../utils/response';
+import { normalizeTimeframeAlias, readTimeframe } from '../strategy/timeframe';
 import {
   CONFIDENCE_VALUES,
   PINE_FEASIBILITY_VALUES,
@@ -61,7 +62,7 @@ function normalizeMarket(value: unknown): string {
 }
 
 function normalizeTimeframe(value: unknown): string {
-  const timeframe = readOptionalText(value, 'D').toUpperCase();
+  const timeframe = readTimeframe(value);
   if (timeframe.length > 20) {
     throw new AppError(400, 'VALIDATION_ERROR', 'timeframe must be 20 characters or fewer.');
   }
@@ -183,7 +184,7 @@ export function validateStrategyProposalCandidate(
     title,
     summary,
     market_assumption: requireText(candidate.market_assumption, 'market_assumption', 80),
-    timeframe_assumption: requireText(candidate.timeframe_assumption, 'timeframe_assumption', 40),
+    timeframe_assumption: normalizeTimeframeAlias(requireText(candidate.timeframe_assumption, 'timeframe_assumption', 40)),
     strategy_type: strategyType as StrategyProposalCandidate['strategy_type'],
     entry_logic: normalizeTextArray(candidate.entry_logic, 'entry_logic'),
     exit_logic: normalizeTextArray(candidate.exit_logic, 'exit_logic'),

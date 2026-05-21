@@ -1205,7 +1205,8 @@ Sanitized provider event log persistence は、Strategy proposal の provider ca
 
 StrategyLab は proposal / Codex CLI import と同じ画面に Pine generation 入力を持つが、proposal selection から Pine generation へ自動連鎖しない境界を維持する。
 
-- Pine generation の初回 market / timeframe 拡張対象は `JP_STOCK` / `US_STOCK` と `D` / `1D` / `4H` / `1H` に限定する。
+- Pine generation の初回 market / timeframe 拡張対象は `JP_STOCK` / `US_STOCK` と canonical `D` / `4H` / `1H` に限定する。`1D` は `D` の alias として backend で正規化し、UI 選択肢には出さない。
+- Strategy proposal request / response / history / Codex CLI prompt は canonical timeframe を基本に扱う。`D` は日足 swing / trend following / breakout、`4H` は short swing / momentum / pullback / breakout confirmation、`1H` は intraday / short-term momentum / mean reversion / volatility breakout の前提・注意点を prompt / stub 候補に反映する。
 - StrategyLab の default は `JP_STOCK` / `D` のまま維持する。
 - 生成した Pine は TradingView の chart symbol / timeframe 上で検証する前提であり、internal backtest engine の対応範囲拡張ではない。
 - unsupported market / timeframe は Pine generation warning / assumption で明示し、FX / CRYPTO、15M / 30M、market data provider 拡張、TradingView compile 自動実行は後続判断にする。

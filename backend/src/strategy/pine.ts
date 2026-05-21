@@ -1,3 +1,5 @@
+import { isCanonicalPineTimeframe, normalizeTimeframeAlias } from './timeframe';
+
 export type PineGenerationInput = {
   naturalLanguageSpec: string;
   normalizedRuleJson: Record<string, unknown> | null;
@@ -34,7 +36,6 @@ export type PineAssessmentResult = {
 };
 
 const SUPPORTED_MARKETS = new Set(['JP_STOCK', 'US_STOCK']);
-const SUPPORTED_TIMEFRAMES = new Set(['D', '1D', '4H', '1H']);
 
 function toConditionText(lines: string[]): string {
   if (lines.length === 0) return 'false';
@@ -185,6 +186,7 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
   const warnings: string[] = [];
   const assumptions: string[] = [];
   const nl = input.naturalLanguageSpec.trim();
+  const targetTimeframe = normalizeTimeframeAlias(input.targetTimeframe);
 
   if (nl.length === 0) {
     return {
@@ -208,11 +210,11 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
     assumptions.push(`target_market is interpreted as ${input.targetMarket}`);
   }
 
-  if (!SUPPORTED_TIMEFRAMES.has(input.targetTimeframe)) {
+  if (!isCanonicalPineTimeframe(targetTimeframe)) {
     warnings.push(`timeframe=${input.targetTimeframe} is outside Pine generation scope. Fallback assumes D.`);
     assumptions.push('target_timeframe is interpreted as D');
-  } else if (input.targetTimeframe !== 'D') {
-    assumptions.push(`target_timeframe is interpreted as ${input.targetTimeframe}`);
+  } else if (targetTimeframe !== 'D') {
+    assumptions.push(`target_timeframe is interpreted as ${targetTimeframe}`);
     assumptions.push('generated Pine follows the active TradingView chart timeframe');
   }
 
