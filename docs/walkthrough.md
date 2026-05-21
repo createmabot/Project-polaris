@@ -38,7 +38,7 @@ pnpm run dev
 
 1. 同画面または version 作成導線で strategy version を作成する。
 2. `POST /api/strategies/:strategyId/versions` が成功することを確認する。
-3. `market` と `timeframe` が version に保存されていることを確認する。
+3. `market` と `timeframe` が version に保存されていることを確認する。Pine generation の初回対象は `JP_STOCK` / `US_STOCK` と `D` / `1D` / `4H` / `1H` で、default は `JP_STOCK` / `D` のまま維持する。
 
 ## 3. 自然言語 -> Pine 生成
 
@@ -46,6 +46,7 @@ pnpm run dev
 2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
 3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
 4. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
+5. 生成した Pine は TradingView の symbol / chart timeframe 上で検証する。internal backtest engine の市場 / 時間足対応範囲が同時に広がったわけではない。
 
 ## 4. TradingView 一次検証
 

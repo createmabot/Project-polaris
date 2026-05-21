@@ -92,7 +92,7 @@ function primeScenarioState(params: {
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
-  const setters = params.setters ?? Array.from({ length: 40 }).map(() => vi.fn());
+  const setters = params.setters ?? Array.from({ length: 42 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
@@ -132,6 +132,7 @@ function primeScenarioState(params: {
     params.importError ?? null,
     false,
     null,
+    false,
   ];
   values.forEach((value, index) => {
     mockUseState.mockImplementationOnce(() => [value, setters[index]]);
@@ -273,9 +274,15 @@ describe('StrategyLab', () => {
     expect(html).toContain('自然言語ルール');
     expect(html).toContain('市場');
     expect(html).toContain('時間足');
+    expect(html).toContain('US_STOCK');
+    expect(html).toContain('1D');
+    expect(html).toContain('4H');
+    expect(html).toContain('1H');
     expect(html).toContain(DEFAULT_RULE);
     expect(html).toContain('保存してPine生成');
-    expect(html).toContain('日本語入力中心 / 日足(D)中心 / long_only');
+    expect(html).toContain('Pine生成対象: JP_STOCK / US_STOCK、D / 1D / 4H / 1H');
+    expect(html).toContain('internal backtestの対応範囲拡張ではありません');
+    expect(html).toContain('日本語入力中心 / long_only');
   });
 
   it('requests a Codex CLI manual import prompt without executing providers', async () => {
