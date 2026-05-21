@@ -14,6 +14,7 @@ import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
+import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
 import {
   BacktestCreateData,
@@ -803,7 +804,7 @@ export default function StrategyLab() {
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
           </Button>
 
-          <div className='grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm'>
+          <Surface variant='muted' className='grid gap-3 p-4'>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem' }}>Codex CLIで生成した候補JSONを取り込む</h3>
               <p className='mt-1 text-sm leading-6 text-slate-600'>
@@ -892,7 +893,7 @@ export default function StrategyLab() {
                 {codexImportError}
               </ErrorState>
             )}
-          </div>
+          </Surface>
 
           {proposalError && (
             <ErrorState title='候補取得に失敗しました'>
@@ -929,9 +930,9 @@ export default function StrategyLab() {
                 </EmptyState>
               ) : (
                 proposalData.candidates.map((candidate) => (
-                  <div
+                  <Surface
                     key={candidate.candidate_id}
-                    className='grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm'
+                    className='grid gap-3'
                   >
                     <div className='flex flex-wrap justify-between gap-3'>
                       <div>
@@ -959,7 +960,7 @@ export default function StrategyLab() {
                     <div className='rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500'>
                       caution: {candidate.backtest_cautions.join(' / ')}
                     </div>
-                  </div>
+                  </Surface>
                 ))
               )}
 
@@ -983,7 +984,7 @@ export default function StrategyLab() {
             isLoading={proposalQualityTrendLoading}
           />
 
-          <div className='grid gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 shadow-sm'>
+          <Surface variant='muted' className='grid gap-3 p-4'>
             <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
               <TextInput
                 label='履歴検索'
@@ -1053,7 +1054,7 @@ export default function StrategyLab() {
             <InlineNotice tone='info'>
               archive は削除ではなく通常一覧から隠す操作です。履歴検索は run id / provider / input metadata を対象にし、candidate本文、providerやCodexの生出力、内部診断、秘密値は表示しません。
             </InlineNotice>
-          </div>
+          </Surface>
 
           {proposalHistoryLoading && (
             <LoadingState title='提案履歴を読み込み中です' />

@@ -1,6 +1,6 @@
 # 北極星 Post-P3 release acceptance checklist
 
-更新日: 2026-05-21
+更新日: 2026-05-22
 分類: 運用ドキュメント
 
 ## 1. 目的
@@ -47,7 +47,7 @@
 リリース可能な完成範囲:
 
 - P3 本体: Home / SideRail / SymbolDetail / Strategy / Application / Backtest の主要導線。
-- UI cleanup / UI foundation: AppLayout、PageHeader、Navigation、shared component の限定導入、FormFields、ModalShell、JsonBlock、FilterGroup、PaginationControls、InlineNotice の限定適用。
+- UI cleanup / UI foundation: AppLayout、PageHeader、Navigation、shared component の限定導入、Surface、FormFields、ModalShell、JsonBlock、FilterGroup、PaginationControls、InlineNotice の限定適用。
 - IA / navigation debt cleanup: 主要導線を Home / SideRail / SymbolDetail / ApplicationDetail / BacktestDetail に整理し、legacy route を補助 route として扱う判断。
 - Docs full consolidation / legacy docs cleanup: 仕様書、運用ドキュメント、作業進捗管理の3分類と legacy numbered docs の扱い整理。
 - Symbol Strategy Application: application / run / report の親子関係、SymbolDetail 入口、ApplicationDetail read-only history。
