@@ -69,6 +69,7 @@ function primeScenarioState(params: {
   result?: Record<string, unknown> | null;
   strategyId?: string | null;
   backtest?: Record<string, unknown> | null;
+  timeframe?: string;
   importState?: Record<string, unknown> | null;
   importError?: string | null;
   proposalData?: Record<string, unknown> | null;
@@ -97,7 +98,7 @@ function primeScenarioState(params: {
     '監視銘柄比較ルール',
     DEFAULT_RULE,
     'JP_STOCK',
-    'D',
+    params.timeframe ?? 'D',
     'balanced',
     'any',
     params.proposalData ?? null,
@@ -261,6 +262,7 @@ describe('StrategyLab', () => {
     expect(html).toContain('ストラテジー候補の提案');
     expect(html).toContain('候補は検証用のたたき台です。売買推奨ではありません。');
     expect(html).toContain('リスク設定');
+    expect(html).toContain('提案用時間足');
     expect(html).toContain('戦略タイプ');
     expect(html).toContain('ストラテジーを提案');
     expect(html).toContain('Codex CLIで生成した候補JSONを取り込む');
@@ -279,6 +281,7 @@ describe('StrategyLab', () => {
     expect(html).toContain('4時間足（4H）');
     expect(html).toContain('1時間足（1H）');
     expect(html).not.toContain('value="1D"');
+    expect(html).toContain('時間足により提案される戦略候補の前提や注意点が変わります');
     expect(html).toContain(DEFAULT_RULE);
     expect(html).toContain('保存してPine生成');
     expect(html).toContain('Pine生成対象: JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）');
@@ -287,8 +290,52 @@ describe('StrategyLab', () => {
     expect(html).toContain('日本語入力中心 / long_only');
   });
 
+  it('sends the selected proposal timeframe to strategy proposal generation without auto-running downstream flows', async () => {
+    const historyMutate = vi.fn();
+    const trendMutate = vi.fn();
+    primeScenarioState({ timeframe: '4H' });
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === DEFAULT_HISTORY_PATH) {
+        return { isLoading: false, error: null, data: null, mutate: historyMutate };
+      }
+      if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
+        return { isLoading: false, error: null, data: null, mutate: trendMutate };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      proposal_run_id: 'proposal-run-4h',
+      provider: {
+        name: 'stub',
+        mode: 'deterministic',
+        web_search: false,
+        persisted: false,
+      },
+      candidates: [],
+      disclaimer: '検証候補です。',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    const proposalButton = renderedButtons.find((button) => button.children === 'ストラテジーを提案');
+    await proposalButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
+      market: 'JP_STOCK',
+      timeframe: '4H',
+      risk_preference: 'balanced',
+      strategy_type_bias: 'any',
+      proposal_count: 5,
+      user_hint: DEFAULT_RULE,
+    }));
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+    expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
+    expect(historyMutate).toHaveBeenCalled();
+    expect(trendMutate).toHaveBeenCalled();
+  });
+
   it('requests a Codex CLI manual import prompt without executing providers', async () => {
-    const setters = primeScenarioState({});
+    const setters = primeScenarioState({ timeframe: '1H' });
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -310,7 +357,7 @@ describe('StrategyLab', () => {
 
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', {
       market: 'JP_STOCK',
-      timeframe: 'D',
+      timeframe: '1H',
       risk_preference: 'balanced',
       strategy_type_bias: 'any',
       proposal_count: 5,
@@ -324,8 +371,8 @@ describe('StrategyLab', () => {
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
   });
 
-  it('requests a Codex CLI Web search prompt option when checked', async () => {
-    primeScenarioState({ codexWebSearchPrompt: true });
+  it('requests a Codex CLI Web search prompt option with the selected timeframe when checked', async () => {
+    primeScenarioState({ codexWebSearchPrompt: true, timeframe: '4H' });
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -347,6 +394,7 @@ describe('StrategyLab', () => {
     await flushPromises();
 
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
+      timeframe: '4H',
       web_search_prompt: true,
     }));
   });

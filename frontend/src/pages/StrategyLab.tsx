@@ -787,7 +787,17 @@ export default function StrategyLab() {
             候補は検証用のたたき台です。売買推奨ではありません。選択後に内容を確認し、Pine生成とbacktestで検証してください。
           </InlineNotice>
 
-          <div className='grid gap-4 lg:grid-cols-2'>
+          <div className='grid gap-4 lg:grid-cols-3'>
+            <SelectField
+              label='提案用時間足'
+              value={timeframe}
+              onChange={(event) => setTimeframe(event.target.value)}
+            >
+              {TIMEFRAME_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </SelectField>
+
             <SelectField
               label='リスク設定'
               value={proposalRiskPreference}
@@ -808,6 +818,10 @@ export default function StrategyLab() {
               ))}
             </SelectField>
           </div>
+
+          <InlineNotice tone='info'>
+            時間足により提案される戦略候補の前提や注意点が変わります。1D は選択肢に出さず、API入力時は D と同義に扱います。
+          </InlineNotice>
 
           <Button onClick={onRequestProposals} disabled={proposing} variant='primary' className='w-fit'>
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
