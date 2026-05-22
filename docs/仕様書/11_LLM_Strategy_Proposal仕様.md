@@ -32,7 +32,7 @@ Pine 生成、Strategy / StrategyVersion 保存、validation、CSV import、inte
 - risk_preference: conservative / balanced / aggressive 程度の任意入力。
 - strategy_type_bias: trend following / mean reversion / breakout / momentum / volatility / risk management / any。
 - proposal_count: 既定 5、最大 10。
-- user_hint: 任意の補足。既存 natural language spec がある場合は候補生成の context として使える。
+- user_hint: 任意の補足。StrategyLab では Pine 生成用 natural language spec とは別の `提案用ヒント（任意）` 入力から送る。空欄時は `null` とし、既存 Pine 生成用ルール文を暗黙に proposal context として使わない。
 
 ### 2-3. 表示
 
@@ -280,7 +280,7 @@ prompt / response JSON 方針:
 
 retry / repair 境界:
 
-- `required_field_missing` に限り、local_llm provider 内で最大 1 回だけ bounded retry を行う。retry prompt には raw response 全文を入れず、missing field names と affected candidate count だけを渡し、完全な JSON を最初から再生成させる。
+- `required_field_missing` に限り、local_llm provider 内で最大 1 回だけ bounded retry を行う。retry prompt には raw response 全文を入れず、missing field names と affected candidate count だけを渡し、完全な JSON を最初から再生成させる。retry prompt では required candidate key、non-empty string scalar、non-empty string array、`research_basis` object array、`uncertainty`、`suggested_pine_constraints` など欠落しやすい field を明示する。
 - retry 成功時は `provider_observation.retry_used=true` / `retry_reason=required_field_missing` / `retry_succeeded=true` を返せる。retry 後も失敗する場合は sanitized missing field diagnostics と `retry_succeeded=false` を返す。
 - malformed JSON、enum invalid、candidate count invalid、provider unavailable、timeout はこの bounded retry の対象外とする。
 

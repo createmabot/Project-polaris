@@ -230,11 +230,11 @@ describe('deterministic pine market / timeframe scope', () => {
     });
 
     expect(output.status).toBe('generated');
-    expect(output.warnings.join(' ')).not.toContain('Fallback assumes JP_STOCK');
-    expect(output.warnings.join(' ')).not.toContain('Fallback assumes D');
-    expect(output.assumptions).toContain('target_market is interpreted as US_STOCK');
-    expect(output.assumptions).toContain('target_timeframe is interpreted as 1H');
-    expect(output.assumptions).toContain('generated Pine follows the active TradingView chart timeframe');
+    expect(output.warnings.join(' ')).not.toContain('JP_STOCK 前提として扱います');
+    expect(output.warnings.join(' ')).not.toContain('日足（D）前提として扱います');
+    expect(output.assumptions).toContain('対象市場は US_STOCK として扱います。');
+    expect(output.assumptions).toContain('対象時間足は 1H として扱います。');
+    expect(output.assumptions).toContain('生成されたPineはTradingViewの表示中チャート時間足に従って検証します。');
   });
 
   it('canonicalizes 1D to D without D fallback warnings', () => {
@@ -246,8 +246,8 @@ describe('deterministic pine market / timeframe scope', () => {
     });
 
     expect(output.status).toBe('generated');
-    expect(output.warnings.join(' ')).not.toContain('Fallback assumes D');
-    expect(output.assumptions).not.toContain('target_timeframe is interpreted as 1D');
+    expect(output.warnings.join(' ')).not.toContain('日足（D）前提として扱います');
+    expect(output.assumptions).not.toContain('対象時間足は 1D として扱います。');
   });
 
   it('keeps explicit fallback warnings for unsupported market and timeframe', () => {
@@ -258,10 +258,26 @@ describe('deterministic pine market / timeframe scope', () => {
       targetTimeframe: '15M',
     });
 
-    expect(output.warnings).toContain('market=CRYPTO is outside Pine generation scope. Fallback assumes JP_STOCK.');
-    expect(output.warnings).toContain('timeframe=15M is outside Pine generation scope. Fallback assumes D.');
-    expect(output.assumptions).toContain('target_market is interpreted as JP_STOCK');
-    expect(output.assumptions).toContain('target_timeframe is interpreted as D');
+    expect(output.warnings).toContain('市場 CRYPTO はPine生成の初回対応範囲外です。JP_STOCK 前提として扱います。');
+    expect(output.warnings).toContain('時間足 15M はPine生成の初回対応範囲外です。日足（D）前提として扱います。');
+    expect(output.assumptions).toContain('対象市場は JP_STOCK として扱います。');
+    expect(output.assumptions).toContain('対象時間足は日足（D）として扱います。');
+  });
+
+  it('returns Japanese warnings and assumptions from deterministic Pine generation', () => {
+    const output = generatePineDeterministic({
+      naturalLanguageSpec: 'ショートで高値更新を狙う。トレーリングストップも使う。',
+      normalizedRuleJson: null,
+      targetMarket: 'JP_STOCK',
+      targetTimeframe: 'D',
+    });
+
+    expect(output.status).toBe('failed');
+    expect(output.warnings).toContain('ショート条件は初回Pine生成の対応範囲外です。long_only 前提で扱います。');
+    expect(output.warnings).toContain('トレーリング、ナンピン、pyramiding、詳細なポジションサイズ制御は初回Pine生成の対応範囲外です。');
+    expect(output.warnings).toContain('初回対応パターンからエントリー条件を検出できませんでした。');
+    expect(output.warnings).toContain('初回対応パターンから手仕舞い条件を検出できませんでした。');
+    expect(output.warnings.join(' ')).not.toContain('entry conditions were not detected');
   });
 });
 

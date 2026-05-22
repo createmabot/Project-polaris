@@ -200,6 +200,13 @@ export function buildProposalErrorMessage(error: unknown): string {
     return appendProviderObservation('短時間に候補取得が続いたため、少し時間をおいて再試行してください。');
   }
   if (error.status >= 500) {
+    const providerObservation = error.details?.provider_observation;
+    const invalidReason = providerObservation && typeof providerObservation === 'object'
+      ? (providerObservation as Record<string, unknown>).invalid_reason
+      : null;
+    if (invalidReason === 'required_field_missing') {
+      return appendProviderObservation('AI候補の形式が不完全だったため取得できませんでした。もう一度お試しください。');
+    }
     return appendProviderObservation('サーバー側で候補取得に失敗しました。時間をおいて再試行してください。');
   }
   return appendProviderObservation(error.message || 'ストラテジー候補の取得に失敗しました。');
@@ -381,6 +388,7 @@ export default function StrategyLab() {
   const [timeframe, setTimeframe] = useState('D');
   const [proposalRiskPreference, setProposalRiskPreference] = useState('balanced');
   const [proposalStrategyType, setProposalStrategyType] = useState('any');
+  const [proposalUserHint, setProposalUserHint] = useState('');
   const [proposalData, setProposalData] = useState<StrategyProposalData | null>(null);
   const [proposalError, setProposalError] = useState<string | null>(null);
   const [proposing, setProposing] = useState(false);
@@ -471,7 +479,7 @@ export default function StrategyLab() {
         risk_preference: proposalRiskPreference,
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,
-        user_hint: naturalLanguageRule.trim() || null,
+        user_hint: proposalUserHint.trim() || null,
       });
       setProposalData(proposals);
       setSelectedProposalRunId(getProposalRunId(proposals));
@@ -499,7 +507,7 @@ export default function StrategyLab() {
         risk_preference: proposalRiskPreference,
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,
-        user_hint: naturalLanguageRule.trim() || null,
+        user_hint: proposalUserHint.trim() || null,
         web_search_prompt: codexWebSearchPrompt,
       });
       setCodexPromptData(promptData);
@@ -822,6 +830,15 @@ export default function StrategyLab() {
           <InlineNotice tone='info'>
             時間足により提案される戦略候補の前提や注意点が変わります。1D は選択肢に出さず、API入力時は D と同義に扱います。
           </InlineNotice>
+
+          <TextArea
+            label='提案用ヒント（任意）'
+            value={proposalUserHint}
+            onChange={(event) => setProposalUserHint(event.target.value)}
+            rows={3}
+            placeholder='例: 高値更新後の押し目買い、出来高急増を使った短期戦略、売買回数少なめの日足戦略など。'
+            helpText='提案の方向性を絞りたい場合だけ入力します。空欄なら市場・時間足・リスク・戦略タイプから幅広く候補を出します。Pine生成用ルール文とは別に扱います。'
+          />
 
           <Button onClick={onRequestProposals} disabled={proposing} variant='primary' className='w-fit'>
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
@@ -1292,7 +1309,7 @@ export default function StrategyLab() {
           </div>
 
           <div>
-            <h3 style={{ marginBottom: '0.5rem' }}>warnings</h3>
+            <h3 style={{ marginBottom: '0.5rem' }}>警告</h3>
             {result.warnings.length > 0 ? (
               <ul style={{ color: '#8a5b00' }}>
                 {result.warnings.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
@@ -1303,7 +1320,7 @@ export default function StrategyLab() {
           </div>
 
           <div>
-            <h3 style={{ marginBottom: '0.5rem' }}>assumptions</h3>
+            <h3 style={{ marginBottom: '0.5rem' }}>前提</h3>
             {result.assumptions.length > 0 ? (
               <ul>
                 {result.assumptions.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
@@ -1341,7 +1358,7 @@ export default function StrategyLab() {
               </pre>
             ) : (
               <EmptyState title='生成に失敗しました'>
-                warnings を確認してください。
+                警告を確認してください。
               </EmptyState>
             )}
           </div>
