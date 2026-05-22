@@ -149,7 +149,7 @@ optional benchmark script:
 UI manual check:
 
 1. StrategyLab を開く。
-2. provider ごとに代表シナリオを入力する。
+2. provider ごとに代表シナリオを入力する。提案の方向性を絞りたい場合だけ `提案用ヒント（任意）` を入力し、空欄時は既存 Pine 生成用 natural language rule が `user_hint` として送られないことを確認する。
 3. proposal count は基本 5 件で確認し、境界確認時だけ 1 件、10 件、0 candidates になり得る条件を確認する。
 4. 候補が表示されたら、少なくとも 5 件または返却された全件を読む。
 5. 1 件を選択し、title / natural language spec 反映が既存導線を壊さないことを確認する。
@@ -179,7 +179,7 @@ local_llm の `provider status: invalid_response / reason: required_field_missin
 2. API response または proposal history の `provider_observation` に `missing_required_fields`、`missing_required_field_count`、`affected_candidate_count` がある場合は、field 名だけを確認する。field value、candidate本文、raw response は確認対象にしない。
 3. 現行実装は common alias normalization と非中核 metadata fallback を行う。`entry` / `exit` / `riskManagement` / `strengths` / `weaknesses` / `indicators` / `natural_language_spec` などは exact key に寄せる。
 4. `backtest_cautions`、`uncertainty`、`suggested_pine_constraints` は検証前提を示す固定 fallback を補える。`title`、`summary`、`strategy_type`、`entry_logic`、`exit_logic`、`risk_management`、`suggested_natural_language_spec` は backend が内容を生成して補完しない。
-5. 欠落が残る場合は local_llm のみ最大 1 回 bounded retry を行う。retry prompt には missing field names と affected candidate count だけを渡し、raw provider response は渡さない。
+5. 欠落が残る場合は local_llm のみ最大 1 回 bounded retry を行う。retry prompt には missing field names と affected candidate count、required candidate key、non-empty scalar / array の境界だけを渡し、raw provider response は渡さない。
 6. retry 後も失敗する場合は sanitized failure として扱い、`retry_used` / `retry_succeeded` / missing field diagnostics だけを記録する。
 7. model tuning や prompt regression automation は後続判断とし、real local_llm 実体依存の再現確認は required check に入れない。
 
@@ -195,7 +195,7 @@ manual browser smoke:
 ### 5-4. 手動評価の見方
 
 - diversity: strategy_type と entry idea が重複しすぎていないかを見る。
-- user_hint alignment: concrete / vague / long user_hint の条件や曖昧さが候補に反映されているかを見る。
+- user_hint alignment: concrete / vague / long user_hint の条件や曖昧さが候補に反映されているかを見る。空欄時は 25日線 / RSI / 出来高など Pine 生成用初期ルールに固定されず、market / timeframe / risk / strategy_type_bias から幅広い候補が出るかを見る。
 - Pine feasibility: 条件が Pine で表現できる指標・閾値・比較に落ちるかを見る。
 - risk: stop、position size、drawdown、volatility、time stop などが検討されているかを見る。
 - backtest caution: slippage、手数料、sample period、regime change、overfitting の注意があるかを見る。

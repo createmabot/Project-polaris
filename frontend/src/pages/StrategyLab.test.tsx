@@ -74,6 +74,7 @@ function primeScenarioState(params: {
   importError?: string | null;
   proposalData?: Record<string, unknown> | null;
   proposalError?: string | null;
+  proposalUserHint?: string;
   selectedProposalRunId?: string | null;
   proposalSelectionError?: string | null;
   selectingProposalCandidateId?: string | null;
@@ -101,6 +102,7 @@ function primeScenarioState(params: {
     params.timeframe ?? 'D',
     'balanced',
     'any',
+    params.proposalUserHint ?? '',
     params.proposalData ?? null,
     params.proposalError ?? null,
     false,
@@ -192,6 +194,28 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('internal details');
   });
 
+  it('shows a clearer retry message for incomplete provider candidate JSON', () => {
+    const message = buildProposalErrorMessage(new ApiError(
+      'provider failed with raw diagnostics',
+      'PROVIDER_INVALID_RESPONSE',
+      {
+        provider_observation: {
+          status: 'invalid_response',
+          invalid_reason: 'required_field_missing',
+          latency_bucket: 'slow',
+          missing_required_fields: ['suggested_pine_constraints'],
+        },
+      },
+      502,
+    ));
+
+    expect(message).toContain('AI候補の形式が不完全だったため取得できませんでした。もう一度お試しください。');
+    expect(message).toContain('provider status: invalid_response / reason: required_field_missing / latency: slow');
+    expect(message).not.toContain('provider failed with raw diagnostics');
+    expect(message).not.toContain('suggested_pine_constraints');
+  });
+
+
   it('builds proposal history paths with sanitized filters', () => {
     expect(buildProposalHistoryPath()).toBe(DEFAULT_HISTORY_PATH);
     expect(buildProposalHistoryPath({
@@ -263,6 +287,9 @@ describe('StrategyLab', () => {
     expect(html).toContain('候補は検証用のたたき台です。売買推奨ではありません。');
     expect(html).toContain('リスク設定');
     expect(html).toContain('提案用時間足');
+    expect(html).toContain('提案用ヒント（任意）');
+    expect(html).toContain('提案の方向性を絞りたい場合だけ入力します');
+    expect(html).toContain('Pine生成用ルール文とは別に扱います');
     expect(html).toContain('戦略タイプ');
     expect(html).toContain('ストラテジーを提案');
     expect(html).toContain('Codex CLIで生成した候補JSONを取り込む');
@@ -326,7 +353,7 @@ describe('StrategyLab', () => {
       risk_preference: 'balanced',
       strategy_type_bias: 'any',
       proposal_count: 5,
-      user_hint: DEFAULT_RULE,
+      user_hint: null,
     }));
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
     expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
@@ -334,8 +361,46 @@ describe('StrategyLab', () => {
     expect(trendMutate).toHaveBeenCalled();
   });
 
+  it('sends the dedicated proposal hint instead of the Pine natural language rule', async () => {
+    const historyMutate = vi.fn();
+    const trendMutate = vi.fn();
+    primeScenarioState({ proposalUserHint: '高値更新後の押し目買いを広めに比較したい' });
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === DEFAULT_HISTORY_PATH) {
+        return { isLoading: false, error: null, data: null, mutate: historyMutate };
+      }
+      if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
+        return { isLoading: false, error: null, data: null, mutate: trendMutate };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      proposal_run_id: 'proposal-run-hint',
+      provider: { name: 'stub', mode: 'deterministic', web_search: false, persisted: false },
+      candidates: [],
+      disclaimer: '検証候補です。',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    const proposalButton = renderedButtons.find((button) => button.children === 'ストラテジーを提案');
+    await proposalButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
+      user_hint: '高値更新後の押し目買いを広めに比較したい',
+    }));
+    expect(postApi).not.toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
+      user_hint: DEFAULT_RULE,
+    }));
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+    expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
+  });
+
   it('requests a Codex CLI manual import prompt without executing providers', async () => {
-    const setters = primeScenarioState({ timeframe: '1H' });
+    const setters = primeScenarioState({
+      timeframe: '1H',
+      proposalUserHint: '売買回数少なめの日足戦略',
+    });
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -361,10 +426,10 @@ describe('StrategyLab', () => {
       risk_preference: 'balanced',
       strategy_type_bias: 'any',
       proposal_count: 5,
-      user_hint: DEFAULT_RULE,
+      user_hint: '売買回数少なめの日足戦略',
       web_search_prompt: false,
     });
-    expect(setters[12]).toHaveBeenCalledWith(expect.objectContaining({
+    expect(setters[13]).toHaveBeenCalledWith(expect.objectContaining({
       provider_name: 'codex_cli_manual',
       prompt: 'Return only one JSON object',
     }));
@@ -372,7 +437,11 @@ describe('StrategyLab', () => {
   });
 
   it('requests a Codex CLI Web search prompt option with the selected timeframe when checked', async () => {
-    primeScenarioState({ codexWebSearchPrompt: true, timeframe: '4H' });
+    primeScenarioState({
+      codexWebSearchPrompt: true,
+      timeframe: '4H',
+      proposalUserHint: '出来高急増を使った短期戦略',
+    });
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -395,6 +464,7 @@ describe('StrategyLab', () => {
 
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
       timeframe: '4H',
+      user_hint: '出来高急増を使った短期戦略',
       web_search_prompt: true,
     }));
   });
@@ -442,10 +512,10 @@ describe('StrategyLab', () => {
       result_json_text: '{"schema_name":"strategy_proposal_candidates"}',
       file_name: null,
     });
-    expect(setters[6]).toHaveBeenCalledWith(expect.objectContaining({
+    expect(setters[7]).toHaveBeenCalledWith(expect.objectContaining({
       proposal_run_id: 'proposal-run-codex',
     }));
-    expect(setters[9]).toHaveBeenCalledWith('proposal-run-codex');
+    expect(setters[10]).toHaveBeenCalledWith('proposal-run-codex');
     expect(historyMutate).toHaveBeenCalled();
     expect(trendMutate).toHaveBeenCalled();
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
@@ -481,10 +551,10 @@ describe('StrategyLab', () => {
       await importButton?.onClick?.();
       await flushPromises();
 
-      expect(setters[18]).toHaveBeenCalledWith('短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。');
-      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('raw payload marker'));
-      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('manual_import'));
-      expect(setters[18]).not.toHaveBeenCalledWith(expect.stringContaining('60000'));
+      expect(setters[19]).toHaveBeenCalledWith('短時間にJSON取り込みが続いたため、少し時間をおいて再試行してください。');
+      expect(setters[19]).not.toHaveBeenCalledWith(expect.stringContaining('raw payload marker'));
+      expect(setters[19]).not.toHaveBeenCalledWith(expect.stringContaining('manual_import'));
+      expect(setters[19]).not.toHaveBeenCalledWith(expect.stringContaining('60000'));
     } finally {
       consoleError.mockRestore();
     }
@@ -521,8 +591,8 @@ describe('StrategyLab', () => {
     expect(html).toContain('backtest_id:');
     expect(html).toContain('version 一覧を開く');
     expect(html).toContain('この version 詳細を開く');
-    expect(html).toContain('warnings');
-    expect(html).toContain('assumptions');
+    expect(html).toContain('警告');
+    expect(html).toContain('前提');
     expect(html).toContain('generated pine');
     expect(html).toContain('コピー');
     expect(html).toContain('CSV取込（MVP）');
@@ -562,7 +632,7 @@ describe('StrategyLab', () => {
 
     const html = renderToStaticMarkup(<StrategyLab />);
     expect(html).toContain('生成に失敗しました');
-    expect(html).toContain('warnings を確認してください。');
+    expect(html).toContain('警告を確認してください。');
     expect(html).toContain('parse_status:');
     expect(html).toContain('parse_error:');
     expect(html).toContain('対応形式: Performance Summary または List of Trades（英語ヘッダー / 日本語ヘッダー対応）。');
@@ -689,6 +759,7 @@ describe('StrategyLab', () => {
     });
     expect(setters[0]).toHaveBeenCalledWith('選択候補');
     expect(setters[1]).toHaveBeenCalledWith('選択候補の自然言語ルール');
+    expect(setters[6]).not.toHaveBeenCalled();
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
     expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
   });

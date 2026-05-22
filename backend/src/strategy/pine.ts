@@ -197,32 +197,35 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
         unsupported_clauses: ['empty_rule'],
       },
       generatedScript: null,
-      warnings: ['natural_language_spec must not be empty'],
+      warnings: ['自然言語ルールが空です。Pine生成には検証したい条件を入力してください。'],
       assumptions,
       status: 'failed',
     };
   }
 
   if (!SUPPORTED_MARKETS.has(input.targetMarket)) {
-    warnings.push(`market=${input.targetMarket} is outside Pine generation scope. Fallback assumes JP_STOCK.`);
-    assumptions.push('target_market is interpreted as JP_STOCK');
+    warnings.push(`市場 ${input.targetMarket} はPine生成の初回対応範囲外です。JP_STOCK 前提として扱います。`);
+    assumptions.push('対象市場は JP_STOCK として扱います。');
   } else if (input.targetMarket !== 'JP_STOCK') {
-    assumptions.push(`target_market is interpreted as ${input.targetMarket}`);
+    assumptions.push(`対象市場は ${input.targetMarket} として扱います。`);
   }
 
   if (!isCanonicalPineTimeframe(targetTimeframe)) {
-    warnings.push(`timeframe=${input.targetTimeframe} is outside Pine generation scope. Fallback assumes D.`);
-    assumptions.push('target_timeframe is interpreted as D');
+    warnings.push(`時間足 ${input.targetTimeframe} はPine生成の初回対応範囲外です。日足（D）前提として扱います。`);
+    assumptions.push('対象時間足は日足（D）として扱います。');
   } else if (targetTimeframe !== 'D') {
-    assumptions.push(`target_timeframe is interpreted as ${targetTimeframe}`);
-    assumptions.push('generated Pine follows the active TradingView chart timeframe');
+    assumptions.push(`対象時間足は ${targetTimeframe} として扱います。`);
+    assumptions.push('生成されたPineはTradingViewの表示中チャート時間足に従って検証します。');
   }
 
   const unsupportedPatterns = [
-    { regex: /short/i, warning: 'short conditions are not supported in MVP (long_only).' },
     {
-      regex: /trailing|nanpin|pyramiding/i,
-      warning: 'position sizing and advanced execution controls are outside MVP scope.',
+      regex: /short|ショート|空売り/i,
+      warning: 'ショート条件は初回Pine生成の対応範囲外です。long_only 前提で扱います。',
+    },
+    {
+      regex: /trailing|トレーリング|nanpin|ナンピン|pyramiding/i,
+      warning: 'トレーリング、ナンピン、pyramiding、詳細なポジションサイズ制御は初回Pine生成の対応範囲外です。',
     },
   ];
 
@@ -239,17 +242,17 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
 
   if (/25日|移動平均|ma25|sma\(25\)/i.test(nl)) {
     entryConditions.push('close > ma25');
-    assumptions.push('moving average period defaults to 25');
+    assumptions.push('移動平均の期間は25を既定値として扱います。');
   }
 
   if (/rsi/i.test(nl)) {
     entryConditions.push('rsi14 >= 50');
-    assumptions.push('RSI length defaults to 14 and threshold defaults to 50');
+    assumptions.push('RSIは期間14、閾値50を既定値として扱います。');
   }
 
   if (/出来高|volume/i.test(nl)) {
     entryConditions.push('volume >= volMa20 * 1.5');
-    assumptions.push('volume condition defaults to 20-day average * 1.5');
+    assumptions.push('出来高条件は20本平均の1.5倍を既定値として扱います。');
   }
 
   if (/終値|close\s*</i.test(nl) && /25日|移動平均|ma25|sma\(25\)/i.test(nl)) {
@@ -257,11 +260,11 @@ export function generatePineDeterministic(input: PineGenerationInput): PineGener
   }
 
   if (entryConditions.length === 0) {
-    warnings.push('entry conditions were not detected from supported MVP pattern set.');
+    warnings.push('初回対応パターンからエントリー条件を検出できませんでした。');
   }
 
   if (exitConditions.length === 0) {
-    warnings.push('exit conditions were not detected from supported MVP pattern set.');
+    warnings.push('初回対応パターンから手仕舞い条件を検出できませんでした。');
   }
 
   const normalizedRuleJson: Record<string, unknown> = {
