@@ -439,7 +439,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       : pineState === 'unavailable'
         ? '未生成'
         : pineState === 'warning'
-          ? 'warning あり'
+          ? '警告あり'
           : pineState === 'failed'
             ? 'failed'
             : '取得済み';
@@ -2213,7 +2213,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         )}
       </section>
 
-      <SectionCard title='warnings' className='mt-5'>
+      <SectionCard title='警告' className='mt-5'>
         {warnings.length === 0 ? (
           <EmptyState title='なし' />
         ) : (
@@ -2225,7 +2225,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         )}
       </SectionCard>
 
-      <SectionCard title='assumptions' className='mt-5'>
+      <SectionCard title='前提' className='mt-5'>
         {assumptions.length === 0 ? (
           <EmptyState title='なし' />
         ) : (

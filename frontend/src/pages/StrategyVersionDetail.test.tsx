@@ -444,6 +444,12 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('最初に確認: naturalLanguageRule');
     expect(html).toContain('naturalLanguageRule');
     expect(html).toContain('Pine');
+    expect(html).toContain('警告');
+    expect(html).toContain('未対応条件を無視しました');
+    expect(html).toContain('前提');
+    expect(html).toContain('long_only を前提にしました');
+    expect(html).not.toContain('>warnings<');
+    expect(html).not.toContain('>assumptions<');
     expect(html).toContain('status');
     expect(html).toContain('updatedAt');
     expect(html).toContain('ルール差分: +');
