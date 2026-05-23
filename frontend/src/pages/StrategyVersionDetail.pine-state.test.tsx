@@ -66,7 +66,7 @@ describe('StrategyVersionDetail pine state', () => {
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('data-testid="pine-generation-state"');
-    expect(html).toContain('Pine 状態: warning あり');
+    expect(html).toContain('Pine 状態: 警告あり');
     expect(html).toContain('data-testid="strategy-version-copy-pine-button"');
     expect(html).not.toContain('data-testid="strategy-version-copy-pine-button" disabled');
   });

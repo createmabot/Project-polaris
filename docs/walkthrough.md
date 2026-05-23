@@ -45,8 +45,9 @@ pnpm run dev
 1. `StrategyVersionDetail` で `Pine を生成` を実行する。
 2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
 3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
-4. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
-5. 生成した Pine は TradingView の symbol / chart timeframe 上で検証する。internal backtest engine の市場 / 時間足対応範囲が同時に広がったわけではない。
+4. `warnings` / `assumptions` 相当の表示は `警告` / `前提` として日本語で読めることを確認する。未知の provider 文言は後続 mapping 対象として扱い、生成 script 自体は変えない。
+5. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
+6. 生成した Pine は TradingView の symbol / chart timeframe 上で検証する。internal backtest engine の市場 / 時間足対応範囲が同時に広がったわけではない。
 
 ## 4. TradingView 一次検証
 

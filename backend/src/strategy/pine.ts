@@ -37,6 +37,40 @@ export type PineAssessmentResult = {
 
 const SUPPORTED_MARKETS = new Set(['JP_STOCK', 'US_STOCK']);
 
+const PINE_DISPLAY_NOTE_TRANSLATIONS: Record<string, string> = {
+  'The strategy enters at the open of the next day after the signal. The stop loss is calculated based on the ATR value of the signal bar.':
+    'シグナル発生後、翌営業日の始値でエントリーし、損切り価格はシグナル発生足の ATR 値をもとに計算します。',
+  'Chandelier Exit uses a 20-day lookback for the highest high, consistent with the ATR average period.':
+    'Chandelier Exit は、ATR の平均期間と同じ20期間の最高値を参照します。',
+  'Risk management stop loss is fixed at entry and does not trail.':
+    'リスク管理用の損切り価格はエントリー時点で固定し、トレーリングしません。',
+  'Leading explanatory text was removed from generated script.':
+    '生成結果の先頭に含まれていた説明文を削除しました。',
+  'The \'past 20 days\' for ATR average and SMA refers to a simple moving average over 20 periods.':
+    'ATR 平均や SMA における「過去20日」は、20期間の単純移動平均として解釈します。',
+  'The Chandelier Exit \'past highest value\' is interpreted as the highest high over the same 20-day lookback period.':
+    'Chandelier Exit の「過去の最高値」は、同じ20期間における高値の最大値として解釈します。',
+  'Entry and exit occur at the open of the next trading day after the condition is met.':
+    'エントリーと手仕舞いは、条件成立後の翌営業日の始値で行う前提です。',
+  'The stop loss is calculated using the ATR value from the bar where the entry signal was generated.':
+    '損切り価格は、エントリーシグナルが発生した足の ATR 値を使って計算します。',
+  'Markdown code fences were removed from generated script.':
+    '生成結果に含まれていた Markdown code fence を削除しました。',
+  'Generated script contains explanatory text mixed with code.':
+    '生成されたスクリプトに説明文が混在している可能性があります。',
+  'Missing //@version declaration.':
+    'Pine Script の //@version 宣言が見つかりません。',
+};
+
+export function localizePineDisplayNote(note: string): string {
+  const trimmed = note.trim();
+  return PINE_DISPLAY_NOTE_TRANSLATIONS[trimmed] ?? note;
+}
+
+export function localizePineDisplayNotes(notes: string[]): string[] {
+  return notes.map((note) => localizePineDisplayNote(note));
+}
+
 function toConditionText(lines: string[]): string {
   if (lines.length === 0) return 'false';
   if (lines.length === 1) return lines[0];
@@ -118,19 +152,19 @@ export function assessGeneratedPineScript(script: string | null): PineAssessment
   const strippedFence = stripMarkdownCodeFence(normalizedScript);
   if (strippedFence.hadFence) {
     normalizedScript = strippedFence.script;
-    warnings.push('Markdown code fences were removed from generated script.');
+    warnings.push('生成結果に含まれていた Markdown code fence を削除しました。');
     invalidReasonCodes.push('markdown_code_fence_pollution');
   }
 
   const strippedNoise = stripExplanatoryNoise(normalizedScript);
   if (strippedNoise.removed) {
     normalizedScript = strippedNoise.script;
-    warnings.push('Leading explanatory text was removed from generated script.');
+    warnings.push('生成結果の先頭に含まれていた説明文を削除しました。');
     invalidReasonCodes.push('explanatory_text_pollution');
   }
 
   if (detectExplanatoryNoise(normalizedScript)) {
-    warnings.push('Generated script contains explanatory text mixed with code.');
+    warnings.push('生成されたスクリプトに説明文が混在している可能性があります。');
     invalidReasonCodes.push('explanatory_text_pollution');
   }
 
@@ -146,7 +180,7 @@ export function assessGeneratedPineScript(script: string | null): PineAssessment
 
   const hasVersion = /@version=\d+/i.test(normalizedScript);
   if (!hasVersion) {
-    warnings.push('Missing //@version declaration.');
+    warnings.push('Pine Script の //@version 宣言が見つかりません。');
     invalidReasonCodes.push('missing_version_declaration');
   }
 

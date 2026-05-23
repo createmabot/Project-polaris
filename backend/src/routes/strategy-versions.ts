@@ -2,7 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
-import { assessGeneratedPineScript } from '../strategy/pine';
+import { assessGeneratedPineScript, localizePineDisplayNotes } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
 import { AppError, formatSuccess } from '../utils/response';
 
@@ -25,6 +25,12 @@ type StrategyVersionRecord = {
 };
 
 function toStrategyVersionResponse(version: StrategyVersionRecord) {
+  const warnings = Array.isArray(version.warningsJson)
+    ? localizePineDisplayNotes(version.warningsJson.filter((item): item is string => typeof item === 'string'))
+    : [];
+  const assumptions = Array.isArray(version.assumptionsJson)
+    ? localizePineDisplayNotes(version.assumptionsJson.filter((item): item is string => typeof item === 'string'))
+    : [];
   return {
     id: version.id,
     strategy_id: version.strategyRuleId,
@@ -35,8 +41,8 @@ function toStrategyVersionResponse(version: StrategyVersionRecord) {
     forward_validation_note_updated_at: version.forwardValidationNoteUpdatedAt,
     normalized_rule_json: version.normalizedRuleJson,
     generated_pine: version.generatedPine,
-    warnings: Array.isArray(version.warningsJson) ? version.warningsJson : [],
-    assumptions: Array.isArray(version.assumptionsJson) ? version.assumptionsJson : [],
+    warnings,
+    assumptions,
     market: version.market,
     timeframe: normalizeTimeframeAlias(version.timeframe),
     created_at: version.createdAt,
@@ -109,8 +115,23 @@ function toPineResponse(record: {
 
   const warningsRaw = payload?.warnings;
   const warnings = Array.isArray(warningsRaw)
-    ? warningsRaw.filter((item) => typeof item === 'string')
+    ? localizePineDisplayNotes(warningsRaw.filter((item): item is string => typeof item === 'string'))
     : [];
+  const assumptionsRaw = payload?.assumptions;
+  const localizedGenerationNote = generationNote
+    ? {
+        ...generationNote,
+        payload: payload
+          ? {
+              ...payload,
+              warnings,
+              assumptions: Array.isArray(assumptionsRaw)
+                ? localizePineDisplayNotes(assumptionsRaw.filter((item): item is string => typeof item === 'string'))
+                : [],
+            }
+          : generationNote.payload,
+      }
+    : null;
   const generatedFromRevision = record.generatedFromRevision ?? null;
 
   return {
@@ -120,7 +141,7 @@ function toPineResponse(record: {
     generated_script: record.scriptBody,
     script_body: record.scriptBody,
     warnings,
-    generation_note: generationNote,
+    generation_note: localizedGenerationNote,
     script_status: record.status,
     parent_pine_script_id: record.parentPineScriptId,
     source_pine_script_id: generatedFromRevision?.sourcePineScriptId ?? record.parentPineScriptId ?? null,
@@ -294,7 +315,8 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const validation = assessGeneratedPineScript(output.generatedScript);
-    const warnings = [...new Set([...output.warnings, ...validation.warnings])];
+    const warnings = localizePineDisplayNotes([...new Set([...output.warnings, ...validation.warnings])]);
+    const assumptions = localizePineDisplayNotes(output.assumptions);
     const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
     const finalStatus: 'generated' | 'failed' = shouldFail ? 'failed' : 'generated';
     const finalScript = finalStatus === 'generated' ? validation.normalizedScript : null;
@@ -308,7 +330,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       confidence: finalStatus === 'generated' ? 'medium' : 'low',
       insufficient_context: finalStatus === 'failed',
       payload: {
-        assumptions: output.assumptions,
+        assumptions,
         warnings,
         failure_reason: failureReason,
         repair_attempts: repairAttempts,
@@ -356,7 +378,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         normalizedRuleJson: output.normalizedRuleJson as Prisma.InputJsonValue,
         generatedPine: finalScript,
         warningsJson: warnings as Prisma.InputJsonValue,
-        assumptionsJson: output.assumptions as Prisma.InputJsonValue,
+        assumptionsJson: assumptions as Prisma.InputJsonValue,
         status: finalStatus,
       },
     });
@@ -370,6 +392,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         revision_input_id: params.revisionInput?.id ?? null,
         generated_script: finalScript,
         warnings,
+        assumptions,
         status: finalStatus,
         failure_reason: failureReason,
         repair_attempts: repairAttempts,
