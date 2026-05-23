@@ -60,7 +60,7 @@ export default function BacktestComparisonDetail() {
 
   return (
     <AppLayout>
-      <div className='mx-auto max-w-5xl space-y-5'>
+      <div className='mx-auto max-w-5xl space-y-4'>
         <PageHeader
           title='保存済みバックテスト比較'
           description={

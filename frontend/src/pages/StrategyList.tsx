@@ -6,7 +6,7 @@ import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import TextLink from '../components/ui/TextLink';
 
-const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
+const PANEL_CLASS = 'rounded-xl border border-slate-200 bg-white p-3 shadow-sm';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
 type StatusFilter = 'active' | 'archived' | 'all';
 
@@ -62,7 +62,7 @@ function StrategyList(): JSX.Element {
 
   return (
     <AppLayout>
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-4">
         <PageHeader
           title="ストラテジーリスト"
           description="再利用可能なストラテジー定義を一覧・詳細で扱う画面です。"
@@ -70,7 +70,7 @@ function StrategyList(): JSX.Element {
         />
 
         <section className={PANEL_CLASS}>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <h2 className="text-lg font-semibold text-slate-900">Strategy Definition 一覧</h2>
             <p className={MUTED_TEXT_CLASS}>
               再利用可能なストラテジー定義をここに集約します。
@@ -85,19 +85,19 @@ function StrategyList(): JSX.Element {
           <div className="mt-4 flex flex-wrap gap-3">
             <TextLink
               href="/strategy-lab"
-              className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white no-underline hover:no-underline"
+              className="rounded-md bg-sky-700 px-3 py-1.5 text-sm font-medium text-white no-underline hover:no-underline"
             >
               ストラテジー作成を開く
             </TextLink>
             <TextLink
               href="/backtests"
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 no-underline hover:no-underline"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 no-underline hover:no-underline"
             >
               検証レポート一覧を開く
             </TextLink>
           </div>
 
-          <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             BacktestList は検証レポート一覧として継続し、この画面の代替にはしません。
           </div>
         </section>
@@ -140,9 +140,9 @@ function StrategyList(): JSX.Element {
               </p>
             </div>
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-2">
               {strategies.map((strategy) => (
-                <article key={strategy.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <article key={strategy.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-1">
                       <TextLink href={`/strategies/${strategy.id}`} className="text-base font-semibold text-sky-700 no-underline hover:underline">

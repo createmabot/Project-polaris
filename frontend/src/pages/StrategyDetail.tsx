@@ -18,7 +18,7 @@ import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
 
-const PANEL_CLASS = 'rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70';
+const PANEL_CLASS = 'rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm shadow-slate-200/70';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
 type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 
@@ -102,7 +102,7 @@ function StrategyDetail(): JSX.Element {
 
   return (
     <AppLayout>
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-4">
         <PageHeader
           title="ストラテジー詳細"
           description="再利用可能なストラテジー定義の詳細、version、関連検証レポート、適用済み銘柄を扱う画面です。"
@@ -110,7 +110,7 @@ function StrategyDetail(): JSX.Element {
         />
 
         <section className={PANEL_CLASS}>
-          <div className="space-y-3">
+          <div className="space-y-2">
             <p className="text-sm text-slate-500">
               strategy_id: <code>{strategyId}</code>
             </p>
@@ -168,25 +168,25 @@ function StrategyDetail(): JSX.Element {
           <div className="mt-4 flex flex-wrap gap-3">
             <TextLink
               href={`/strategies/${strategyId}/versions`}
-              className="rounded-md bg-sky-700 px-4 py-2 text-sm font-medium text-white no-underline hover:no-underline"
+              className="rounded-md bg-sky-700 px-3 py-1.5 text-sm font-medium text-white no-underline hover:no-underline"
             >
               version 一覧を開く
             </TextLink>
             <TextLink
               href="/strategy-lab"
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 no-underline hover:no-underline"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 no-underline hover:no-underline"
             >
               ストラテジー作成を開く
             </TextLink>
             <TextLink
               href="/backtests"
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 no-underline hover:no-underline"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 no-underline hover:no-underline"
             >
               検証レポート一覧を開く
             </TextLink>
           </div>
 
-          <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             BacktestDetail は個別検証レポート詳細として継続し、この画面には吸収しません。
           </div>
         </section>
@@ -200,9 +200,9 @@ function StrategyDetail(): JSX.Element {
           ) : versions.length === 0 ? (
             <EmptyState title="このストラテジーにはまだ version がありません。" className="mt-4" />
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-2">
               {versions.map((version) => (
-                <article key={version.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <article key={version.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-1">
                       <TextLink href={`/strategy-versions/${version.id}`} className="font-semibold text-sky-700 no-underline hover:underline">
@@ -260,9 +260,9 @@ function StrategyDetail(): JSX.Element {
           ) : symbolApplications.length === 0 ? (
             <EmptyState title="この strategy はまだ銘柄に適用されていません。" className="mt-4" />
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-2">
               {symbolApplications.map((application) => (
-                <article key={application.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <article key={application.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                     <div>
                       <TextLink href={`/symbols/${application.symbol.id}`} className="font-semibold text-sky-700 no-underline hover:underline">
@@ -330,12 +330,12 @@ function StrategyDetail(): JSX.Element {
           ) : relatedReports.length === 0 ? (
             <EmptyState title="関連検証レポートはまだありません。" className="mt-4" />
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-2">
               {relatedReports.map((application) => {
                 const report = application.latest_backtest_report;
                 if (!report) return null;
                 return (
-                  <article key={`${application.id}-${report.id}`} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <article key={`${application.id}-${report.id}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <TextLink href={`/backtests/${report.id}`} className="font-semibold text-sky-700 no-underline hover:underline">
                       {report.title}
                     </TextLink>

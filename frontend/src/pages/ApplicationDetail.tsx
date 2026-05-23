@@ -232,7 +232,7 @@ export default function ApplicationDetail() {
 
   return (
     <AppLayout showSideRail>
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-4">
         <PageHeader
           title={getApplicationTitle(runsData)}
           backLink={{ href: `/symbols/${application.symbol.id}`, label: LABELS.backToSymbol }}
@@ -288,7 +288,7 @@ export default function ApplicationDetail() {
             {runsData.runs.length === 0 ? (
               <EmptyState title={LABELS.noRuns} />
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2">
               {runsData.runs.map((run) => (
                 <Surface key={run.id} as="article" variant="card">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -306,7 +306,7 @@ export default function ApplicationDetail() {
                       <TextLink href={`/backtests/${run.linked_backtest.id}`}>{LABELS.openBacktest}</TextLink>
                     ) : null}
                   </div>
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
+                  <div className="mt-3 grid gap-2 md:grid-cols-3">
                     <Surface variant="nested">
                       <strong className="block text-slate-700">linked backtest</strong>
                       {run.linked_backtest ? (
@@ -399,7 +399,7 @@ export default function ApplicationDetail() {
             ) : !reportsData || reportsData.reports.length === 0 ? (
               <EmptyState title={LABELS.noReports} />
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2">
               <div className="text-xs text-slate-500">{LABELS.reportCount}: {reportsData.application.report_count}</div>
               {reportsData.reports.map((report) => (
                 <Surface key={report.id} as="article" variant="card">

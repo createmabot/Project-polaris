@@ -788,14 +788,14 @@ export default function StrategyLab() {
       <SectionCard
         title='ストラテジー候補の提案'
         description='AIによる検証候補を取得し、選択した候補を自然言語ルールへ反映します。投資助言ではなく、backtest前提のたたき台です。'
-        className='mt-5'
+        className='mt-4'
       >
-        <div className='grid gap-4'>
+        <div className='grid gap-3'>
           <InlineNotice tone='warning'>
             候補は検証用のたたき台です。売買推奨ではありません。選択後に内容を確認し、Pine生成とbacktestで検証してください。
           </InlineNotice>
 
-          <div className='grid gap-4 lg:grid-cols-3'>
+          <div className='grid gap-3 lg:grid-cols-3'>
             <SelectField
               label='提案用時間足'
               value={timeframe}
@@ -844,7 +844,7 @@ export default function StrategyLab() {
             {proposing ? '候補を取得中...' : 'ストラテジーを提案'}
           </Button>
 
-          <Surface variant='muted' className='grid gap-3 p-4'>
+          <Surface variant='muted' className='grid gap-2 p-3'>
             <div>
               <h3 style={{ margin: 0, fontSize: '1rem' }}>Codex CLIで生成した候補JSONを取り込む</h3>
               <p className='mt-1 text-sm leading-6 text-slate-600'>
@@ -948,7 +948,7 @@ export default function StrategyLab() {
           )}
 
           {proposalData && (
-            <div className='grid gap-3'>
+            <div className='grid gap-2'>
               <KeyValueList className='sm:grid-cols-2'>
                 <KeyValueRow label='provider'>{proposalData.provider.name} / {proposalData.provider.mode}</KeyValueRow>
                 <KeyValueRow label='web search'>{proposalData.provider.web_search ? 'enabled' : 'disabled'}</KeyValueRow>
@@ -972,7 +972,7 @@ export default function StrategyLab() {
                 proposalData.candidates.map((candidate) => (
                   <Surface
                     key={candidate.candidate_id}
-                    className='grid gap-3'
+                    className='grid gap-2'
                   >
                     <div className='flex flex-wrap justify-between gap-3'>
                       <div>
@@ -1015,17 +1015,17 @@ export default function StrategyLab() {
       <SectionCard
         title='提案履歴'
         description='保存済み strategy proposal run を provider / status / selected / search で絞り込みます。候補を使う操作は title と自然言語ルールへの反映に留めます。'
-        className='mt-5'
+        className='mt-4'
       >
-        <div className='grid gap-4'>
+        <div className='grid gap-3'>
           <ProviderQualityTrendNote
             data={proposalQualityTrendData}
             error={proposalQualityTrendError}
             isLoading={proposalQualityTrendLoading}
           />
 
-          <Surface variant='muted' className='grid gap-3 p-4'>
-            <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-5'>
+          <Surface variant='muted' className='grid gap-2 p-3'>
+            <div className='grid gap-2 md:grid-cols-2 xl:grid-cols-5'>
               <TextInput
                 label='履歴検索'
                 value={historySearchDraft}
@@ -1221,7 +1221,7 @@ export default function StrategyLab() {
       <SectionCard
         title='ルール入力'
         description='自然言語ルール、対象市場、時間足を指定して Pine 生成まで実行します。'
-        className='mt-5'
+        className='mt-4'
       >
         <form onSubmit={onSubmit} style={{ display: 'grid', gap: '1rem' }}>
           <TextInput
