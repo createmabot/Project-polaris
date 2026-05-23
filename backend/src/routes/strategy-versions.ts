@@ -374,6 +374,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         revision_input_id: params.revisionInput?.id ?? null,
         generated_script: finalScript,
         warnings,
+        assumptions: output.assumptions,
         status: finalStatus,
         failure_reason: failureReason,
         repair_attempts: repairAttempts,
