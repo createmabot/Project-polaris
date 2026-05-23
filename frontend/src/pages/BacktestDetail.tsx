@@ -387,7 +387,7 @@ function ApplicationReportAiSummaryComparison({
         CSV import report は BacktestImport parsed summary / comparison diff、internal backtest report は result_summary / artifact_pointer を主な input とします。
         ここでは新規生成、自動比較生成、polling、artifact diff は行いません。
       </InlineNotice>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
         <ReportAiSummaryCard title="current report AI summary" report={currentReport} />
         <ReportAiSummaryCard title="related report AI summary" report={relatedReport} />
       </div>
@@ -452,7 +452,7 @@ function ApplicationReportMetricsComparison({
         CSV import report は BacktestImport parsed summary、internal backtest report は strategySnapshotJson.result_summary 由来です。
         `-` は取得元に該当 metric がないことを示します。
       </InlineNotice>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
         <ReportMetricCard title="current report" report={currentReport} />
         <ReportMetricCard title="related report" report={relatedReport} />
       </div>
@@ -606,7 +606,7 @@ function ArtifactPointerPanel({
   const sanitizedArtifactPointer = sanitizeArtifactMetadataForDisplay(artifactPointer);
 
   return (
-    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
       <strong className="text-sm text-slate-900">artifact_pointer</strong>
       <InlineNotice tone="info" className="my-3">
         internal backtest の artifact pointer を metadata として表示します。artifact path は非表示化し、artifact file の実体読込、download、diff は行いません。
@@ -616,7 +616,7 @@ function ArtifactPointerPanel({
       ) : (
         <>
           {artifactRows.length > 0 ? (
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+            <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
               {artifactRows.map((row) => (
                 <div
                   key={row.key}
@@ -654,7 +654,7 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
       description="この report は internal backtest result から作成されています。internal_backtest report では BacktestImport は作成されません。"
       className="mt-4"
     >
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         {metricCard('execution_id', valueText(snapshot?.internal_backtest_execution_id))}
         {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
         {metricCard('period from', recordText(period, 'from'))}
@@ -776,7 +776,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
   return (
     <AppLayout>
-      <div className="mx-auto max-w-5xl space-y-5">
+      <div className="mx-auto max-w-5xl space-y-4">
         <PageHeader
           title="検証レポート（詳細）"
           description="まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。"
@@ -789,7 +789,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           }
         />
 
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm shadow-slate-200/70">
         <h2 className="mt-0 text-lg font-semibold text-slate-900">基本情報</h2>
         <KeyValueList>
           <KeyValueRow label="backtest ID"><code>{data.backtest.id}</code></KeyValueRow>
@@ -802,7 +802,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         </KeyValueList>
       </section>
 
-      <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm shadow-slate-200/70">
+      <section className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm shadow-slate-200/70">
         <h2 className="mt-0 text-lg font-semibold text-slate-900">使用した Strategy</h2>
         <div><strong>Strategy ID:</strong> <code>{usedStrategy.strategy_id ?? '-'}</code></div>
         <div><strong>Strategy Version ID:</strong> <code>{usedStrategy.strategy_version_id ?? '-'}</code></div>

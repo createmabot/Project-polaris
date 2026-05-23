@@ -1049,7 +1049,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   return (
     <AppLayout>
-      <div className='mx-auto max-w-5xl space-y-5'>
+      <div className='mx-auto max-w-5xl space-y-4'>
         <PageHeader
           title='rule version 詳細'
           description='自然言語ルール、Pine、検証、内製バックテスト導線を同じ version 文脈で確認します。'
@@ -1091,7 +1091,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       <SectionCard
         title='自然言語ルール（編集）'
         description='保存、Pine 再生成、修正再生成の導線は既存のまま維持します。'
-        className='mt-5'
+        className='mt-4'
       >
         <TextArea
           label='自然言語ルール'
@@ -1235,7 +1235,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       <SectionCard
         title='次の検証ノート'
         description='forward validation の確認内容を version 単位で記録します。'
-        className='mt-5'
+        className='mt-4'
       >
         <KeyValueList className='mb-3'>
           <KeyValueRow label='現在のノート'>
@@ -2213,7 +2213,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         )}
       </section>
 
-      <SectionCard title='警告' className='mt-5'>
+      <SectionCard title='警告' className='mt-4'>
         {warnings.length === 0 ? (
           <EmptyState title='なし' />
         ) : (
@@ -2225,7 +2225,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         )}
       </SectionCard>
 
-      <SectionCard title='前提' className='mt-5'>
+      <SectionCard title='前提' className='mt-4'>
         {assumptions.length === 0 ? (
           <EmptyState title='なし' />
         ) : (
@@ -2239,7 +2239,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
       <SectionCard
         title='generated pine'
-        className='mt-5'
+        className='mt-4'
         actions={(
           <Button
             data-testid='strategy-version-copy-pine-button'

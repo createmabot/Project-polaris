@@ -287,7 +287,7 @@ function DetailSection({ title, actions, children }: DetailSectionProps) {
 }
 
 function InfoCard({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-lg border border-slate-200 bg-slate-50 p-4 ${className}`.trim()}>{children}</div>;
+  return <div className={`rounded-lg border border-slate-200 bg-slate-50 p-3 ${className}`.trim()}>{children}</div>;
 }
 
 function EmptyText({ children }: { children: ReactNode }) {
@@ -868,7 +868,7 @@ function SavedApplicationRow({
   };
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-lg border border-slate-200 bg-white p-3">
       <ApplicationSummaryHeader
         application={application}
         isMutatingApplicationStatus={isMutatingApplicationStatus}
@@ -881,14 +881,14 @@ function SavedApplicationRow({
         <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{applicationStatusError}</p>
       ) : null}
 
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
         <ApplicationLatestRunCard application={application} mutateApplications={mutateApplications} />
         <ApplicationLatestReportCard application={application} />
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <h5 className="text-sm font-semibold text-slate-900">{LABELS.csvImportTitle}</h5>
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid gap-2">
           <label className="grid gap-1 text-sm text-slate-700">
             <span className="font-medium">{LABELS.csvFile}</span>
             <input
@@ -956,10 +956,10 @@ function SavedApplicationRow({
         ) : null}
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <h5 className="text-sm font-semibold text-slate-900">{LABELS.internalBacktest}</h5>
         <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.internalBacktestDescription}</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1 text-sm text-slate-700">
             <span className="font-medium">{LABELS.internalBacktestFrom}</span>
             <input
@@ -1092,7 +1092,7 @@ function SavedStrategyApplicationsPanel({
     && applicationStrategyVersionIdFilter.trim() === '';
 
   return (
-    <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3">
       <h3 className="text-base font-semibold text-slate-900">{LABELS.savedApplicationsTitle}</h3>
       <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.strategyResultsPending}</p>
       {isLoading ? (
@@ -1210,7 +1210,7 @@ function SavedStrategyApplicationsPanel({
           ) : applications.length === 0 ? (
             <EmptyState title={LABELS.noFilteredApplications} className="mt-3" />
           ) : (
-            <div className="mt-3 grid gap-3">
+            <div className="mt-3 grid gap-2">
               {applications.map((application) => (
                 <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
               ))}
@@ -1342,7 +1342,7 @@ function StrategyApplySelectionPanel({
   };
 
   return (
-    <div className="mt-5 space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="mt-4 space-y-4 rounded-lg border border-slate-200 bg-white p-3">
       <div>
         <h3 className="text-base font-semibold text-slate-900">{LABELS.chooseExistingStrategy}</h3>
         <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.applySelectionNotice}</p>
@@ -1444,7 +1444,7 @@ function StrategyApplySelectionPanel({
       </div>
 
       {selectedStrategy ? (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h4 className="text-sm font-semibold text-slate-900">{LABELS.selectedStrategy}</h4>
@@ -1500,7 +1500,7 @@ function StrategyApplySelectionPanel({
       ) : null}
 
       {selectedStrategy && selectedVersion ? (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
           <h4 className="text-sm font-semibold text-emerald-950">{LABELS.selectedVersion}</h4>
           <p className="mt-1 text-sm text-emerald-900">
             version_id: {selectedVersion.id} / {selectedVersion.market} / {selectedVersion.timeframe} / {selectedVersion.status}
@@ -1719,7 +1719,7 @@ export default function SymbolDetail() {
 
   return (
     <AppLayout showSideRail>
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-4">
         <PageHeader
           title={data.symbol.display_name || data.symbol.symbol}
           backLink={{ href: '/', label: LABELS.backToHome }}
@@ -1738,7 +1738,7 @@ export default function SymbolDetail() {
               <h2 className="text-lg font-semibold text-slate-900">{LABELS.chartTitle}</h2>
               <p className="mt-1 text-sm text-slate-600">{LABELS.chartDescription}</p>
             </div>
-            <div className="h-[500px] w-full bg-white p-4">
+            <div className="h-[500px] w-full bg-white p-3">
               <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} className="h-full w-full" />
             </div>
           </section>
@@ -1774,9 +1774,9 @@ export default function SymbolDetail() {
           {data.recent_alerts.length === 0 ? (
             <EmptyState title={LABELS.noAlerts} />
           ) : (
-            <div className="grid gap-3">
+            <div className="grid gap-2">
               {data.recent_alerts.map((alert) => (
-                <article key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <article key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                   <div className="min-w-0">
                     <strong className="block text-slate-900">
                       <TextLink href={`/alerts/${alert.id}`}>{alert.alert_name}</TextLink>
@@ -1823,7 +1823,7 @@ export default function SymbolDetail() {
                   variant="primary"
                   onClick={() => handleGenerateThesis(true)}
                   disabled={isGeneratingThesis}
-                  className="px-4 py-2 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
+                  className="px-3 py-1.5 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
                 >
                   {isGeneratingThesis ? LABELS.generating : LABELS.regenerateAi}
                 </Button>
@@ -1838,7 +1838,7 @@ export default function SymbolDetail() {
                   variant="primary"
                   onClick={() => handleGenerateThesis(false)}
                   disabled={isGeneratingThesis}
-                  className="px-4 py-2 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
+                  className="px-3 py-1.5 transition hover:bg-sky-800 disabled:bg-slate-400 disabled:opacity-100"
                 >
                   {isGeneratingThesis ? LABELS.generating : LABELS.generateAi}
                 </Button>
@@ -1860,10 +1860,10 @@ export default function SymbolDetail() {
           title={LABELS.strategyResultsTitle}
           actions={
             <>
-              <TextLink href="/strategy-lab" className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline">
+              <TextLink href="/strategy-lab" className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
                 {LABELS.openStrategyLab}
               </TextLink>
-              <TextLink href="/backtests" className="rounded border border-slate-300 bg-white px-4 py-2 text-slate-700 no-underline hover:no-underline">
+              <TextLink href="/backtests" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-slate-700 no-underline hover:no-underline">
                 {LABELS.openBacktestList}
               </TextLink>
             </>
@@ -1872,7 +1872,7 @@ export default function SymbolDetail() {
           <InfoCard>
             <p className="text-sm leading-6 text-slate-700">{LABELS.strategyResultsIntro}</p>
             <p className="mt-2 text-sm leading-6 text-slate-500">{LABELS.strategyResultsPending}</p>
-            <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4">
+            <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-3">
               <MetaText>今後ここに表示する予定の要素</MetaText>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
                 <li>この銘柄に適用済みのストラテジー一覧</li>
@@ -1914,11 +1914,11 @@ export default function SymbolDetail() {
           title={LABELS.researchNoteTitle}
           actions={
             data.latest_active_note ? (
-              <TextLink href={`/notes/${data.latest_active_note.id}`} className="rounded bg-sky-700 px-4 py-2 text-white no-underline hover:no-underline">
+              <TextLink href={`/notes/${data.latest_active_note.id}`} className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
                 {LABELS.openNote}
               </TextLink>
             ) : (
-              <TextLink href={`/symbols/${symbolId}/note/new`} className="rounded bg-emerald-600 px-4 py-2 text-white no-underline hover:no-underline">
+              <TextLink href={`/symbols/${symbolId}/note/new`} className="rounded bg-emerald-600 px-3 py-1.5 text-white no-underline hover:no-underline">
                 {LABELS.createNote}
               </TextLink>
             )
@@ -1953,13 +1953,13 @@ export default function SymbolDetail() {
               variant="secondary"
               onClick={handleRefreshReferences}
               disabled={isRefreshingReferences}
-              className="px-4 py-2 disabled:bg-slate-300 disabled:text-slate-600 disabled:opacity-100"
+              className="px-3 py-1.5 disabled:bg-slate-300 disabled:text-slate-600 disabled:opacity-100"
             >
               {isRefreshingReferences ? LABELS.refreshingReferences : LABELS.refreshReferences}
             </Button>
           }
         >
-          <div className="space-y-3">
+          <div className="space-y-2">
             <p className="text-sm text-slate-600">
               {LABELS.breakdown}: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
             </p>
@@ -1975,9 +1975,9 @@ export default function SymbolDetail() {
                 <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
               </InfoCard>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid gap-2">
                 {data.related_references.map((reference) => (
-                  <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                  <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                     <MetaText>
                       [{reference.reference_type}] {formatDate(reference.published_at)}
                     </MetaText>
