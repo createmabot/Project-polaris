@@ -67,8 +67,9 @@ describe('Home', () => {
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
-    expect(html).toContain('日次確認の見方');
-    expect(html).toContain('監視銘柄・保有銘柄の詳細一覧は、左の共通サイドメニューから確認します。');
+    expect(html).toContain('概況、AIサマリー、アラート、注目イベントを確認します。');
+    expect(html).not.toContain('日次確認の見方');
+    expect(html).not.toContain('Daily workspace');
     expect(html).toContain('AIデイリーサマリー');
     expect(html).toContain('AIがマーケット・アラート・参照情報をもとに生成した要約です。');
     expect(html).toContain('最新');
@@ -196,13 +197,17 @@ describe('Home', () => {
 
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
-    expect(html).toContain('<strong>指数:</strong> 日経平均');
-    expect(html).toContain('<strong>為替:</strong> USD/JPY');
-    expect(html).toContain('<strong>セクター:</strong> 半導体');
-    expect(html).toContain('<strong>値:</strong> 39000');
-    expect(html).toContain('<strong>変化率:</strong> 1.2');
-    expect(html).toContain('<strong>変化率:</strong> 0.3');
-    expect(html).toContain('<strong>変化率:</strong> 2.1');
+    expect(html).toContain('指数');
+    expect(html).toContain('為替');
+    expect(html).toContain('セクター');
+    expect(html).toContain('日経平均');
+    expect(html).toContain('USD/JPY');
+    expect(html).toContain('半導体');
+    expect(html).toContain('値 39,000');
+    expect(html).toContain('値 149.2');
+    expect(html).toContain('+1.2%');
+    expect(html).toContain('+0.3%');
+    expect(html).toContain('+2.1%');
     expect(html).toContain('href="/symbols/sym_7203"');
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
