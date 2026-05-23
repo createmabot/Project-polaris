@@ -460,7 +460,6 @@ export type StrategyVersionPineGenerateData = {
     revision_input_id?: string | null;
     generated_script: string | null;
     warnings: string[];
-    assumptions?: string[];
     status: 'generated' | 'failed';
     failure_reason?: string | null;
     repair_attempts?: number;

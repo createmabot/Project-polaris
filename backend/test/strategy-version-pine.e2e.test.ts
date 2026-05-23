@@ -369,17 +369,17 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
-  it('localizes provider and post-processing Pine notes in API responses', async () => {
+  it('preserves provider Pine notes and keeps post-processing notes in Japanese', async () => {
     generatePineScriptMock.mockResolvedValue({
       output: {
         normalizedRuleJson: { strategy_type: 'long_only' },
         generatedScript: 'Here is your Pine script:\n//@version=6\nstrategy("ok", overlay=true)',
         warnings: [
-          'Risk management stop loss is fixed at entry and does not trail.',
+          'リスク管理用の損切り価格はエントリー時点で固定し、トレーリングしません。',
         ],
         assumptions: [
-          'The strategy enters at the open of the next day after the signal. The stop loss is calculated based on the ATR value of the signal bar.',
-          'The Chandelier Exit \'past highest value\' is interpreted as the highest high over the same 20-day lookback period.',
+          'シグナル発生後、翌営業日の始値でエントリーし、損切り価格はシグナル発生足の ATR 値をもとに計算します。',
+          'Chandelier Exit の「過去の最高値」は、同じ20期間における高値の最大値として解釈します。',
         ],
         status: 'generated',
         modelName: 'local-model',
@@ -411,8 +411,6 @@ describe('strategy version pine endpoints', () => {
     expect(generatedBody.strategy_version.assumptions).toContain(
       'Chandelier Exit の「過去の最高値」は、同じ20期間における高値の最大値として解釈します。',
     );
-    expect(generatedBody.strategy_version.warnings.join(' ')).not.toContain('Risk management stop loss');
-    expect(generatedBody.strategy_version.assumptions.join(' ')).not.toContain('The strategy enters');
     expect(generatedBody.pine.generated_script).toContain('strategy("ok", overlay=true)');
 
     const detail = await app.inject({
@@ -433,7 +431,7 @@ describe('strategy version pine endpoints', () => {
     });
     expect(pine.statusCode).toBe(200);
     expect(pine.json().data.warnings).toContain('生成結果の先頭に含まれていた説明文を削除しました。');
-    expect(JSON.stringify(pine.json().data.generation_note)).not.toContain('The strategy enters');
+    expect(JSON.stringify(pine.json().data.generation_note)).toContain('シグナル発生後');
 
     await app.close();
   });
