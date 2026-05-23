@@ -796,9 +796,7 @@ function buildDeterministicPineOutput(
 
   const warnings = [...generated.warnings];
   if (context.regenerationInput) {
-    warnings.push(
-      `regeneration_context_applied: source=${context.regenerationInput.sourcePineScriptId}`,
-    );
+    warnings.push('既存Pineスクリプトの修正入力を反映しました。');
   }
 
   return {
@@ -1448,7 +1446,14 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content:
-              'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script. Return strict JSON only.',
+              [
+                'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script. Return strict JSON only.',
+                'Return user-facing warnings and assumptions in Japanese.',
+                'Do not write English explanatory sentences in warnings or assumptions.',
+                'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
+                'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
+                'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
+              ].join(' '),
           },
           {
             role: 'user',
@@ -1461,8 +1466,8 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               repair_request: context.repairRequest ?? null,
               output_schema: {
                 generated_script: '<string>',
-                warnings: ['<string>'],
-                assumptions: ['<string>'],
+                warnings: ['<Japanese user-facing string>'],
+                assumptions: ['<Japanese user-facing string>'],
                 normalized_rule_json: '<object>',
               },
             }),
@@ -1932,7 +1937,14 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: 'Convert natural language rule to Pine script. Use regeneration_input when provided to revise existing script. Return strict JSON.',
+            content: [
+              'Convert natural language rule to Pine script. Use regeneration_input when provided to revise existing script. Return strict JSON.',
+              'Return user-facing warnings and assumptions in Japanese.',
+              'Do not write English explanatory sentences in warnings or assumptions.',
+              'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
+              'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
+              'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
+            ].join(' '),
           },
           {
             role: 'user',
@@ -1943,6 +1955,12 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               target_timeframe: context.targetTimeframe,
               regeneration_input: context.regenerationInput ?? null,
               repair_request: context.repairRequest ?? null,
+              output_schema: {
+                generated_script: '<string>',
+                warnings: ['<Japanese user-facing string>'],
+                assumptions: ['<Japanese user-facing string>'],
+                normalized_rule_json: '<object>',
+              },
             }),
           },
         ],
@@ -1973,6 +1991,12 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
       return {
         ...deterministic,
         generatedScript,
+        warnings: Array.isArray(parsed?.warnings)
+          ? parsed.warnings.filter((item: unknown) => typeof item === 'string').slice(0, 16)
+          : deterministic.warnings,
+        assumptions: Array.isArray(parsed?.assumptions)
+          ? parsed.assumptions.filter((item: unknown) => typeof item === 'string').slice(0, 16)
+          : deterministic.assumptions,
         status: generatedScript ? 'generated' : 'failed',
       };
     } catch {

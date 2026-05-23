@@ -232,6 +232,10 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.stream).toBe(false);
     expect(body.think).toBe(false);
     expect(body.options.num_predict).toBe(1800);
+    expect(body.messages[0].content).toContain('Return user-facing warnings and assumptions in Japanese');
+    expect(body.messages[0].content).toContain('Keep generated_script as valid Pine Script');
+    expect(body.messages[0].content).toContain('do not translate Pine code');
+    expect(body.messages[1].content).toContain('<Japanese user-facing string>');
     expect(result.generatedScript).toContain('strategy("X"');
   });
 
