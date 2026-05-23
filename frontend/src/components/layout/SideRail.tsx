@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import useSWR, { type KeyedMutator } from 'swr';
 import { deleteApi, patchApi, postApi, swrFetcher } from '../../api/client';
 import type { HomeData, PositionManagementData, PositionMutateData, WatchlistItemData, WatchlistItemMutateData } from '../../api/types';
@@ -114,6 +114,59 @@ function getFriendlyMutationMessage(error: any, fallback: string): string {
     return error.message;
   }
   return fallback;
+}
+
+function EditIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 13.5V16h2.5L15 7.5 12.5 5 4 13.5Z" />
+      <path strokeLinecap="round" d="M11.5 6 14 8.5" />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h12M8 6V4h4v2m-6 0 1 10h6l1-10" />
+    </svg>
+  );
+}
+
+function RailToggleIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path strokeLinecap="round" strokeLinejoin="round" d={collapsed ? 'M7 5l5 5-5 5' : 'M13 5l-5 5 5 5'} />
+    </svg>
+  );
+}
+
+type IconButtonProps = {
+  label: string;
+  title?: string;
+  variant?: 'neutral' | 'danger';
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+};
+
+function IconButton({ label, title = label, variant = 'neutral', disabled, onClick, children }: IconButtonProps) {
+  const variantClass =
+    variant === 'danger'
+      ? 'border-rose-200 text-rose-700 hover:border-rose-300 hover:bg-rose-50 focus-visible:outline-rose-500'
+      : 'border-slate-200 text-slate-600 hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700 focus-visible:outline-sky-500';
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex h-7 w-7 items-center justify-center rounded-md border bg-white transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${variantClass}`}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function SideRail({
@@ -415,35 +468,37 @@ export default function SideRail({
       return <EmptyState title="監視銘柄はまだありません。" />;
     }
     return (
-      <div className="space-y-2">
+      <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         {data.watchlist_symbols.map((symbol: any, index: number) => (
-          <div key={symbol.symbol_id ?? `watch-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40">
-            <div className="flex items-start justify-between gap-3">
+          <div key={symbol.symbol_id ?? `watch-${index}`} className="px-2.5 py-2 transition hover:bg-sky-50/50">
+            <div className="flex items-center justify-between gap-2">
               <TextLink
                 href={symbol.symbol_id ? `/symbols/${symbol.symbol_id}` : '/watchlist'}
-                className="block text-sm font-medium text-slate-900 no-underline hover:text-sky-700 hover:underline"
+                className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900 no-underline hover:text-sky-700 hover:underline"
               >
                 {symbol.display_name ?? symbol.symbol_id ?? '不明'}
               </TextLink>
-              <div className="flex shrink-0 gap-1.5">
-                <Button
+              <div className="flex shrink-0 gap-1">
+                <IconButton
+                  label="監視銘柄を編集"
+                  title="監視銘柄を編集"
                   onClick={() => openEditWatchlistModal(symbol)}
                   disabled={!watchlistActionsReady}
-                  className="px-2 py-1 text-xs"
                 >
-                  編集
-                </Button>
-                <Button
+                  <EditIcon />
+                </IconButton>
+                <IconButton
+                  label="監視銘柄を削除"
+                  title="監視銘柄を削除"
                   variant="danger"
                   onClick={() => openDeleteWatchlistModal(symbol)}
                   disabled={!symbol.item_id && !watchlistActionsReady}
-                  className="px-2 py-1 text-xs"
                 >
-                  削除
-                </Button>
+                  <DeleteIcon />
+                </IconButton>
               </div>
             </div>
-            <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
+            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] leading-4 text-slate-500">
               価格: {formatNumber(symbol.latest_price, 2)} / 変化率:{' '}
               {symbol.change_rate === null || symbol.change_rate === undefined
                 ? '-'
@@ -466,38 +521,41 @@ export default function SideRail({
       return <EmptyState title="保有銘柄はまだありません。" />;
     }
     return (
-      <div className="space-y-2">
+      <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
         {data.positions.map((position: any, index: number) => (
-          <div key={position.position_id ?? `position-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-3 shadow-sm transition hover:border-sky-200 hover:bg-sky-50/40">
-            <div className="flex items-start justify-between gap-3">
+          <div key={position.position_id ?? `position-${index}`} className="px-2.5 py-2 transition hover:bg-sky-50/50">
+            <div className="flex items-center justify-between gap-2">
               <TextLink
                 href={position.symbol_id ? `/symbols/${position.symbol_id}` : '/positions'}
-                className="block text-sm font-medium text-slate-900 no-underline hover:text-sky-700 hover:underline"
+                className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900 no-underline hover:text-sky-700 hover:underline"
               >
                 {buildPositionDisplayName(position, watchlistDisplayNameById)}
               </TextLink>
-              <div className="flex shrink-0 gap-1.5">
-                <Button
+              <div className="flex shrink-0 gap-1">
+                <IconButton
+                  label="保有銘柄を編集"
+                  title="保有銘柄を編集"
                   onClick={() => openEditPositionModal(position)}
                   disabled={!positionActionsReady}
-                  className="px-2 py-1 text-xs"
                 >
-                  編集
-                </Button>
-                <Button
+                  <EditIcon />
+                </IconButton>
+                <IconButton
+                  label="保有銘柄を削除"
+                  title="保有銘柄を削除"
                   variant="danger"
                   onClick={() => openDeletePositionModal(position)}
                   disabled={!position.position_id && !positionActionsReady}
-                  className="px-2 py-1 text-xs"
                 >
-                  削除
-                </Button>
+                  <DeleteIcon />
+                </IconButton>
               </div>
             </div>
-            <div className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">
-              数量: {formatNumber(position.quantity, 0)} / 現在値: {formatNumber(position.latest_price, 2)}
+            <div className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] leading-4 text-slate-500">
+              <span>数量: {formatNumber(position.quantity, 0)}</span>
+              <span>現在値: {formatNumber(position.latest_price, 2)}</span>
+              <span>評価損益: {formatNumber(position.unrealized_pnl, 2)}</span>
             </div>
-            <div className="mt-1 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-500">評価損益: {formatNumber(position.unrealized_pnl, 2)}</div>
             {!positionActionsReady && isPositionsLoading ? (
               <div className="mt-2">
                 <LoadingState title="保有銘柄の操作情報を読み込み中..." className="p-2 text-xs shadow-none" />
@@ -549,24 +607,24 @@ export default function SideRail({
         className="sticky top-24 max-h-[calc(100vh-7rem)] w-full shrink-0 self-start overflow-y-auto pr-1"
       >
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/70">
-          <div className="border-b border-slate-100 p-4">
-            <div className="flex items-center justify-between gap-2">
-              {!isCollapsed ? <h2 className="text-sm font-semibold text-slate-900">共通サイドメニュー</h2> : null}
-              <Button
+          <div className="border-b border-slate-100 p-2">
+            <div className="flex justify-end">
+              <IconButton
+                label={isCollapsed ? 'サイドレールを開く' : 'サイドレールを折りたたむ'}
+                title={isCollapsed ? 'サイドレールを開く' : 'サイドレールを折りたたむ'}
                 onClick={toggleCollapsed}
-                className="px-2 py-1 text-xs"
               >
-                {isCollapsed ? '開く' : '折りたたむ'}
-              </Button>
+                <RailToggleIcon collapsed={isCollapsed} />
+              </IconButton>
             </div>
           </div>
 
           {isCollapsed ? (
-            <div className="space-y-3 p-3 text-center text-xs text-slate-500">
+            <div className="space-y-2 p-2 text-center text-xs text-slate-500">
               <button
                 type="button"
                 onClick={() => setTab('watchlist')}
-                className={`w-full rounded px-2 py-2 ${
+                className={`w-full rounded px-1.5 py-1.5 ${
                   tab === 'watchlist' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-700'
                 }`}
               >
@@ -575,7 +633,7 @@ export default function SideRail({
               <button
                 type="button"
                 onClick={() => setTab('positions')}
-                className={`w-full rounded px-2 py-2 ${
+                className={`w-full rounded px-1.5 py-1.5 ${
                   tab === 'positions' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-700'
                 }`}
               >
@@ -583,11 +641,11 @@ export default function SideRail({
               </button>
             </div>
           ) : (
-            <div className="p-4">
-              <div className="mb-3">
+            <div className="p-3">
+              <div className="mb-2">
                 {message ? (
                   <div
-                    className={`rounded-md border px-3 py-2 text-xs ${
+                    className={`rounded-md border px-2.5 py-1.5 text-xs ${
                       message.kind === 'success'
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                         : 'border-rose-200 bg-rose-50 text-rose-700'
@@ -598,11 +656,11 @@ export default function SideRail({
                 ) : null}
               </div>
 
-            <div className="mb-4 flex rounded-xl bg-slate-100 p-1">
+            <div className="mb-3 flex rounded-lg bg-slate-100 p-0.5">
                 <button
                   type="button"
                   onClick={() => setTab('watchlist')}
-                  className={`flex-1 rounded px-3 py-2 text-sm ${
+                  className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
                     tab === 'watchlist' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -611,7 +669,7 @@ export default function SideRail({
                 <button
                   type="button"
                   onClick={() => setTab('positions')}
-                  className={`flex-1 rounded px-3 py-2 text-sm ${
+                  className={`flex-1 rounded-md px-2 py-1 text-xs font-medium ${
                     tab === 'positions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
@@ -619,42 +677,33 @@ export default function SideRail({
                 </button>
               </div>
 
-              <div className="mb-3">
+              <div className="mb-2">
                 {tab === 'watchlist' ? (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center justify-end">
                     <Button
                       onClick={openCreateWatchlistModal}
+                      aria-label="監視銘柄を追加"
+                      title="監視銘柄を追加"
+                      className="px-2 py-1 text-xs"
                     >
-                      監視銘柄を追加
+                      + 監視
                     </Button>
-                    <TextLink
-                      href="/watchlist"
-                      className="text-xs text-slate-500 no-underline hover:underline"
-                    >
-                      詳細管理
-                    </TextLink>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center justify-end">
                     <Button
                       onClick={openCreatePositionModal}
+                      aria-label="保有銘柄を追加"
+                      title="保有銘柄を追加"
+                      className="px-2 py-1 text-xs"
                     >
-                      保有銘柄を追加
+                      + 保有
                     </Button>
-                    <TextLink
-                      href="/positions"
-                      className="text-xs text-slate-500 no-underline hover:underline"
-                    >
-                      詳細管理
-                    </TextLink>
                   </div>
                 )}
-                <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
-                  詳細管理は移行期の補助画面です。通常の追加・編集・削除はこの SideRail で行います。
-                </p>
               </div>
 
-              <div className="space-y-2">{renderContent()}</div>
+              <div>{renderContent()}</div>
             </div>
           )}
         </div>
