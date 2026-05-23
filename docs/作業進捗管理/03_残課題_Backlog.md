@@ -21,6 +21,7 @@
 - UI/UX production readiness phase 2 では ApplicationDetail / BacktestDetail / StrategyDetail / StrategyVersionDetail / BacktestComparisonDetail の検証・履歴系画面を改善済みである。
 - UI/UX production readiness phase 3 では、Phase 1 / Phase 2 の実装で実際に重複した surface 表現だけを `Surface` component として最小整理済みである。
 - UI/UX production readiness acceptance smoke では、Phase 1 / 2 / 3 後の主要画面を browser smoke 観点で確認済みである。リリースを止める大きな UI 退行は確認されていない。
+- SideRail compact density improvement では、監視 / 保有一覧を軽い compact list に寄せ、表示見出し、詳細管理リンク、補助説明を削り、折りたたみ / 編集 / 削除を icon button 化する範囲まで完了扱いにする。API / backend / AppLayout collapsed grid 挙動は変更しない。
 - DataList / SimpleTable / DataTable の導入可否を、実際に重複が増えた場所から判断する。
 - BacktestDetail 全面 redesign は急がず、高頻度 section の小改善に留める。
 - responsive UX の余白、情報密度、導線優先度を画面単位で整理する。

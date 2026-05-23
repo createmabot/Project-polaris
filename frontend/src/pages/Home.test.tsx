@@ -207,6 +207,12 @@ describe('Home', () => {
     expect(html).toContain('トヨタ自動車');
     expect(html).toContain('href="/symbols/sym_6758"');
     expect(html).toContain('ソニーグループ');
+    expect(html).toContain('aria-label="サイドレールを折りたたむ"');
+    expect(html).toContain('aria-label="監視銘柄を追加"');
+    expect(html).toContain('aria-label="監視銘柄を編集"');
+    expect(html).toContain('aria-label="監視銘柄を削除"');
+    expect(html).toContain('+ 監視');
+    expect(html).not.toContain('詳細管理');
     expect(html).not.toContain('Sony Group');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
