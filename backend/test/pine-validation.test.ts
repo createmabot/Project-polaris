@@ -27,4 +27,28 @@ describe('assessGeneratedPineScript', () => {
     expect(assessed.warnings).toContain('生成結果の先頭に含まれていた説明文を削除しました。');
     expect(assessed.invalidReasonCodes).toContain('markdown_code_fence_pollution');
   });
+
+  it('normalizes unsupported color.color namespace', () => {
+    const assessed = assessGeneratedPineScript(
+      '//@version=6\nstrategy("ok", overlay=true)\nplot(close, color=color.color.green)',
+    );
+
+    expect(assessed.failureReason).toBeNull();
+    expect(assessed.normalizedScript).toContain('color=color.green');
+    expect(assessed.normalizedScript).not.toContain('color.color.');
+    expect(assessed.warnings).toContain('Pine Script の unsupported color.color.* namespace を color.* に補正しました。');
+    expect(assessed.invalidReasonCodes).toContain('unsupported_color_namespace');
+  });
+
+  it('normalizes unsupported plot.style_dashed style', () => {
+    const assessed = assessGeneratedPineScript(
+      '//@version=6\nstrategy("ok", overlay=true)\nplot(close, style=plot.style_dashed)',
+    );
+
+    expect(assessed.failureReason).toBeNull();
+    expect(assessed.normalizedScript).toContain('style=plot.style_linebr');
+    expect(assessed.normalizedScript).not.toContain('plot.style_dashed');
+    expect(assessed.warnings).toContain('Pine Script の unsupported plot.style_dashed を plot.style_linebr に補正しました。');
+    expect(assessed.invalidReasonCodes).toContain('unsupported_plot_style');
+  });
 });

@@ -265,6 +265,18 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('RSI crosses back above 30 means ta.crossover(rsi, 30)');
     expect(body.messages[0].content).toContain('With overlay=true, do not plot RSI');
     expect(body.messages[0].content).toContain('plot oscillators only when explicitly requested');
+    expect(body.messages[0].content).toContain('Do not use color.color.*');
+    expect(body.messages[0].content).toContain('Do not use plot.style_dashed');
+    expect(body.messages[0].content).toContain('use state variables such as var bool setupActive');
+    expect(body.messages[0].content).toContain('Do not directly require setupCondition and triggerCondition on the same bar');
+    expect(body.messages[0].content).toContain('entryCondition = setupActive and triggerCondition');
+    expect(body.messages[0].content).toContain('below, or less than');
+    expect(body.messages[0].content).toContain('Use ta.crossunder only when the wording explicitly says');
+    expect(body.messages[0].content).toContain('capture it on the position-open transition');
+    expect(body.messages[0].content).toContain('Avoid representative ATR patterns that capture state with if strategy.position_size > 0 and na(entryAtr)');
+    expect(body.messages[0].content).toContain('Do not declare unused variables');
+    expect(body.messages[0].content).toContain('generated_script comments should be short section comments only');
+    expect(body.messages[0].content).toContain('If plotting a stop line, guard it with position and na checks');
     expect(body.messages[0].content).toContain('prefer strategy.exit(..., stop=...)');
     expect(body.messages[0].content).toContain('Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...)');
     expect(body.messages[0].content).toContain('Use strategy.close() for rule-based exits');
@@ -443,6 +455,93 @@ if exitCondition and strategy.position_size > 0
     expect(script).not.toContain('plot(rsi');
     expect(script).not.toContain('hline(');
     expect(script).not.toContain('ta.crossunder(rsiValue, 60)');
+  });
+
+  it('returns setup-trigger Pine with below condition, ATR transition capture, and safe stop plot', async () => {
+    const representativeScript = `//@version=6
+strategy("VWAP Setup Pullback Strategy", overlay=true)
+
+vwapValue = ta.vwap(hlc3)
+ma50 = ta.sma(close, 50)
+atr14 = ta.atr(14)
+var bool setupActive = false
+var float entryAtr = na
+atrMult = 2.0
+
+setupCondition = close < ma50
+triggerCondition = ta.crossover(close, vwapValue)
+
+if strategy.position_size == 0 and setupCondition
+    setupActive := true
+
+entryCondition = setupActive and triggerCondition
+
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    setupActive := false
+
+if strategy.position_size > 0 and strategy.position_size[1] == 0
+    entryAtr := atr14
+
+if strategy.position_size > 0 and not na(entryAtr)
+    stopLossPrice = strategy.position_avg_price - entryAtr * atrMult
+    strategy.exit("ATR Stop", "Long", stop=stopLossPrice)
+
+if strategy.position_size == 0 and strategy.position_size[1] > 0
+    entryAtr := na
+
+plot(ma50, color=color.green)
+plot(strategy.position_size > 0 and not na(entryAtr) ? strategy.position_avg_price - entryAtr * atrMult : na, "ATR Stop", color=color.red, style=plot.style_linebr)`;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: representativeScript,
+            warnings: ['セットアップ状態は無効化条件まで保持します。'],
+            assumptions: ['終値がMA50を下回った状態をセットアップとして扱います。'],
+            normalized_rule_json: { strategy_type: 'long_only', indicators: ['VWAP', 'MA50', 'ATR14'] },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript({
+      ...createPineContext(),
+      naturalLanguageSpec:
+        '終値がMA50を下回った後、VWAPを上抜けたら買い。ATRの2倍で損切りし、損切り線も表示する。',
+      normalizedRuleJson: null,
+    });
+
+    expect(result.status).toBe('generated');
+    const script = result.generatedScript ?? '';
+    const assessed = assessGeneratedPineScript(script);
+    expect(assessed.failureReason).toBeNull();
+    expect(script).toContain('var bool setupActive = false');
+    expect(script).toContain('setupActive := true');
+    expect(script).toContain('entryCondition = setupActive and triggerCondition');
+    expect(script).toContain('setupCondition = close < ma50');
+    expect(script).not.toContain('setupCondition and triggerCondition');
+    expect(script).not.toContain('ta.crossunder(close, ma50)');
+    expect(script).toContain('if strategy.position_size > 0 and strategy.position_size[1] == 0');
+    expect(script).toContain('entryAtr := atr14');
+    expect(script).not.toContain('if strategy.position_size > 0 and na(entryAtr)');
+    expect(script).toContain('color=color.green');
+    expect(script).not.toContain('color.color.');
+    expect(script).not.toContain('plot.style_dashed');
+    expect(script).toContain('style=plot.style_linebr');
+    expect(script).toContain('plot(strategy.position_size > 0 and not na(entryAtr) ?');
+    expect(script).not.toContain('Note:');
+    expect(script).not.toContain('注意:');
+    expect(script).not.toContain('Since');
+    expect(script).not.toContain("Let's use");
+    expect(script).not.toContain('より正確な実装');
+    expect(script).not.toContain('Pine Scriptの仕様上');
   });
 
   it('does not silently fall back to deterministic Pine when LLM JSON is malformed', async () => {
