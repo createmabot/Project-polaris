@@ -1228,6 +1228,10 @@ LLM に要求する安全な strategy coding rule:
 - ATR stop は `strategy.exit(..., stop=...)` による stop order を優先する。`low <= stopLossPrice` の bar 判定と `strategy.close()` の組み合わせは、ユーザーが manual bar-based stop を明示した場合以外は避ける。
 - `strategy.close()` は stop loss order の代替ではなく、MA cross、time exit、invalidation condition など rule-based exit に使う。
 - entry block 内で `strategy.position_avg_price` を使って stop / limit を計算しない。`strategy.position_avg_price` は entry 約定後に有効になる値であり、entry 同時の stop 計算に使うと意図しない `na` / stale value になり得る。
+- percentage stop は position open 中に `strategy.position_avg_price` を基準に計算する。`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で entry price を代替しない。
+- percentage stop のみを要求された戦略では、ATR が明示されていない限り `entryAtr` や `ta.atr` などの ATR state / indicator を導入しない。
+- RSI / oscillator 戦略では threshold direction を維持する。例: 「RSI が 60 を上回る」は `rsi > 60` または wording に応じた crossover であり、明示がない限り crossunder にしない。
+- `overlay=true` の価格 chart strategy では、oscillator plot は既定では出さない。oscillator plot はユーザーが明示した場合、または separate pane を意図する場合だけ検討する。
 - volume condition は signal 判定には使ってよいが、volume plot は既定では出さない。価格 chart 上の overlay strategy で volume plot を追加すると視認性を悪化させるため、ユーザーが明示した場合だけ検討する。
 - `plot` は strategy 理解に必要な最小補助線に限定する。過剰な debug plot / label / table は初回生成では避ける。
 - unsupported risk control、複数ポジション、pyramiding、trailing stop、time stop、volume plot などを完全に表現できない場合は、warnings / assumptions に日本語で限界を明記する。
@@ -1239,6 +1243,8 @@ LLM に要求する安全な strategy coding rule:
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
 - Pine generation / regeneration は Strategy 保存、backtest、AI summary を自動起動しない。
 - real `local_llm` 実体依存の確認は manual smoke に限定し、required check には入れない。required check は fake provider output、deterministic baseline / fallback、validation / repair classification を対象にする。
+- percentage stop / oscillator strategy の prompt tuning も同じ境界で扱う。real local_llm 品質は manual smoke で確認し、required check は fake / deterministic tests を使う。
+- TradingView compile automation、TradingView への自動保存、backtest / AI summary への自動連鎖は未実装のまま維持する。
 
 ## 20. 後続候補
 

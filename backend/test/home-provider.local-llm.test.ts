@@ -1,4 +1,5 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { assessGeneratedPineScript } from '../src/strategy/pine';
 
 function createBacktestContext() {
   return {
@@ -252,6 +253,18 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('Do not use close as a substitute for the actual entry price');
     expect(body.messages[0].content).toContain('Do not create entry_price := close or entryPrice := close');
     expect(body.messages[0].content).toContain('use strategy.position_avg_price after the position is open');
+    expect(body.messages[0].content).toContain('For fixed percentage stop loss');
+    expect(body.messages[0].content).toContain('Do not create entryPrice or entry_price from strategy.position_avg_price inside the entry block');
+    expect(body.messages[0].content).toContain('Fixed percentage stops do not need entry-time state variables');
+    expect(body.messages[0].content).toContain('Only create ATR variables, entryAtr, atrValue, or other ATR state');
+    expect(body.messages[0].content).toContain('If the user does not ask for ATR, do not create entryAtr, atrValue, ta.atr, or ATR state');
+    expect(body.messages[0].content).toContain('Do not reuse an ATR stop template for a percentage stop');
+    expect(body.messages[0].content).toContain('Preserve oscillator threshold direction exactly');
+    expect(body.messages[0].content).toContain('RSI above 60 means rsi > 60');
+    expect(body.messages[0].content).toContain('Do not use ta.crossunder(rsi, 60)');
+    expect(body.messages[0].content).toContain('RSI crosses back above 30 means ta.crossover(rsi, 30)');
+    expect(body.messages[0].content).toContain('With overlay=true, do not plot RSI');
+    expect(body.messages[0].content).toContain('plot oscillators only when explicitly requested');
     expect(body.messages[0].content).toContain('prefer strategy.exit(..., stop=...)');
     expect(body.messages[0].content).toContain('Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...)');
     expect(body.messages[0].content).toContain('Use strategy.close() for rule-based exits');
@@ -363,6 +376,73 @@ plot(ma75)`;
     expect(result.generatedScript).not.toMatch(/^\s*\/\*/m);
     expect(result.warnings).toContain('横ばい相場では取引を控える条件を簡易的に扱っています。');
     expect(result.modelName).toBe('gemma4-ns');
+  });
+
+  it('returns RSI mean reversion Pine with percentage stop without ATR leakage', async () => {
+    const representativeScript = `//@version=6
+strategy("RSI Mean Reversion Strategy", overlay=true)
+
+rsiValue = ta.rsi(close, 14)
+
+entryCondition = ta.crossover(rsiValue, 30)
+exitCondition = rsiValue > 60
+
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+if strategy.position_size > 0
+    stopLossPrice = strategy.position_avg_price * 0.95
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
+
+if exitCondition and strategy.position_size > 0
+    strategy.close("Long", comment="RSI Exit")`;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: representativeScript,
+            warnings: ['RSI単独条件のため、トレンドフィルターは含めていません。'],
+            assumptions: ['5%の固定損切りは建値平均を基準にします。'],
+            normalized_rule_json: { strategy_type: 'long_only', indicators: ['RSI14'], stop_loss_percent: 5 },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript({
+      ...createPineContext(),
+      naturalLanguageSpec:
+        'RSIが30を上抜けたら買い、RSIが60を上回ったら利確。損切りは建値から5%。',
+      normalizedRuleJson: null,
+    });
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).not.toBeNull();
+    const script = result.generatedScript ?? '';
+    const assessed = assessGeneratedPineScript(script);
+    expect(assessed.failureReason).toBeNull();
+    expect(script).toContain('strategy("RSI Mean Reversion Strategy", overlay=true)');
+    expect(script).toContain('rsiValue = ta.rsi(close, 14)');
+    expect(script).toContain('entryCondition = ta.crossover(rsiValue, 30)');
+    expect(script).toContain('exitCondition = rsiValue > 60');
+    expect(script).toContain('if entryCondition and strategy.position_size == 0');
+    expect(script).toContain('strategy.entry("Long", strategy.long)');
+    expect(script).toContain('stopLossPrice = strategy.position_avg_price * 0.95');
+    expect(script).toContain('strategy.exit("Stop Loss", "Long", stop=stopLossPrice)');
+    expect(script).toContain('strategy.close("Long", comment="RSI Exit")');
+    expect(script).not.toContain('entryPrice := strategy.position_avg_price');
+    expect(script).not.toContain('entry_price := strategy.position_avg_price');
+    expect(script).not.toContain('entryAtr');
+    expect(script).not.toContain('ta.atr');
+    expect(script).not.toContain('plot(rsi');
+    expect(script).not.toContain('hline(');
+    expect(script).not.toContain('ta.crossunder(rsiValue, 60)');
   });
 
   it('does not silently fall back to deterministic Pine when LLM JSON is malformed', async () => {
