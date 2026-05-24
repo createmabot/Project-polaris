@@ -1222,7 +1222,8 @@ LLM に要求する安全な strategy coding rule:
 
 - `strategy.entry` は entry condition と `strategy.position_size == 0` などの position guard を併用し、同一 bar / 連続 bar で意図しない多重 entry を避ける。
 - `strategy.exit` / `strategy.close` は exit condition と `strategy.position_size > 0` などの position guard を併用し、未保有時の exit 注文を避ける。
-- ATR stop / take profit など entry 時点で固定したい値は、entry signal 発生時に `var` 変数へ保存し、position close 後に明示的に reset する pattern を使う。
+- ATR stop / take profit など entry 時点で固定したい値は、entry signal 発生時に `entryAtr` などの `var` 変数へ保存する。entry-time state の reset は単純な `strategy.position_size == 0` reset ではなく、open から flat へ遷移した bar を示す `strategy.position_size == 0 and strategy.position_size[1] > 0` pattern を優先する。
+- stop price / limit price は position open 中、かつ `entryAtr` など entry-time state が利用可能な場合だけ計算する。state が `na` の間は exit price を計算しない。
 - entry block 内で `strategy.position_avg_price` を使って stop / limit を計算しない。`strategy.position_avg_price` は entry 約定後に有効になる値であり、entry 同時の stop 計算に使うと意図しない `na` / stale value になり得る。
 - volume condition は signal 判定には使ってよいが、volume plot は既定では出さない。価格 chart 上の overlay strategy で volume plot を追加すると視認性を悪化させるため、ユーザーが明示した場合だけ検討する。
 - `plot` は strategy 理解に必要な最小補助線に限定する。過剰な debug plot / label / table は初回生成では避ける。
@@ -1234,7 +1235,7 @@ LLM に要求する安全な strategy coding rule:
 - LLM output は既存 validation / bounded repair を通す。repair は最大 2 回までで、無限 retry は行わない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
 - Pine generation / regeneration は Strategy 保存、backtest、AI summary を自動起動しない。
-- real `local_llm` 実体依存の確認は manual optional とし、required check には入れない。required check は fake provider output、deterministic baseline / fallback、validation / repair classification を対象にする。
+- real `local_llm` 実体依存の確認は manual smoke に限定し、required check には入れない。required check は fake provider output、deterministic baseline / fallback、validation / repair classification を対象にする。
 
 ## 20. 後続候補
 
