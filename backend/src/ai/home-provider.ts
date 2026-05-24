@@ -976,6 +976,71 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     return content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
   }
 
+  private extractJsonObjectCandidates(content: string): string[] {
+    const sanitized = this.sanitizeJsonContent(content);
+    const candidates: string[] = [];
+    if (sanitized.startsWith('{') && sanitized.endsWith('}')) {
+      candidates.push(sanitized);
+    }
+
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < sanitized.length; index += 1) {
+      const char = sanitized[index];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (char === '\\') {
+          escaped = true;
+        } else if (char === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (char === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (char === '{') {
+        if (depth === 0) {
+          start = index;
+        }
+        depth += 1;
+        continue;
+      }
+
+      if (char === '}') {
+        if (depth === 0) {
+          continue;
+        }
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          const candidate = sanitized.slice(start, index + 1).trim();
+          if (!candidates.includes(candidate)) {
+            candidates.push(candidate);
+          }
+          start = -1;
+        }
+      }
+    }
+
+    return candidates;
+  }
+
+  private hasUsableGeneratedScript(value: unknown): boolean {
+    if (typeof value !== 'string') {
+      return false;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 && trimmed !== '<string>' && trimmed !== 'string' && !/^<[^>]+>$/.test(trimmed);
+  }
+
   private normalizeFinishReason(payload: any): string | null {
     const raw = payload?.done_reason ?? payload?.finish_reason ?? payload?.doneReason ?? null;
     if (typeof raw !== 'string') {
@@ -1707,16 +1772,32 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       );
     }
 
-    const content = messageContent;
-
     let parsed: any = null;
-    try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim());
-    } catch {
+    let parsedAnyJson = false;
+    for (const candidate of this.extractJsonObjectCandidates(messageContent)) {
+      try {
+        const candidateJson = JSON.parse(candidate);
+        parsedAnyJson = true;
+        if (this.hasUsableGeneratedScript(candidateJson?.generated_script)) {
+          parsed = candidateJson;
+          break;
+        }
+      } catch {
+        // Try the next balanced object. Local models sometimes include a prose example before the real envelope.
+      }
+    }
+    if (!parsed && !parsedAnyJson) {
       return failedProviderOutput(
         'LLM Pine生成のJSONを解析できませんでした。修復リトライを試みます。',
         'provider_invalid_response',
         ['provider_invalid_response', 'malformed_json'],
+      );
+    }
+    if (!parsed) {
+      return failedProviderOutput(
+        'LLM Pine生成結果に generated_script が含まれていませんでした。修復リトライを試みます。',
+        'provider_invalid_response',
+        ['provider_invalid_response', 'generated_script_missing'],
       );
     }
 

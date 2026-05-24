@@ -147,9 +147,26 @@ function buildCsvImportErrorMessage(error: unknown): string {
   return error.message || 'CSV取込に失敗しました。';
 }
 
-function buildRuleSubmitErrorMessage(error: unknown): string {
+function readSafeRuleGenerationErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const message = error.message.trim();
+  if (!message || message.length > 240) {
+    return null;
+  }
+  if (!/(Pine生成|ルール生成)/.test(message)) {
+    return null;
+  }
+  if (/(raw|endpoint|model|stack|token|secret|http:\/\/|https:\/\/|provider response|reviewer response)/i.test(message)) {
+    return null;
+  }
+  return message;
+}
+
+export function buildRuleSubmitErrorMessage(error: unknown): string {
   if (!(error instanceof ApiError)) {
-    return 'ルール生成に失敗しました。入力内容を確認して再試行してください。';
+    return readSafeRuleGenerationErrorMessage(error) ?? 'ルール生成に失敗しました。入力内容を確認して再試行してください。';
   }
   if (error.status === 413) {
     return '入力サイズが上限を超えています。ルール文を短くして再試行してください。';

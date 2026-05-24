@@ -50,7 +50,7 @@ vi.mock('../api/client', async () => {
 
 import StrategyLab from './StrategyLab';
 import { ApiError, fetchApi, postApi } from '../api/client';
-import { buildProposalErrorMessage, buildProposalHistoryPath } from './StrategyLab';
+import { buildProposalErrorMessage, buildProposalHistoryPath, buildRuleSubmitErrorMessage } from './StrategyLab';
 
 const DEFAULT_RULE =
   '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。';
@@ -219,6 +219,26 @@ describe('StrategyLab', () => {
     expect(message).toContain('provider status: invalid_response / reason: required_field_missing / latency: slow');
     expect(message).not.toContain('provider failed with raw diagnostics');
     expect(message).not.toContain('suggested_pine_constraints');
+  });
+
+  it('keeps sanitized Pine job failure messages instead of replacing them with input guidance', () => {
+    const message = buildRuleSubmitErrorMessage(
+      new Error('Pine生成に失敗しました。条件を見直して再試行してください。'),
+    );
+
+    expect(message).toBe('Pine生成に失敗しました。条件を見直して再試行してください。');
+    expect(message).not.toContain('入力内容を確認');
+  });
+
+  it('does not expose unsafe non-API rule generation error details', () => {
+    const message = buildRuleSubmitErrorMessage(
+      new Error('Pine生成に失敗しました endpoint=http://secret.local model=secret-model raw provider response'),
+    );
+
+    expect(message).toBe('ルール生成に失敗しました。入力内容を確認して再試行してください。');
+    expect(message).not.toContain('endpoint');
+    expect(message).not.toContain('secret-model');
+    expect(message).not.toContain('raw provider response');
   });
 
 
