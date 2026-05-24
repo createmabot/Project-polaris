@@ -38,6 +38,7 @@ type PineScriptRow = {
 type Runtime = {
   pineSeq: number;
   revisionSeq: number;
+  jobSeq: number;
   versions: Map<string, StrategyRuleVersionRow>;
   pineScripts: Map<string, PineScriptRow>;
   pineRevisionInputs: Map<string, {
@@ -48,6 +49,20 @@ type Runtime = {
     compileErrorText: string | null;
     validationNote: string | null;
     revisionRequest: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }>;
+  pineGenerationJobs: Map<string, {
+    id: string;
+    strategyRuleVersionId: string | null;
+    requestKind: string;
+    status: string;
+    currentStage: string;
+    stageHistoryJson: unknown;
+    resultPineScriptId: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+    completedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
   }>;
@@ -62,6 +77,7 @@ function createRuntime(): Runtime {
   return {
     pineSeq: 1,
     revisionSeq: 1,
+    jobSeq: 1,
     versions: new Map([
       [
         'ver-1',
@@ -86,12 +102,15 @@ function createRuntime(): Runtime {
     ]),
     pineScripts: new Map(),
     pineRevisionInputs: new Map(),
+    pineGenerationJobs: new Map(),
   };
 }
 
 vi.mock('../src/ai/home-ai-service', () => {
   class HomeAiService {
-    async generatePineScript(context: unknown) {
+    async generatePineScript(context: unknown, options?: { onProgress?: (update: any) => void | Promise<void> }) {
+      await options?.onProgress?.({ stage: 'LLMでPine生成', progressPercent: 35 });
+      await options?.onProgress?.({ stage: '生成結果レビュー', progressPercent: 65 });
       return generatePineScriptMock(context);
     }
   }
@@ -204,10 +223,62 @@ vi.mock('../src/db', () => {
         return rows[0] ?? null;
       },
     },
+    pineGenerationJob: {
+      create: async ({ data }: any) => {
+        const id = `pine-job-${runtime.jobSeq++}`;
+        const now = new Date();
+        const row = {
+          id,
+          strategyRuleVersionId: data.strategyRuleVersionId,
+          requestKind: data.requestKind ?? 'generate',
+          status: data.status ?? 'queued',
+          currentStage: data.currentStage ?? '生成リクエスト送信',
+          stageHistoryJson: data.stageHistoryJson ?? [],
+          resultPineScriptId: data.resultPineScriptId ?? null,
+          errorCode: data.errorCode ?? null,
+          errorMessage: data.errorMessage ?? null,
+          completedAt: data.completedAt ?? null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.pineGenerationJobs.set(id, row);
+        return row;
+      },
+      findUnique: async ({ where }: any) => runtime.pineGenerationJobs.get(where.id) ?? null,
+      update: async ({ where, data }: any) => {
+        const row = runtime.pineGenerationJobs.get(where.id);
+        if (!row) throw new Error('pine_generation_job_not_found');
+        const next = {
+          ...row,
+          ...data,
+          updatedAt: new Date(),
+        };
+        runtime.pineGenerationJobs.set(where.id, next);
+        return next;
+      },
+      findFirst: async ({ where }: any) => {
+        let rows = Array.from(runtime.pineGenerationJobs.values());
+        if (where?.id) {
+          rows = rows.filter((row) => row.id === where.id);
+        }
+        if (where?.strategyRuleVersionId) {
+          rows = rows.filter((row) => row.strategyRuleVersionId === where.strategyRuleVersionId);
+        }
+        rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+        return rows[0] ?? null;
+      },
+    },
   };
 
   return { prisma };
 });
+
+async function flushAsyncJob() {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setImmediate(resolve));
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 async function createApp() {
   const app = Fastify({ logger: false });
@@ -322,6 +393,146 @@ describe('strategy version pine endpoints', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.json().data.status).toBe('available');
     expect(typeof fetched.json().data.generated_script).toBe('string');
+
+    await app.close();
+  });
+
+  it('starts an async pine generation job and exposes sanitized progress status', async () => {
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: '//@version=6\nstrategy("job-ok", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+
+    const started = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generation-jobs',
+      payload: {},
+    });
+    expect(started.statusCode).toBe(202);
+    expect(started.json().data.job.status).toBe('queued');
+    expect(started.json().data.job.current_stage).toBe('生成リクエスト送信');
+    expect(started.json().data.job.progress_percent).toBe(5);
+
+    const jobId = started.json().data.job.id;
+    await flushAsyncJob();
+
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/ver-1/pine/generation-jobs/${jobId}`,
+    });
+    expect(status.statusCode).toBe(200);
+    const job = status.json().data.job;
+    expect(job.status).toBe('succeeded');
+    expect(job.current_stage).toBe('最終確認');
+    expect(job.progress_percent).toBe(100);
+    expect(job.result.pine_script_id).toBeTruthy();
+    expect(job.result.generated_script).toBeUndefined();
+    expect(job.stage_history.map((event: { stage: string }) => event.stage)).toEqual(
+      expect.arrayContaining(['生成リクエスト送信', 'LLMでPine生成', '生成結果レビュー', '最終確認']),
+    );
+    expect(JSON.stringify(job)).not.toContain('raw prompt');
+    expect(JSON.stringify(job)).not.toContain('endpoint');
+    expect(JSON.stringify(job)).not.toContain('local-model');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(1);
+
+    await app.close();
+  });
+
+  it('starts an async pine regeneration job and stores revision lineage without exposing raw revision text in job status', async () => {
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: '//@version=6\nstrategy("job-regenerated", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+    const initial = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    const sourcePineScriptId = initial.json().data.pine.pine_script_id;
+    generatePineScriptMock.mockClear();
+
+    const started = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/regeneration-jobs',
+      payload: {
+        source_pine_script_id: sourcePineScriptId,
+        compile_error_text: 'Undeclared identifier "sma" at local/path.ts',
+        validation_note: 'entry was late',
+        revision_request: 'Use ta.sma instead.',
+      },
+    });
+    expect(started.statusCode).toBe(202);
+    expect(started.json().data.job.request_kind).toBe('regenerate');
+    const jobId = started.json().data.job.id;
+
+    await flushAsyncJob();
+
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/ver-1/pine/generation-jobs/${jobId}`,
+    });
+    expect(status.statusCode).toBe(200);
+    const jobText = JSON.stringify(status.json().data.job);
+    expect(status.json().data.job.status).toBe('succeeded');
+    expect(status.json().data.job.result.pine_script_id).toBeTruthy();
+    expect(jobText).not.toContain('local/path.ts');
+    expect(jobText).not.toContain('Use ta.sma instead.');
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(1);
+
+    await app.close();
+  });
+
+  it('marks async pine generation job failed with sanitized provider errors', async () => {
+    generatePineScriptMock.mockRejectedValue(new Error('provider timeout at http://secret.local with model=sensitive'));
+    const app = await createApp();
+
+    const started = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generation-jobs',
+      payload: {},
+    });
+    expect(started.statusCode).toBe(202);
+    const jobId = started.json().data.job.id;
+
+    await flushAsyncJob();
+
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/ver-1/pine/generation-jobs/${jobId}`,
+    });
+    expect(status.statusCode).toBe(200);
+    const job = status.json().data.job;
+    expect(job.status).toBe('failed');
+    expect(job.error_code).toBe('PINE_GENERATION_FAILED');
+    expect(job.error_message).toBe('Pine生成に失敗しました。条件を見直して再試行してください。');
+    expect(JSON.stringify(job)).not.toContain('http://secret.local');
+    expect(JSON.stringify(job)).not.toContain('sensitive');
 
     await app.close();
   });

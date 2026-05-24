@@ -41,6 +41,20 @@ type PineRepairValidation = {
 
 type PineReview = (script: string) => PineReviewResult | Promise<PineReviewResult>;
 
+export type PineGenerationProgressStage =
+  | '生成リクエスト送信'
+  | 'LLMでPine生成'
+  | '生成結果レビュー'
+  | '必要に応じて修正'
+  | '最終確認';
+
+export type PineGenerationProgressUpdate = {
+  stage: PineGenerationProgressStage;
+  progressPercent: number;
+};
+
+type PineGenerationProgressHandler = (update: PineGenerationProgressUpdate) => void | Promise<void>;
+
 export class HomeAiService {
   constructor(
     private readonly provider: HomeAiProvider = createHomeAiProvider(),
@@ -275,6 +289,7 @@ export class HomeAiService {
       maxRepairAttempts?: number;
       validateOutput?: (script: string | null) => PineRepairValidation;
       reviewOutput?: PineReview;
+      onProgress?: PineGenerationProgressHandler;
     },
   ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
     const maxRepairAttempts = Math.max(0, Math.min(options?.maxRepairAttempts ?? env.MAX_LOCAL_RETRY_COUNT, 2));
@@ -289,7 +304,10 @@ export class HomeAiService {
     let lastFailureReason: string | null = null;
     let lastInvalidReasonCodes: string[] = [];
 
+    await this.emitPineProgress(options?.onProgress, '生成リクエスト送信', 5);
+
     while (attempt <= maxRepairAttempts) {
+      await this.emitPineProgress(options?.onProgress, 'LLMでPine生成', Math.min(25 + attempt * 15, 55));
       const run = await this.generatePineScriptSingleAttempt(currentContext, attemptedModel, startedAt);
       lastRun = run;
 
@@ -328,6 +346,7 @@ export class HomeAiService {
 
       const normalizedGeneratedScript = assessed.normalizedScript;
       if (!assessed.failureReason && normalizedGeneratedScript) {
+        await this.emitPineProgress(options?.onProgress, '生成結果レビュー', Math.min(55 + attempt * 10, 75));
         const review = reviewOutput
           ? await reviewOutput(normalizedGeneratedScript)
           : await this.reviewPineScriptWithProvider(context, normalizedGeneratedScript, attempt);
@@ -365,6 +384,7 @@ export class HomeAiService {
           }
 
           attempt += 1;
+          await this.emitPineProgress(options?.onProgress, '必要に応じて修正', Math.min(70 + attempt * 5, 85));
           currentContext = {
             ...context,
             repairRequest: {
@@ -423,6 +443,7 @@ export class HomeAiService {
       }
 
       attempt += 1;
+      await this.emitPineProgress(options?.onProgress, '必要に応じて修正', Math.min(65 + attempt * 8, 85));
       currentContext = {
         ...context,
         repairRequest: {
@@ -465,6 +486,22 @@ export class HomeAiService {
       return env.FALLBACK_API_MODEL;
     }
     return 'mock-v1';
+  }
+
+  private async emitPineProgress(
+    onProgress: PineGenerationProgressHandler | undefined,
+    stage: PineGenerationProgressStage,
+    progressPercent: number,
+  ) {
+    if (!onProgress) return;
+    try {
+      await onProgress({
+        stage,
+        progressPercent: Math.max(0, Math.min(100, Math.round(progressPercent))),
+      });
+    } catch {
+      // Progress reporting must not fail generation.
+    }
   }
 
   private shouldFallbackToStub(): boolean {

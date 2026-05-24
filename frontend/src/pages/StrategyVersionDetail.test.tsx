@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+const mockFetchApi = vi.fn();
 const mockPostApi = vi.fn();
 const mockPatchApi = vi.fn();
 const mockUseLocation = vi.fn();
@@ -20,6 +21,7 @@ vi.mock('../api/client', async () => {
   const actual = await vi.importActual('../api/client');
   return {
     ...actual,
+    fetchApi: (...args: unknown[]) => mockFetchApi(...args),
     postApi: (...args: unknown[]) => mockPostApi(...args),
     patchApi: (...args: unknown[]) => mockPatchApi(...args),
   };
@@ -1187,10 +1189,14 @@ describe('StrategyVersionDetail', () => {
   });
 
   it('renders Pine generation progress indicator labels', () => {
-    const html = renderToStaticMarkup(<PineGenerationProgress />);
+    const html = renderToStaticMarkup(<PineGenerationProgress currentStage='reviewing' stageHistory={[
+      { stage: 'queued', status: 'completed', occurred_at: '2026-05-25T00:00:00.000Z' },
+      { stage: 'generating', status: 'completed', occurred_at: '2026-05-25T00:00:01.000Z' },
+      { stage: 'reviewing', status: 'running', occurred_at: '2026-05-25T00:00:02.000Z' },
+    ]} />);
     expect(html).toContain('data-testid="pine-generation-progress"');
     expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('生成リクエスト送信');
+    expect(html).toContain('受付');
     expect(html).toContain('LLMでPine生成');
     expect(html).toContain('生成結果レビュー');
     expect(html).toContain('必要に応じて修正');

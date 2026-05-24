@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useLocation } from 'wouter';
-import { patchApi, postApi, swrFetcher } from '../api/client';
+import { fetchApi, patchApi, postApi, swrFetcher } from '../api/client';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
@@ -22,7 +22,7 @@ import {
   InternalBacktestExecutionStatusData,
   StrategyVersionData,
   StrategyVersionPineData,
-  StrategyVersionPineGenerateData,
+  StrategyVersionPineJobData,
   StrategyVersionListData,
 } from '../api/types';
 import {
@@ -388,6 +388,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     repairAttempts: number | null;
     invalidReasonCodes: string[];
   } | null>(null);
+  const [pineGenerationJob, setPineGenerationJob] = useState<StrategyVersionPineJobData['job'] | null>(null);
   const [pineCopyFeedback, setPineCopyFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const [cloning, setCloning] = useState(false);
@@ -773,24 +774,33 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const firstChangedSummaryItem = compareSummaryItems.find((item) => item.changed) ?? null;
 
+  const pollPineGenerationJob = async (jobId: string) => {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 1200));
+      const data = await fetchApi<StrategyVersionPineJobData>(
+        `/api/strategy-versions/${versionId}/pine/generation-jobs/${jobId}`
+      );
+      setPineGenerationJob(data.job);
+      if (data.job.status === 'succeeded' || data.job.status === 'failed') {
+        return data.job;
+      }
+    }
+    throw new Error('Pine生成の完了確認がタイムアウトしました。時間をおいて再読み込みしてください。');
+  };
+
   const onGeneratePine = async () => {
     setRegenerating(true);
     setRegenerateError(null);
     setPineRunMeta(null);
+    setPineGenerationJob(null);
     try {
-      const response = await postApi<StrategyVersionPineGenerateData>(`/api/strategy-versions/${versionId}/pine/generate`, {});
-      setPineRunMeta({
-        failureReason: response.pine.failure_reason ?? null,
-        repairAttempts: typeof response.pine.repair_attempts === 'number' ? response.pine.repair_attempts : null,
-        invalidReasonCodes: Array.isArray(response.pine.invalid_reason_codes) ? response.pine.invalid_reason_codes : [],
-      });
-      await mutate(
-        {
-          strategy_version: response.strategy_version,
-          compare_base: data?.compare_base ?? null,
-        },
-        false,
-      );
+      const response = await postApi<StrategyVersionPineJobData>(`/api/strategy-versions/${versionId}/pine/generation-jobs`, {});
+      setPineGenerationJob(response.job);
+      const completedJob = await pollPineGenerationJob(response.job.id);
+      if (completedJob.status !== 'succeeded') {
+        throw new Error(completedJob.error?.message ?? 'Pine の再生成に失敗しました。');
+      }
+      await mutate();
       await mutatePine();
       setSaveRuleMessage(null);
       setRevisionRequest('');
@@ -798,6 +808,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setRegenerateError(requestError?.message ?? 'Pine の再生成に失敗しました。');
     } finally {
       setRegenerating(false);
+      setPineGenerationJob(null);
     }
   };
 
@@ -805,6 +816,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     setRegenerating(true);
     setRegenerateError(null);
     setPineRunMeta(null);
+    setPineGenerationJob(null);
     try {
       const sourcePineScriptId = pineData?.pine_script_id;
       if (!sourcePineScriptId) {
@@ -815,8 +827,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         throw new Error('revision_request は必須です。');
       }
 
-      const response = await postApi<StrategyVersionPineGenerateData>(
-        `/api/strategy-versions/${versionId}/pine/regenerate`,
+      const response = await postApi<StrategyVersionPineJobData>(
+        `/api/strategy-versions/${versionId}/pine/regeneration-jobs`,
         {
           source_pine_script_id: sourcePineScriptId,
           compile_error_text: compileErrorText.trim() || undefined,
@@ -824,24 +836,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           revision_request: revisionRequestValue,
         },
       );
-      setPineRunMeta({
-        failureReason: response.pine.failure_reason ?? null,
-        repairAttempts: typeof response.pine.repair_attempts === 'number' ? response.pine.repair_attempts : null,
-        invalidReasonCodes: Array.isArray(response.pine.invalid_reason_codes) ? response.pine.invalid_reason_codes : [],
-      });
-      await mutate(
-        {
-          strategy_version: response.strategy_version,
-          compare_base: data?.compare_base ?? null,
-        },
-        false,
-      );
+      setPineGenerationJob(response.job);
+      const completedJob = await pollPineGenerationJob(response.job.id);
+      if (completedJob.status !== 'succeeded') {
+        throw new Error(completedJob.error?.message ?? 'Pine の修正再生成に失敗しました。');
+      }
+      await mutate();
       await mutatePine();
       setSaveRuleMessage(null);
     } catch (requestError: any) {
       setRegenerateError(requestError?.message ?? 'Pine の修正再生成に失敗しました。');
     } finally {
       setRegenerating(false);
+      setPineGenerationJob(null);
     }
   };
 
@@ -1139,7 +1146,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           Pine生成対象は JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
         </div>
         {regenerating && (
-          <PineGenerationProgress className='mt-3' />
+          <PineGenerationProgress
+            currentStage={pineGenerationJob?.current_stage ?? 'queued'}
+            status={pineGenerationJob?.status ?? 'running'}
+            stageHistory={pineGenerationJob?.stage_history ?? []}
+            className='mt-3'
+          />
         )}
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
