@@ -373,7 +373,7 @@ describe('strategy version pine endpoints', () => {
     generatePineScriptMock.mockResolvedValue({
       output: {
         normalizedRuleJson: { strategy_type: 'long_only' },
-        generatedScript: 'Here is your Pine script:\n//@version=6\nstrategy("ok", overlay=true)',
+        generatedScript: 'Here is your Pine script:\n```pine\n//@version=6\nstrategy("ok", overlay=true)\n```',
         warnings: [
           'リスク管理用の損切り価格はエントリー時点で固定し、トレーリングしません。',
         ],
@@ -411,7 +411,11 @@ describe('strategy version pine endpoints', () => {
     expect(generatedBody.strategy_version.assumptions).toContain(
       'Chandelier Exit の「過去の最高値」は、同じ20期間における高値の最大値として解釈します。',
     );
+    expect(generatedBody.pine.warnings).toContain('生成結果に含まれていた Markdown code fence を削除しました。');
+    expect(generatedBody.pine.warnings).toContain('生成結果の先頭に含まれていた説明文を削除しました。');
     expect(generatedBody.pine.generated_script).toContain('strategy("ok", overlay=true)');
+    expect(generatedBody.pine.generated_script).not.toContain('```');
+    expect(generatedBody.pine.generated_script).not.toContain('Here is your Pine script');
 
     const detail = await app.inject({
       method: 'GET',
@@ -430,6 +434,9 @@ describe('strategy version pine endpoints', () => {
       url: '/api/strategy-versions/ver-1/pine',
     });
     expect(pine.statusCode).toBe(200);
+    expect(pine.json().data.generated_script).not.toContain('```');
+    expect(pine.json().data.generated_script).not.toContain('Here is your Pine script');
+    expect(pine.json().data.warnings).toContain('生成結果に含まれていた Markdown code fence を削除しました。');
     expect(pine.json().data.warnings).toContain('生成結果の先頭に含まれていた説明文を削除しました。');
     expect(JSON.stringify(pine.json().data.generation_note)).toContain('シグナル発生後');
 
@@ -635,8 +642,8 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
-  it('returns failed status when provider call throws', async () => {
-    generatePineScriptMock.mockRejectedValue(new Error('provider timeout'));
+  it('returns sanitized failed status when provider call throws', async () => {
+    generatePineScriptMock.mockRejectedValue(new Error('provider timeout at upstream-url with model=sensitive-model-value'));
     const app = await createApp();
 
     const generated = await app.inject({
@@ -646,7 +653,11 @@ describe('strategy version pine endpoints', () => {
     });
     expect(generated.statusCode).toBe(200);
     expect(generated.json().data.strategy_version.status).toBe('failed');
-    expect(generated.json().data.pine.warnings.join(' ')).toContain('provider_error');
+    expect(generated.json().data.pine.warnings).toContain('provider_error: provider_timeout');
+    expect(generated.json().data.pine.failure_reason).toBe('provider_timeout');
+    const serialized = JSON.stringify(generated.json().data);
+    expect(serialized).not.toContain('upstream-url');
+    expect(serialized).not.toContain('sensitive-model-value');
 
     await app.close();
   });

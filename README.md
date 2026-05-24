@@ -142,7 +142,7 @@ pnpm run down
 - provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
 - `local_llm` / `openai_api` 失敗時は既定で `ai_jobs=failed` を返す（必要時のみ `AI_ENABLE_STUB_FALLBACK=true`）。
 
-## 自然言語→Pine 生成（最小）
+## 自然言語→Pine 生成（LLM-first 最小）
 - API:
   - `POST /api/strategy-versions/:versionId/pine/generate`
   - `POST /api/strategy-versions/:versionId/pine/regenerate`
@@ -150,7 +150,9 @@ pnpm run down
 - 保存方針:
   - 生成物: `pine_scripts`（最新は `GET /pine` で返却）
   - 互換反映: `strategy_rule_versions.generated_pine` / `warnings_json` / `assumptions_json` / `status`
-- provider は Home/Symbol/Comparison/Backtest と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
+- Pine generation は専用の `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` で切り替える。既定は `local_llm`。
+- 現行方針は LLM-first とし、`local_llm` が Pine 生成本文を返す。deterministic generator は baseline / emergency fallback / test fixture 用に降格し、品質評価の主経路とは扱わない。`openai_api` は明示 opt-in / cost guard 設計後の後続候補として扱う。
+- LLM 生成結果は保存前に Pine validation と bounded repair を通す。repair は最大 2 回までで、無限 retry は行わない。
 - validation（最小）:
   - 空文字は failure
   - `//@version` と `strategy(...)|indicator(...)` の最小構文チェック
@@ -159,6 +161,11 @@ pnpm run down
   - invalid output を `warning / retry / failure` に分類
   - retry は最大 2 回（無限ループしない）
   - `POST /pine/generate` は `repair_attempts` と `invalid_reason_codes` を返却
+- provider / repair 境界:
+  - raw prompt / raw provider response / endpoint / model 実値 / secret / local path / stack trace は API response、UI、docs、PR に出さない
+  - real `local_llm` 実体依存の確認は manual optional とし、required check には入れない
+  - TradingView compile 自動実行は行わず、compile error / validation note は `POST /pine/regenerate` へユーザーが手動で戻す
+  - Pine 生成成功から Strategy 保存、backtest、AI summary へ自動連鎖しない
 - 入力制約（最小）:
   - `natural_language_spec` / `target_market` / `target_timeframe` 必須
   - `backtest_period_from` / `backtest_period_to` は同時指定のみ許可

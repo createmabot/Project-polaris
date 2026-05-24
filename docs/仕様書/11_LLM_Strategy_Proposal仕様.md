@@ -205,11 +205,11 @@ provider が失敗しても StrategyLab の既存 save / Pine generation / valid
 
 ### 5-2. provider boundary
 
-既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest / Pine generation で使われている。strategy proposal は `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を採用済みで、`HOME_AI_PROVIDER` とは分離する。未指定 default は `stub` とし、local_llm は明示 opt-in で使う。
+既存 `HOME_AI_PROVIDER=stub|local_llm|openai_api` は Home / Symbol / Comparison / Backtest 系で使う。Pine generation は LLM-first 移行後、`PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` に分離し、deterministic は baseline / emergency fallback / test fixture として扱う。strategy proposal は `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` を採用済みで、`HOME_AI_PROVIDER` / `PINE_GENERATION_PROVIDER` とは分離する。未指定 default は `stub` とし、local_llm は明示 opt-in で使う。
 
 初回は cost / latency / safety の観点から `stub` 相当を第一候補にする。`local_llm` / `openai_api` を使う場合は、prompt / response sanitization、timeout、fallback、error redaction、投資助言 disclaimer を先に固定する。
 
-local_llm provider design PR 1 では、strategy proposal 専用の選択設定を `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` として設計する。未指定時の default は `stub` とし、既存 deterministic stub provider の挙動を壊さない。`HOME_AI_PROVIDER` は既存 AI summary / Pine generation 系の設定として維持し、strategy proposal の provider 切替は proposal 専用設定を優先する。
+local_llm provider design PR 1 では、strategy proposal 専用の選択設定を `STRATEGY_PROPOSAL_PROVIDER=stub|local_llm` として設計する。未指定時の default は `stub` とし、既存 deterministic stub provider の挙動を壊さない。`HOME_AI_PROVIDER` は既存 AI summary 系、`PINE_GENERATION_PROVIDER` は Pine generation 系の設定として維持し、strategy proposal の provider 切替は proposal 専用設定を優先する。
 
 provider expansion の境界:
 

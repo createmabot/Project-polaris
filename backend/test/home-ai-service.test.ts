@@ -494,6 +494,58 @@ describe('HomeAiService', () => {
     expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
   });
 
+  it('repairs failed LLM Pine output without deterministic fallback', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => {
+      if (!context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript: null,
+          warnings: ['LLM Pine生成のJSONを解析できませんでした。修復リトライを試みます。'],
+          assumptions: [],
+          status: 'failed',
+          failureReason: 'provider_invalid_response',
+          invalidReasonCodes: ['provider_invalid_response', 'malformed_json'],
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript: '//@version=6\nstrategy("llm-repaired", overlay=true)',
+        warnings: [],
+        assumptions: ['修復後の Pine Script を使用します。'],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'SMA25とSMA75のクロスで売買する',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.generatedScript).toContain('llm-repaired');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.warnings).toContain('Pine生成結果の検証に失敗したため、修復リトライ1回目を実行しました。');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(0);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
+      'provider_invalid_response',
+    );
+  });
+
   it('fails when pine repair reaches retry limit', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();

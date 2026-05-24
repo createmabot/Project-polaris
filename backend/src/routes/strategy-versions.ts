@@ -2,6 +2,9 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
+import { createHomeAiProvider, createStubHomeAiProvider } from '../ai/home-provider';
+import type { HomeAiProviderType } from '../ai/home-provider';
+import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
 import { AppError, formatSuccess } from '../utils/response';
@@ -74,6 +77,41 @@ function normalizeRuleJson(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function classifyPineProviderFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/timeout|aborted|AbortError/i.test(message)) {
+    return 'provider_timeout';
+  }
+  if (/HTTP\s+429/i.test(message)) {
+    return 'provider_rate_limited';
+  }
+  if (/HTTP\s+5\d\d/i.test(message)) {
+    return 'provider_unavailable';
+  }
+  if (/HTTP\s+4\d\d/i.test(message)) {
+    return 'provider_rejected';
+  }
+  if (/invalid output|empty content|malformed|JSON|schema/i.test(message)) {
+    return 'provider_invalid_response';
+  }
+  return 'provider_error';
+}
+
+function resolvePineGenerationProviderType(): HomeAiProviderType {
+  if (env.PINE_GENERATION_PROVIDER === 'deterministic' || env.PINE_GENERATION_PROVIDER === 'stub') {
+    return 'stub';
+  }
+  return env.PINE_GENERATION_PROVIDER;
+}
+
+function createPineGenerationService(): HomeAiService {
+  return new HomeAiService(
+    createHomeAiProvider(resolvePineGenerationProviderType()),
+    createStubHomeAiProvider(),
+    false,
+  );
 }
 
 function toPineResponse(record: {
@@ -244,7 +282,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       revisionRequest: string;
     } | null;
   }) => {
-    const homeAiService = new HomeAiService();
+    const homeAiService = createPineGenerationService();
     let output;
     let log;
     try {
@@ -269,17 +307,16 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       output = generated.output;
       log = generated.log;
     } catch (providerError) {
+      const providerFailureReason = classifyPineProviderFailure(providerError);
       output = {
         normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson) ?? {},
         generatedScript: null,
-        warnings: [
-          `provider_error: ${providerError instanceof Error ? providerError.message : String(providerError)}`,
-        ],
+        warnings: [`provider_error: ${providerFailureReason}`],
         assumptions: [],
         status: 'failed' as const,
         repairAttempts: 0,
-        failureReason: providerError instanceof Error ? providerError.message : String(providerError),
-        invalidReasonCodes: ['provider_error'],
+        failureReason: providerFailureReason,
+        invalidReasonCodes: [providerFailureReason],
         modelName: 'provider_error',
         promptVersion: 'v1.0.0-pine-provider-error',
       };

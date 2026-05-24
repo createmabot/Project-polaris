@@ -311,8 +311,14 @@ export class HomeAiService {
       for (const warning of assessed.warnings) {
         aggregateWarnings.push(warning);
       }
-      lastFailureReason = assessed.failureReason;
-      lastInvalidReasonCodes = assessed.invalidReasonCodes;
+      const providerInvalidReasonCodes = run.output.invalidReasonCodes ?? [];
+      const combinedInvalidReasonCodes = Array.from(
+        new Set([...providerInvalidReasonCodes, ...assessed.invalidReasonCodes]),
+      );
+      const providerFailureReason = run.output.failureReason ?? null;
+      const failureReason = providerFailureReason ?? assessed.failureReason;
+      lastFailureReason = failureReason;
+      lastInvalidReasonCodes = combinedInvalidReasonCodes;
 
       const normalizedGeneratedScript = assessed.normalizedScript;
       if (!assessed.failureReason && normalizedGeneratedScript) {
@@ -334,7 +340,12 @@ export class HomeAiService {
         };
       }
 
-      const canRepair = assessed.retryable && attempt < maxRepairAttempts;
+      const providerOutputCanRepair =
+        run.output.status === 'failed' &&
+        providerInvalidReasonCodes.some((code) =>
+          ['provider_invalid_response', 'malformed_json', 'generated_script_missing'].includes(code),
+        );
+      const canRepair = (assessed.retryable || providerOutputCanRepair) && attempt < maxRepairAttempts;
       if (!canRepair) {
         return {
           output: {
@@ -343,8 +354,8 @@ export class HomeAiService {
             warnings: Array.from(new Set([...mergedOutputWarnings, ...assessed.warnings])),
             status: 'failed',
             repairAttempts: attempt,
-            failureReason: assessed.failureReason,
-            invalidReasonCodes: assessed.invalidReasonCodes,
+            failureReason,
+            invalidReasonCodes: combinedInvalidReasonCodes,
           },
           log: {
             ...run.log,
@@ -359,12 +370,12 @@ export class HomeAiService {
         ...context,
         repairRequest: {
           attempt,
-          invalidReasonCodes: assessed.invalidReasonCodes,
-          failureReason: assessed.failureReason ?? 'invalid_output',
+          invalidReasonCodes: combinedInvalidReasonCodes,
+          failureReason: failureReason ?? 'invalid_output',
           previousScript: run.output.generatedScript,
         },
       };
-      aggregateWarnings.push(`repair_retry_${attempt}: ${assessed.failureReason}`);
+      aggregateWarnings.push(`Pine生成結果の検証に失敗したため、修復リトライ${attempt}回目を実行しました。`);
     }
 
     if (!lastRun) {

@@ -1431,7 +1431,23 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
   }
 
   async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
-    const deterministic = buildDeterministicPineOutput(context, {
+    const baseline = buildDeterministicPineOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-pine-local',
+    });
+
+    const failedProviderOutput = (
+      warning: string,
+      failureReason: string,
+      invalidReasonCodes: string[],
+    ): PineGenerationOutput => ({
+      normalizedRuleJson: baseline.normalizedRuleJson,
+      generatedScript: null,
+      warnings: [warning],
+      assumptions: baseline.assumptions,
+      status: 'failed',
+      failureReason,
+      invalidReasonCodes,
       modelName: this.modelName,
       promptVersion: 'v1.0.0-pine-local',
     });
@@ -1447,7 +1463,13 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
             role: 'system',
             content:
               [
-                'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script. Return strict JSON only.',
+                'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script.',
+                'Return one strict JSON object only. Do not include markdown fences around the JSON.',
+                'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
+                'Use //@version=6 and strategy(...), not indicator(...), unless strategy output is impossible.',
+                'Use long-only behavior by default unless the user explicitly requests short behavior and it can be represented safely.',
+                'Respect target_market and target_timeframe context, but do not claim TradingView compile success.',
+                'Do not include URLs, citations, web search results, or profit guarantees.',
                 'Return user-facing warnings and assumptions in Japanese.',
                 'Do not write English explanatory sentences in warnings or assumptions.',
                 'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
@@ -1484,10 +1506,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(
-        `local_llm pine generation failed: HTTP ${response.status} ${body.slice(0, 200)} | task_type=pine_generation | model=${this.modelName} | endpoint=${endpointPath} | think=false`,
-      );
+      throw new Error(`local_llm pine generation failed: HTTP ${response.status} | task_type=pine_generation`);
     }
 
     const data: any = await response.json();
@@ -1501,8 +1520,6 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         JSON.stringify({
           event: 'local_llm_pine_call',
           task_type: 'pine_generation',
-          model: this.modelName,
-          endpoint: endpointPath,
           think: false,
           finish_reason: finishReason,
           has_content: hasContent,
@@ -1515,8 +1532,6 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
             finishReason === 'length' ? 'empty content with finish_reason=length' : 'empty content'
           }`,
           'task_type=pine_generation',
-          `model=${this.modelName}`,
-          `endpoint=${endpointPath}`,
           'think=false',
           `finish_reason=${finishReason ?? 'null'}`,
           `content_present=${hasContent}`,
@@ -1529,8 +1544,6 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         JSON.stringify({
           event: 'local_llm_pine_call',
           task_type: 'pine_generation',
-          model: this.modelName,
-          endpoint: endpointPath,
           think: false,
           finish_reason: finishReason,
           has_content: true,
@@ -1543,35 +1556,47 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
 
     let parsed: any = null;
     try {
-      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').trim());
+      parsed = JSON.parse(content.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim());
     } catch {
-      return deterministic;
+      return failedProviderOutput(
+        'LLM Pine生成のJSONを解析できませんでした。修復リトライを試みます。',
+        'provider_invalid_response',
+        ['provider_invalid_response', 'malformed_json'],
+      );
     }
 
     const generatedScript =
       typeof parsed?.generated_script === 'string' && parsed.generated_script.trim()
         ? parsed.generated_script
-        : deterministic.generatedScript;
+        : null;
+    if (!generatedScript) {
+      return failedProviderOutput(
+        'LLM Pine生成結果に generated_script が含まれていませんでした。修復リトライを試みます。',
+        'provider_invalid_response',
+        ['provider_invalid_response', 'generated_script_missing'],
+      );
+    }
+
     const warnings = Array.isArray(parsed?.warnings)
       ? parsed.warnings.filter((item: unknown) => typeof item === 'string').slice(0, 16)
-      : deterministic.warnings;
+      : [];
     const assumptions = Array.isArray(parsed?.assumptions)
       ? parsed.assumptions.filter((item: unknown) => typeof item === 'string').slice(0, 16)
-      : deterministic.assumptions;
+      : [];
     const normalizedRuleJson =
       typeof parsed?.normalized_rule_json === 'object' &&
       parsed.normalized_rule_json !== null &&
       !Array.isArray(parsed.normalized_rule_json)
         ? parsed.normalized_rule_json
-        : deterministic.normalizedRuleJson;
+        : baseline.normalizedRuleJson;
 
     return {
-      ...deterministic,
+      ...baseline,
       generatedScript,
       warnings,
       assumptions,
       normalizedRuleJson,
-      status: generatedScript ? 'generated' : 'failed',
+      status: 'generated',
     };
   }
 }
@@ -1972,8 +1997,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
     });
 
     if (!response.ok) {
-      const body = await response.text().catch(() => '');
-      throw new Error(`openai_api pine generation failed: HTTP ${response.status} ${body.slice(0, 200)}`);
+      throw new Error(`openai_api pine generation failed: HTTP ${response.status} | task_type=pine_generation`);
     }
 
     const data: any = await response.json();
