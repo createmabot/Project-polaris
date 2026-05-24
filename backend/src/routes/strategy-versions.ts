@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
+import type { PineGenerationProgressStage } from '../ai/home-ai-service';
 import { createHomeAiProvider, createStubHomeAiProvider } from '../ai/home-provider';
 import type { HomeAiProviderType } from '../ai/home-provider';
 import { env } from '../env';
@@ -114,6 +115,10 @@ function createPineGenerationService(): HomeAiService {
   );
 }
 
+function pineGenerationJobClient() {
+  return (prisma as any).pineGenerationJob;
+}
+
 function toPineResponse(record: {
   id: string;
   scriptName: string;
@@ -199,6 +204,107 @@ async function resolveLatestPineRevisionInput(versionId: string) {
   });
 }
 
+type PineGenerationJobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
+type PineGenerationJobRequestKind = 'generate' | 'regenerate';
+type PineGenerationJobStage = PineGenerationProgressStage;
+type PineGenerationStageEventStatus = 'running' | 'completed' | 'skipped';
+
+type PineGenerationStageEvent = {
+  stage: PineGenerationJobStage;
+  status: PineGenerationStageEventStatus;
+  occurred_at: string;
+};
+
+const PINE_GENERATION_STAGES: PineGenerationJobStage[] = [
+  '生成リクエスト送信',
+  'LLMでPine生成',
+  '生成結果レビュー',
+  '必要に応じて修正',
+  '最終確認',
+];
+
+function isPineGenerationStage(value: unknown): value is PineGenerationJobStage {
+  return typeof value === 'string' && PINE_GENERATION_STAGES.includes(value as PineGenerationJobStage);
+}
+
+function normalizePineStageHistory(value: unknown): PineGenerationStageEvent[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') {
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    if (!isPineGenerationStage(record.stage)) {
+      return [];
+    }
+    const status = record.status === 'completed' || record.status === 'skipped' ? record.status : 'running';
+    const occurredAt = typeof record.occurred_at === 'string' ? record.occurred_at : new Date().toISOString();
+    return [{ stage: record.stage, status, occurred_at: occurredAt }];
+  });
+}
+
+function appendPineStage(history: unknown, stage: PineGenerationJobStage, status: PineGenerationStageEventStatus = 'running') {
+  const current = normalizePineStageHistory(history).map((event) => (
+    event.status === 'running' ? { ...event, status: 'completed' as const } : event
+  ));
+  current.push({ stage, status, occurred_at: new Date().toISOString() });
+  return current;
+}
+
+function toPineGenerationJobResponse(job: {
+  id: string;
+  strategyRuleVersionId: string | null;
+  requestKind: string;
+  status: string;
+  currentStage: string;
+  stageHistoryJson: unknown;
+  resultPineScriptId: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+}) {
+  const progressByStage: Record<string, number> = {
+    生成リクエスト送信: 5,
+    LLMでPine生成: 35,
+    生成結果レビュー: 65,
+    必要に応じて修正: 80,
+    最終確認: job.status === 'queued' ? 5 : 100,
+  };
+  return {
+    id: job.id,
+    strategy_version_id: job.strategyRuleVersionId,
+    strategy_rule_version_id: job.strategyRuleVersionId,
+    request_kind: job.requestKind,
+    job_kind: job.requestKind,
+    status: job.status,
+    current_stage: job.currentStage,
+    stage: job.currentStage,
+    progress_percent: progressByStage[job.currentStage] ?? (job.status === 'succeeded' || job.status === 'failed' ? 100 : 0),
+    stage_history: normalizePineStageHistory(job.stageHistoryJson),
+    result: job.resultPineScriptId
+      ? {
+          pine_script_id: job.resultPineScriptId,
+          status: 'available',
+        }
+      : null,
+    error: job.errorCode
+      ? {
+          code: job.errorCode,
+          message: job.errorMessage ?? 'Pine生成に失敗しました。条件を見直して再試行してください。',
+        }
+      : null,
+    error_code: job.errorCode,
+    error_message: job.errorMessage,
+    created_at: job.createdAt.toISOString(),
+    updated_at: job.updatedAt.toISOString(),
+    completed_at: job.completedAt ? job.completedAt.toISOString() : null,
+  };
+}
+
 export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
   const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -281,6 +387,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       validationNote: string | null;
       revisionRequest: string;
     } | null;
+    onStage?: (stage: PineGenerationJobStage) => void | Promise<void>;
   }) => {
     const homeAiService = createPineGenerationService();
     let output;
@@ -302,7 +409,13 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
               }
             : null,
         },
-        { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+        {
+          maxRepairAttempts: 2,
+          validateOutput: assessGeneratedPineScript,
+          onProgress: async (update) => {
+            await params.onStage?.(update.stage);
+          },
+        },
       );
       output = generated.output;
       log = generated.log;
@@ -334,6 +447,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       };
     }
 
+    await params.onStage?.('最終確認');
     const validation = assessGeneratedPineScript(output.generatedScript);
     const warnings = [...new Set([...output.warnings, ...validation.warnings])];
     const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
@@ -371,6 +485,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
     let pineScriptId: string | null = null;
     if (finalScript) {
+      await params.onStage?.('最終確認');
       const created = await prisma.pineScript.create({
         data: {
           strategyRuleVersionId: params.version.id,
@@ -419,6 +534,115 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         invalid_reason_codes: invalidReasonCodes,
       },
     };
+  };
+
+  const updatePineGenerationJobStage = async (jobId: string, stage: PineGenerationJobStage) => {
+    const job = await prisma.pineGenerationJob.findUnique({ where: { id: jobId } });
+    if (!job || job.status === 'succeeded' || job.status === 'failed' || job.status === 'canceled') {
+      return;
+    }
+    await prisma.pineGenerationJob.update({
+      where: { id: jobId },
+      data: {
+        status: 'running',
+        currentStage: stage,
+        stageHistoryJson: appendPineStage(job.stageHistoryJson, stage) as Prisma.InputJsonValue,
+      },
+    });
+  };
+
+  const completePineGenerationJob = async (
+    jobId: string,
+    status: Extract<PineGenerationJobStatus, 'succeeded' | 'failed'>,
+    params: {
+      resultPineScriptId?: string | null;
+      errorCode?: string | null;
+      errorMessage?: string | null;
+    } = {},
+  ) => {
+    const job = await prisma.pineGenerationJob.findUnique({ where: { id: jobId } });
+    if (!job) {
+      return;
+    }
+    const finalStage: PineGenerationJobStage = '最終確認';
+    await prisma.pineGenerationJob.update({
+      where: { id: jobId },
+      data: {
+        status,
+        currentStage: finalStage,
+        stageHistoryJson: appendPineStage(job.stageHistoryJson, finalStage, 'completed') as Prisma.InputJsonValue,
+        resultPineScriptId: params.resultPineScriptId ?? null,
+        errorCode: params.errorCode ?? null,
+        errorMessage: params.errorMessage ?? null,
+        completedAt: new Date(),
+      },
+    });
+  };
+
+  const failPineGenerationJob = async (jobId: string, errorCode = 'PINE_GENERATION_FAILED') => {
+    const safeErrorCode = /^[A-Z0-9_]+$/.test(errorCode) ? errorCode : 'PINE_GENERATION_FAILED';
+    await completePineGenerationJob(jobId, 'failed', {
+      errorCode: safeErrorCode,
+      errorMessage: 'Pine生成に失敗しました。条件を見直して再試行してください。',
+    });
+  };
+
+  const validatePineGenerationVersion = (version: StrategyVersionRecord | null): StrategyVersionRecord => {
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+    if (!version.naturalLanguageRule.trim()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_spec is required.');
+    }
+    if (!version.market.trim()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'target_market is required.');
+    }
+    if (!version.timeframe.trim()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'target_timeframe is required.');
+    }
+    return version;
+  };
+
+  const createPineGenerationJob = async (params: {
+    versionId: string;
+    requestKind: PineGenerationJobRequestKind;
+  }) => prisma.pineGenerationJob.create({
+    data: {
+      strategyRuleVersionId: params.versionId,
+      requestKind: params.requestKind,
+      status: 'queued',
+      currentStage: '生成リクエスト送信',
+      stageHistoryJson: [
+        {
+          stage: '生成リクエスト送信',
+          status: 'running',
+          occurred_at: new Date().toISOString(),
+        },
+      ] as Prisma.InputJsonValue,
+    },
+  });
+
+  const schedulePineGenerationJob = (
+    jobId: string,
+    run: () => Promise<{ pine: { status: 'generated' | 'failed'; pine_script_id: string | null; failure_reason?: string | null } }>,
+  ) => {
+    setTimeout(() => {
+      void (async () => {
+        try {
+          await updatePineGenerationJobStage(jobId, '生成リクエスト送信');
+          const result = await run();
+          if (result.pine.status === 'generated' && result.pine.pine_script_id) {
+            await completePineGenerationJob(jobId, 'succeeded', {
+              resultPineScriptId: result.pine.pine_script_id,
+            });
+            return;
+          }
+          await failPineGenerationJob(jobId, result.pine.failure_reason ?? 'PINE_GENERATION_FAILED');
+        } catch {
+          await failPineGenerationJob(jobId);
+        }
+      })();
+    }, 0);
   };
 
   fastify.patch<{
@@ -562,6 +786,135 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         ...toPineResponse(latest, latestRevisionInput),
       }),
     );
+  });
+
+  fastify.get<{ Params: { versionId: string; jobId: string } }>('/:versionId/pine/generation-jobs/:jobId', async (request, reply) => {
+    try {
+      const { versionId, jobId } = request.params;
+      const job = await pineGenerationJobClient().findFirst({
+        where: {
+          id: jobId,
+          strategyRuleVersionId: versionId,
+        },
+      });
+      if (!job) {
+        throw new AppError(404, 'NOT_FOUND', 'pine generation job was not found.');
+      }
+      return reply.status(200).send(formatSuccess(request, { job: toPineGenerationJobResponse(job) }));
+    } catch (error) {
+      rethrowKnownSchemaMismatch(error);
+    }
+  });
+
+  fastify.post<{
+    Params: { versionId: string };
+    Body: {
+      backtest_period_from?: unknown;
+      backtest_period_to?: unknown;
+    };
+  }>('/:versionId/pine/generation-jobs', async (request, reply) => {
+    try {
+      const { versionId } = request.params;
+      const backtestPeriodFrom = readOptionalBodyString(request.body, 'backtest_period_from');
+      const backtestPeriodTo = readOptionalBodyString(request.body, 'backtest_period_to');
+      if ((backtestPeriodFrom && !backtestPeriodTo) || (!backtestPeriodFrom && backtestPeriodTo)) {
+        throw new AppError(
+          400,
+          'VALIDATION_ERROR',
+          'backtest_period_from and backtest_period_to must be provided together.',
+        );
+      }
+      if (backtestPeriodFrom && backtestPeriodTo) {
+        const from = parseDateOnly(backtestPeriodFrom, 'backtest_period_from');
+        const to = parseDateOnly(backtestPeriodTo, 'backtest_period_to');
+        if (from.getTime() > to.getTime()) {
+          throw new AppError(
+            400,
+            'VALIDATION_ERROR',
+            'backtest period is invalid: backtest_period_from must be <= backtest_period_to.',
+          );
+        }
+      }
+
+      const version = await prisma.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
+      const validVersion = validatePineGenerationVersion(version);
+      const job = await createPineGenerationJob({ versionId: validVersion.id, requestKind: 'generate' });
+      schedulePineGenerationJob(job.id, () =>
+        generateAndPersistPine({
+          version: validVersion,
+          onStage: (stage) => updatePineGenerationJobStage(job.id, stage),
+        }),
+      );
+
+      return reply.status(202).send(formatSuccess(request, { job: toPineGenerationJobResponse(job) }));
+    } catch (error) {
+      rethrowKnownSchemaMismatch(error);
+    }
+  });
+
+  fastify.post<{
+    Params: { versionId: string };
+    Body: {
+      source_pine_script_id?: unknown;
+      compile_error_text?: unknown;
+      validation_note?: unknown;
+      revision_request?: unknown;
+    };
+  }>('/:versionId/pine/regeneration-jobs', async (request, reply) => {
+    try {
+      const { versionId } = request.params;
+      const sourcePineScriptId = readRequiredText(request.body?.source_pine_script_id, 'source_pine_script_id');
+      const compileErrorText = readOptionalText(request.body?.compile_error_text, 'compile_error_text');
+      const validationNote = readOptionalText(request.body?.validation_note, 'validation_note');
+      const revisionRequest = readRequiredText(request.body?.revision_request, 'revision_request');
+
+      const version = await prisma.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
+      const validVersion = validatePineGenerationVersion(version);
+
+      const sourcePineScript = await prisma.pineScript.findFirst({
+        where: {
+          id: sourcePineScriptId,
+          strategyRuleVersionId: validVersion.id,
+        },
+      });
+      if (!sourcePineScript) {
+        throw new AppError(404, 'NOT_FOUND', 'source pine script was not found for this strategy version.');
+      }
+
+      const revisionInput = await prisma.pineRevisionInput.create({
+        data: {
+          strategyRuleVersionId: validVersion.id,
+          sourcePineScriptId: sourcePineScript.id,
+          compileErrorText,
+          validationNote,
+          revisionRequest,
+        },
+      });
+      const job = await createPineGenerationJob({ versionId: validVersion.id, requestKind: 'regenerate' });
+      schedulePineGenerationJob(job.id, () =>
+        generateAndPersistPine({
+          version: validVersion,
+          parentPineScriptId: sourcePineScript.id,
+          onStage: (stage) => updatePineGenerationJobStage(job.id, stage),
+          revisionInput: {
+            id: revisionInput.id,
+            sourcePineScriptId: sourcePineScript.id,
+            sourceScriptBody: sourcePineScript.scriptBody,
+            compileErrorText,
+            validationNote,
+            revisionRequest,
+          },
+        }),
+      );
+
+      return reply.status(202).send(formatSuccess(request, { job: toPineGenerationJobResponse(job) }));
+    } catch (error) {
+      rethrowKnownSchemaMismatch(error);
+    }
   });
 
   fastify.post<{

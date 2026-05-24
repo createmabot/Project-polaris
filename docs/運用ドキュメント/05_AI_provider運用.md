@@ -39,6 +39,8 @@ Pine generation は `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api
 
 Pine generation は generator -> reviewer -> repair pipeline として扱う。deterministic reviewer は明らかな Pine syntax / style / safety issue を structured issue として検出し、AI reviewer provider boundary を使う場合も raw reviewer response は保存・表示せず structured issue に正規化する。reviewer issue は retryable な場合に bounded repair の入力にし、既存 validation / normalization は維持する。
 
+Pine generation progress は job-based に扱う。`/pine/generation-jobs` / `/pine/regeneration-jobs` で job を開始し、`/pine/generation-jobs/:jobId` の status polling endpoint で queued / running / succeeded / failed と backend stage を確認する。stage は generator、reviewer、repair、validation / persistence を sanitized に示す。進捗確認は polling であり、SSE / WebSocket / streaming は使わない。既存 sync endpoint は互換維持のため残す。
+
 Pine generation の prompt tuning では、安全な strategy coding rule を provider instruction に反映する。`strategy.entry` / `strategy.exit` は position guard 付きにし、entry 時点で固定する ATR stop などは position が open になった直後の `strategy.position_size > 0 and strategy.position_size[1] == 0` pattern で `entryAtr` などの `var` 変数へ保存する。entry-time state の reset は単純な `strategy.position_size == 0` ではなく、open から flat への遷移を示す `strategy.position_size == 0 and strategy.position_size[1] > 0` pattern を優先する。stop price / limit price は position open 中、かつ entry-time state が利用可能な場合だけ計算する。stop loss は signal bar の `close` ではなく actual entry price として position open 後の `strategy.position_avg_price` を基準にし、ユーザーが明示しない限り `entry_price := close` を entry price 代替にしない。ATR stop は `strategy.exit(..., stop=...)` を優先し、`low <= stopLossPrice` と `strategy.close()` による manual bar-based stop はユーザー明示時以外避ける。`strategy.close()` は rule-based exit に使う。entry block 内では `strategy.position_avg_price` を使って stop / limit を計算しない。volume condition は許容するが、volume plot はユーザー明示がない限り出さない。表現できない risk control、pyramiding、trailing、time stop、volume plot などは warnings / assumptions に日本語で限界を書く。
 
 Pine generation の prompt tuning は percentage stop / oscillator strategy も対象にする。percentage stop は position open 中に `strategy.position_avg_price` を基準に計算し、`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で代替しない。ATR が明示されていない percentage stop strategy では、`entryAtr` や `ta.atr` を導入しない。RSI / oscillator threshold は方向を維持し、「60 を上回る」は `rsi > 60` または wording に応じた crossover として扱い、明示がない限り crossunder にしない。`overlay=true` の価格 chart strategy では oscillator plot を既定で出さず、明示要求または separate pane 意図がある場合だけ扱う。real local_llm 品質確認は manual smoke に限定し、required check は fake / deterministic tests を使う。TradingView compile automation、自動保存、backtest / AI summary 自動連鎖は未実装のまま維持する。
@@ -88,8 +90,8 @@ Pine generation でも raw prompt、raw provider response、raw reviewer respons
 - `openai_api` は明示設定時のみ使う。
 - 自動生成対象を広げる前に cost cap / rate limit / opt-in 条件を設計する。
 - page view 起点の生成は過剰 enqueue になりやすいため現行では採用しない。
-- Pine generation はユーザー操作起点の同期生成に限定し、保存、backtest、AI summary への自動連鎖で provider call を増やさない。
-- polling 本格化、batch retry、scheduled job は後続判断とする。
+- Pine generation はユーザー操作起点の job start または既存 sync endpoint に限定し、保存、backtest、AI summary への自動連鎖で provider call を増やさない。
+- Pine generation status polling は job status 確認だけに限定する。batch retry、scheduled job、SSE / WebSocket / streaming は後続判断とする。
 
 ## 7-1. LLM strategy proposal provider 運用境界
 

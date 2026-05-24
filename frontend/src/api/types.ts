@@ -468,6 +468,54 @@ export type StrategyVersionPineGenerateData = {
   };
 };
 
+export type PineGenerationJobStage =
+  | 'queued'
+  | 'loading_context'
+  | 'generating'
+  | 'normalizing'
+  | 'reviewing'
+  | 'repairing'
+  | 'validating'
+  | 'saving'
+  | 'succeeded'
+  | 'failed';
+
+export type PineGenerationStageEvent = {
+  stage: PineGenerationJobStage | string;
+  status: 'running' | 'completed' | 'skipped';
+  occurred_at: string;
+};
+
+export type PineGenerationJob = {
+  id: string;
+  strategy_version_id: string | null;
+  strategy_rule_version_id?: string | null;
+  request_kind: 'generate' | 'regenerate' | string;
+  job_kind?: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | string;
+  current_stage: PineGenerationJobStage | string;
+  stage?: string;
+  progress_percent?: number;
+  stage_history: PineGenerationStageEvent[];
+  result: {
+    pine_script_id: string;
+    status: 'available' | string;
+  } | null;
+  error: {
+    code: string;
+    message: string;
+  } | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type StrategyVersionPineJobData = {
+  job: PineGenerationJob;
+};
+
 export type StrategyVersionListData = {
   strategy: {
     id: string;

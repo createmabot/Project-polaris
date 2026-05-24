@@ -458,6 +458,7 @@ model StrategyRuleVersion {
   backtests Backtest[]
   pineScripts PineScript[]
   pineRevisionInputs PineRevisionInput[]
+  pineGenerationJobs PineGenerationJob[]
   internalBacktestExecutions InternalBacktestExecution[]
   symbolStrategyApplications SymbolStrategyApplication[]
 }
@@ -562,6 +563,26 @@ model PineScript {
   @@index([parentPineScriptId])
   @@index([status])
   @@map("pine_scripts")
+}
+
+model PineGenerationJob {
+  id                    String               @id @default(uuid())
+  strategyRuleVersionId String?              @map("strategy_version_id")
+  strategyRuleVersion   StrategyRuleVersion? @relation(fields: [strategyRuleVersionId], references: [id], onDelete: SetNull)
+  requestKind           String   @map("request_kind")
+  status                String
+  currentStage          String   @map("current_stage")
+  stageHistoryJson      Json     @map("stage_history_json")
+  resultPineScriptId    String?  @map("result_pine_script_id")
+  errorCode             String?  @map("error_code")
+  errorMessage          String?  @map("error_message")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+  completedAt           DateTime? @map("completed_at")
+
+  @@index([strategyRuleVersionId, createdAt])
+  @@index([status, createdAt])
+  @@map("pine_generation_jobs")
 }
 
 model PineRevisionInput {

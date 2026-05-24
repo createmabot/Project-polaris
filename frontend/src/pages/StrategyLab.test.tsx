@@ -43,12 +43,13 @@ vi.mock('../api/client', async () => {
   const actual = await vi.importActual('../api/client');
   return {
     ...actual,
+    fetchApi: vi.fn(),
     postApi: vi.fn(),
   };
 });
 
 import StrategyLab from './StrategyLab';
-import { ApiError, postApi } from '../api/client';
+import { ApiError, fetchApi, postApi } from '../api/client';
 import { buildProposalErrorMessage, buildProposalHistoryPath } from './StrategyLab';
 
 const DEFAULT_RULE =
@@ -69,6 +70,7 @@ function primeScenarioState(params: {
   result?: Record<string, unknown> | null;
   strategyId?: string | null;
   backtest?: Record<string, unknown> | null;
+  pineGenerationJob?: Record<string, unknown> | null;
   timeframe?: string;
   importState?: Record<string, unknown> | null;
   importError?: string | null;
@@ -95,7 +97,7 @@ function primeScenarioState(params: {
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
-  const setters = params.setters ?? Array.from({ length: 42 }).map(() => vi.fn());
+  const setters = params.setters ?? Array.from({ length: 43 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
@@ -131,6 +133,7 @@ function primeScenarioState(params: {
     params.result ?? null,
     params.strategyId ?? null,
     params.backtest ?? null,
+    params.pineGenerationJob ?? null,
     null,
     params.importState ?? null,
     params.importError ?? null,
@@ -151,6 +154,7 @@ describe('StrategyLab', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-lab', vi.fn()]);
+    vi.mocked(fetchApi).mockReset();
     vi.mocked(postApi).mockReset();
   });
 
@@ -607,6 +611,16 @@ describe('StrategyLab', () => {
   it('renders Pine generation progress while submitting', () => {
     primeScenarioState({
       submitting: true,
+      pineGenerationJob: {
+        id: 'pine-job-1',
+        status: 'running',
+        current_stage: 'reviewing',
+        stage_history: [
+          { stage: 'queued', status: 'completed', occurred_at: '2026-05-25T00:00:00.000Z' },
+          { stage: 'generating', status: 'completed', occurred_at: '2026-05-25T00:00:01.000Z' },
+          { stage: 'reviewing', status: 'running', occurred_at: '2026-05-25T00:00:02.000Z' },
+        ],
+      },
     });
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -620,7 +634,7 @@ describe('StrategyLab', () => {
     const html = renderToStaticMarkup(<StrategyLab />);
     expect(html).toContain('data-testid="pine-generation-progress"');
     expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('生成リクエスト送信');
+    expect(html).toContain('受付');
     expect(html).toContain('Pine生成中です');
     expect(html).toContain('LLMでPine生成');
     expect(html).toContain('生成結果レビュー');

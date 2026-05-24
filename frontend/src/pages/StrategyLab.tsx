@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useLocation } from 'wouter';
-import { ApiError, postApi, swrFetcher } from '../api/client';
+import { ApiError, fetchApi, postApi, swrFetcher } from '../api/client';
 import Button from '../components/ui/Button';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
@@ -29,7 +29,8 @@ import {
   StrategyProposalProviderQualityTrendData,
   StrategyProposalSelectData,
   StrategyVersionData,
-  StrategyVersionPineGenerateData,
+  StrategyVersionPineData,
+  StrategyVersionPineJobData,
   StrategyVersionListData,
 } from '../api/types';
 
@@ -418,6 +419,7 @@ export default function StrategyLab() {
   const [result, setResult] = useState<StrategyVersionData['strategy_version'] | null>(null);
   const [strategyId, setStrategyId] = useState<string | null>(null);
   const [backtest, setBacktest] = useState<BacktestCreateData['backtest'] | null>(null);
+  const [pineGenerationJob, setPineGenerationJob] = useState<StrategyVersionPineJobData['job'] | null>(null);
 
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [importState, setImportState] = useState<BacktestImportData['import'] | null>(null);
@@ -678,6 +680,20 @@ export default function StrategyLab() {
     historySelected !== 'all' ||
     historyArchived !== 'active';
 
+  const pollPineGenerationJob = async (versionId: string, jobId: string) => {
+    for (let attempt = 0; attempt < 180; attempt += 1) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 1200));
+      const data = await fetchApi<StrategyVersionPineJobData>(
+        `/api/strategy-versions/${versionId}/pine/generation-jobs/${jobId}`
+      );
+      setPineGenerationJob(data.job);
+      if (data.job.status === 'succeeded' || data.job.status === 'failed') {
+        return data.job;
+      }
+    }
+    throw new Error('Pine生成の完了確認がタイムアウトしました。時間をおいて再読み込みしてください。');
+  };
+
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
@@ -686,6 +702,7 @@ export default function StrategyLab() {
     setBacktest(null);
     setImportState(null);
     setImportError(null);
+    setPineGenerationJob(null);
 
     try {
       const strategy = await postApi<StrategyCreateData>('/api/strategies', {
@@ -700,15 +717,25 @@ export default function StrategyLab() {
         timeframe,
       });
 
-      const generated = await postApi<StrategyVersionPineGenerateData>(
-        `/api/strategy-versions/${version.strategy_version.id}/pine/generate`,
+      const started = await postApi<StrategyVersionPineJobData>(
+        `/api/strategy-versions/${version.strategy_version.id}/pine/generation-jobs`,
         {}
       );
-      setResult(generated.strategy_version);
+      setPineGenerationJob(started.job);
+      const completedJob = await pollPineGenerationJob(version.strategy_version.id, started.job.id);
+      if (completedJob.status !== 'succeeded') {
+        throw new Error(completedJob.error?.message ?? 'Pine生成に失敗しました。条件を見直して再試行してください。');
+      }
 
-      if (generated.pine.status === 'generated') {
+      const [latestVersion, latestPine] = await Promise.all([
+        fetchApi<StrategyVersionData>(`/api/strategy-versions/${version.strategy_version.id}`),
+        fetchApi<StrategyVersionPineData>(`/api/strategy-versions/${version.strategy_version.id}/pine`),
+      ]);
+      setResult(latestVersion.strategy_version);
+
+      if (latestPine.status === 'available') {
         const createdBacktest = await postApi<BacktestCreateData>('/api/backtests', {
-          strategy_version_id: generated.strategy_version.id,
+          strategy_version_id: latestVersion.strategy_version.id,
           title: `${title.trim()} / ${market} / ${timeframe}`,
           execution_source: 'tradingview',
           market,
@@ -721,6 +748,7 @@ export default function StrategyLab() {
       setError(buildRuleSubmitErrorMessage(submitError));
     } finally {
       setSubmitting(false);
+      setPineGenerationJob(null);
     }
   };
 
@@ -1281,7 +1309,12 @@ export default function StrategyLab() {
           </Button>
 
           {submitting && (
-            <PineGenerationProgress className='mt-2' />
+            <PineGenerationProgress
+              currentStage={pineGenerationJob?.current_stage ?? 'queued'}
+              status={pineGenerationJob?.status ?? 'running'}
+              stageHistory={pineGenerationJob?.stage_history ?? []}
+              className='mt-2'
+            />
           )}
         </form>
       </SectionCard>
