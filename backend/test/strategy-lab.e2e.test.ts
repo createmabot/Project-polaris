@@ -2138,15 +2138,28 @@ describe('strategy lab vertical slice', () => {
     expect(JSON.stringify(response.json())).not.toContain('local-llm.example.test');
   });
 
-  it('keeps the default local_llm timeout cap conservative and allows long context opt-in', () => {
-    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '999999';
+  it('uses the tuned default local_llm timeout when env is unset', () => {
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'default',
-      timeoutMs: 120000,
+      timeoutMs: 150000,
       maxOutputChars: 20000,
     });
+  });
 
+  it('clamps high local_llm timeout env values to the default profile maximum', () => {
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '999999';
+
+    expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
+      timeoutProfile: 'default',
+      timeoutMs: 240000,
+      maxOutputChars: 20000,
+    });
+  });
+
+  it('keeps the long_context local_llm timeout maximum and fallback', () => {
+    process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS = '999999';
     process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE = 'long_context';
+
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'long_context',
       timeoutMs: 300000,
@@ -2159,11 +2172,14 @@ describe('strategy lab vertical slice', () => {
       timeoutMs: 180000,
       maxOutputChars: 20000,
     });
+  });
 
+  it('uses the default local_llm timeout profile for invalid profile env values', () => {
     process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE = 'unknown';
+
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'default',
-      timeoutMs: 90000,
+      timeoutMs: 150000,
       maxOutputChars: 20000,
     });
   });
