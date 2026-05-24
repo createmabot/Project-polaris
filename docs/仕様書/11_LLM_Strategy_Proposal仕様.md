@@ -1222,8 +1222,11 @@ LLM に要求する安全な strategy coding rule:
 
 - `strategy.entry` は entry condition と `strategy.position_size == 0` などの position guard を併用し、同一 bar / 連続 bar で意図しない多重 entry を避ける。
 - `strategy.exit` / `strategy.close` は exit condition と `strategy.position_size > 0` などの position guard を併用し、未保有時の exit 注文を避ける。
-- ATR stop / take profit など entry 時点で固定したい値は、entry signal 発生時に `entryAtr` などの `var` 変数へ保存する。entry-time state の reset は単純な `strategy.position_size == 0` reset ではなく、open から flat へ遷移した bar を示す `strategy.position_size == 0 and strategy.position_size[1] > 0` pattern を優先する。
+- ATR stop / take profit など entry 時点で固定したい値は、position が open になった直後の `strategy.position_size > 0 and strategy.position_size[1] == 0` pattern で `entryAtr` などの `var` 変数へ保存する。entry-time state の reset は単純な `strategy.position_size == 0` reset ではなく、open から flat へ遷移した bar を示す `strategy.position_size == 0 and strategy.position_size[1] > 0` pattern を優先する。
 - stop price / limit price は position open 中、かつ `entryAtr` など entry-time state が利用可能な場合だけ計算する。state が `na` の間は exit price を計算しない。
+- stop loss は signal bar の `close` ではなく、actual entry price として position open 後の `strategy.position_avg_price` を基準にする方針を優先する。ユーザーが明示しない限り、`entry_price := close` のように signal bar close を entry price 代替として保存しない。
+- ATR stop は `strategy.exit(..., stop=...)` による stop order を優先する。`low <= stopLossPrice` の bar 判定と `strategy.close()` の組み合わせは、ユーザーが manual bar-based stop を明示した場合以外は避ける。
+- `strategy.close()` は stop loss order の代替ではなく、MA cross、time exit、invalidation condition など rule-based exit に使う。
 - entry block 内で `strategy.position_avg_price` を使って stop / limit を計算しない。`strategy.position_avg_price` は entry 約定後に有効になる値であり、entry 同時の stop 計算に使うと意図しない `na` / stale value になり得る。
 - volume condition は signal 判定には使ってよいが、volume plot は既定では出さない。価格 chart 上の overlay strategy で volume plot を追加すると視認性を悪化させるため、ユーザーが明示した場合だけ検討する。
 - `plot` は strategy 理解に必要な最小補助線に限定する。過剰な debug plot / label / table は初回生成では避ける。
