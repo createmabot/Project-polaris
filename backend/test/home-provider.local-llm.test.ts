@@ -243,12 +243,19 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('Submit strategy.exit on every bar while the position is open');
     expect(body.messages[0].content).toContain('Do not compute stop or limit prices from strategy.position_avg_price');
     expect(body.messages[0].content).toContain('When an ATR stop uses entry-time ATR');
+    expect(body.messages[0].content).toContain('strategy.position_size > 0 and strategy.position_size[1] == 0');
     expect(body.messages[0].content).toContain('strategy.position_size[1] > 0');
     expect(body.messages[0].content).toContain('Do not reset entry-time state variables');
     expect(body.messages[0].content).toContain('simple flat-state reset can erase entry-time state too early');
     expect(body.messages[0].content).toContain('strategy.position_size > 0 and not na(entryAtr)');
     expect(body.messages[0].content).toContain('Do not compute stopLossPrice at top level');
-    expect(body.messages[0].content).toContain('Use strategy.close for rule-based exits');
+    expect(body.messages[0].content).toContain('Do not use close as a substitute for the actual entry price');
+    expect(body.messages[0].content).toContain('Do not create entry_price := close or entryPrice := close');
+    expect(body.messages[0].content).toContain('use strategy.position_avg_price after the position is open');
+    expect(body.messages[0].content).toContain('prefer strategy.exit(..., stop=...)');
+    expect(body.messages[0].content).toContain('Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...)');
+    expect(body.messages[0].content).toContain('Use strategy.close() for rule-based exits');
+    expect(body.messages[0].content).toContain('not for ordinary stop loss or take profit orders');
     expect(body.messages[0].content).toContain('Avoid plotting volume or average volume');
     expect(body.messages[0].content).toContain('Do not include narrative comments');
     expect(body.messages[0].content).toContain('Do not include URLs, citations, web search results, or profit guarantees');
@@ -267,23 +274,26 @@ ma75 = ta.sma(close, 75)
 volMa20 = ta.sma(volume, 20)
 atr14 = ta.atr(14)
 var float entryAtr = na
+atrMult = 2.0
 
 entryCondition = ta.crossover(ma25, ma75) and volume > volMa20 * 1.2
 exitCondition = ta.crossunder(ma25, ma75) or close < ma25
 
-if strategy.position_size == 0 and strategy.position_size[1] > 0
-    entryAtr := na
-
 if entryCondition and strategy.position_size == 0
-    entryAtr := atr14
     strategy.entry("Long", strategy.long)
 
+if strategy.position_size > 0 and strategy.position_size[1] == 0
+    entryAtr := atr14
+
 if strategy.position_size > 0 and not na(entryAtr)
-    stopPrice = strategy.position_avg_price - entryAtr * 2
-    strategy.exit("Stop", "Long", stop=stopPrice)
+    stopLossPrice = strategy.position_avg_price - entryAtr * atrMult
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
 
 if exitCondition and strategy.position_size > 0
-    strategy.close("Long")
+    strategy.close("Long", comment="Trend Exit")
+
+if strategy.position_size == 0 and strategy.position_size[1] > 0
+    entryAtr := na
 
 plot(ma25)
 plot(ma75)`;
@@ -317,25 +327,34 @@ plot(ma75)`;
     expect(result.generatedScript).toContain('if entryCondition and strategy.position_size == 0');
     expect(result.generatedScript).toContain('if exitCondition and strategy.position_size > 0');
     expect(result.generatedScript).toContain('var float entryAtr = na');
+    expect(result.generatedScript).toContain('if strategy.position_size > 0 and strategy.position_size[1] == 0\n    entryAtr := atr14');
     expect(result.generatedScript).toContain('entryAtr := atr14');
     expect(result.generatedScript).toContain('if strategy.position_size > 0 and not na(entryAtr)');
-    expect(result.generatedScript).toContain('stopPrice = strategy.position_avg_price - entryAtr * 2');
-    expect(result.generatedScript).toContain('strategy.exit("Stop", "Long", stop=stopPrice)');
+    expect(result.generatedScript).toContain('stopLossPrice = strategy.position_avg_price - entryAtr * atrMult');
+    expect(result.generatedScript).toContain('strategy.exit("Stop Loss", "Long", stop=stopLossPrice)');
+    expect(result.generatedScript).toContain('strategy.close("Long", comment="Trend Exit")');
     expect(result.generatedScript).toContain('if strategy.position_size == 0 and strategy.position_size[1] > 0\n    entryAtr := na');
     expect(result.generatedScript).not.toContain('if strategy.position_size == 0\n    entryAtr := na');
+    expect(result.generatedScript).not.toContain('entry_price := close');
+    expect(result.generatedScript).not.toContain('entryPrice := close');
+    expect(result.generatedScript).not.toContain('low <= stopLossPrice');
+    expect(result.generatedScript).not.toContain('if low <= stopLossPrice');
     expect(result.generatedScript).not.toContain('nz(entryAtr, atr14)');
     expect(result.generatedScript).not.toMatch(/^stopLossPrice\s*=/m);
     expect(result.generatedScript).toMatch(
-      /if strategy\.position_size > 0 and not na\(entryAtr\)\s+stopPrice = strategy\.position_avg_price - entryAtr \* 2\s+strategy\.exit/s,
+      /if strategy\.position_size > 0 and not na\(entryAtr\)\s+stopLossPrice = strategy\.position_avg_price - entryAtr \* atrMult\s+strategy\.exit\("Stop Loss", "Long", stop=stopLossPrice\)/s,
     );
-    expect(result.generatedScript.indexOf('strategy.position_size[1] > 0')).toBeLessThan(
-      result.generatedScript.indexOf('if entryCondition and strategy.position_size == 0'),
+    expect(result.generatedScript.indexOf('if strategy.position_size > 0 and strategy.position_size[1] == 0')).toBeGreaterThan(
+      result.generatedScript.indexOf('strategy.entry("Long", strategy.long)'),
     );
-    expect(result.generatedScript.indexOf('entryAtr := atr14')).toBeLessThan(
+    expect(result.generatedScript.indexOf('entryAtr := atr14')).toBeGreaterThan(
       result.generatedScript.indexOf('strategy.entry("Long", strategy.long)'),
     );
     expect(result.generatedScript.indexOf('strategy.position_avg_price')).toBeGreaterThan(
       result.generatedScript.indexOf('strategy.entry("Long", strategy.long)'),
+    );
+    expect(result.generatedScript.indexOf('strategy.position_size[1] > 0')).toBeGreaterThan(
+      result.generatedScript.indexOf('strategy.close("Long", comment="Trend Exit")'),
     );
     expect(result.generatedScript).not.toContain('strategy.short');
     expect(result.generatedScript).not.toContain('plot(volume');
