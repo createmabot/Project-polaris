@@ -233,6 +233,20 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.think).toBe(false);
     expect(body.options.num_predict).toBe(1800);
     expect(body.messages[0].content).toContain('Return user-facing warnings and assumptions in Japanese');
+    expect(body.messages[0].content).toContain('Return one strict JSON object only');
+    expect(body.messages[0].content).toContain('generated_script value must contain Pine Script only');
+    expect(body.messages[0].content).toContain('Use //@version=6 and strategy(...)');
+    expect(body.messages[0].content).toContain('Use long-only behavior by default');
+    expect(body.messages[0].content).toContain('do not generate strategy.short entries');
+    expect(body.messages[0].content).toContain('strategy.position_size == 0');
+    expect(body.messages[0].content).toContain('strategy.position_size > 0');
+    expect(body.messages[0].content).toContain('Submit strategy.exit on every bar while the position is open');
+    expect(body.messages[0].content).toContain('Do not compute stop or limit prices from strategy.position_avg_price');
+    expect(body.messages[0].content).toContain('When an ATR stop uses entry-time ATR');
+    expect(body.messages[0].content).toContain('Use strategy.close for rule-based exits');
+    expect(body.messages[0].content).toContain('Avoid plotting volume or average volume');
+    expect(body.messages[0].content).toContain('Do not include narrative comments');
+    expect(body.messages[0].content).toContain('Do not include URLs, citations, web search results, or profit guarantees');
     expect(body.messages[0].content).toContain('Keep generated_script as valid Pine Script');
     expect(body.messages[0].content).toContain('do not translate Pine code');
     expect(body.messages[1].content).toContain('<Japanese user-facing string>');
@@ -247,19 +261,24 @@ ma25 = ta.sma(close, 25)
 ma75 = ta.sma(close, 75)
 volMa20 = ta.sma(volume, 20)
 atr14 = ta.atr(14)
+var float entryAtr = na
 
 entryCondition = ta.crossover(ma25, ma75) and volume > volMa20 * 1.2
 exitCondition = ta.crossunder(ma25, ma75) or close < ma25
-stopPrice = strategy.position_avg_price - atr14 * 2
 
 if entryCondition and strategy.position_size == 0
+    entryAtr := atr14
     strategy.entry("Long", strategy.long)
 
 if strategy.position_size > 0
+    stopPrice = strategy.position_avg_price - nz(entryAtr, atr14) * 2
     strategy.exit("Stop", "Long", stop=stopPrice)
 
 if exitCondition and strategy.position_size > 0
     strategy.close("Long")
+
+if strategy.position_size == 0
+    entryAtr := na
 
 plot(ma25)
 plot(ma75)`;
@@ -290,7 +309,24 @@ plot(ma75)`;
 
     expect(result.status).toBe('generated');
     expect(result.generatedScript).toContain('ta.crossover(ma25, ma75)');
+    expect(result.generatedScript).toContain('if entryCondition and strategy.position_size == 0');
+    expect(result.generatedScript).toContain('if exitCondition and strategy.position_size > 0');
+    expect(result.generatedScript).toContain('var float entryAtr = na');
+    expect(result.generatedScript).toContain('entryAtr := atr14');
+    expect(result.generatedScript).toContain('nz(entryAtr, atr14)');
     expect(result.generatedScript).toContain('strategy.exit("Stop", "Long", stop=stopPrice)');
+    expect(result.generatedScript.indexOf('entryAtr := atr14')).toBeLessThan(
+      result.generatedScript.indexOf('strategy.entry("Long", strategy.long)'),
+    );
+    expect(result.generatedScript.indexOf('strategy.position_avg_price')).toBeGreaterThan(
+      result.generatedScript.indexOf('strategy.entry("Long", strategy.long)'),
+    );
+    expect(result.generatedScript).toContain('if strategy.position_size == 0\n    entryAtr := na');
+    expect(result.generatedScript).not.toContain('strategy.short');
+    expect(result.generatedScript).not.toContain('plot(volume');
+    expect(result.generatedScript).not.toContain('plot(volMa20');
+    expect(result.generatedScript).not.toMatch(/^\s*\/\/(?!@version=6)/m);
+    expect(result.generatedScript).not.toMatch(/^\s*\/\*/m);
     expect(result.warnings).toContain('横ばい相場では取引を控える条件を簡易的に扱っています。');
     expect(result.modelName).toBe('gemma4-ns');
   });
