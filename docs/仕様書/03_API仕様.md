@@ -90,7 +90,9 @@
 - `POST /api/strategy-versions/:versionId/pine/generate` は保存済み StrategyVersion の natural language rule / market / timeframe を使って Pine を生成する。
 - `POST /api/strategy-versions/:versionId/pine/regenerate` は既存 `pine_script_id` と、ユーザーが TradingView 等で確認した `compile_error_text` / `validation_note` / `revision_request` を使って修正再生成する。
 - Pine generation は `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` で provider を切り替える。既定は `local_llm` の LLM-first path とし、deterministic generator は baseline / emergency fallback / test fixture 用であり、API の主品質経路とは扱わない。`openai_api` は明示 opt-in / cost guard 設計後の後続候補として扱う。
-- generated Pine は保存前に最小 validation を通す。空 output、`//@version` 不足、`strategy(...)|indicator(...)` 不足、Markdown fence / 説明文混入を分類し、retryable な invalid output は bounded repair（最大 2 回）に回す。
+- generated Pine は generator -> reviewer -> repair pipeline で扱い、保存前に既存 normalization / 最小 validation を通す。
+- deterministic reviewer は明らかな Pine syntax / style / safety issue を構造化 issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine を structured issue として review するだけで、raw reviewer response は response / 保存対象に含めない。
+- 空 output、`//@version` 不足、`strategy(...)|indicator(...)` 不足、Markdown fence / 説明文混入、reviewer issue など retryable な invalid output は bounded repair（最大 2 回）に回す。
 - response は既存 `pine.repair_attempts` / `pine.invalid_reason_codes` / `pine.failure_reason` を使い、provider / repair の状態を sanitized に返す。
 - raw prompt、raw provider response、provider endpoint、model 実値、secret、local path、stack trace は response に含めない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。

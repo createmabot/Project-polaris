@@ -1,7 +1,8 @@
 ﻿import { describe, expect, it, vi } from 'vitest';
 import { HomeAiService } from '../src/ai/home-ai-service';
 import type { HomeAiProvider } from '../src/ai/home-provider';
-import { assessGeneratedPineScript } from '../src/strategy/pine';
+import { assessGeneratedPineScript, reviewGeneratedPineScriptDeterministic } from '../src/strategy/pine';
+import type { PineReviewResult } from '../src/strategy/pine';
 
 const alertContext = {
   alertEventId: 'alert-1',
@@ -33,6 +34,21 @@ const alertContext = {
     },
   ],
 };
+
+function createPassingPineReview(): PineReviewResult {
+  return {
+    schema_name: 'pine_review_result',
+    schema_version: '1.0',
+    status: 'pass',
+    issues: [],
+    summary: {
+      issue_count: 0,
+      error_count: 0,
+      warning_count: 0,
+      repairable_issue_count: 0,
+    },
+  };
+}
 
 function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
   return {
@@ -168,6 +184,10 @@ function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
         promptVersion: 'v1',
       };
     }),
+    reviewPineScript: vi.fn(async () => {
+      if (kind === 'fail') throw new Error('provider failed');
+      return createPassingPineReview();
+    }),
   };
 }
 
@@ -287,6 +307,7 @@ function createStubProvider(): HomeAiProvider {
       modelName: 'stub-model',
       promptVersion: 'v1',
     })),
+    reviewPineScript: vi.fn(async (context) => reviewGeneratedPineScriptDeterministic(context.generatedScript)),
   };
 }
 
@@ -544,6 +565,200 @@ describe('HomeAiService', () => {
     expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
       'provider_invalid_response',
     );
+  });
+
+  it('repairs reviewer error Pine output within the existing retry budget', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => {
+      if (!context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript:
+            '//@version=6\nstrategy("bad", overlay=true)\nsetupCondition = close < ta.sma(close, 50)\ntriggerCondition = ta.crossover(close, ta.vwap(hlc3))\nentryCondition = setupCondition and triggerCondition\nif entryCondition and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript:
+          '//@version=6\nstrategy("repaired", overlay=true)\nvar bool setupActive = false\nma50 = ta.sma(close, 50)\nvwapValue = ta.vwap(hlc3)\nsetupCondition = close < ma50\ntriggerCondition = ta.crossover(close, vwapValue)\nif strategy.position_size == 0 and setupCondition\n    setupActive := true\nentryCondition = setupActive and triggerCondition\nif entryCondition and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\n    setupActive := false\nplot(ma50)',
+        warnings: ['reviewer_repaired'],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'MA50 below setup then VWAP trigger',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.generatedScript).toContain('var bool setupActive = false');
+    expect(result.output.generatedScript).not.toContain('setupCondition and triggerCondition');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.reviewerSummary?.error_count).toBe(0);
+    expect(result.output.warnings).toContain('Pine reviewer の指摘により、修復リトライ1回目を実行しました。');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.failureReason).toBe('pine_review_needs_repair');
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
+      'reviewer_setup_trigger_same_bar',
+    );
+  });
+
+  it('repairs when provider reviewer reports an error issue', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => {
+      if (!context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript:
+            '//@version=6\nstrategy("provider-reviewed", overlay=true)\nma50 = ta.sma(close, 50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(ma50, color=color.green)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript:
+          '//@version=6\nstrategy("provider-repaired", overlay=true)\nma50 = ta.sma(close, 50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(ma50, color=color.green)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+    reviewMock.mockImplementation(async (context: any) => {
+      if (context.repairAttempt === 0) {
+        return {
+          schema_name: 'pine_review_result',
+          schema_version: '1.0',
+          status: 'needs_repair',
+          issues: [
+            {
+              code: 'narrative_comment',
+              severity: 'error',
+              message: 'Provider reviewer detected a repairable comment issue.',
+              repair_hint: 'Remove narrative generated_script comments.',
+              repairable: true,
+            },
+          ],
+          summary: {
+            issue_count: 1,
+            error_count: 1,
+            warning_count: 0,
+            repairable_issue_count: 1,
+          },
+        };
+      }
+      return createPassingPineReview();
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.generatedScript).toContain('provider-repaired');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.reviewerSummary?.error_count).toBe(0);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect(reviewMock).toHaveBeenCalledTimes(2);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.failureReason).toBe('pine_review_needs_repair');
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
+      'reviewer_narrative_comment',
+    );
+  });
+
+  it('falls back to deterministic reviewer when provider reviewer fails without leaking details', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    reviewMock.mockRejectedValue(new Error('http://secret-reviewer.local model=secret-model stack trace details'));
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 1, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.reviewerSummary?.error_count).toBe(0);
+    expect(result.output.reviewerSummary?.warning_count).toBe(1);
+    expect(JSON.stringify(result.output)).not.toContain('http://secret-reviewer.local');
+    expect(JSON.stringify(result.output)).not.toContain('secret-model');
+    expect(reviewMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails with sanitized reviewer metadata when reviewer issues remain after retry limit', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockResolvedValue({
+      normalizedRuleJson: {},
+      generatedScript:
+        '//@version=6\nstrategy("bad", overlay=true)\nsetupCondition = close < ta.sma(close, 50)\ntriggerCondition = ta.crossover(close, ta.vwap(hlc3))\nentryCondition = setupCondition and triggerCondition\nif entryCondition and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'MA50 below setup then VWAP trigger',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 0, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('failed');
+    expect(result.output.failureReason).toBe('pine_review_needs_repair');
+    expect(result.output.invalidReasonCodes).toContain('reviewer_setup_trigger_same_bar');
+    expect(result.output.reviewerSummary?.error_count).toBe(1);
+    expect(JSON.stringify(result.output)).not.toContain('endpoint');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
   });
 
   it('fails when pine repair reaches retry limit', async () => {

@@ -354,6 +354,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         failure_reason: failureReason,
         repair_attempts: repairAttempts,
         invalid_reason_codes: invalidReasonCodes,
+        pine_reviewer: output.reviewerSummary ?? null,
         provider: log.provider,
         fallback_to_stub: log.fallbackToStub,
         regeneration: params.revisionInput
