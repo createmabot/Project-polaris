@@ -290,6 +290,104 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.generatedScript).toContain('strategy("X"');
   });
 
+  it('extracts Pine JSON envelope from fenced output with surrounding explanation', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [
+            '以下のJSONで返します。',
+            '```json',
+            JSON.stringify({
+              generated_script: '//@version=6\nstrategy("Extracted", overlay=true)',
+              warnings: ['日本語の警告'],
+              assumptions: ['日本語の前提'],
+              normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
+            }),
+            '```',
+            '以上です。',
+          ].join('\n'),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).toContain('strategy("Extracted"');
+    expect(result.warnings).toContain('日本語の警告');
+    expect(result.assumptions).toContain('日本語の前提');
+  });
+
+  it('skips non-JSON braces before the Pine JSON envelope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [
+            '説明用の疑似形式: {generated_script: "..."}',
+            JSON.stringify({
+              generated_script: '//@version=6\nstrategy("Second Envelope", overlay=true)',
+              warnings: [],
+              assumptions: [],
+              normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
+            }),
+          ].join('\n'),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).toContain('strategy("Second Envelope"');
+  });
+
+  it('skips parseable schema examples before the Pine JSON envelope', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [
+            JSON.stringify({
+              generated_script: '<string>',
+              warnings: ['<Japanese user-facing string>'],
+              assumptions: ['<Japanese user-facing string>'],
+              normalized_rule_json: {},
+            }),
+            JSON.stringify({
+              generated_script: '//@version=6\nstrategy("Real Envelope", overlay=true)',
+              warnings: [],
+              assumptions: [],
+              normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
+            }),
+          ].join('\n'),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).toContain('strategy("Real Envelope"');
+    expect(result.generatedScript).not.toContain('<string>');
+  });
+
   it('returns generated Pine from representative LLM-first envelope without deterministic fallback', async () => {
     const representativeScript = `//@version=6
 strategy("Hokkyokusei LLM Generated Strategy", overlay=true)
