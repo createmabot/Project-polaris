@@ -26,6 +26,7 @@ vi.mock('../api/client', async () => {
 });
 
 import StrategyVersionDetail, { findNextPriorityVersionId } from './StrategyVersionDetail';
+import PineGenerationProgress from '../components/ui/PineGenerationProgress';
 
 function createPayload(params: {
   withCompareBase: boolean;
@@ -1182,6 +1183,22 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('<strong>parent_pine_script_id:</strong> <code>pine-1</code>');
     expect(html).toContain('<strong>latest_revision_input_id:</strong> <code>rev-1</code>');
     expect(html).toContain('<strong>latest_revision_request:</strong> sma -&gt; ta.sma');
+    expect(html).not.toContain('Pine生成中です');
+  });
+
+  it('renders Pine generation progress indicator labels', () => {
+    const html = renderToStaticMarkup(<PineGenerationProgress />);
+    expect(html).toContain('data-testid="pine-generation-progress"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('生成リクエスト送信');
+    expect(html).toContain('LLMでPine生成');
+    expect(html).toContain('生成結果レビュー');
+    expect(html).toContain('必要に応じて修正');
+    expect(html).toContain('最終確認');
+    expect(html).not.toContain('raw prompt');
+    expect(html).not.toContain('raw provider response');
+    expect(html).not.toContain('raw reviewer response');
+    expect(html).not.toContain('endpoint');
   });
 });
 

@@ -10,6 +10,7 @@ import ErrorState from '../components/ui/ErrorState';
 import { TextArea } from '../components/ui/FormFields';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
+import PineGenerationProgress from '../components/ui/PineGenerationProgress';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -1137,6 +1138,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
           Pine生成対象は JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
         </div>
+        {regenerating && (
+          <PineGenerationProgress className='mt-3' />
+        )}
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
           <div style={{ display: 'grid', gap: '0.55rem' }}>
