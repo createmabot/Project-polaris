@@ -239,6 +239,114 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.generatedScript).toContain('strategy("X"');
   });
 
+  it('returns generated Pine from representative LLM-first envelope without deterministic fallback', async () => {
+    const representativeScript = `//@version=6
+strategy("Hokkyokusei LLM Generated Strategy", overlay=true)
+
+ma25 = ta.sma(close, 25)
+ma75 = ta.sma(close, 75)
+volMa20 = ta.sma(volume, 20)
+atr14 = ta.atr(14)
+
+entryCondition = ta.crossover(ma25, ma75) and volume > volMa20 * 1.2
+exitCondition = ta.crossunder(ma25, ma75) or close < ma25
+stopPrice = strategy.position_avg_price - atr14 * 2
+
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+
+if strategy.position_size > 0
+    strategy.exit("Stop", "Long", stop=stopPrice)
+
+if exitCondition and strategy.position_size > 0
+    strategy.close("Long")
+
+plot(ma25)
+plot(ma75)`;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: representativeScript,
+            warnings: ['横ばい相場では取引を控える条件を簡易的に扱っています。'],
+            assumptions: ['損切りはエントリーシグナル発生足の ATR(14) を基準にします。'],
+            normalized_rule_json: { strategy_type: 'long_only', indicators: ['SMA25', 'SMA75', 'ATR14'] },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript({
+      ...createPineContext(),
+      naturalLanguageSpec:
+        '日足チャートにおいて、SMA25がSMA75を上抜け、かつ出来高が過去20日平均の1.2倍を超えた場合に買い、ATR(14)の2倍で損切りする。',
+    });
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).toContain('ta.crossover(ma25, ma75)');
+    expect(result.generatedScript).toContain('strategy.exit("Stop", "Long", stop=stopPrice)');
+    expect(result.warnings).toContain('横ばい相場では取引を控える条件を簡易的に扱っています。');
+    expect(result.modelName).toBe('gemma4-ns');
+  });
+
+  it('does not silently fall back to deterministic Pine when LLM JSON is malformed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: 'not json',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('failed');
+    expect(result.generatedScript).toBeNull();
+    expect(result.failureReason).toBe('provider_invalid_response');
+    expect(result.invalidReasonCodes).toContain('malformed_json');
+    expect(result.warnings.join(' ')).toContain('JSONを解析できませんでした');
+  });
+
+  it('does not silently fall back to deterministic Pine when generated_script is missing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            warnings: ['日本語の警告'],
+            assumptions: ['日本語の前提'],
+            normalized_rule_json: {},
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('failed');
+    expect(result.generatedScript).toBeNull();
+    expect(result.failureReason).toBe('provider_invalid_response');
+    expect(result.invalidReasonCodes).toContain('generated_script_missing');
+    expect(result.warnings.join(' ')).toContain('generated_script');
+  });
+
   it('fails pine generation when content is empty and finish reason is length', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

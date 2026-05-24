@@ -1,6 +1,6 @@
 # 北極星 API 現行仕様
 
-更新日: 2026-05-15
+更新日: 2026-05-24
 分類: 仕様書
 
 ## 1. 目的
@@ -85,7 +85,18 @@
 - CSV import parsed report 作成直後と internal backtest report conversion 完了直後は、最小 auto enqueue 対象。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
-## 7-0. Strategy proposal
+## 7-0. StrategyVersion Pine generation
+
+- `POST /api/strategy-versions/:versionId/pine/generate` は保存済み StrategyVersion の natural language rule / market / timeframe を使って Pine を生成する。
+- `POST /api/strategy-versions/:versionId/pine/regenerate` は既存 `pine_script_id` と、ユーザーが TradingView 等で確認した `compile_error_text` / `validation_note` / `revision_request` を使って修正再生成する。
+- Pine generation は `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` で provider を切り替える。既定は `local_llm` の LLM-first path とし、deterministic generator は baseline / emergency fallback / test fixture 用であり、API の主品質経路とは扱わない。`openai_api` は明示 opt-in / cost guard 設計後の後続候補として扱う。
+- generated Pine は保存前に最小 validation を通す。空 output、`//@version` 不足、`strategy(...)|indicator(...)` 不足、Markdown fence / 説明文混入を分類し、retryable な invalid output は bounded repair（最大 2 回）に回す。
+- response は既存 `pine.repair_attempts` / `pine.invalid_reason_codes` / `pine.failure_reason` を使い、provider / repair の状態を sanitized に返す。
+- raw prompt、raw provider response、provider endpoint、model 実値、secret、local path、stack trace は response に含めない。
+- TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
+- Pine generation / regeneration は Strategy / StrategyVersion 保存、backtest、AI summary を自動起動しない。
+
+## 7-1. Strategy proposal
 
 - LLM strategy proposal の初回実装は `POST /api/strategy-lab/proposals` とする。
 - request は `market` / `timeframe` / `symbol_code` / `risk_preference` / `strategy_type_bias` / `proposal_count` / `user_hint` を候補にする。
@@ -170,7 +181,7 @@ StrategyVersion Pine generation の market / timeframe:
 - unsupported market / timeframe は Pine generation note の warning / assumption で明示し、既存 fallback 境界を維持する。
 - internal backtest engine の対応範囲拡張、TradingView compile 自動実行、auto Pine / auto save / auto backtest / AI summary 自動生成はこの API 変更に含めない。
 
-## 7-1. Symbol references
+## 7-2. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`
   - SymbolDetail の関連参照情報をユーザー操作起点で手動再取得する。
@@ -180,7 +191,7 @@ StrategyVersion Pine generation の market / timeframe:
   - 既に `collect_references_for_symbol` の `queued|running` job がある場合は、追加実行せず既存 job status を返す。
   - 失敗時は provider endpoint、secret、stack trace を response に含めない。
 
-## 7-2. Watchlist / positions management
+## 7-3. Watchlist / positions management
 
 - `POST /api/watchlist-items` と `POST /api/positions` は `symbol_code` だけの追加を受け付ける。
 - 既存 `symbols` に一致する `symbol_code` / `symbol` / `tradingview_symbol` がある場合、既存の `displayName` / `marketCode` / `tradingviewSymbol` を利用する。
