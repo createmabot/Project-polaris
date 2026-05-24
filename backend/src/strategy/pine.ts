@@ -37,6 +37,52 @@ export type PineAssessmentResult = {
   invalidReasonCodes: PineInvalidReasonCode[];
 };
 
+export type PineReviewIssueCode =
+  | 'pine_syntax_risk'
+  | 'unsupported_color_alias'
+  | 'unsupported_color_namespace'
+  | 'unsupported_plot_style'
+  | 'dmi_property_access'
+  | 'unsupported_dmi_property_access'
+  | 'unsupported_adx_function'
+  | 'block_local_variable_scope_risk'
+  | 'na_type_inference_risk'
+  | 'uninitialized_stop_loss_price'
+  | 'setup_trigger_state_risk'
+  | 'below_vs_crossunder_mismatch'
+  | 'oscillator_plot_overlay_risk'
+  | 'overlay_oscillator_plot'
+  | 'entry_price_reference_risk'
+  | 'stop_order_semantics_risk'
+  | 'unused_state_variable'
+  | 'narrative_comment'
+  | 'long_only_violation'
+  | 'setup_trigger_same_bar'
+  | 'entry_atr_na_capture'
+  | 'provider_review_unavailable'
+  | 'other';
+
+export type PineReviewIssue = {
+  code: PineReviewIssueCode;
+  severity: 'error' | 'warning' | 'info';
+  message: string;
+  repair_hint: string;
+  repairable: boolean;
+};
+
+export type PineReviewResult = {
+  schema_name: 'pine_review_result';
+  schema_version: '1.0';
+  status: 'pass' | 'needs_repair';
+  issues: PineReviewIssue[];
+  summary: {
+    issue_count: number;
+    error_count: number;
+    warning_count: number;
+    repairable_issue_count: number;
+  };
+};
+
 const SUPPORTED_MARKETS = new Set(['JP_STOCK', 'US_STOCK']);
 
 function toConditionText(lines: string[]): string {
@@ -124,6 +170,78 @@ function normalizeUnsupportedPineAliases(script: string): {
   }
 
   return { script: normalized, warnings, invalidReasonCodes };
+}
+
+function createPineReviewResult(issues: PineReviewIssue[]): PineReviewResult {
+  const errorCount = issues.filter((issue) => issue.severity === 'error').length;
+  const warningIssueCount = issues.filter((issue) => issue.severity === 'warning').length;
+  const repairableIssueCount = issues.filter((issue) => issue.repairable).length;
+  return {
+    schema_name: 'pine_review_result',
+    schema_version: '1.0',
+    status: errorCount > 0 ? 'needs_repair' : 'pass',
+    issues,
+    summary: {
+      issue_count: issues.length,
+      error_count: errorCount,
+      warning_count: warningIssueCount,
+      repairable_issue_count: repairableIssueCount,
+    },
+  };
+}
+
+function pushReviewIssue(issues: PineReviewIssue[], code: PineReviewIssueCode, message: string): void {
+  issues.push({
+    code,
+    severity: 'error',
+    message,
+    repair_hint: message,
+    repairable: true,
+  });
+}
+
+export function reviewGeneratedPineScriptDeterministic(script: string | null): PineReviewResult {
+  if (!script || !script.trim()) {
+    return createPineReviewResult([]);
+  }
+
+  const issues: PineReviewIssue[] = [];
+  const source = script.trim();
+  const hasOverlayTrue = /\b(strategy|indicator)\s*\([^)]*\boverlay\s*=\s*true\b/i.test(source);
+
+  if (/\bcolor\.color\./.test(source)) {
+    pushReviewIssue(issues, 'unsupported_color_namespace', 'Use supported color.* namespace, not color.color.*.');
+  }
+  if (/\bplot\.style_dashed\b/.test(source)) {
+    pushReviewIssue(issues, 'unsupported_plot_style', 'plot.style_dashed is not supported in plot().');
+  }
+  if (/\bta\.dmi\s*\([^)]*\)\s*\.\w+/i.test(source)) {
+    pushReviewIssue(issues, 'unsupported_dmi_property_access', 'Do not access properties directly from ta.dmi(...).');
+  }
+  if (/\bta\.adx\s*\(/i.test(source)) {
+    pushReviewIssue(issues, 'unsupported_adx_function', 'Use supported DMI/ADX calculation patterns instead of ta.adx(...).');
+  }
+  if (/^\s*stopLossPrice\s*=\s*na\s*$/im.test(source)) {
+    pushReviewIssue(issues, 'uninitialized_stop_loss_price', 'Do not initialize stopLossPrice with a bare na assignment.');
+  }
+  if (
+    hasOverlayTrue &&
+    (/\bplot\s*\(\s*(rsi|rsiValue|stoch|stochValue|macd|macdHist|adx|adxValue)\b/i.test(source) ||
+      /^\s*hline\s*\(/im.test(source))
+  ) {
+    pushReviewIssue(issues, 'overlay_oscillator_plot', 'Do not plot oscillator panes by default when overlay=true.');
+  }
+  if (/^\s*(\/\/|\/\*)\s*(Note:|注意:|Since\b|To ensure\b|Let's use\b|より正確な実装|Pine Scriptの仕様上)/im.test(source)) {
+    pushReviewIssue(issues, 'narrative_comment', 'Generated script comments must stay short and structural, not narrative.');
+  }
+  if (/\b(entryCondition\s*=\s*)?setupCondition\s+and\s+triggerCondition\b/i.test(source)) {
+    pushReviewIssue(issues, 'setup_trigger_same_bar', 'Use setupActive state instead of requiring setup and trigger on the same bar.');
+  }
+  if (/\bif\s+strategy\.position_size\s*>\s*0\s+and\s+na\s*\(\s*entryAtr\s*\)/i.test(source)) {
+    pushReviewIssue(issues, 'entry_atr_na_capture', 'Capture entry ATR on the position-open transition instead of na(entryAtr).');
+  }
+
+  return createPineReviewResult(issues);
 }
 
 export function assessGeneratedPineScript(script: string | null): PineAssessmentResult {

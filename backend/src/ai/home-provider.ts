@@ -2,7 +2,11 @@ import { env } from '../env';
 import { AlertSummaryContext, AlertSummaryOutput, MockAiAdapter } from './adapter';
 import { LocalLlmAdapter } from './local-llm-adapter';
 import { FallbackApiAdapter } from './fallback-api-adapter';
-import { generatePineDeterministic } from '../strategy/pine';
+import {
+  generatePineDeterministic,
+  reviewGeneratedPineScriptDeterministic,
+} from '../strategy/pine';
+import type { PineReviewIssue, PineReviewIssueCode, PineReviewResult } from '../strategy/pine';
 
 export type HomeAiProviderType = 'stub' | 'local_llm' | 'openai_api';
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
@@ -259,6 +263,14 @@ export type PineGenerationContext = {
   } | null;
 };
 
+export type PineReviewContext = {
+  generatedScript: string;
+  naturalLanguageSpec: string;
+  targetMarket: string;
+  targetTimeframe: string;
+  repairAttempt: number;
+};
+
 export type PineGenerationOutput = {
   normalizedRuleJson: Record<string, unknown>;
   generatedScript: string | null;
@@ -268,6 +280,12 @@ export type PineGenerationOutput = {
   repairAttempts?: number;
   failureReason?: string | null;
   invalidReasonCodes?: string[];
+  reviewerSummary?: {
+    issue_count: number;
+    error_count: number;
+    warning_count: number;
+    repairable_issue_count: number;
+  };
   modelName: string;
   promptVersion: string;
 };
@@ -280,6 +298,7 @@ export type HomeAiProvider = {
   generateComparisonSummary: (context: ComparisonSummaryContext) => Promise<ComparisonSummaryOutput>;
   generateBacktestSummary: (context: BacktestSummaryContext) => Promise<BacktestSummaryOutput>;
   generatePineScript: (context: PineGenerationContext) => Promise<PineGenerationOutput>;
+  reviewPineScript?: (context: PineReviewContext) => Promise<PineReviewResult>;
 };
 
 type LocalLlmTaskType =
@@ -807,6 +826,90 @@ function buildDeterministicPineOutput(
   };
 }
 
+const PINE_REVIEW_ISSUE_CODES: ReadonlySet<string> = new Set([
+  'pine_syntax_risk',
+  'unsupported_color_alias',
+  'unsupported_color_namespace',
+  'unsupported_plot_style',
+  'dmi_property_access',
+  'unsupported_dmi_property_access',
+  'unsupported_adx_function',
+  'block_local_variable_scope_risk',
+  'na_type_inference_risk',
+  'uninitialized_stop_loss_price',
+  'setup_trigger_state_risk',
+  'below_vs_crossunder_mismatch',
+  'oscillator_plot_overlay_risk',
+  'overlay_oscillator_plot',
+  'entry_price_reference_risk',
+  'stop_order_semantics_risk',
+  'unused_state_variable',
+  'narrative_comment',
+  'long_only_violation',
+  'setup_trigger_same_bar',
+  'entry_atr_na_capture',
+  'other',
+]);
+
+function createPineReviewResultFromIssues(issues: PineReviewIssue[]): PineReviewResult {
+  const errorCount = issues.filter((issue) => issue.severity === 'error').length;
+  const warningIssueCount = issues.filter((issue) => issue.severity === 'warning').length;
+  const repairableIssueCount = issues.filter((issue) => issue.repairable).length;
+  return {
+    schema_name: 'pine_review_result',
+    schema_version: '1.0',
+    status: errorCount > 0 ? 'needs_repair' : 'pass',
+    issues,
+    summary: {
+      issue_count: issues.length,
+      error_count: errorCount,
+      warning_count: warningIssueCount,
+      repairable_issue_count: repairableIssueCount,
+    },
+  };
+}
+
+function normalizePineReviewResult(value: unknown): PineReviewResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('pine_review_invalid_response');
+  }
+  const row = value as Record<string, unknown>;
+  if (row.schema_name !== 'pine_review_result' || row.schema_version !== '1.0') {
+    throw new Error('pine_review_invalid_response');
+  }
+  if (row.status !== 'pass' && row.status !== 'needs_repair') {
+    throw new Error('pine_review_invalid_response');
+  }
+  if (!Array.isArray(row.issues)) {
+    throw new Error('pine_review_invalid_response');
+  }
+  const issues = row.issues
+    .map((item): PineReviewIssue | null => {
+      if (typeof item !== 'object' || item === null || Array.isArray(item)) return null;
+      const issue = item as Record<string, unknown>;
+      if (typeof issue.code !== 'string' || !PINE_REVIEW_ISSUE_CODES.has(issue.code)) return null;
+      const severity =
+        issue.severity === 'error' || issue.severity === 'warning' || issue.severity === 'info'
+          ? issue.severity
+          : null;
+      if (!severity) return null;
+      const message = typeof issue.message === 'string' && issue.message.trim() ? issue.message.trim() : issue.code;
+      const repairHint =
+        typeof issue.repair_hint === 'string' && issue.repair_hint.trim() ? issue.repair_hint.trim() : message;
+      return {
+        code: issue.code as PineReviewIssueCode,
+        severity,
+        message,
+        repair_hint: repairHint,
+        repairable: typeof issue.repairable === 'boolean' ? issue.repairable : severity === 'error',
+      };
+    })
+    .filter((issue): issue is PineReviewIssue => issue !== null)
+    .slice(0, 16);
+
+  return createPineReviewResultFromIssues(issues);
+}
+
 class StubHomeAiProvider implements HomeAiProvider {
   readonly providerType: HomeAiProviderType = 'stub';
   private readonly adapter = new MockAiAdapter();
@@ -852,6 +955,10 @@ class StubHomeAiProvider implements HomeAiProvider {
       modelName: 'stub-pine-v1',
       promptVersion: 'v1.0.0-pine-stub',
     });
+  }
+
+  async reviewPineScript(context: PineReviewContext): Promise<PineReviewResult> {
+    return reviewGeneratedPineScriptDeterministic(context.generatedScript);
   }
 }
 
@@ -1647,6 +1754,89 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       status: 'generated',
     };
   }
+
+  async reviewPineScript(context: PineReviewContext): Promise<PineReviewResult> {
+    const endpointPath = '/api/chat';
+    const response = await fetch(`${this.endpoint}${endpointPath}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Review generated Pine Script for known compile, safety, and strategy-state issues.',
+              'Return one strict JSON object only. Do not include markdown fences.',
+              'Do not rewrite or return the Pine script.',
+              'Use schema_name pine_review_result and schema_version 1.0.',
+              'Use status pass when no error issues exist, otherwise needs_repair.',
+              'Each issue must include code, severity, message, repair_hint, and repairable.',
+              'Use severity error for repair-triggering issues. Use warning or info only for non-blocking observations.',
+              'Allowed issue codes: pine_syntax_risk, unsupported_color_alias, unsupported_color_namespace, unsupported_plot_style, dmi_property_access, unsupported_dmi_property_access, unsupported_adx_function, block_local_variable_scope_risk, na_type_inference_risk, uninitialized_stop_loss_price, setup_trigger_state_risk, below_vs_crossunder_mismatch, oscillator_plot_overlay_risk, overlay_oscillator_plot, entry_price_reference_risk, stop_order_semantics_risk, unused_state_variable, narrative_comment, long_only_violation, setup_trigger_same_bar, entry_atr_na_capture, other.',
+              'Do not include raw prompt, raw response, endpoint, model, secret, local path, or stack trace.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              target_market: context.targetMarket,
+              target_timeframe: context.targetTimeframe,
+              repair_attempt: context.repairAttempt,
+              natural_language_spec_summary:
+                context.naturalLanguageSpec.length > 240
+                  ? `${context.naturalLanguageSpec.slice(0, 240)}...`
+                  : context.naturalLanguageSpec,
+              generated_script: context.generatedScript,
+              output_schema: {
+                schema_name: 'pine_review_result',
+                schema_version: '1.0',
+                status: 'pass | needs_repair',
+                issues: [
+                  {
+                    code: '<allowed_issue_code>',
+                    severity: 'error | warning | info',
+                    message: '<sanitized short string>',
+                    repair_hint: '<sanitized short string>',
+                    repairable: true,
+                  },
+                ],
+                summary: {
+                  issue_count: '<number>',
+                  error_count: '<number>',
+                  warning_count: '<number>',
+                  repairable_issue_count: '<number>',
+                },
+              },
+            }),
+          },
+        ],
+        stream: false,
+        think: false,
+        options: {
+          temperature: 0,
+          num_predict: 700,
+        },
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`local_llm pine review failed: HTTP ${response.status} | task_type=pine_review`);
+    }
+
+    const data: any = await response.json();
+    const content = typeof data?.message?.content === 'string' ? data.message.content.trim() : '';
+    if (!content) {
+      throw new Error('local_llm pine review returned invalid output | task_type=pine_review');
+    }
+
+    try {
+      return normalizePineReviewResult(JSON.parse(this.sanitizeJsonContent(content)));
+    } catch {
+      throw new Error('local_llm pine review returned invalid output | task_type=pine_review');
+    }
+  }
 }
 
 class OpenAiHomeAiProvider implements HomeAiProvider {
@@ -2128,6 +2318,10 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
     } catch {
       return deterministic;
     }
+  }
+
+  async reviewPineScript(context: PineReviewContext): Promise<PineReviewResult> {
+    return reviewGeneratedPineScriptDeterministic(context.generatedScript);
   }
 }
 

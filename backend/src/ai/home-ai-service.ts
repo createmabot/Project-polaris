@@ -1,5 +1,7 @@
 import { AlertSummaryContext } from './adapter';
 import { env } from '../env';
+import { reviewGeneratedPineScriptDeterministic } from '../strategy/pine';
+import type { PineReviewResult } from '../strategy/pine';
 import {
   BacktestSummaryContext,
   BacktestSummaryOutput,
@@ -36,6 +38,8 @@ type PineRepairValidation = {
   retryable: boolean;
   invalidReasonCodes: string[];
 };
+
+type PineReview = (script: string) => PineReviewResult | Promise<PineReviewResult>;
 
 export class HomeAiService {
   constructor(
@@ -270,10 +274,12 @@ export class HomeAiService {
     options?: {
       maxRepairAttempts?: number;
       validateOutput?: (script: string | null) => PineRepairValidation;
+      reviewOutput?: PineReview;
     },
   ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
     const maxRepairAttempts = Math.max(0, Math.min(options?.maxRepairAttempts ?? env.MAX_LOCAL_RETRY_COUNT, 2));
     const validateOutput = options?.validateOutput;
+    const reviewOutput = options?.reviewOutput;
     const aggregateWarnings: string[] = [];
     const startedAt = Date.now();
     const attemptedModel = this.resolveAttemptedModel();
@@ -322,6 +328,56 @@ export class HomeAiService {
 
       const normalizedGeneratedScript = assessed.normalizedScript;
       if (!assessed.failureReason && normalizedGeneratedScript) {
+        const review = reviewOutput
+          ? await reviewOutput(normalizedGeneratedScript)
+          : await this.reviewPineScriptWithProvider(context, normalizedGeneratedScript, attempt);
+        const errorReviewIssues = review.issues.filter((issue) => issue.severity === 'error');
+        if (errorReviewIssues.length > 0) {
+          const reviewInvalidReasonCodes = errorReviewIssues.map((issue) => `reviewer_${issue.code}`);
+          const canRepairReview = attempt < maxRepairAttempts && errorReviewIssues.some((issue) => issue.repairable);
+          lastFailureReason = 'pine_review_needs_repair';
+          lastInvalidReasonCodes = Array.from(new Set([...combinedInvalidReasonCodes, ...reviewInvalidReasonCodes]));
+
+          if (!canRepairReview) {
+            return {
+              output: {
+                ...run.output,
+                generatedScript: null,
+                warnings: Array.from(
+                  new Set([
+                    ...mergedOutputWarnings,
+                    ...assessed.warnings,
+                    `Pine reviewer が修復対象の問題を ${errorReviewIssues.length} 件検出しました。`,
+                  ]),
+                ),
+                status: 'failed',
+                repairAttempts: attempt,
+                failureReason: 'pine_review_needs_repair',
+                invalidReasonCodes: lastInvalidReasonCodes,
+                reviewerSummary: review.summary,
+              },
+              log: {
+                ...run.log,
+                retryCount: attempt,
+                durationMs: Date.now() - startedAt,
+              },
+            };
+          }
+
+          attempt += 1;
+          currentContext = {
+            ...context,
+            repairRequest: {
+              attempt,
+              invalidReasonCodes: lastInvalidReasonCodes,
+              failureReason: 'pine_review_needs_repair',
+              previousScript: normalizedGeneratedScript,
+            },
+          };
+          aggregateWarnings.push(`Pine reviewer の指摘により、修復リトライ${attempt}回目を実行しました。`);
+          continue;
+        }
+
         return {
           output: {
             ...run.output,
@@ -331,6 +387,7 @@ export class HomeAiService {
             repairAttempts: attempt,
             failureReason: null,
             invalidReasonCodes: assessed.invalidReasonCodes,
+            reviewerSummary: review.summary,
           },
           log: {
             ...run.log,
@@ -417,6 +474,74 @@ export class HomeAiService {
   private toProviderFailureError(error: unknown): Error {
     const message = error instanceof Error ? error.message : String(error);
     return new Error(`ai_provider_failed(${this.provider.providerType}): ${message}`);
+  }
+
+  private async reviewPineScriptWithProvider(
+    context: PineGenerationContext,
+    generatedScript: string,
+    repairAttempt: number,
+  ): Promise<PineReviewResult> {
+    const deterministicReview = reviewGeneratedPineScriptDeterministic(generatedScript);
+    if (!this.provider.reviewPineScript || this.provider.providerType === 'stub') {
+      return deterministicReview;
+    }
+
+    try {
+      const providerReview = await this.provider.reviewPineScript({
+        generatedScript,
+        naturalLanguageSpec: context.naturalLanguageSpec,
+        targetMarket: context.targetMarket,
+        targetTimeframe: context.targetTimeframe,
+        repairAttempt,
+      });
+      return this.mergePineReviews(deterministicReview, providerReview);
+    } catch {
+      return this.mergePineReviews(deterministicReview, {
+        schema_name: 'pine_review_result',
+        schema_version: '1.0',
+        status: 'pass',
+        issues: [
+          {
+            code: 'provider_review_unavailable',
+            severity: 'warning',
+            message: 'Pine reviewer provider was unavailable; deterministic review was used.',
+            repair_hint: 'Retry provider review manually if needed.',
+            repairable: false,
+          },
+        ],
+        summary: {
+          issue_count: 1,
+          error_count: 0,
+          warning_count: 1,
+          repairable_issue_count: 0,
+        },
+      });
+    }
+  }
+
+  private mergePineReviews(base: PineReviewResult, extra: PineReviewResult): PineReviewResult {
+    const seen = new Set<string>();
+    const issues = [...base.issues, ...extra.issues].filter((issue) => {
+      const key = `${issue.code}:${issue.severity}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const errorCount = issues.filter((issue) => issue.severity === 'error').length;
+    const warningIssueCount = issues.filter((issue) => issue.severity === 'warning').length;
+    const repairableIssueCount = issues.filter((issue) => issue.repairable).length;
+    return {
+      schema_name: 'pine_review_result',
+      schema_version: '1.0',
+      status: errorCount > 0 ? 'needs_repair' : 'pass',
+      issues,
+      summary: {
+        issue_count: issues.length,
+        error_count: errorCount,
+        warning_count: warningIssueCount,
+        repairable_issue_count: repairableIssueCount,
+      },
+    };
   }
 
   private async generatePineScriptSingleAttempt(
