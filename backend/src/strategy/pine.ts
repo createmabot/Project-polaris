@@ -25,7 +25,9 @@ export type PineInvalidReasonCode =
   | 'missing_version_declaration'
   | 'missing_strategy_or_indicator_declaration'
   | 'markdown_code_fence_pollution'
-  | 'explanatory_text_pollution';
+  | 'explanatory_text_pollution'
+  | 'unsupported_color_namespace'
+  | 'unsupported_plot_style';
 
 export type PineAssessmentResult = {
   normalizedScript: string | null;
@@ -100,6 +102,30 @@ function detectExplanatoryNoise(script: string): boolean {
   });
 }
 
+function normalizeUnsupportedPineAliases(script: string): {
+  script: string;
+  warnings: string[];
+  invalidReasonCodes: PineInvalidReasonCode[];
+} {
+  let normalized = script;
+  const warnings: string[] = [];
+  const invalidReasonCodes: PineInvalidReasonCode[] = [];
+
+  if (/\bcolor\.color\./.test(normalized)) {
+    normalized = normalized.replace(/\bcolor\.color\./g, 'color.');
+    warnings.push('Pine Script の unsupported color.color.* namespace を color.* に補正しました。');
+    invalidReasonCodes.push('unsupported_color_namespace');
+  }
+
+  if (/\bplot\.style_dashed\b/.test(normalized)) {
+    normalized = normalized.replace(/\bplot\.style_dashed\b/g, 'plot.style_linebr');
+    warnings.push('Pine Script の unsupported plot.style_dashed を plot.style_linebr に補正しました。');
+    invalidReasonCodes.push('unsupported_plot_style');
+  }
+
+  return { script: normalized, warnings, invalidReasonCodes };
+}
+
 export function assessGeneratedPineScript(script: string | null): PineAssessmentResult {
   if (!script || !script.trim()) {
     return {
@@ -133,6 +159,11 @@ export function assessGeneratedPineScript(script: string | null): PineAssessment
     warnings.push('生成されたスクリプトに説明文が混在している可能性があります。');
     invalidReasonCodes.push('explanatory_text_pollution');
   }
+
+  const normalizedUnsupportedAliases = normalizeUnsupportedPineAliases(normalizedScript);
+  normalizedScript = normalizedUnsupportedAliases.script;
+  warnings.push(...normalizedUnsupportedAliases.warnings);
+  invalidReasonCodes.push(...normalizedUnsupportedAliases.invalidReasonCodes);
 
   if (!normalizedScript) {
     return {

@@ -41,6 +41,8 @@ Pine generation の prompt tuning では、安全な strategy coding rule を pr
 
 Pine generation の prompt tuning は percentage stop / oscillator strategy も対象にする。percentage stop は position open 中に `strategy.position_avg_price` を基準に計算し、`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で代替しない。ATR が明示されていない percentage stop strategy では、`entryAtr` や `ta.atr` を導入しない。RSI / oscillator threshold は方向を維持し、「60 を上回る」は `rsi > 60` または wording に応じた crossover として扱い、明示がない限り crossunder にしない。`overlay=true` の価格 chart strategy では oscillator plot を既定で出さず、明示要求または separate pane 意図がある場合だけ扱う。real local_llm 品質確認は manual smoke に限定し、required check は fake / deterministic tests を使う。TradingView compile automation、自動保存、backtest / AI summary 自動連鎖は未実装のまま維持する。
 
+Representative strategy smoke follow-up では、Pine compile typo / unsupported plot style、setup -> trigger 条件、below wording、entry-time ATR、unused state、comment、stop loss plot の品質観点も prompt tuning に含める。`color.color.*` や `plot.style_dashed` は避ける。setup と trigger は同一 bar の不可能な `and` 結合ではなく state variable でつなぐ。「below / 下回った場合」は状態条件を基本とし、crossunder は cross wording が明示された場合に使う。entry-time ATR は position open transition capture を優先し、ATR を使わない戦略では `entryAtr` / `ta.atr` を出さない。unused variable / state は抑制する。generated_script の comment は短い section comment だけにし、実装理由は warnings / assumptions に寄せる。stop loss plot を出す場合は position / `na` guard を使う。
+
 Pine generation でも raw prompt、raw provider response、provider endpoint、model 実値、secret、local path、stack trace は API response、UI、docs、PR、通常 logs に残さない。real `local_llm` 実体依存の確認は manual smoke に限定し、required check には入れない。mock / fake provider output、deterministic fallback、validation / repair classification を required check の対象にする。
 
 ## 4. job 状態の見方

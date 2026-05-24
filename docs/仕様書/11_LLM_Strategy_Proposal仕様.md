@@ -1231,11 +1231,16 @@ LLM に要求する安全な strategy coding rule:
 - percentage stop は position open 中に `strategy.position_avg_price` を基準に計算する。`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で entry price を代替しない。
 - percentage stop のみを要求された戦略では、ATR が明示されていない限り `entryAtr` や `ta.atr` などの ATR state / indicator を導入しない。
 - RSI / oscillator 戦略では threshold direction を維持する。例: 「RSI が 60 を上回る」は `rsi > 60` または wording に応じた crossover であり、明示がない限り crossunder にしない。
+- setup -> trigger 型の条件は、同一 bar で同時成立しない条件を `and` で結合せず、setup state を `var` などで保持してから trigger を評価する。
+- 「below / 下回った場合」は状態条件として扱い、`crossunder` は「下抜け」「cross below」など cross wording が明示された場合に使う。
 - `overlay=true` の価格 chart strategy では、oscillator plot は既定では出さない。oscillator plot はユーザーが明示した場合、または separate pane を意図する場合だけ検討する。
 - volume condition は signal 判定には使ってよいが、volume plot は既定では出さない。価格 chart 上の overlay strategy で volume plot を追加すると視認性を悪化させるため、ユーザーが明示した場合だけ検討する。
+- Pine compile typo を避ける。`color.color.*` や unsupported な `plot.style_dashed` は生成しない。
 - `plot` は strategy 理解に必要な最小補助線に限定する。過剰な debug plot / label / table は初回生成では避ける。
+- stop loss plot を出す場合は、position open 中だけ値を返し、それ以外は `na` にするなど position / na guard を使う。
+- unused variable / unused state は出さない。ATR state は ATR を使う戦略でだけ導入する。
 - unsupported risk control、複数ポジション、pyramiding、trailing stop、time stop、volume plot などを完全に表現できない場合は、warnings / assumptions に日本語で限界を明記する。
-- generated script 本文は Pine syntax を維持し、関数名・識別子・Pine 予約語を翻訳しない。warnings / assumptions はユーザー向け日本語文にする。
+- generated script 本文は Pine syntax を維持し、関数名・識別子・Pine 予約語を翻訳しない。comments は短い section comment だけに留め、実装理由や制約説明は warnings / assumptions に出す。warnings / assumptions はユーザー向け日本語文にする。
 
 生成後の境界:
 
