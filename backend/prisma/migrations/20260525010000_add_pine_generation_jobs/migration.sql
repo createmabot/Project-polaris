@@ -25,7 +25,3 @@ CREATE INDEX "pine_generation_jobs_status_created_at_idx" ON "pine_generation_jo
 -- AddForeignKey
 ALTER TABLE "pine_generation_jobs" ADD CONSTRAINT "pine_generation_jobs_strategy_version_id_fkey"
     FOREIGN KEY ("strategy_version_id") REFERENCES "strategy_rule_versions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "pine_generation_jobs" ADD CONSTRAINT "pine_generation_jobs_strategy_version_id_fkey"
-    FOREIGN KEY ("strategy_version_id") REFERENCES "strategy_rule_versions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
