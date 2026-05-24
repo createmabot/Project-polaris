@@ -12,6 +12,7 @@ import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
+import PineGenerationProgress from '../components/ui/PineGenerationProgress';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import Surface from '../components/ui/Surface';
@@ -1278,6 +1279,10 @@ export default function StrategyLab() {
           <Button type='submit' variant='primary' disabled={submitting} className='w-fit'>
             {submitting ? '生成中...' : '保存してPine生成'}
           </Button>
+
+          {submitting && (
+            <PineGenerationProgress className='mt-2' />
+          )}
         </form>
       </SectionCard>
 

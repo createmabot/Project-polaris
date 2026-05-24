@@ -1247,6 +1247,7 @@ LLM に要求する安全な strategy coding rule:
 - Pine generation は generator -> reviewer -> repair pipeline で扱い、LLM output は既存 normalization / validation / bounded repair を通す。repair は最大 2 回までで、無限 retry は行わない。
 - deterministic reviewer は明らかな Pine syntax / style / safety issue を structured issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine の review 結果は structured issue に正規化し、raw reviewer response は API / UI / 保存対象に出さない。
 - reviewer issue は retryable な場合に bounded repair の入力にできる。repair 後も既存 validation / normalization は維持する。
+- StrategyLab / StrategyVersionDetail の progress indicator は同期 request 中の frontend-only 概算表示であり、generator -> reviewer -> repair step は説明用の近似である。backend streaming、polling、job、SSE、WebSocket、endpoint / model / raw prompt / raw response / raw reviewer response 表示は導入しない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
 - Pine generation / regeneration は Strategy 保存、backtest、AI summary を自動起動しない。
 - real `local_llm` 実体依存の確認は manual smoke に限定し、required check には入れない。required check は fake provider output、deterministic baseline / fallback、validation / repair classification を対象にする。

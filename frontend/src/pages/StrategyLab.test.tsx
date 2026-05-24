@@ -91,6 +91,7 @@ function primeScenarioState(params: {
   historySelected?: string;
   historyArchived?: string;
   historyPage?: number;
+  submitting?: boolean;
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
@@ -125,7 +126,7 @@ function primeScenarioState(params: {
     params.historySelected ?? 'all',
     params.historyArchived ?? 'active',
     params.historyPage ?? 1,
-    false,
+    params.submitting ?? false,
     null,
     params.result ?? null,
     params.strategyId ?? null,
@@ -135,11 +136,12 @@ function primeScenarioState(params: {
     params.importError ?? null,
     false,
     null,
-    false,
+    0,
   ];
   values.forEach((value, index) => {
     mockUseState.mockImplementationOnce(() => [value, setters[index]]);
   });
+  mockUseState.mockImplementation((initial: unknown) => [initial, vi.fn()]);
   return setters;
 }
 
@@ -599,6 +601,36 @@ describe('StrategyLab', () => {
     expect(html).toContain('対応CSV: Performance Summary（英語・日本語ヘッダー）/ List of Trades（英語・日本語ヘッダー）。');
     expect(html).toContain('CSVを取込');
     expect(html).toContain('検証レポートを開く');
+    expect(html).not.toContain('Pine生成中です');
+  });
+
+  it('renders Pine generation progress while submitting', () => {
+    primeScenarioState({
+      submitting: true,
+    });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        strategy_versions: [],
+      },
+      mutate: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+    expect(html).toContain('data-testid="pine-generation-progress"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain('生成リクエスト送信');
+    expect(html).toContain('Pine生成中です');
+    expect(html).toContain('LLMでPine生成');
+    expect(html).toContain('生成結果レビュー');
+    expect(html).toContain('必要に応じて修正');
+    expect(html).toContain('最終確認');
+    expect(html).not.toContain('raw prompt');
+    expect(html).not.toContain('raw provider response');
+    expect(html).not.toContain('raw reviewer response');
+    expect(html).not.toContain('endpoint');
+    expect(html).not.toContain('model value');
   });
 
   it('renders failed import guidance when parse_status is failed', () => {
