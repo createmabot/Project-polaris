@@ -58,6 +58,7 @@
   - parse success 時は Backtest AI summary auto enqueue の対象になる。
 - `POST /api/symbol-strategy-applications/:applicationId/internal-backtests`
   - active application に対して internal backtest execution と run を作成する。
+  - Phase 1 では frontend の新規実行導線を閉じるが、backend route / response shape / DB 互換は維持する。削除可否は後続判断にする。
 - `POST /api/symbol-strategy-applications/:applicationId/internal-backtests/:executionId/report`
   - succeeded execution から importless Backtest report を作成、または既存 report を返す。
   - conversion success 時は Backtest AI summary auto enqueue の対象になる。
@@ -68,6 +69,7 @@
   - data source failure summary を返す。
 - `POST /api/internal-backtests/executions`
   - strategy version 起点の internal backtest execution を作成する。
+  - Phase 1 では StrategyVersionDetail の新規実行 UI からは呼び出さない。API contract は互換維持する。
 - `GET /api/internal-backtests/executions/:executionId`
   - execution detail を返す。
 - `GET /api/internal-backtests/executions/:executionId/result`
