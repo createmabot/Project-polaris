@@ -45,6 +45,7 @@ type SanitizedPineReviewIssue = {
   code: string;
   severity: 'error' | 'warning' | 'info';
   repair_hint: string;
+  repair_template?: string;
 };
 
 const PINE_REVIEW_REPAIR_PRIORITIES: Record<PineReviewIssueCode, number> = {
@@ -76,6 +77,27 @@ const PINE_REVIEW_REPAIR_PRIORITIES: Record<PineReviewIssueCode, number> = {
   entry_time_atr_not_persisted: 95,
   provider_review_unavailable: 0,
   other: 0,
+};
+
+const PINE_REVIEW_REPAIR_TEMPLATES: Partial<Record<PineReviewIssueCode, string>> = {
+  entry_guard_risk:
+    'Wrap each long-only strategy.entry call in a flat-position guard: if entryCondition and strategy.position_size == 0 then strategy.entry("Long", strategy.long). Do not allow unguarded long entries.',
+  entry_time_atr_not_persisted:
+    'Use persisted entry-time ATR state: declare var float entryAtr = na, set entryAtr on the position-open transition with if strategy.position_size > 0 and strategy.position_size[1] == 0 then entryAtr := atrValue, calculate stops from entryAtr while not na(entryAtr), and reset entryAtr only on the open-to-flat transition.',
+  stop_order_guard_risk:
+    'Declare float stopLossPrice = na or var float stopLossPrice = na in outer scope, assign stopLossPrice only under strategy.position_size > 0, and call strategy.exit(..., stop=stopLossPrice) only under strategy.position_size > 0 and not na(stopLossPrice).',
+  setup_trigger_state_risk:
+    'Keep the setup-state variable true after setup until trigger entry or explicit invalidation. Do not clear it in a generic else branch before trigger. After strategy.entry in the entry block, reset the same state variable to false.',
+  unsupported_adx_function:
+    'Replace ta.adx(...) with supported DMI tuple output such as [plusDI, minusDI, adxValue] = ta.dmi(adxLength, adxLength), then use adxValue for ADX conditions.',
+  dmi_property_access:
+    'Replace direct ta.dmi(...).property access with tuple destructuring: [plusDI, minusDI, adxValue] = ta.dmi(diLength, adxSmoothing), then reference plusDI, minusDI, or adxValue.',
+  unsupported_dmi_property_access:
+    'Replace direct ta.dmi(...).property access with tuple destructuring: [plusDI, minusDI, adxValue] = ta.dmi(diLength, adxSmoothing), then reference plusDI, minusDI, or adxValue.',
+  donchian_current_bar_self_reference:
+    'For Donchian breakouts or exits, compare close against the prior channel value, for example upperBand = ta.highest(high, len), lowerBand = ta.lowest(low, len), entryCondition = close > upperBand[1], exitCondition = close < lowerBand[1].',
+  unsupported_function_alias:
+    'Replace unsupported ta.crossabove(...) with ta.crossover(...) and ta.crossbelow(...) with ta.crossunder(...). Preserve the original signal direction.',
 };
 
 export type PineGenerationProgressStage =
@@ -392,12 +414,13 @@ export class HomeAiService {
         const blockingReviewIssues = this.selectBlockingPineReviewIssues(errorReviewIssues);
         if (blockingReviewIssues.length > 0) {
           const selectedRepairIssues = this.selectPineReviewRepairIssues(blockingReviewIssues);
-          const sanitizedRepairIssues = this.sanitizePineReviewIssues(selectedRepairIssues);
+          const sanitizedRepairIssues = this.sanitizePineReviewIssues(selectedRepairIssues, { includeRepairTemplate: true });
+          const sanitizedReviewerIssues = this.sanitizePineReviewIssues(selectedRepairIssues);
           const reviewInvalidReasonCodes = blockingReviewIssues.map((issue) => `reviewer_${issue.code}`);
           const canRepairReview = attempt < maxRepairAttempts && selectedRepairIssues.length > 0;
           lastFailureReason = 'pine_review_needs_repair';
           lastInvalidReasonCodes = Array.from(new Set([...combinedInvalidReasonCodes, ...reviewInvalidReasonCodes]));
-          lastReviewerIssues = sanitizedRepairIssues;
+          lastReviewerIssues = sanitizedReviewerIssues;
 
           if (!canRepairReview) {
             return {
@@ -416,7 +439,7 @@ export class HomeAiService {
                 failureReason: 'pine_review_needs_repair',
                 invalidReasonCodes: lastInvalidReasonCodes,
                 reviewerSummary: review.summary,
-                reviewerIssues: sanitizedRepairIssues,
+                reviewerIssues: sanitizedReviewerIssues,
               },
               log: {
                 ...run.log,
@@ -570,12 +593,19 @@ export class HomeAiService {
     return PINE_REVIEW_REPAIR_PRIORITIES[code] ?? 0;
   }
 
-  private sanitizePineReviewIssues(issues: PineReviewIssue[]): SanitizedPineReviewIssue[] {
-    return issues.slice(0, 8).map((issue) => ({
-      code: /^[a-z_]+$/i.test(issue.code) ? issue.code : 'other',
-      severity: issue.severity,
-      repair_hint: this.sanitizePineReviewText(issue.repair_hint || issue.message),
-    }));
+  private sanitizePineReviewIssues(
+    issues: PineReviewIssue[],
+    options: { includeRepairTemplate?: boolean } = {},
+  ): SanitizedPineReviewIssue[] {
+    return issues.slice(0, 8).map((issue) => {
+      const repairTemplate = PINE_REVIEW_REPAIR_TEMPLATES[issue.code];
+      return {
+        code: /^[a-z_]+$/i.test(issue.code) ? issue.code : 'other',
+        severity: issue.severity,
+        repair_hint: this.sanitizePineReviewText(issue.repair_hint || issue.message),
+        ...(options.includeRepairTemplate && repairTemplate ? { repair_template: repairTemplate } : {}),
+      };
+    });
   }
 
   private sanitizePineReviewText(value: string): string {

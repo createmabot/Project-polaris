@@ -382,6 +382,8 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
             code: 'entry_guard_risk',
             severity: 'error',
             repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+            repair_template:
+              'Wrap each long-only strategy.entry call in a flat-position guard: if entryCondition and strategy.position_size == 0 then strategy.entry("Long", strategy.long).',
           },
         ],
       },
@@ -392,7 +394,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     const systemPrompt = body.messages[0].content;
     const userPayload = JSON.parse(body.messages[1].content);
     expect(systemPrompt).toContain('Repair an existing Pine v6 strategy script');
-    expect(systemPrompt).toContain('Fix only the listed issue codes and repair hints');
+    expect(systemPrompt).toContain('Prioritize repair_template over repair_hint');
     expect(systemPrompt).toContain('Preserve unrelated strategy logic');
     expect(systemPrompt).not.toContain('Do not reuse an ATR stop template for a percentage stop');
     expect(userPayload.task).toBe('repair_pine_script');
@@ -402,11 +404,66 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
         code: 'entry_guard_risk',
         severity: 'error',
         repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+        repair_template:
+          'Wrap each long-only strategy.entry call in a flat-position guard: if entryCondition and strategy.position_size == 0 then strategy.entry("Long", strategy.long).',
       },
     ]);
     expect(systemPrompt).not.toContain('gemma4-ns');
     expect(body.messages[1].content).not.toContain('gemma4-ns');
     expect(result.generatedScript).toContain('strategy("Repaired"');
+  });
+
+  it('adds recurring repair note for repeated pine repair attempts', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: '//@version=6\nstrategy("Repaired Again", overlay=true)\nplot(close)',
+            warnings: [],
+            assumptions: [],
+            normalized_rule_json: { strategy_type: 'long_only' },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    await provider.generatePineScript({
+      ...createPineContext(),
+      repairRequest: {
+        attempt: 2,
+        invalidReasonCodes: ['reviewer_stop_order_guard_risk'],
+        failureReason: 'pine_review_needs_repair',
+        previousScript: '//@version=6\nstrategy("Needs repair again", overlay=true)',
+        reviewIssues: [
+          {
+            code: 'stop_order_guard_risk',
+            severity: 'error',
+            repair_hint: 'Guard stop order.',
+            repair_template:
+              'Call strategy.exit(..., stop=stopLossPrice) only under strategy.position_size > 0 and not na(stopLossPrice).',
+          },
+        ],
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+    const systemPrompt = body.messages[0].content;
+    const userPayload = JSON.parse(body.messages[1].content);
+    expect(systemPrompt).toContain('If the same issue persists after a prior repair attempt');
+    expect(userPayload.recurring_repair_note).toContain('repeated repair attempt');
+    expect(userPayload.repair_request.reviewIssues[0]).toMatchObject({
+      code: 'stop_order_guard_risk',
+      repair_hint: 'Guard stop order.',
+      repair_template:
+        'Call strategy.exit(..., stop=stopLossPrice) only under strategy.position_size > 0 and not na(stopLossPrice).',
+    });
   });
 
   it('extracts Pine JSON envelope from fenced output with surrounding explanation', async () => {
