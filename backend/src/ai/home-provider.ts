@@ -799,7 +799,7 @@ function buildDeterministicBacktestOutput(
       : '主要指標は一部取得済みですが、追加の検証素材を加えて判断精度を上げる段階です。';
 
   const strengths = [
-    hasInternalBacktestContext ? `internal_backtest execution ${internalContext?.internalBacktestExecutionId ?? '-'} の result summary を参照しています。` : '',
+    hasInternalBacktestContext ? `historical internal_backtest report snapshot ${internalContext?.internalBacktestExecutionId ?? '-'} の result summary を参照しています。` : '',
     hasInternalBacktestContext && internalPeriodFrom && internalPeriodTo
       ? `対象期間は ${internalPeriodFrom} から ${internalPeriodTo} です。`
       : '',
@@ -835,7 +835,7 @@ function buildDeterministicBacktestOutput(
   ].filter(Boolean);
 
   const nextActions = [
-    hasInternalBacktestContext ? 'artifact pointer と internal execution result を確認し、report 化した前提条件を記録してください。' : '',
+    hasInternalBacktestContext ? 'artifact pointer と historical internal report snapshot を確認し、report 化済みの前提条件を記録してください。' : '',
     hasInternalBacktestContext ? '必要に応じて同じ strategy version のTradingView CSV import reportと比較してください。' : '',
     `同条件で期間を分割し、PF・DD・勝率の再現性を確認してください。`,
     context.strategy?.naturalLanguageRule ? '自然言語ルールの exit 条件が現行ボラティリティに合うか見直してください。' : '',

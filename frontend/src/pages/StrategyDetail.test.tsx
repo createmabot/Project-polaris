@@ -96,7 +96,6 @@ const applicationItem = {
     status: 'succeeded',
     backtest_id: 'backtest_1',
     backtest_import_id: 'import_1',
-    internal_backtest_execution_id: null,
     created_at: '2026-05-04T00:00:00.000Z',
     updated_at: '2026-05-04T00:00:00.000Z',
   },

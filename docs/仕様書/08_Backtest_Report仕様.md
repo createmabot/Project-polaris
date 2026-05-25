@@ -1,6 +1,6 @@
 # 北極星 Backtest Report 現行仕様
 
-更新日: 2026-05-15
+更新日: 2026-05-26
 分類: 仕様書
 
 ## 1. 目的
@@ -25,8 +25,8 @@
 - `BacktestImport` を持たない importless report。
 - `execution_source` は `internal_backtest` として扱う。
 - `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` を持つ。
-- Stage 2A 時点では historical read-only 表示を維持する。新規 report conversion は Stage 2B で 410 Gone / delete を判断する。
-- report conversion endpoint が閉じられた後は、conversion 完了直後の Backtest AI summary auto enqueue は新規には使われない。既存 AI summary と manual generation は generic Backtest report として維持する。
+- Stage 2C cleanup 後は new report conversion endpoint / execution relation / artifact table が存在しない。
+- conversion 完了直後の Backtest AI summary auto enqueue は新規には使われない。既存 AI summary と manual generation は generic Backtest report として維持する。
 - AI summary input は `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、`internal_backtest_execution_id`、importless report 文脈を中心に組み立てる。
 - `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。
 
@@ -60,8 +60,8 @@
 
 - Backtest AI summary は manual generate と auto enqueue の両方で作成される。
 - CSV import report は parsed CSV summary を AI context に含める。
-- internal backtest report は result summary と artifact pointer を AI context に含める。
-- artifact pointer は metadata として表示し、存在しない場合は欠損として説明する。
+- historical internal backtest report は Backtest snapshot 内の result summary と artifact pointer metadata を AI context に含める。
+- artifact pointer は snapshot metadata として表示し、存在しない場合は欠損として説明する。Stage 2C cleanup 後は artifact read endpoint / table は存在しない。
 - artifact file read / download / diff / retention job は未実装であり、詳細境界は `docs/仕様書/09_AI_summary_artifact仕様.md` を正本とする。
 - AI summary comparison helper は保存済み summary の表示補助であり、summary の優劣判定、自動比較文生成、provider 呼び出しを行わない。
 

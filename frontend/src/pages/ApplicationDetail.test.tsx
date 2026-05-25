@@ -107,15 +107,6 @@ const runsFixture = {
         updated_at: '2026-05-04T00:10:00.000Z',
       },
       linked_backtest_import: null,
-      linked_internal_backtest_execution: {
-        id: 'execution_1',
-        status: 'succeeded',
-        requested_at: '2026-05-04T00:00:00.000Z',
-        started_at: '2026-05-04T00:01:00.000Z',
-        finished_at: '2026-05-04T00:10:00.000Z',
-        engine_version: 'ibtx-v0',
-        error_code: null,
-      },
     },
     {
       id: 'run_csv_1',
@@ -146,7 +137,6 @@ const runsFixture = {
         created_at: '2026-05-03T00:00:00.000Z',
         updated_at: '2026-05-03T00:00:00.000Z',
       },
-      linked_internal_backtest_execution: null,
     },
   ],
 };
@@ -190,15 +180,6 @@ const reportsFixture = {
         updated_at: '2026-05-04T00:10:00.000Z',
         started_at: '2026-05-04T00:01:00.000Z',
         finished_at: '2026-05-04T00:10:00.000Z',
-      },
-      linked_internal_backtest_execution: {
-        id: 'execution_1',
-        status: 'succeeded',
-        requested_at: '2026-05-04T00:00:00.000Z',
-        started_at: '2026-05-04T00:01:00.000Z',
-        finished_at: '2026-05-04T00:10:00.000Z',
-        engine_version: 'ibtx-v0',
-        error_code: null,
       },
       metrics: {
         period_from: '2026-01-01',
@@ -269,8 +250,8 @@ describe('ApplicationDetail', () => {
     expect(html).toContain('前へ');
     expect(html).toContain('次へ');
     expect(html).toContain('run_internal_1');
-    expect(html).toContain('linked execution');
-    expect(html).toContain('execution_1');
+    expect(html).not.toContain('linked execution');
+    expect(html).not.toContain('execution_1');
     expect(html).toContain('linked import');
     expect(html).toContain('summary.csv');
     expect(html).toContain('report履歴');

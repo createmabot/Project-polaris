@@ -17,7 +17,6 @@ import { strategyVersionRoutes } from './routes/strategy-versions';
 import { symbolStrategyApplicationRoutes } from './routes/symbol-strategy-applications';
 import { backtestRoutes } from './routes/backtests';
 import { backtestComparisonRoutes } from './routes/backtest-comparisons';
-import { internalBacktestRoutes } from './routes/internal-backtests';
 import { summaryRoutes } from './routes/summaries';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
@@ -59,7 +58,6 @@ fastify.register(strategyVersionRoutes, { prefix: '/api/strategy-versions' });
 fastify.register(symbolStrategyApplicationRoutes, { prefix: '/api/symbol-strategy-applications' });
 fastify.register(backtestRoutes, { prefix: '/api/backtests' });
 fastify.register(backtestComparisonRoutes, { prefix: '/api/backtest-comparisons' });
-fastify.register(internalBacktestRoutes, { prefix: '/api/internal-backtests' });
 
 const start = async () => {
   try {

@@ -879,7 +879,6 @@ export type SymbolStrategyApplicationItem = {
     updated_at: string;
     backtest_id: string | null;
     backtest_import_id: string | null;
-    internal_backtest_execution_id: string | null;
   } | null;
   latest_backtest_report: {
     id: string;
@@ -1084,15 +1083,6 @@ export type SymbolStrategyApplicationRunHistoryData = {
       created_at: string;
       updated_at: string;
     } | null;
-    linked_internal_backtest_execution: {
-      id: string;
-      status: string;
-      requested_at: string;
-      started_at: string | null;
-      finished_at: string | null;
-      engine_version: string;
-      error_code: string | null;
-    } | null;
   }>;
 };
 
@@ -1128,7 +1118,6 @@ export type SymbolStrategyApplicationReportHistoryData = {
       started_at: string | null;
       finished_at: string | null;
     };
-    linked_internal_backtest_execution: SymbolStrategyApplicationRunHistoryData['runs'][number]['linked_internal_backtest_execution'];
     metrics: (BacktestRelatedReportMetrics & {
       source: string;
     }) | null;
@@ -1148,7 +1137,6 @@ export type SymbolStrategyApplicationCsvImportData = {
     status: string;
     backtest_id: string | null;
     backtest_import_id: string | null;
-    internal_backtest_execution_id: string | null;
     created_at: string;
     updated_at: string;
   };
