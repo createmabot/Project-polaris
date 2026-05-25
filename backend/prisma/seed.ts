@@ -120,6 +120,104 @@ async function main() {
     throw new Error('required symbols 7203/6758 are missing after seed upsert');
   }
 
+  const calendarEvents = [
+    {
+      id: '00000000-0000-4000-8000-000000000081',
+      symbolId: toyota.id,
+      eventDate: new Date('2026-06-10T00:00:00.000Z'),
+      eventTime: null,
+      eventType: 'earnings',
+      title: 'トヨタ自動車 決算発表予定',
+      importance: 'high',
+      sourceType: 'seed',
+      sourceName: 'seed',
+      sourceLabel: '決算予定',
+      externalId: 'seed-7203-earnings-2026-06-10',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000082',
+      symbolId: sony.id,
+      eventDate: new Date('2026-06-12T00:00:00.000Z'),
+      eventTime: null,
+      eventType: 'ex_dividend',
+      title: 'ソニーグループ 配当権利落ち予定',
+      importance: 'medium',
+      sourceType: 'seed',
+      sourceName: 'seed',
+      sourceLabel: '配当予定',
+      externalId: 'seed-6758-ex-dividend-2026-06-12',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000083',
+      symbolId: null,
+      eventDate: new Date('2026-06-05T00:00:00.000Z'),
+      eventTime: '21:30',
+      eventType: 'economic_indicator',
+      title: '米雇用統計',
+      importance: 'high',
+      sourceType: 'seed',
+      sourceName: 'seed',
+      sourceLabel: '経済指標',
+      externalId: 'seed-market-us-payrolls-2026-06-05',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000084',
+      symbolId: null,
+      eventDate: new Date('2026-06-17T00:00:00.000Z'),
+      eventTime: null,
+      eventType: 'central_bank',
+      title: 'FOMC 政策金利発表',
+      importance: 'high',
+      sourceType: 'seed',
+      sourceName: 'seed',
+      sourceLabel: '中央銀行',
+      externalId: 'seed-market-fomc-2026-06-17',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000085',
+      symbolId: null,
+      eventDate: new Date('2026-07-20T00:00:00.000Z'),
+      eventTime: null,
+      eventType: 'market_holiday',
+      title: '東京市場 休場日',
+      importance: 'medium',
+      sourceType: 'seed',
+      sourceName: 'seed',
+      sourceLabel: '休場日',
+      externalId: 'seed-market-holiday-2026-07-20',
+    },
+  ];
+
+  for (const event of calendarEvents) {
+    await (prisma as any).investmentCalendarEvent.upsert({
+      where: {
+        sourceType_externalId: {
+          sourceType: event.sourceType,
+          externalId: event.externalId,
+        },
+      },
+      update: {
+        symbolId: event.symbolId,
+        eventDate: event.eventDate,
+        eventTime: event.eventTime,
+        timezone: 'Asia/Tokyo',
+        eventType: event.eventType,
+        title: event.title,
+        importance: event.importance,
+        sourceName: event.sourceName,
+        sourceLabel: event.sourceLabel,
+        status: 'active',
+        fetchedAt: new Date('2026-05-26T00:00:00.000Z'),
+      },
+      create: {
+        ...event,
+        timezone: 'Asia/Tokyo',
+        status: 'active',
+        fetchedAt: new Date('2026-05-26T00:00:00.000Z'),
+      },
+    });
+  }
+
   const sectorSnapshots = [
     {
       id: '00000000-0000-4000-8000-000000000071',

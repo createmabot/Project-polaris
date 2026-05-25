@@ -1,7 +1,7 @@
 import useSWR from 'swr';
 import { useMemo, useState } from 'react';
-import { swrFetcher } from '../api/client';
-import { HomeData } from '../api/types';
+import { postApi, swrFetcher } from '../api/client';
+import { HomeData, InvestmentCalendarEvent, InvestmentCalendarRefreshData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
 import PageHeader from '../components/layout/PageHeader';
@@ -10,6 +10,8 @@ import ErrorState from '../components/ui/ErrorState';
 import LoadingState from '../components/ui/LoadingState';
 import SectionCard from '../components/ui/SectionCard';
 import TextLink from '../components/ui/TextLink';
+import Button from '../components/ui/Button';
+import InlineNotice from '../components/ui/InlineNotice';
 
 type HomeSummaryType = 'latest' | 'morning' | 'evening';
 
@@ -49,6 +51,27 @@ function formatChangeRate(value: number | null | undefined): string {
   return `${value > 0 ? '+' : ''}${formatCompactNumber(value)}%`;
 }
 
+function eventTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    earnings: '決算',
+    ex_dividend: '権利落ち',
+    shareholder_meeting: '株主総会',
+    dividend_payment: '配当支払',
+    economic_indicator: '経済指標',
+    central_bank: '中央銀行',
+    market_holiday: '休場日',
+    ipo: 'IPO',
+    other: 'その他',
+  };
+  return labels[type] ?? type;
+}
+
+function importanceLabel(importance: string): string {
+  if (importance === 'high') return '重要';
+  if (importance === 'low') return '低';
+  return '中';
+}
+
 function MarketTile({
   kind,
   name,
@@ -78,6 +101,9 @@ function MarketTile({
 export default function Home() {
   const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
   const [summaryDate] = useState<string | null>(null);
+  const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
+  const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
   const homeApiPath = useMemo(() => buildHomeApiPath(summaryType, summaryDate), [summaryType, summaryDate]);
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
@@ -105,6 +131,25 @@ export default function Home() {
       </div>
     );
   }
+
+  async function handleRefreshCalendar() {
+    setIsRefreshingCalendar(true);
+    setCalendarMessage(null);
+    setCalendarError(null);
+    try {
+      const result = await postApi<InvestmentCalendarRefreshData>('/api/home/investment-calendar/refresh', {
+        include_market_events: true,
+      });
+      setCalendarMessage(`投資カレンダーを更新しました。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+      await mutate();
+    } catch {
+      setCalendarError('投資カレンダーを更新できませんでした。時間をおいて再実行してください。');
+    } finally {
+      setIsRefreshingCalendar(false);
+    }
+  }
+
+  const investmentCalendarEvents = data.investment_calendar?.events ?? [];
 
   return (
     <AppLayout
@@ -253,16 +298,49 @@ export default function Home() {
             )}
           </SectionCard>
 
-          <SectionCard title="注目イベント" className="p-4" headingClassName="text-base font-semibold text-slate-900">
-            {data.key_events.length === 0 ? (
-              <EmptyState title="注目イベントはまだありません。" />
+          <SectionCard
+            title="投資カレンダー"
+            description="監視・保有銘柄の予定と市場イベントをまとめて確認します。"
+            className="p-4"
+            headingClassName="text-base font-semibold text-slate-900"
+            actions={
+              <Button variant="secondary" onClick={handleRefreshCalendar} disabled={isRefreshingCalendar}>
+                {isRefreshingCalendar ? '更新中...' : '投資カレンダーを更新'}
+              </Button>
+            }
+          >
+            {calendarMessage ? <InlineNotice tone="success" className="mb-3">{calendarMessage}</InlineNotice> : null}
+            {calendarError ? <InlineNotice tone="warning" className="mb-3">{calendarError}</InlineNotice> : null}
+            {investmentCalendarEvents.length === 0 ? (
+              data.key_events.length === 0 ? (
+                <EmptyState title="投資カレンダーはまだありません。" />
+              ) : (
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+                  {data.key_events.map((event: any, index: number) => (
+                    <div key={`${event.label ?? 'event'}-${index}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <strong className="text-slate-800">{event.label ?? 'イベント'}</strong>
+                      <div className="text-xs text-slate-500">
+                        日付: {event.date ?? '-'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
               <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-                {data.key_events.map((event: any, index: number) => (
-                  <div key={`${event.label ?? 'event'}-${index}`} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <strong className="text-slate-800">{event.label ?? 'イベント'}</strong>
-                    <div className="text-xs text-slate-500">
-                      日付: {event.date ?? '-'}
+                {investmentCalendarEvents.map((event: InvestmentCalendarEvent) => (
+                  <div key={event.id} className="px-3 py-2 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <strong className="text-slate-800">{event.title}</strong>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        {importanceLabel(event.importance)}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                      <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
+                      <span>{eventTypeLabel(event.event_type)}</span>
+                      <span>{event.scope === 'market' ? '市場全体' : event.display_name ?? event.symbol_code ?? '-'}</span>
+                      {event.source_label ? <span>source: {event.source_label}</span> : null}
                     </div>
                   </div>
                 ))}

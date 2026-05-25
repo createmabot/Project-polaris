@@ -204,3 +204,14 @@ StrategyVersion Pine generation の market / timeframe:
 - Symbol Strategy Application API: `docs/52.北極星 Symbol Strategy Application DB・API設計（P3）.md`
 - application-specific endpoints: `docs/54.北極星 application-specific runs endpoint 設計（次フェーズ）.md`, `docs/55.北極星 application-specific reports endpoint 設計（次フェーズ）.md`
 - AI summary auto-generation: `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
+
+## 投資カレンダー API
+
+- `GET /api/symbols/:symbolId/calendar-events`: 銘柄別 calendar events を返す。query は `from` / `to` / `event_type` / `importance` / `status` / `limit`。
+- `POST /api/symbols/:symbolId/calendar-events/refresh`: 対象銘柄の calendar events を手動更新する。market-level event は含めない。
+- `GET /api/home`: 互換維持のため `key_events` は残し、optional field `investment_calendar` を追加する。
+- `POST /api/home/investment-calendar/refresh`: watchlist / positions 対象銘柄と market-level event を手動更新する。
+
+refresh failure は sanitized error に閉じる。raw external response、endpoint 実値、secret、stack trace は API response に出さない。
+
+`GET /api/symbols/:symbolId` は TradingView chart widget config を返さない。`tradingview_symbol` は webhook / Pine / CSV import の symbol mapping として維持する。

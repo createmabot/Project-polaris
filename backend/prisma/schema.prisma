@@ -45,8 +45,40 @@ model Symbol {
   watchlistItems     WatchlistItem[]
   comparisonSymbols  ComparisonSymbol[]
   strategyApplications SymbolStrategyApplication[]
+  investmentCalendarEvents InvestmentCalendarEvent[]
 
   @@map("symbols")
+}
+
+model InvestmentCalendarEvent {
+  id          String   @id @default(uuid())
+  symbolId    String?  @map("symbol_id")
+  symbol      Symbol?  @relation(fields: [symbolId], references: [id], onDelete: SetNull)
+
+  eventDate   DateTime @map("event_date")
+  eventTime   String?  @map("event_time")
+  timezone    String   @default("Asia/Tokyo")
+  eventType   String   @map("event_type")
+  title       String
+  description String?  @db.Text
+  importance  String   @default("medium")
+  sourceType  String   @default("manual") @map("source_type")
+  sourceName  String?  @map("source_name")
+  sourceLabel String?  @map("source_label")
+  sourceUrl   String?  @map("source_url")
+  externalId  String?  @map("external_id")
+  status      String   @default("active")
+  fetchedAt   DateTime? @map("fetched_at")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([symbolId, eventDate])
+  @@index([eventDate])
+  @@index([eventType, eventDate])
+  @@index([status, eventDate])
+  @@unique([sourceType, externalId])
+  @@map("investment_calendar_events")
 }
 
 model Portfolio {

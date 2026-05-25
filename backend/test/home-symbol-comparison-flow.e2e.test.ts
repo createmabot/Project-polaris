@@ -443,6 +443,9 @@ vi.mock('../src/db', () => {
           .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
       },
     },
+    investmentCalendarEvent: {
+      findMany: async () => [],
+    },
     alertEvent: {
       findMany: async ({ where }: any = {}) => {
         let rows = runtime.alerts.slice();

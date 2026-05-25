@@ -60,7 +60,6 @@ const baseSymbolData = {
     source_name: 'stooq_daily',
   },
   tradingview_symbol: 'TYO:7203',
-  chart: { widget_symbol: 'TYO:7203', default_interval: 'D' },
   recent_alerts: [],
   latest_ai_thesis_summary: null,
   related_references: [],
@@ -304,6 +303,36 @@ function getCommonSWRResult(key: string | null) {
   if (key === '/api/positions') {
     return { isLoading: false, error: null, data: sideRailPositionsFixture };
   }
+  if (key === '/api/symbols/sym-1/calendar-events?limit=20') {
+    return {
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+      data: {
+        events: [
+          {
+            id: 'cal-1',
+            scope: 'symbol',
+            symbol_id: 'sym-1',
+            symbol_code: '7203',
+            display_name: 'Toyota',
+            event_date: '2026-06-10',
+            event_time: null,
+            timezone: 'Asia/Tokyo',
+            event_type: 'earnings',
+            title: 'Toyota earnings',
+            importance: 'high',
+            source_type: 'seed',
+            source_name: 'seed',
+            source_label: '決算予定',
+            status: 'active',
+            fetched_at: '2026-05-26T00:00:00.000Z',
+          },
+        ],
+        meta: { from: '2026-05-26', to: '2026-07-25', scope: 'symbol', symbol_id: 'sym-1' },
+      },
+    };
+  }
   if (key === '/api/strategies?page=1&limit=5&sort=updated_at&order=desc&status=active') {
     return { isLoading: false, error: null, data: strategyListFixture };
   }
@@ -455,6 +484,13 @@ describe('SymbolDetail', () => {
     expect(html).toContain('Margin improvement');
     expect(html).toContain('FX risk');
     expect(html).toContain('AI論点カードを再生成');
+    expect(html).not.toContain('TradingView chart');
+    expect(html).not.toContain('tv_chart_');
+    expect(html).not.toContain('s3.tradingview.com');
+    expect(html).toContain('投資カレンダー');
+    expect(html).toContain('カレンダーを更新');
+    expect(html).toContain('Toyota earnings');
+    expect(html).toContain('決算予定');
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');

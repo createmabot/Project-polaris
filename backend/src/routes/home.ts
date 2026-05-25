@@ -4,6 +4,7 @@ import { formatSuccess } from '../utils/response';
 import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
 import { rebuildPositionsReadModel } from '../home/positions-read-model';
 import { HOME_SECTOR_MASTER } from '../home/sector-master';
+import { listHomeInvestmentCalendar, refreshHomeInvestmentCalendar } from '../investment-calendar/service';
 import {
   normalizeDate,
   normalizeSummaryType,
@@ -14,6 +15,11 @@ type HomeQuery = {
   summary_type?: string;
   summaryType?: string;
   date?: string;
+};
+type HomeCalendarRefreshBody = {
+  from?: unknown;
+  to?: unknown;
+  include_market_events?: unknown;
 };
 
 
@@ -420,6 +426,7 @@ export async function homeRoutes(fastify: FastifyInstance) {
       };
     });
     const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
+    const investment_calendar = await listHomeInvestmentCalendar();
     const market_overview_from_alerts = buildMarketOverviewFromRecentAlerts(recentAlerts);
     const sectors = await buildHomeSectors(prismaAny);
     const market_overview = {
@@ -434,8 +441,17 @@ export async function homeRoutes(fastify: FastifyInstance) {
       recent_alerts: recentAlerts,
       daily_summary: dailySummary,
       key_events,
+      investment_calendar,
     };
 
     return reply.status(200).send(formatSuccess(request, data));
+  });
+
+  fastify.post('/investment-calendar/refresh', async (
+    request: FastifyRequest<{ Body: HomeCalendarRefreshBody }>,
+    reply: FastifyReply,
+  ) => {
+    const result = await refreshHomeInvestmentCalendar(request.body ?? {});
+    return reply.status(200).send(formatSuccess(request, result));
   });
 }
