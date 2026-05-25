@@ -269,6 +269,21 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('secret-model');
   });
 
+  it('builds sanitized Pine job failure messages for provider rejection without reviewer wording', () => {
+    const message = buildPineGenerationJobFailureMessage({
+      code: 'PINE_GENERATION_FAILED',
+      message: 'Pine生成に失敗しました。条件を見直して再試行してください。',
+      invalid_reason_codes: ['provider_rejected'],
+      pine_reviewer_issues: [],
+    });
+
+    expect(message).toContain('Pine生成に失敗しました');
+    expect(message).toContain('LLM provider がリクエストを拒否');
+    expect(message).not.toContain('reviewer issue');
+    expect(message).not.toContain('endpoint');
+    expect(message).not.toContain('model=');
+  });
+
 
   it('builds proposal history paths with sanitized filters', () => {
     expect(buildProposalHistoryPath()).toBe(DEFAULT_HISTORY_PATH);

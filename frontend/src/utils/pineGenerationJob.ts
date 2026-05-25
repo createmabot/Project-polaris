@@ -2,7 +2,13 @@ import type { PineGenerationJob } from '../api/types';
 
 const UNSAFE_DETAIL_PATTERN = /raw|endpoint|model|stack|token|secret|credential|local path|http:\/\/|https:\/\/|provider response|reviewer response/i;
 
-const REVIEWER_ISSUE_LABELS: Record<string, string> = {
+const PINE_FAILURE_LABELS: Record<string, string> = {
+  provider_rejected: 'LLM provider がリクエストを拒否（モデル設定または入力サイズを確認）',
+  provider_rate_limited: 'LLM provider の rate limit',
+  provider_timeout: 'LLM provider の timeout',
+  provider_unavailable: 'LLM provider が利用不可',
+  provider_invalid_response: 'LLM provider の応答形式が不正',
+  provider_error: 'LLM provider error',
   setup_trigger_state_risk: 'setup 条件と trigger 条件の状態保持が不十分',
   setup_trigger_same_bar: 'setup 条件と trigger 条件が同一足で矛盾する可能性',
   stop_order_semantics_risk: '損切り注文の表現が不安定',
@@ -44,7 +50,7 @@ function safeText(value: unknown): string | null {
 }
 
 function labelForCode(code: string): string {
-  return REVIEWER_ISSUE_LABELS[code] ?? `reviewer issue: ${code}`;
+  return PINE_FAILURE_LABELS[code] ?? `Pine validation issue: ${code}`;
 }
 
 export function buildPineGenerationJobFailureMessage(
