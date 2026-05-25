@@ -708,6 +708,89 @@ describe('HomeAiService', () => {
     ]);
   });
 
+  it('passes below-vs-crossunder reviewer issues into bounded repair context', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => {
+      if (!context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript:
+            '//@version=6\nstrategy("below mismatch", overlay=true)\nma50 = ta.sma(close, 50)\nexitCondition = ta.crossunder(close, ma50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and exitCondition\n    strategy.close("Long")\nplot(ma50)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript:
+          '//@version=6\nstrategy("below repaired", overlay=true)\nma50 = ta.sma(close, 50)\nexitCondition = close < ma50\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and exitCondition\n    strategy.close("Long")\nplot(ma50)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+    reviewMock.mockImplementation(async (context: any) => {
+      if (context.repairAttempt === 0) {
+        return {
+          schema_name: 'pine_review_result',
+          schema_version: '1.0',
+          status: 'needs_repair',
+          issues: [
+            {
+              code: 'below_vs_crossunder_mismatch',
+              severity: 'error',
+              message: 'The input says below, not crossunder.',
+              repair_hint: 'Use close < ma50 for a state-based exit instead of ta.crossunder(close, ma50).',
+              repairable: true,
+            },
+          ],
+          summary: {
+            issue_count: 1,
+            error_count: 1,
+            warning_count: 0,
+            repairable_issue_count: 1,
+          },
+        };
+      }
+      return createPassingPineReview();
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: '終値が50日移動平均を下回った場合に決済します。',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.generatedScript).toContain('exitCondition = close < ma50');
+    expect(result.output.generatedScript).not.toContain('ta.crossunder(close, ma50)');
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
+      'reviewer_below_vs_crossunder_mismatch',
+    );
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
+      {
+        code: 'below_vs_crossunder_mismatch',
+        severity: 'error',
+        repair_hint: 'Use close < ma50 for a state-based exit instead of ta.crossunder(close, ma50).',
+      },
+    ]);
+  });
+
   it('falls back to deterministic reviewer when provider reviewer fails without leaking details', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();

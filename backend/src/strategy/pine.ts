@@ -27,7 +27,8 @@ export type PineInvalidReasonCode =
   | 'markdown_code_fence_pollution'
   | 'explanatory_text_pollution'
   | 'unsupported_color_namespace'
-  | 'unsupported_plot_style';
+  | 'unsupported_plot_style'
+  | 'unsupported_function_alias';
 
 export type PineAssessmentResult = {
   normalizedScript: string | null;
@@ -42,12 +43,14 @@ export type PineReviewIssueCode =
   | 'unsupported_color_alias'
   | 'unsupported_color_namespace'
   | 'unsupported_plot_style'
+  | 'unsupported_function_alias'
   | 'dmi_property_access'
   | 'unsupported_dmi_property_access'
   | 'unsupported_adx_function'
   | 'block_local_variable_scope_risk'
   | 'na_type_inference_risk'
   | 'uninitialized_stop_loss_price'
+  | 'stop_order_guard_risk'
   | 'setup_trigger_state_risk'
   | 'below_vs_crossunder_mismatch'
   | 'oscillator_plot_overlay_risk'
@@ -169,6 +172,14 @@ function normalizeUnsupportedPineAliases(script: string): {
     invalidReasonCodes.push('unsupported_plot_style');
   }
 
+  if (/\bta\.crossabove\s*\(/i.test(normalized) || /\bta\.crossbelow\s*\(/i.test(normalized)) {
+    normalized = normalized
+      .replace(/\bta\.crossabove\s*\(/gi, 'ta.crossover(')
+      .replace(/\bta\.crossbelow\s*\(/gi, 'ta.crossunder(');
+    warnings.push('Pineで未対応の可能性がある crossabove/crossbelow を crossover/crossunder に補正しました。');
+    invalidReasonCodes.push('unsupported_function_alias');
+  }
+
   return { script: normalized, warnings, invalidReasonCodes };
 }
 
@@ -200,6 +211,25 @@ function pushReviewIssue(issues: PineReviewIssue[], code: PineReviewIssueCode, m
   });
 }
 
+function hasTypedStopLossDeclaration(source: string): boolean {
+  return /^\s*(?:var\s+)?float\s+stopLossPrice\s*=\s*na\s*$/im.test(source);
+}
+
+function hasStopLossPlotReference(source: string): boolean {
+  return /^\s*plot\s*\([^)]*\bstopLossPrice\b/im.test(source);
+}
+
+function hasStopExitWithoutNaGuard(source: string): boolean {
+  const lines = source.split(/\r?\n/);
+  return lines.some((line, index) => {
+    if (!/\bstrategy\.exit\s*\([^)]*\bstop\s*=\s*stopLossPrice\b/i.test(line)) {
+      return false;
+    }
+    const nearby = lines.slice(Math.max(0, index - 3), index + 1).join('\n');
+    return !/\bnot\s+na\s*\(\s*stopLossPrice\s*\)/i.test(nearby);
+  });
+}
+
 export function reviewGeneratedPineScriptDeterministic(script: string | null): PineReviewResult {
   if (!script || !script.trim()) {
     return createPineReviewResult([]);
@@ -215,6 +245,9 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
   if (/\bplot\.style_dashed\b/.test(source)) {
     pushReviewIssue(issues, 'unsupported_plot_style', 'plot.style_dashed is not supported in plot().');
   }
+  if (/\bta\.cross(?:above|below)\s*\(/i.test(source)) {
+    pushReviewIssue(issues, 'unsupported_function_alias', 'Use ta.crossover / ta.crossunder instead of unsupported crossabove / crossbelow aliases.');
+  }
   if (/\bta\.dmi\s*\([^)]*\)\s*\.\w+/i.test(source)) {
     pushReviewIssue(issues, 'unsupported_dmi_property_access', 'Do not access properties directly from ta.dmi(...).');
   }
@@ -223,6 +256,12 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
   }
   if (/^\s*stopLossPrice\s*=\s*na\s*$/im.test(source)) {
     pushReviewIssue(issues, 'uninitialized_stop_loss_price', 'Do not initialize stopLossPrice with a bare na assignment.');
+  }
+  if (hasStopLossPlotReference(source) && !hasTypedStopLossDeclaration(source)) {
+    pushReviewIssue(issues, 'block_local_variable_scope_risk', 'Declare stopLossPrice in outer scope with float stopLossPrice = na before plotting it.');
+  }
+  if (hasStopExitWithoutNaGuard(source)) {
+    pushReviewIssue(issues, 'stop_order_guard_risk', 'Call strategy.exit with stop=stopLossPrice only under a not na(stopLossPrice) guard.');
   }
   if (
     hasOverlayTrue &&
@@ -236,6 +275,13 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
   }
   if (/\b(entryCondition\s*=\s*)?setupCondition\s+and\s+triggerCondition\b/i.test(source)) {
     pushReviewIssue(issues, 'setup_trigger_same_bar', 'Use setupActive state instead of requiring setup and trigger on the same bar.');
+  }
+  if (
+    /\bsetupActive\s*:=\s*false\b/i.test(source) &&
+    /\belse\s*\r?\n\s+setupActive\s*:=\s*false\b/i.test(source) &&
+    /\bentryCondition\s*=\s*setupActive\s+and\s+triggerCondition\b/i.test(source)
+  ) {
+    pushReviewIssue(issues, 'setup_trigger_state_risk', 'Keep setupActive true after setupCondition until entryCondition triggers, then reset after entry or explicit invalidation.');
   }
   if (/\bif\s+strategy\.position_size\s*>\s*0\s+and\s+na\s*\(\s*entryAtr\s*\)/i.test(source)) {
     pushReviewIssue(issues, 'entry_atr_na_capture', 'Capture entry ATR on the position-open transition instead of na(entryAtr).');
