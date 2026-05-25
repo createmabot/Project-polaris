@@ -8,13 +8,9 @@ import {
   SymbolAiSummaryData,
   SymbolDetailData,
   SymbolReferenceRefreshData,
-  InternalBacktestExecutionResultData,
-  InternalBacktestExecutionStatusData,
   SymbolStrategyApplicationCreateData,
   SymbolStrategyApplicationCsvImportData,
   SymbolStrategyApplicationItem,
-  SymbolStrategyApplicationInternalBacktestData,
-  SymbolStrategyApplicationInternalBacktestReportData,
   SymbolStrategyApplicationListData,
   SymbolStrategyApplicationMutateData,
 } from '../api/types';
@@ -46,7 +42,7 @@ const LABELS = {
   strategyResultsTitle: 'ストラテジー / 検証結果',
   strategyResultsIntro: 'この銘柄に適用したストラテジーと検証結果をここに集約します。',
   strategyResultsPending:
-    '保存済み application から CSV取込へ進めます。内部バックテスト接続は後続タスクです。',
+    '保存済み application から TradingView CSV取込へ進めます。内製バックテストの新規実行UIは閉じています。',
   savedApplicationsTitle: '保存済みストラテジー適用',
   savedApplicationsLoading: '保存済み application を読み込み中...',
   savedApplicationsError: '保存済み application を取得できませんでした。',
@@ -62,7 +58,6 @@ const LABELS = {
   savedApplicationsSourceFilter: 'source',
   savedApplicationsSourceAll: 'すべて',
   savedApplicationsSourceCsv: 'CSV',
-  savedApplicationsSourceInternal: 'internal',
   savedApplicationsRunTypeFilter: 'latest run type',
   savedApplicationsRunStatusFilter: 'latest run status',
   savedApplicationsStrategyFilter: 'strategy_id',
@@ -102,40 +97,6 @@ const LABELS = {
   openBacktestDetail: '検証レポートを開く',
   openApplicationRuns: 'run履歴を見る',
   openApplicationReports: 'report履歴を見る',
-  internalBacktest: '内部バックテスト',
-  internalBacktestDescription: '保存済み application 起点で internal backtest execution を作成します。succeeded execution は Backtest report 化できます。',
-  internalBacktestFrom: '開始日',
-  internalBacktestTo: '終了日',
-  internalBacktestMode: 'summary_mode',
-  runInternalBacktest: '内部バックテストを開始',
-  internalBacktestStarting: '内部バックテスト開始中...',
-  internalBacktestSuccess: '内部バックテストを開始しました。',
-  internalBacktestRefreshFailed: '内部バックテストを開始しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
-  internalBacktestError: '内部バックテストを開始できませんでした。',
-  internalBacktestResultPending: '実行結果の詳細表示は後続タスクです。',
-  internalBacktestResultTitle: '内部バックテスト結果',
-  internalBacktestResultLoading: '内部バックテスト status を読み込み中...',
-  internalBacktestResultStatusError: '内部バックテスト status を取得できませんでした。',
-  internalBacktestResultResultLoading: '内部バックテスト result を読み込み中...',
-  internalBacktestResultResultError: '内部バックテスト result を取得できませんでした。',
-  internalBacktestResultNotReady: '実行結果はまだ準備中です。',
-  internalBacktestResultReady: '実行結果 summary を表示しています。',
-  internalBacktestResultUnavailable: '実行結果 summary はまだ利用できません。',
-  internalBacktestResultFailed: '内部バックテストは failed です。',
-  internalBacktestResultCanceled: '内部バックテストは canceled です。',
-  internalBacktestResultStatus: 'execution status',
-  createBacktestReport: 'Backtest report を作成',
-  creatingBacktestReport: 'Backtest report 作成中...',
-  backtestReportCreated: 'Backtest report を作成しました。',
-  backtestReportRefreshFailed: 'Backtest report を作成しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
-  backtestReportError: 'Backtest report を作成できませんでした。',
-  backtestReportAlreadyCreated: 'Backtest report は作成済みです。',
-  resultSummaryKind: 'summary_kind',
-  resultPeriod: 'period',
-  resultBarCount: 'bar_count',
-  resultPriceChangePercent: 'price_change_percent',
-  resultRangePercent: 'range_percent',
-  resultFinishedAt: 'finished_at',
   archiveApplication: 'アーカイブ',
   archiveApplicationConfirm: 'この application をアーカイブしますか？',
   archiveApplicationSuccess: 'アーカイブしました。',
@@ -146,7 +107,6 @@ const LABELS = {
   restoreApplicationSuccess: '復元しました。',
   restoreApplicationRefreshFailed: '復元しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
   restoreApplicationError: '復元に失敗しました。',
-  executionId: 'execution_id',
   chooseExistingStrategy: '既存ストラテジーを選ぶ',
   applySelectionNotice:
     '保存すると、この銘柄のストラテジー適用として記録されます。',
@@ -176,7 +136,6 @@ const LABELS = {
   clearSelection: '選択解除',
   saveApplyPending: '適用を保存（準備中）',
   csvImportLater: 'CSV取込（後続）',
-  internalBacktestLater: '内部バックテスト（後続）',
   openStrategyLab: 'ストラテジー作成を開く',
   openBacktestList: '検証レポート一覧を開く',
   researchNoteTitle: 'Research Note',
@@ -345,8 +304,8 @@ export function buildStrategySelectionListPath({
 
 type ApplicationStatusFilter = 'active' | 'archived' | 'all';
 type ApplicationReportFilter = 'all' | 'with_reports' | 'without_reports';
-type ApplicationReportSourceFilter = 'all' | 'csv_import' | 'internal_backtest';
-type ApplicationRunTypeFilter = 'all' | 'csv_import' | 'internal_backtest';
+type ApplicationReportSourceFilter = 'all' | 'csv_import';
+type ApplicationRunTypeFilter = 'all' | 'csv_import';
 type ApplicationRunStatusFilter = 'all' | 'running' | 'succeeded' | 'failed';
 
 function getApplicationStatusLabel(filter: ApplicationStatusFilter): string {
@@ -363,13 +322,11 @@ function getApplicationReportPresenceQuery(filter: ApplicationReportFilter): str
 
 function getApplicationReportSourceQuery(filter: ApplicationReportSourceFilter): string {
   if (filter === 'csv_import') return '&report_source=csv_import';
-  if (filter === 'internal_backtest') return '&report_source=internal_backtest';
   return '';
 }
 
 function getApplicationRunTypeQuery(filter: ApplicationRunTypeFilter): string {
   if (filter === 'csv_import') return '&run_type=csv_import';
-  if (filter === 'internal_backtest') return '&run_type=internal_backtest';
   return '';
 }
 
@@ -392,181 +349,6 @@ function getApplicationIdQuery(strategyId: string, strategyVersionId: string): s
   }
   const query = params.toString();
   return query ? `&${query}` : '';
-}
-
-function InternalBacktestResultPanel({
-  applicationId,
-  executionId,
-  existingBacktestId,
-  mutateApplications,
-}: {
-  applicationId: string;
-  executionId: string;
-  existingBacktestId: string | null;
-  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
-}) {
-  const [isCreatingReport, setIsCreatingReport] = useState(false);
-  const [reportMessage, setReportMessage] = useState<string | null>(null);
-  const [reportError, setReportError] = useState<string | null>(null);
-  const [createdBacktestId, setCreatedBacktestId] = useState<string | null>(null);
-  const {
-    data: executionStatusData,
-    error: executionStatusError,
-    isLoading: isExecutionStatusLoading,
-  } = useSWR<InternalBacktestExecutionStatusData>(
-    `/api/internal-backtests/executions/${executionId}`,
-    swrFetcher,
-    {
-      refreshInterval: (currentData) => {
-        const status = currentData?.execution?.status;
-        return status === 'queued' || status === 'running' ? 3000 : 0;
-      },
-    },
-  );
-  const executionStatus = executionStatusData?.execution?.status ?? null;
-  const resultApiPath =
-    executionStatus === 'succeeded'
-      ? `/api/internal-backtests/executions/${executionId}/result`
-      : null;
-  const {
-    data: executionResultData,
-    error: executionResultError,
-    isLoading: isExecutionResultLoading,
-  } = useSWR<InternalBacktestExecutionResultData>(resultApiPath, swrFetcher);
-
-  const metrics = executionResultData?.result_summary?.metrics ?? null;
-  const period = executionResultData?.result_summary?.period ?? null;
-  const backtestLink = existingBacktestId ?? createdBacktestId;
-  const statusTone =
-    executionStatus === 'failed' || executionStatus === 'canceled'
-      ? 'border-rose-200 bg-rose-50 text-rose-800'
-      : executionStatus === 'succeeded'
-        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-        : 'border-sky-200 bg-sky-50 text-sky-800';
-
-  const createBacktestReport = async () => {
-    if (executionStatus !== 'succeeded' || backtestLink) {
-      return;
-    }
-    setIsCreatingReport(true);
-    setReportMessage(null);
-    setReportError(null);
-    try {
-      const result = await postApi<SymbolStrategyApplicationInternalBacktestReportData>(
-        `/api/symbol-strategy-applications/${applicationId}/internal-backtests/${executionId}/report`,
-        {},
-      );
-      setCreatedBacktestId(result.backtest.id);
-      setReportMessage(LABELS.backtestReportCreated);
-      try {
-        await mutateApplications();
-      } catch {
-        setReportMessage(LABELS.backtestReportRefreshFailed);
-      }
-    } catch (error) {
-      setReportError(getErrorMessage(error, LABELS.backtestReportError));
-    } finally {
-      setIsCreatingReport(false);
-    }
-  };
-
-  return (
-    <div className={`mt-3 rounded-lg border p-3 text-sm ${statusTone}`}>
-      <h6 className="font-semibold">{LABELS.internalBacktestResultTitle}</h6>
-      <div className="mt-1 text-xs leading-5">
-        {LABELS.executionId}: {executionId}
-      </div>
-      {isExecutionStatusLoading ? (
-        <p className="mt-2">{LABELS.internalBacktestResultLoading}</p>
-      ) : executionStatusError ? (
-        <p className="mt-2">{LABELS.internalBacktestResultStatusError}</p>
-      ) : (
-        <>
-          <div className="mt-2 text-xs leading-5">
-            {LABELS.internalBacktestResultStatus}: {executionStatus ?? '-'}
-          </div>
-          {executionStatus === 'queued' || executionStatus === 'running' ? (
-            <p className="mt-2">{LABELS.internalBacktestResultNotReady}</p>
-          ) : null}
-          {executionStatus === 'failed' ? (
-            <p className="mt-2">
-              {LABELS.internalBacktestResultFailed}
-              {executionStatusData?.execution?.error_message
-                ? ` ${executionStatusData.execution.error_message}`
-                : ''}
-            </p>
-          ) : null}
-          {executionStatus === 'canceled' ? (
-            <p className="mt-2">{LABELS.internalBacktestResultCanceled}</p>
-          ) : null}
-          {executionStatus === 'succeeded' ? (
-            <div className="mt-2">
-              {isExecutionResultLoading ? (
-                <p>{LABELS.internalBacktestResultResultLoading}</p>
-              ) : executionResultError ? (
-                <p>{LABELS.internalBacktestResultResultError}</p>
-              ) : metrics ? (
-                <div>
-                  <p>{LABELS.internalBacktestResultReady}</p>
-                  <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultSummaryKind}</dt>
-                      <dd>{executionResultData?.result_summary?.summary_kind ?? '-'}</dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultPeriod}</dt>
-                      <dd>{period ? `${period.from} - ${period.to}` : '-'}</dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultBarCount}</dt>
-                      <dd>{formatNumber(metrics.bar_count, 0)}</dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultPriceChangePercent}</dt>
-                      <dd>{formatNumber(metrics.price_change_percent, 2)}%</dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultRangePercent}</dt>
-                      <dd>{formatNumber(metrics.range_percent, 2)}%</dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold">{LABELS.resultFinishedAt}</dt>
-                      <dd>{formatDate(executionResultData?.finished_at ?? null)}</dd>
-                    </div>
-                  </dl>
-                </div>
-              ) : (
-                <p>{LABELS.internalBacktestResultUnavailable}</p>
-              )}
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {backtestLink ? (
-                  <>
-                    <span className="text-xs font-medium">{LABELS.backtestReportAlreadyCreated}</span>
-                    <TextLink href={`/backtests/${backtestLink}`}>{LABELS.openBacktestDetail}</TextLink>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={createBacktestReport}
-                    disabled={isCreatingReport}
-                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-                  >
-                    {isCreatingReport ? LABELS.creatingBacktestReport : LABELS.createBacktestReport}
-                  </button>
-                )}
-              </div>
-              {reportMessage ? (
-                <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{reportMessage}</p>
-              ) : null}
-              {reportError ? (
-                <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{reportError}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </>
-      )}
-    </div>
-  );
 }
 
 function ApplicationSummaryHeader({
@@ -615,10 +397,8 @@ function ApplicationSummaryHeader({
 
 function ApplicationLatestRunCard({
   application,
-  mutateApplications,
 }: {
   application: SymbolStrategyApplicationItem;
-  mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
   return (
     <Surface variant="nested">
@@ -633,17 +413,8 @@ function ApplicationLatestRunCard({
               <KeyValueRow label="backtest_id"><code>{application.latest_run.backtest_id}</code></KeyValueRow>
             ) : null}
           </KeyValueList>
-          {application.latest_run.internal_backtest_execution_id ? (
-            <>
-              <MetaText>{LABELS.executionId}: {application.latest_run.internal_backtest_execution_id}</MetaText>
-              <InternalBacktestResultPanel
-                key={application.latest_run.internal_backtest_execution_id}
-                applicationId={application.id}
-                executionId={application.latest_run.internal_backtest_execution_id}
-                existingBacktestId={application.latest_run.backtest_id}
-                mutateApplications={mutateApplications}
-              />
-            </>
+          {application.latest_run.backtest_id ? (
+            <TextLink href={`/backtests/${application.latest_run.backtest_id}`}>{LABELS.openBacktestDetail}</TextLink>
           ) : null}
         </div>
       ) : (
@@ -722,12 +493,6 @@ function SavedApplicationRow({
   const [csvImportMessage, setCsvImportMessage] = useState<CsvImportMessage | null>(null);
   const [csvImportError, setCsvImportError] = useState<string | null>(null);
   const [csvBacktestLink, setCsvBacktestLink] = useState<string | null>(null);
-  const [internalBacktestFrom, setInternalBacktestFrom] = useState('2025-01-01');
-  const [internalBacktestTo, setInternalBacktestTo] = useState('2026-01-01');
-  const [isStartingInternalBacktest, setIsStartingInternalBacktest] = useState(false);
-  const [internalBacktestMessage, setInternalBacktestMessage] = useState<string | null>(null);
-  const [internalBacktestError, setInternalBacktestError] = useState<string | null>(null);
-  const [internalExecutionId, setInternalExecutionId] = useState<string | null>(null);
   const [isMutatingApplicationStatus, setIsMutatingApplicationStatus] = useState(false);
   const [applicationStatusMessage, setApplicationStatusMessage] = useState<string | null>(null);
   const [applicationStatusError, setApplicationStatusError] = useState<string | null>(null);
@@ -832,41 +597,6 @@ function SavedApplicationRow({
     }
   };
 
-  const startInternalBacktest = async () => {
-    if (!internalBacktestFrom.trim() || !internalBacktestTo.trim()) {
-      return;
-    }
-    setIsStartingInternalBacktest(true);
-    setInternalBacktestMessage(null);
-    setInternalBacktestError(null);
-    setInternalExecutionId(null);
-    try {
-      const result = await postApi<SymbolStrategyApplicationInternalBacktestData>(
-        `/api/symbol-strategy-applications/${application.id}/internal-backtests`,
-        {
-          data_range: {
-            from: internalBacktestFrom.trim(),
-            to: internalBacktestTo.trim(),
-          },
-          engine_config: {
-            summary_mode: 'engine_estimated',
-          },
-        },
-      );
-      setInternalExecutionId(result.execution.id);
-      setInternalBacktestMessage(LABELS.internalBacktestSuccess);
-      try {
-        await mutateApplications();
-      } catch {
-        setInternalBacktestMessage(LABELS.internalBacktestRefreshFailed);
-      }
-    } catch (error) {
-      setInternalBacktestError(getErrorMessage(error, LABELS.internalBacktestError));
-    } finally {
-      setIsStartingInternalBacktest(false);
-    }
-  };
-
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <ApplicationSummaryHeader
@@ -882,7 +612,7 @@ function SavedApplicationRow({
       ) : null}
 
       <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <ApplicationLatestRunCard application={application} mutateApplications={mutateApplications} />
+        <ApplicationLatestRunCard application={application} />
         <ApplicationLatestReportCard application={application} />
       </div>
 
@@ -956,53 +686,6 @@ function SavedApplicationRow({
         ) : null}
       </div>
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <h5 className="text-sm font-semibold text-slate-900">{LABELS.internalBacktest}</h5>
-        <p className="mt-1 text-sm leading-6 text-slate-600">{LABELS.internalBacktestDescription}</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">{LABELS.internalBacktestFrom}</span>
-            <input
-              type="date"
-              value={internalBacktestFrom}
-              onChange={(event) => setInternalBacktestFrom(event.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-          <label className="grid gap-1 text-sm text-slate-700">
-            <span className="font-medium">{LABELS.internalBacktestTo}</span>
-            <input
-              type="date"
-              value={internalBacktestTo}
-              onChange={(event) => setInternalBacktestTo(event.target.value)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            />
-          </label>
-        </div>
-        <MetaText>{LABELS.internalBacktestMode}: engine_estimated</MetaText>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={startInternalBacktest}
-            disabled={isStartingInternalBacktest || !internalBacktestFrom.trim() || !internalBacktestTo.trim()}
-            className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-600"
-          >
-            {isStartingInternalBacktest ? LABELS.internalBacktestStarting : LABELS.runInternalBacktest}
-          </button>
-          <span className="text-sm text-slate-500">{LABELS.internalBacktestResultPending}</span>
-        </div>
-        {internalExecutionId ? (
-          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-            {LABELS.executionId}: {internalExecutionId}
-          </p>
-        ) : null}
-        {internalBacktestMessage ? (
-          <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{internalBacktestMessage}</p>
-        ) : null}
-        {internalBacktestError ? (
-          <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{internalBacktestError}</p>
-        ) : null}
-      </div>
     </div>
   );
 }
@@ -1069,12 +752,10 @@ function SavedStrategyApplicationsPanel({
   const sourceFilterOptions = [
     { value: 'all' as const, label: LABELS.savedApplicationsSourceAll },
     { value: 'csv_import' as const, label: LABELS.savedApplicationsSourceCsv },
-    { value: 'internal_backtest' as const, label: LABELS.savedApplicationsSourceInternal },
   ];
   const runTypeFilterOptions = [
     { value: 'all' as const, label: LABELS.savedApplicationsRunAll },
     { value: 'csv_import' as const, label: LABELS.savedApplicationsSourceCsv },
-    { value: 'internal_backtest' as const, label: LABELS.savedApplicationsSourceInternal },
   ];
   const runStatusFilterOptions = [
     { value: 'all' as const, label: LABELS.savedApplicationsRunAll },
@@ -1532,9 +1213,6 @@ function StrategyApplySelectionPanel({
         <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
           {LABELS.csvImportLater}
         </button>
-        <button type="button" disabled className="rounded-md bg-slate-200 px-3 py-2 text-sm font-medium text-slate-500">
-          {LABELS.internalBacktestLater}
-        </button>
       </div>
     </div>
   );
@@ -1877,7 +1555,7 @@ export default function SymbolDetail() {
               <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
                 <li>この銘柄に適用済みのストラテジー一覧</li>
                 <li>最新の検証結果と検証レポート詳細への導線</li>
-                <li>CSV取込、内部バックテスト、銘柄別比較の入口</li>
+                <li>TradingView CSV取込、検証レポート、銘柄別比較の入口</li>
               </ul>
             </div>
             <SavedStrategyApplicationsPanel
