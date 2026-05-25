@@ -72,6 +72,8 @@ const PINE_REVIEW_REPAIR_PRIORITIES: Record<PineReviewIssueCode, number> = {
   long_only_violation: 100,
   setup_trigger_same_bar: 90,
   entry_atr_na_capture: 95,
+  donchian_current_bar_self_reference: 95,
+  entry_time_atr_not_persisted: 95,
   provider_review_unavailable: 0,
   other: 0,
 };

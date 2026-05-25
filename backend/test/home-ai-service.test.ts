@@ -964,6 +964,104 @@ describe('HomeAiService', () => {
     expect(reviewMock).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps malformed provider reviewer output non-blocking when deterministic reviewer passes', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockRejectedValue(new Error('local reviewer returned malformed_json from private endpoint'));
+    pineMock.mockResolvedValue({
+      normalizedRuleJson: {},
+      generatedScript:
+        '//@version=6\nstrategy("provider review invalid", overlay=true)\nma50 = ta.sma(close, 50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(ma50)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.repairAttempts).toBe(0);
+    expect(result.output.reviewerSummary?.warning_count).toBe(1);
+    expect(result.output.invalidReasonCodes).toEqual([]);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(result.output)).not.toContain('private endpoint');
+  });
+
+  it('repairs deterministic blocking issue even when provider reviewer fails', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockRejectedValue(new Error('provider_invalid_response with stack trace and token'));
+    pineMock.mockImplementation(async (context: any) => {
+      if (context?.repairRequest) {
+        return {
+          normalizedRuleJson: {},
+          generatedScript:
+            '//@version=6\nstrategy("deterministic repaired", overlay=true)\nma50 = ta.sma(close, 50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(ma50)',
+          warnings: [],
+          assumptions: [],
+          status: 'generated',
+          modelName: 'local-model',
+          promptVersion: 'v1',
+        };
+      }
+      return {
+        normalizedRuleJson: {},
+        generatedScript:
+          '//@version=6\nstrategy("deterministic bad", overlay=true)\nma50 = ta.sma(close, 50)\nif close > ma50\n    strategy.entry("Long", strategy.long)\nplot(ma50)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
+      'reviewer_entry_guard_risk',
+    );
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
+      {
+        code: 'entry_guard_risk',
+        severity: 'error',
+        repair_hint:
+          'Call strategy.entry only inside a flat-position guard such as strategy.position_size == 0 for long-only no-pyramiding strategies.',
+      },
+    ]);
+    expect(JSON.stringify(result.output)).not.toContain('stack trace');
+    expect(JSON.stringify(result.output)).not.toContain('token');
+  });
+
   it('fails with sanitized reviewer metadata when reviewer issues remain after retry limit', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();
