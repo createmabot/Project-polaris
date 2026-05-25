@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
+    "internal-backtest:audit": "tsx src/scripts/audit-internal-backtest-data.ts",
     "strategy-proposal:benchmark": "tsx src/scripts/strategy-proposal-benchmark.ts",
     "test:integration:symbol-snapshot-db:prepare": "prisma migrate deploy",
     "test:snapshot-failover": "vitest run test/snapshot-failover.test.ts",
