@@ -330,6 +330,52 @@ type LocalLlmSummaryChatOptions = {
 const LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS = 1200;
 const LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS = 1800;
 
+const PINE_REPAIR_SYSTEM_PROMPT = [
+  'Repair an existing Pine v6 strategy script using only the listed repair_request.reviewIssues.',
+  'Return one strict JSON object only. Do not include markdown fences around the JSON.',
+  'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
+  'Fix only the listed issue codes and repair hints. Preserve unrelated strategy logic, indicators, entry/exit intent, risk settings, comments that are not related to listed issues, target market, and target timeframe.',
+  'Use //@version=6 and strategy(...). Keep Pine code, identifiers, function names, and required Pine syntax untranslated.',
+  'Do not introduce new indicators, ATR state, exits, plots, shorts, pyramiding, request.security, or behavior changes unless directly required by a listed repair issue.',
+  'For long-only strategies, do not generate strategy.short entries or short-side strategy.entry calls.',
+  'Keep generated_script self-contained and valid Pine Script; do not leave TODOs, placeholders, ellipses, or pseudo-code.',
+  'Return user-facing warnings and assumptions in Japanese. Do not write English explanatory sentences in warnings or assumptions.',
+  'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
+  'Do not include raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, URLs, citations, web search results, or profit guarantees.',
+].join(' ');
+
+function buildPineGenerationUserPayload(context: PineGenerationContext): Record<string, unknown> {
+  const outputSchema = {
+    generated_script: '<string>',
+    warnings: ['<Japanese user-facing string>'],
+    assumptions: ['<Japanese user-facing string>'],
+    normalized_rule_json: '<object>',
+  };
+
+  if (context.repairRequest) {
+    return {
+      task: 'repair_pine_script',
+      natural_language_spec: context.naturalLanguageSpec,
+      normalized_rule_json: context.normalizedRuleJson,
+      target_market: context.targetMarket,
+      target_timeframe: context.targetTimeframe,
+      repair_request: context.repairRequest,
+      previous_script: context.repairRequest.previousScript,
+      output_schema: outputSchema,
+    };
+  }
+
+  return {
+    natural_language_spec: context.naturalLanguageSpec,
+    normalized_rule_json: context.normalizedRuleJson,
+    target_market: context.targetMarket,
+    target_timeframe: context.targetTimeframe,
+    regeneration_input: context.regenerationInput ?? null,
+    repair_request: null,
+    output_schema: outputSchema,
+  };
+}
+
 function buildDeterministicDailyOutput(
   context: DailySummaryContext,
   options: { modelName: string; promptVersion: string; titlePrefix: string },
@@ -1646,7 +1692,9 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content:
+            content: context.repairRequest
+              ? PINE_REPAIR_SYSTEM_PROMPT
+              :
               [
                 'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script.',
                 'Return one strict JSON object only. Do not include markdown fences around the JSON.',
@@ -1708,25 +1756,11 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
                 'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
                 'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
                 'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
-                'When repair_request.reviewIssues is provided, fix those listed reviewer issues first. Use each issue code and repair_hint as the primary repair checklist. Preserve unrelated strategy logic.',
               ].join(' '),
           },
           {
             role: 'user',
-            content: JSON.stringify({
-              natural_language_spec: context.naturalLanguageSpec,
-              normalized_rule_json: context.normalizedRuleJson,
-              target_market: context.targetMarket,
-              target_timeframe: context.targetTimeframe,
-              regeneration_input: context.regenerationInput ?? null,
-              repair_request: context.repairRequest ?? null,
-              output_schema: {
-                generated_script: '<string>',
-                warnings: ['<Japanese user-facing string>'],
-                assumptions: ['<Japanese user-facing string>'],
-                normalized_rule_json: '<object>',
-              },
-            }),
+            content: JSON.stringify(buildPineGenerationUserPayload(context)),
           },
         ],
         stream: false,
@@ -1867,7 +1901,9 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               'Use schema_name pine_review_result and schema_version 1.0.',
               'Use status pass when no error issues exist, otherwise needs_repair.',
               'Each issue must include code, severity, message, repair_hint, and repairable.',
-              'Use severity error for repair-triggering issues. Use warning or info only for non-blocking observations.',
+              'Use severity error only for likely compile failures, material order behavior changes, long-only violations, or issues that make the strategy unlikely to trade.',
+              'Use warning for readability, plotting preferences, below-vs-crossunder nuance, minor unused variables, narrative comments, and other non-blocking observations.',
+              'Do not mark quality-only or readability-only observations as error.',
               'Allowed issue codes: pine_syntax_risk, unsupported_color_alias, unsupported_color_namespace, unsupported_plot_style, unsupported_function_alias, dmi_property_access, unsupported_dmi_property_access, unsupported_adx_function, block_local_variable_scope_risk, na_type_inference_risk, uninitialized_stop_loss_price, stop_order_guard_risk, setup_trigger_state_risk, entry_guard_risk, below_vs_crossunder_mismatch, oscillator_plot_overlay_risk, overlay_oscillator_plot, entry_price_reference_risk, stop_order_semantics_risk, unused_state_variable, narrative_comment, long_only_violation, setup_trigger_same_bar, entry_atr_na_capture, other.',
               'Flag unsupported_function_alias when ta.crossabove or ta.crossbelow appears; prefer ta.crossover and ta.crossunder.',
               'For setup->trigger strategies, setupActive should remain true until entry occurs, explicit invalidation occurs, or lifecycle reset. Do not clear setupActive in a generic else branch before the trigger can fire.',
@@ -2305,7 +2341,9 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
         messages: [
           {
             role: 'system',
-            content: [
+            content: context.repairRequest
+              ? PINE_REPAIR_SYSTEM_PROMPT
+              : [
               'Convert natural language rule to Pine script. Use regeneration_input when provided to revise existing script. Return strict JSON.',
               'Return one strict JSON object only. Do not include markdown fences around the JSON.',
               'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
@@ -2366,25 +2404,11 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
               'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
               'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
-              'When repair_request.reviewIssues is provided, fix those listed reviewer issues first. Use each issue code and repair_hint as the primary repair checklist. Preserve unrelated strategy logic.',
             ].join(' '),
           },
           {
             role: 'user',
-            content: JSON.stringify({
-              natural_language_spec: context.naturalLanguageSpec,
-              normalized_rule_json: context.normalizedRuleJson,
-              target_market: context.targetMarket,
-              target_timeframe: context.targetTimeframe,
-              regeneration_input: context.regenerationInput ?? null,
-              repair_request: context.repairRequest ?? null,
-              output_schema: {
-                generated_script: '<string>',
-                warnings: ['<Japanese user-facing string>'],
-                assumptions: ['<Japanese user-facing string>'],
-                normalized_rule_json: '<object>',
-              },
-            }),
+            content: JSON.stringify(buildPineGenerationUserPayload(context)),
           },
         ],
         response_format: { type: 'json_object' },

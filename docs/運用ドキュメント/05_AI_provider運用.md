@@ -217,7 +217,16 @@ future provider の前提:
 - Web search / deep research は同期 proposal API ではなく job 化候補とし、citation / freshness / timeout / cancellation / cost を別設計する。
 - request-time provider selection は今回対象外であり、cost / abuse / consistency を別途設計してから判断する。
 
-### 7-3-2. Strategy proposal provider event log 運用
+
+### 7-3-2. Pine generation reviewer repair 運用
+
+- Pine generation provider selection は `PINE_GENERATION_PROVIDER` の既存境界を維持し、repair hardening では provider selection を変更しない。
+- reviewer repair は priority mapping に基づき、severity `error`、repairable、priority > 0 の issue だけを最大 3 件 `repair_request.reviewIssues` に渡す。priority 0 の readability / plotting preference / below-vs-crossunder nuance / minor unused variable / narrative comment は repair を起動しない。
+- `repair_request` がある場合は repair 専用 prompt を使い、listed issue だけを修正し、無関係な strategy logic / intent を保持する。repair 回数は既存上限を維持し、増やさない。
+- required check は fake provider / deterministic reviewer で確認し、real local_llm / OpenAI / TradingView compile は manual smoke に限定する。
+- raw prompt、raw provider response、raw reviewer response、endpoint、model 実値、secret、token、local path、stack trace は response / UI / docs / PR に出さない。
+
+### 7-3-3. Strategy proposal provider event log 運用
 
 Sanitized provider event log は、provider call / manual import / retry / rate limit / validation failure の発生を低レイヤーの運用観測として残す。Proposal history は生成された候補と selection lineage、provider quality trend は history からの集計、benchmark record は manual optional benchmark の local summary であり、event log はこれらと責務を分ける。
 
