@@ -700,12 +700,15 @@ describe('HomeAiService', () => {
       'reviewer_entry_guard_risk',
     );
     expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
-      {
+      expect.objectContaining({
         code: 'entry_guard_risk',
         severity: 'error',
         repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
-      },
+      }),
     ]);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues[0].repair_template).toContain(
+      'strategy.position_size == 0',
+    );
   });
 
   it('selects only top-priority repairable reviewer issues for repair context', async () => {
@@ -808,21 +811,21 @@ describe('HomeAiService', () => {
     expect(result.output.status).toBe('generated');
     expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
     expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
-      {
+      expect.objectContaining({
         code: 'unsupported_function_alias',
         severity: 'error',
         repair_hint: 'Use ta.crossover or ta.crossunder.',
-      },
-      {
+      }),
+      expect.objectContaining({
         code: 'long_only_violation',
         severity: 'error',
         repair_hint: 'Remove short-side entries.',
-      },
-      {
+      }),
+      expect.objectContaining({
         code: 'entry_guard_risk',
         severity: 'error',
         repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
-      },
+      }),
     ]);
     expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toHaveLength(3);
     expect(JSON.stringify((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues)).not.toContain(
@@ -831,6 +834,86 @@ describe('HomeAiService', () => {
     expect(JSON.stringify((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues)).not.toContain(
       'unsupported_adx_function',
     );
+  });
+
+  it('adds targeted repair templates to selected repair issues', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => ({
+      normalizedRuleJson: {},
+      generatedScript: context?.repairRequest
+        ? '//@version=6\nstrategy("template repaired", overlay=true)\natrValue = ta.atr(14)\nvar float entryAtr = na\nif close > ta.sma(close, 20) and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and strategy.position_size[1] == 0\n    entryAtr := atrValue\nif strategy.position_size > 0 and not na(entryAtr)\n    stopLossPrice = strategy.position_avg_price - entryAtr * 2\n    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)'
+        : '//@version=6\nstrategy("template source", overlay=true)\natrValue = ta.atr(14)\nif close > ta.sma(close, 20)\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0\n    stopLossPrice = strategy.position_avg_price - atrValue * 2\n    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    }));
+    reviewMock.mockImplementation(async (context: any) => {
+      if (context.repairAttempt > 0) {
+        return createPassingPineReview();
+      }
+      return {
+        schema_name: 'pine_review_result',
+        schema_version: '1.0',
+        status: 'needs_repair',
+        issues: [
+          {
+            code: 'entry_time_atr_not_persisted',
+            severity: 'error',
+            message: 'ATR is not persisted at entry.',
+            repair_hint: 'Persist entry ATR.',
+            repairable: true,
+          },
+          {
+            code: 'stop_order_guard_risk',
+            severity: 'error',
+            message: 'Stop order guard is missing.',
+            repair_hint: 'Guard stop order.',
+            repairable: true,
+          },
+          {
+            code: 'entry_guard_risk',
+            severity: 'error',
+            message: 'Entry guard is missing.',
+            repair_hint: 'Guard entry order.',
+            repairable: true,
+          },
+        ],
+        summary: {
+          issue_count: 3,
+          error_count: 3,
+          warning_count: 0,
+          repairable_issue_count: 3,
+        },
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'Entry-time ATR stop',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    const repairIssues = (pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues;
+    const atrIssue = repairIssues.find((issue: any) => issue.code === 'entry_time_atr_not_persisted');
+    const stopIssue = repairIssues.find((issue: any) => issue.code === 'stop_order_guard_risk');
+    const entryIssue = repairIssues.find((issue: any) => issue.code === 'entry_guard_risk');
+    expect(atrIssue.repair_template).toContain('var float entryAtr = na');
+    expect(atrIssue.repair_template).toContain('strategy.position_size > 0 and strategy.position_size[1] == 0');
+    expect(stopIssue.repair_template).toContain('not na(stopLossPrice)');
+    expect(stopIssue.repair_template).toContain('strategy.position_size > 0');
+    expect(entryIssue.repair_template).toContain('strategy.position_size == 0');
   });
 
   it('succeeds without repair when reviewer returns warning-only issues', async () => {
@@ -1051,12 +1134,12 @@ describe('HomeAiService', () => {
       'reviewer_entry_guard_risk',
     );
     expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
-      {
+      expect.objectContaining({
         code: 'entry_guard_risk',
         severity: 'error',
         repair_hint:
           'Call strategy.entry only inside a flat-position guard such as strategy.position_size == 0 for long-only no-pyramiding strategies.',
-      },
+      }),
     ]);
     expect(JSON.stringify(result.output)).not.toContain('stack trace');
     expect(JSON.stringify(result.output)).not.toContain('token');

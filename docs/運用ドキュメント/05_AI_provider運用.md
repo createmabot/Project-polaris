@@ -224,6 +224,7 @@ future provider の前提:
 - reviewer repair は priority mapping に基づき、severity `error`、repairable、priority > 0 の issue だけを最大 3 件 `repair_request.reviewIssues` に渡す。priority 0 の readability / plotting preference / below-vs-crossunder nuance / minor unused variable / narrative comment は repair を起動しない。
 - AI reviewer provider の malformed JSON / empty output / invalid response は deterministic reviewer が pass なら non-blocking warning として扱う。deterministic reviewer が blocking issue を出した場合は、AI reviewer failure とは独立して deterministic issue により repair / failure を継続する。
 - `repair_request` がある場合は repair 専用 prompt を使い、listed issue だけを修正し、無関係な strategy logic / intent を保持する。repair 回数は既存上限を維持し、増やさない。
+- selected issue には internal-only の targeted `repair_template` を付与する。repair prompt は `repair_template` を `repair_hint` より優先し、attempt 2 以降は同一 issue が残っている前提で template 適用を強める。外部 API / DB / UI shape は変えない。
 - required check は fake provider / deterministic reviewer で確認し、real local_llm / OpenAI / TradingView compile は manual smoke に限定する。
 - raw prompt、raw provider response、raw reviewer response、endpoint、model 実値、secret、token、local path、stack trace は response / UI / docs / PR に出さない。
 

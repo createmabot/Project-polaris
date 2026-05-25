@@ -264,6 +264,7 @@ export type PineGenerationContext = {
       code: string;
       severity: 'error' | 'warning' | 'info';
       repair_hint: string;
+      repair_template?: string;
     }>;
   } | null;
 };
@@ -334,7 +335,9 @@ const PINE_REPAIR_SYSTEM_PROMPT = [
   'Repair an existing Pine v6 strategy script using only the listed repair_request.reviewIssues.',
   'Return one strict JSON object only. Do not include markdown fences around the JSON.',
   'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
-  'Fix only the listed issue codes and repair hints. Preserve unrelated strategy logic, indicators, entry/exit intent, risk settings, comments that are not related to listed issues, target market, and target timeframe.',
+  'Fix only the listed issue codes. Prioritize repair_template over repair_hint when repair_template is present.',
+  'Preserve unrelated strategy logic, indicators, entry/exit intent, risk settings, comments that are not related to listed issues, target market, and target timeframe.',
+  'If the same issue persists after a prior repair attempt, apply the listed repair_template exactly unless doing so would break Pine syntax.',
   'Use //@version=6 and strategy(...). Keep Pine code, identifiers, function names, and required Pine syntax untranslated.',
   'Do not introduce new indicators, ATR state, exits, plots, shorts, pyramiding, request.security, or behavior changes unless directly required by a listed repair issue.',
   'For long-only strategies, do not generate strategy.short entries or short-side strategy.entry calls.',
@@ -360,6 +363,10 @@ function buildPineGenerationUserPayload(context: PineGenerationContext): Record<
       target_market: context.targetMarket,
       target_timeframe: context.targetTimeframe,
       repair_request: context.repairRequest,
+      recurring_repair_note:
+        context.repairRequest.attempt > 1
+          ? 'This is a repeated repair attempt. If a listed issue is still present, apply repair_template exactly and avoid unrelated rewrites.'
+          : null,
       previous_script: context.repairRequest.previousScript,
       output_schema: outputSchema,
     };
