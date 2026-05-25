@@ -51,6 +51,7 @@ vi.mock('../api/client', async () => {
 import StrategyLab from './StrategyLab';
 import { ApiError, fetchApi, postApi } from '../api/client';
 import { buildProposalErrorMessage, buildProposalHistoryPath, buildRuleSubmitErrorMessage } from './StrategyLab';
+import { buildPineGenerationJobFailureMessage } from '../utils/pineGenerationJob';
 
 const DEFAULT_RULE =
   '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。';
@@ -239,6 +240,33 @@ describe('StrategyLab', () => {
     expect(message).not.toContain('endpoint');
     expect(message).not.toContain('secret-model');
     expect(message).not.toContain('raw provider response');
+  });
+
+  it('builds sanitized Pine job failure messages with reviewer causes', () => {
+    const message = buildPineGenerationJobFailureMessage({
+      code: 'PINE_GENERATION_FAILED',
+      message: 'Pine生成に失敗しました。条件を見直して再試行してください。',
+      invalid_reason_codes: ['reviewer_setup_trigger_state_risk', 'endpoint=http://secret.local'],
+      pine_reviewer_issues: [
+        {
+          code: 'setup_trigger_state_risk',
+          severity: 'error',
+          repair_hint: 'Use setupActive state instead of requiring setup and trigger on the same bar.',
+        },
+        {
+          code: 'other',
+          severity: 'error',
+          repair_hint: 'endpoint=http://secret.local model=secret-model',
+        },
+      ],
+    });
+
+    expect(message).toContain('Pine生成に失敗しました');
+    expect(message).toContain('原因:');
+    expect(message).toContain('setup 条件と trigger 条件の状態保持が不十分');
+    expect(message).toContain('Use setupActive state');
+    expect(message).not.toContain('http://secret.local');
+    expect(message).not.toContain('secret-model');
   });
 
 
