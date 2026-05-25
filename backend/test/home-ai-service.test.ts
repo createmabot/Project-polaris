@@ -699,6 +699,13 @@ describe('HomeAiService', () => {
     expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
       'reviewer_narrative_comment',
     );
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
+      {
+        code: 'narrative_comment',
+        severity: 'error',
+        repair_hint: 'Remove narrative generated_script comments.',
+      },
+    ]);
   });
 
   it('falls back to deterministic reviewer when provider reviewer fails without leaking details', async () => {
@@ -757,6 +764,13 @@ describe('HomeAiService', () => {
     expect(result.output.failureReason).toBe('pine_review_needs_repair');
     expect(result.output.invalidReasonCodes).toContain('reviewer_setup_trigger_same_bar');
     expect(result.output.reviewerSummary?.error_count).toBe(1);
+    expect(result.output.reviewerIssues).toEqual([
+      {
+        code: 'setup_trigger_same_bar',
+        severity: 'error',
+        repair_hint: 'Use setupActive state instead of requiring setup and trigger on the same bar.',
+      },
+    ]);
     expect(JSON.stringify(result.output)).not.toContain('endpoint');
     expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
   });

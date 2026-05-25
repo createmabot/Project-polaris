@@ -62,6 +62,7 @@ type Runtime = {
     resultPineScriptId: string | null;
     errorCode: string | null;
     errorMessage: string | null;
+    errorDetailsJson: unknown;
     completedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
@@ -237,6 +238,7 @@ vi.mock('../src/db', () => {
           resultPineScriptId: data.resultPineScriptId ?? null,
           errorCode: data.errorCode ?? null,
           errorMessage: data.errorMessage ?? null,
+          errorDetailsJson: data.errorDetailsJson ?? null,
           completedAt: data.completedAt ?? null,
           createdAt: now,
           updatedAt: now,
@@ -533,6 +535,69 @@ describe('strategy version pine endpoints', () => {
     expect(job.error_message).toBe('Pine生成に失敗しました。条件を見直して再試行してください。');
     expect(JSON.stringify(job)).not.toContain('http://secret.local');
     expect(JSON.stringify(job)).not.toContain('sensitive');
+
+    await app.close();
+  });
+
+  it('returns sanitized invalid reason codes for failed async pine generation jobs', async () => {
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { strategy_type: 'long_only' },
+        generatedScript: null,
+        warnings: ['Pine reviewer が修復対象の問題を 1 件検出しました。'],
+        assumptions: [],
+        status: 'failed',
+        failureReason: 'pine_review_needs_repair',
+        invalidReasonCodes: ['reviewer_unsupported_adx_function', 'endpoint=http://secret.local'],
+        reviewerIssues: [
+          {
+            code: 'unsupported_adx_function',
+            severity: 'error',
+            repair_hint: 'Use supported DMI/ADX calculation patterns instead of ta.adx(...).',
+          },
+          {
+            code: 'other',
+            severity: 'error',
+            repair_hint: 'endpoint=http://secret.local model=secret-model',
+          },
+        ],
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+    const app = await createApp();
+
+    const started = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generation-jobs',
+      payload: {},
+    });
+    expect(started.statusCode).toBe(202);
+    const jobId = started.json().data.job.id;
+
+    await flushAsyncJob();
+
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/ver-1/pine/generation-jobs/${jobId}`,
+    });
+    expect(status.statusCode).toBe(200);
+    const job = status.json().data.job;
+    expect(job.status).toBe('failed');
+    expect(job.error.invalid_reason_codes).toEqual(['reviewer_unsupported_adx_function']);
+    expect(job.error.pine_reviewer_issues).toEqual([
+      {
+        code: 'unsupported_adx_function',
+        severity: 'error',
+        repair_hint: 'Use supported DMI/ADX calculation patterns instead of ta.adx(...).',
+      },
+    ]);
+    expect(JSON.stringify(job)).not.toContain('http://secret.local');
+    expect(JSON.stringify(job)).not.toContain('secret-model');
 
     await app.close();
   });

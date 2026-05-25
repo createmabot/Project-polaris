@@ -260,6 +260,11 @@ export type PineGenerationContext = {
     invalidReasonCodes: string[];
     failureReason: string;
     previousScript: string | null;
+    reviewIssues?: Array<{
+      code: string;
+      severity: 'error' | 'warning' | 'info';
+      repair_hint: string;
+    }>;
   } | null;
 };
 
@@ -286,6 +291,11 @@ export type PineGenerationOutput = {
     warning_count: number;
     repairable_issue_count: number;
   };
+  reviewerIssues?: Array<{
+    code: string;
+    severity: 'error' | 'warning' | 'info';
+    repair_hint: string;
+  }>;
   modelName: string;
   promptVersion: string;
 };
@@ -1695,6 +1705,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
                 'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
                 'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
                 'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
+                'When repair_request.reviewIssues is provided, fix those listed reviewer issues first. Use each issue code and repair_hint as the primary repair checklist. Preserve unrelated strategy logic.',
               ].join(' '),
           },
           {
@@ -2342,6 +2353,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
               'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
               'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
+              'When repair_request.reviewIssues is provided, fix those listed reviewer issues first. Use each issue code and repair_hint as the primary repair checklist. Preserve unrelated strategy logic.',
             ].join(' '),
           },
           {

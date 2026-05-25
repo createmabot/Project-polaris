@@ -576,6 +576,7 @@ model PineGenerationJob {
   resultPineScriptId    String?  @map("result_pine_script_id")
   errorCode             String?  @map("error_code")
   errorMessage          String?  @map("error_message")
+  errorDetailsJson      Json?    @map("error_details_json")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
   completedAt           DateTime? @map("completed_at")
