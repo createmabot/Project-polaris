@@ -52,6 +52,7 @@ export type PineReviewIssueCode =
   | 'uninitialized_stop_loss_price'
   | 'stop_order_guard_risk'
   | 'setup_trigger_state_risk'
+  | 'entry_guard_risk'
   | 'below_vs_crossunder_mismatch'
   | 'oscillator_plot_overlay_risk'
   | 'overlay_oscillator_plot'
@@ -221,13 +222,130 @@ function hasStopLossPlotReference(source: string): boolean {
 
 function hasStopExitWithoutNaGuard(source: string): boolean {
   const lines = source.split(/\r?\n/);
+  const assignments = buildAssignmentMap(lines);
   return lines.some((line, index) => {
     if (!/\bstrategy\.exit\s*\([^)]*\bstop\s*=\s*stopLossPrice\b/i.test(line)) {
       return false;
     }
     const nearby = lines.slice(Math.max(0, index - 3), index + 1).join('\n');
-    return !/\bnot\s+na\s*\(\s*stopLossPrice\s*\)/i.test(nearby);
+    if (/\bnot\s+na\s*\(\s*stopLossPrice\s*\)/i.test(nearby)) {
+      return false;
+    }
+    const conditionContext = expandConditionContext(getParentIfConditions(lines, index), assignments);
+    return !(hasOpenPositionGuard(conditionContext) && hasSameBlockStopLossAssignmentBefore(lines, index));
   });
+}
+
+function getIndent(line: string): number {
+  const match = line.match(/^[ \t]*/);
+  return match ? match[0].replace(/\t/g, '    ').length : 0;
+}
+
+function getParentIfConditions(lines: string[], index: number): string[] {
+  const conditions: string[] = [];
+  let childIndent = getIndent(lines[index] ?? '');
+
+  for (let i = index - 1; i >= 0; i -= 1) {
+    const rawLine = lines[i] ?? '';
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith('//')) continue;
+
+    const indent = getIndent(rawLine);
+    if (indent >= childIndent) continue;
+
+    const ifMatch = trimmed.match(/^if\s+(.+)$/i);
+    if (ifMatch) {
+      conditions.push(ifMatch[1]);
+    }
+    childIndent = indent;
+    if (childIndent === 0) break;
+  }
+
+  return conditions;
+}
+
+function buildAssignmentMap(lines: string[]): Map<string, string> {
+  const assignments = new Map<string, string>();
+  for (const line of lines) {
+    const match = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$/);
+    if (!match) continue;
+    assignments.set(match[1], match[2]);
+  }
+  return assignments;
+}
+
+function expandConditionContext(conditions: string[], assignments: Map<string, string>): string {
+  const contextParts = [...conditions];
+  for (const condition of conditions) {
+    for (const [name, expression] of assignments.entries()) {
+      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp(`\\b${escapedName}\\b`).test(condition)) {
+        contextParts.push(expression);
+      }
+    }
+  }
+  return contextParts.join(' and ');
+}
+
+function hasFlatPositionGuard(context: string): boolean {
+  return (
+    /\bstrategy\.position_size\s*==\s*0\b/i.test(context) ||
+    /\b0\s*==\s*strategy\.position_size\b/i.test(context) ||
+    /\bstrategy\.opentrades\s*==\s*0\b/i.test(context) ||
+    /\b0\s*==\s*strategy\.opentrades\b/i.test(context)
+  );
+}
+
+function hasOpenPositionGuard(context: string): boolean {
+  return (
+    /\bstrategy\.position_size\s*>\s*0\b/i.test(context) ||
+    /\b0\s*<\s*strategy\.position_size\b/i.test(context)
+  );
+}
+
+function hasPositivePyramiding(source: string): boolean {
+  const strategyDeclaration = source.match(/\bstrategy\s*\(([^)]*)\)/is)?.[1] ?? '';
+  const pyramiding = strategyDeclaration.match(/\bpyramiding\s*=\s*(\d+)/i)?.[1];
+  return pyramiding ? Number.parseInt(pyramiding, 10) > 0 : false;
+}
+
+function entryLineNeedsFlatGuard(line: string): boolean {
+  return /\bstrategy\.entry\s*\(/i.test(line) && !/\bstrategy\.short\b/i.test(line);
+}
+
+function hasSameBlockStopLossAssignmentBefore(lines: string[], exitIndex: number): boolean {
+  const exitIndent = getIndent(lines[exitIndex] ?? '');
+  for (let i = exitIndex - 1; i >= 0; i -= 1) {
+    const line = lines[i] ?? '';
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//')) continue;
+
+    const indent = getIndent(line);
+    if (indent < exitIndent) break;
+    if (
+      indent === exitIndent &&
+      /^(?:float\s+)?stopLossPrice\s*:?=\s*.+\bstrategy\.position_avg_price\b/i.test(trimmed)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasSetupResetAfterEntry(lines: string[], entryIndex: number): boolean {
+  const entryIndent = getIndent(lines[entryIndex] ?? '');
+  for (let i = entryIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//')) continue;
+
+    const indent = getIndent(line);
+    if (indent < entryIndent) break;
+    if (indent === entryIndent && /\bsetupActive\s*:=\s*false\b/i.test(trimmed)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function reviewGeneratedPineScriptDeterministic(script: string | null): PineReviewResult {
@@ -237,6 +355,8 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
 
   const issues: PineReviewIssue[] = [];
   const source = script.trim();
+  const lines = source.split(/\r?\n/);
+  const assignments = buildAssignmentMap(lines);
   const hasOverlayTrue = /\b(strategy|indicator)\s*\([^)]*\boverlay\s*=\s*true\b/i.test(source);
 
   if (/\bcolor\.color\./.test(source)) {
@@ -263,6 +383,30 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
   if (hasStopExitWithoutNaGuard(source)) {
     pushReviewIssue(issues, 'stop_order_guard_risk', 'Call strategy.exit with stop=stopLossPrice only under a not na(stopLossPrice) guard.');
   }
+  lines.forEach((line, index) => {
+    if (!/^\s*(?:float\s+)?stopLossPrice\s*:?=\s*.+\bstrategy\.position_avg_price\b/i.test(line)) return;
+    const conditionContext = expandConditionContext(getParentIfConditions(lines, index), assignments);
+    if (!hasOpenPositionGuard(conditionContext)) {
+      pushReviewIssue(
+        issues,
+        'stop_order_guard_risk',
+        'Calculate stopLossPrice from strategy.position_avg_price only inside a strategy.position_size > 0 position guard.',
+      );
+    }
+  });
+  if (!hasPositivePyramiding(source)) {
+    lines.forEach((line, index) => {
+      if (!entryLineNeedsFlatGuard(line)) return;
+      const conditionContext = expandConditionContext(getParentIfConditions(lines, index), assignments);
+      if (!hasFlatPositionGuard(conditionContext)) {
+        pushReviewIssue(
+          issues,
+          'entry_guard_risk',
+          'Call strategy.entry only inside a flat-position guard such as strategy.position_size == 0 for long-only no-pyramiding strategies.',
+        );
+      }
+    });
+  }
   if (
     hasOverlayTrue &&
     (/\bplot\s*\(\s*(rsi|rsiValue|stoch|stochValue|macd|macdHist|adx|adxValue)\b/i.test(source) ||
@@ -282,6 +426,19 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
     /\bentryCondition\s*=\s*setupActive\s+and\s+triggerCondition\b/i.test(source)
   ) {
     pushReviewIssue(issues, 'setup_trigger_state_risk', 'Keep setupActive true after setupCondition until entryCondition triggers, then reset after entry or explicit invalidation.');
+  }
+  if (/\bsetupActive\b/i.test(source)) {
+    lines.forEach((line, index) => {
+      if (!entryLineNeedsFlatGuard(line)) return;
+      const conditionContext = expandConditionContext(getParentIfConditions(lines, index), assignments);
+      if (/\bsetupActive\b/i.test(conditionContext) && !hasSetupResetAfterEntry(lines, index)) {
+        pushReviewIssue(
+          issues,
+          'setup_trigger_state_risk',
+          'Reset setupActive with setupActive := false in the entry block immediately after strategy.entry or an explicit invalidation.',
+        );
+      }
+    });
   }
   if (/\bif\s+strategy\.position_size\s*>\s*0\s+and\s+na\s*\(\s*entryAtr\s*\)/i.test(source)) {
     pushReviewIssue(issues, 'entry_atr_na_capture', 'Capture entry ATR on the position-open transition instead of na(entryAtr).');

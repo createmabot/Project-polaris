@@ -8,6 +8,7 @@ const REVIEWER_ISSUE_LABELS: Record<string, string> = {
   stop_order_semantics_risk: '損切り注文の表現が不安定',
   uninitialized_stop_loss_price: '損切り価格が未初期化になる可能性',
   stop_order_guard_risk: '損切り注文の na guard が不十分',
+  entry_guard_risk: 'entry の flat guard が不十分',
   unsupported_adx_function: '未対応の ADX 関数表現',
   unsupported_plot_style: '未対応の plot style',
   unsupported_function_alias: '未対応の cross 関数 alias',

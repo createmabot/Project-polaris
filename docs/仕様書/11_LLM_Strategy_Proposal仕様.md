@@ -1220,7 +1220,7 @@ Pine generation の LLM prompt tuning では、生成品質を上げるための
 
 LLM に要求する安全な strategy coding rule:
 
-- `strategy.entry` は entry condition と `strategy.position_size == 0` などの position guard を併用し、同一 bar / 連続 bar で意図しない多重 entry を避ける。
+- `strategy.entry` は entry condition と `strategy.position_size == 0` などの position guard を併用し、同一 bar / 連続 bar で意図しない多重 entry を避ける。long-only / no-pyramiding 相当の代表パターンで flat guard がない場合は reviewer issue（`entry_guard_risk`）として扱う。
 - `strategy.exit` / `strategy.close` は exit condition と `strategy.position_size > 0` などの position guard を併用し、未保有時の exit 注文を避ける。
 - ATR stop / take profit など entry 時点で固定したい値は、position が open になった直後の `strategy.position_size > 0 and strategy.position_size[1] == 0` pattern で `entryAtr` などの `var` 変数へ保存する。entry-time state の reset は単純な `strategy.position_size == 0` reset ではなく、open から flat へ遷移した bar を示す `strategy.position_size == 0 and strategy.position_size[1] > 0` pattern を優先する。
 - stop price / limit price は position open 中、かつ `entryAtr` など entry-time state が利用可能な場合だけ計算する。state が `na` の間は exit price を計算しない。
@@ -1228,7 +1228,7 @@ LLM に要求する安全な strategy coding rule:
 - ATR stop は `strategy.exit(..., stop=...)` による stop order を優先する。`low <= stopLossPrice` の bar 判定と `strategy.close()` の組み合わせは、ユーザーが manual bar-based stop を明示した場合以外は避ける。
 - `strategy.close()` は stop loss order の代替ではなく、MA cross、time exit、invalidation condition など rule-based exit に使う。
 - entry block 内で `strategy.position_avg_price` を使って stop / limit を計算しない。`strategy.position_avg_price` は entry 約定後に有効になる値であり、entry 同時の stop 計算に使うと意図しない `na` / stale value になり得る。
-- percentage stop は position open 中に `strategy.position_avg_price` を基準に計算する。`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で entry price を代替しない。
+- percentage stop は position open 中に `strategy.position_avg_price` を基準に計算する。`entryPrice := close` や entry block 内の `entryPrice := strategy.position_avg_price` で entry price を代替しない。`stopLossPrice` が `strategy.position_avg_price` を使う場合は、top-level や flat 中ではなく `strategy.position_size > 0` guard 配下で計算する。
 - percentage stop のみを要求された戦略では、ATR が明示されていない限り `entryAtr` や `ta.atr` などの ATR state / indicator を導入しない。
 - RSI / oscillator 戦略では threshold direction を維持する。例: 「RSI が 60 を上回る」は `rsi > 60` または wording に応じた crossover であり、明示がない限り crossunder にしない。
 - setup -> trigger 型の条件は、同一 bar で同時成立しない条件を `and` で結合せず、setup state を `var` などで保持してから trigger を評価する。
@@ -1247,7 +1247,7 @@ LLM に要求する安全な strategy coding rule:
 - Pine generation は generator -> reviewer -> repair pipeline で扱い、LLM output は既存 normalization / validation / bounded repair を通す。repair は最大 2 回までで、無限 retry は行わない。
 - deterministic reviewer は明らかな Pine syntax / style / safety issue を structured issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine の review 結果は structured issue に正規化し、raw reviewer response は API / UI / 保存対象に出さない。
 - reviewer issue は retryable な場合に bounded repair の入力にできる。repair 後も既存 validation / normalization は維持する。
-- reviewer pipeline hardening では、unsupported function alias（`ta.crossabove` / `ta.crossbelow`）、setupActive premature reset、stopLossPrice の scope / guard、ADX / DMI unsafe pattern、below-vs-crossunder mismatch、overlay oscillator plot、narrative comment を追加チェック対象にする。
+- reviewer pipeline hardening では、unsupported function alias（`ta.crossabove` / `ta.crossbelow`）、setupActive premature reset、setupActive entry block の reset missing、long-only / no-pyramiding entry flat guard missing、stopLossPrice の scope / guard、ADX / DMI unsafe pattern、below-vs-crossunder mismatch、overlay oscillator plot、narrative comment を追加チェック対象にする。
 - StrategyLab / StrategyVersionDetail の progress indicator は Pine generation job の status polling に基づく。start endpoint で job を開始し、status polling endpoint で queued / running / succeeded / failed と backend stage を取得する。
 - job stage は context loading、generator、deterministic / AI reviewer、bounded repair、validation / normalization、persistence の流れを sanitized に示す。SSE / WebSocket / streaming、endpoint / model / raw prompt / raw response / raw reviewer response 表示は導入しない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。

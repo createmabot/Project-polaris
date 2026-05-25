@@ -128,8 +128,8 @@ if strategy.position_size == 0
 entryCondition = setupActive and triggerCondition
 if entryCondition and strategy.position_size == 0
     strategy.entry("Long", strategy.long)
+stopLossPrice = strategy.position_avg_price * 0.95
 if strategy.position_size > 0
-    stopLossPrice = strategy.position_avg_price * 0.95
     strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
 plot(strategy.position_size > 0 ? stopLossPrice : na)`);
 
@@ -142,5 +142,102 @@ plot(strategy.position_size > 0 ? stopLossPrice : na)`);
         'stop_order_guard_risk',
       ]),
     );
+  });
+
+  it('detects setupActive entry blocks that do not reset after strategy.entry', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("missing setup reset", overlay=true)
+var bool setupActive = false
+setupCondition = close < ta.sma(close, 50)
+triggerCondition = ta.crossover(close, ta.vwap(hlc3))
+if strategy.position_size == 0 and setupCondition
+    setupActive := true
+entryCondition = setupActive and triggerCondition
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('setup_trigger_state_risk');
+  });
+
+  it('detects direct setupActive trigger entry blocks that do not reset after strategy.entry', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("missing direct setup reset", overlay=true)
+var bool setupActive = false
+setupCondition = close < ta.sma(close, 50)
+triggerCondition = ta.crossover(close, ta.vwap(hlc3))
+if strategy.position_size == 0 and setupCondition
+    setupActive := true
+if strategy.position_size == 0 and setupActive and triggerCondition
+    strategy.entry("Long", strategy.long)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('setup_trigger_state_risk');
+  });
+
+  it('detects strategy.entry without flat guard in a long-only no-pyramiding pattern', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("missing entry guard", overlay=true)
+ma50 = ta.sma(close, 50)
+entryCondition = close > ma50
+if entryCondition
+    strategy.entry("Long", strategy.long)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('entry_guard_risk');
+  });
+
+  it('detects top-level percentage stopLossPrice calculation before a position guard', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("top-level stop", overlay=true)
+ma50 = ta.sma(close, 50)
+entryCondition = close > ma50
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+float stopLossPrice = strategy.position_avg_price * 0.95
+if strategy.position_size > 0 and not na(stopLossPrice)
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('stop_order_guard_risk');
+  });
+
+  it('allows same-block percentage stop calculation inside a position guard', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("guarded stop", overlay=true)
+ma50 = ta.sma(close, 50)
+entryCondition = close > ma50
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+if strategy.position_size > 0
+    stopLossPrice = strategy.position_avg_price * 0.95
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)`);
+
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('stop_order_guard_risk');
+  });
+
+  it('does not flag hardened setup, entry, and percentage stop guards', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("safe representative", overlay=true)
+ma50 = ta.sma(close, 50)
+var bool setupActive = false
+var float stopLossPrice = na
+setupCondition = close < ma50
+triggerCondition = ta.crossover(close, ma50)
+if strategy.position_size == 0 and setupCondition
+    setupActive := true
+entryCondition = setupActive and triggerCondition
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    setupActive := false
+if strategy.position_size > 0
+    stopLossPrice := strategy.position_avg_price * 0.95
+if strategy.position_size > 0 and not na(stopLossPrice)
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
+plot(strategy.position_size > 0 ? stopLossPrice : na)`);
+
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('setup_trigger_state_risk');
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('entry_guard_risk');
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('stop_order_guard_risk');
   });
 });
