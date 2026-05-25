@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, type FormEvent, type ReactNode, useState } from 'react';
 import useSWR from 'swr';
 import { useRoute } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
@@ -6,6 +6,9 @@ import {
   StrategyListData,
   StrategyVersionListData,
   SymbolAiSummaryData,
+  InvestmentCalendarData,
+  InvestmentCalendarEvent,
+  InvestmentCalendarRefreshData,
   SymbolDetailData,
   SymbolReferenceRefreshData,
   SymbolStrategyApplicationCreateData,
@@ -34,8 +37,13 @@ const LABELS = {
   code: 'コード',
   market: '市場',
   processingStatus: '処理状態',
-  chartTitle: 'TradingView chart',
-  chartDescription: '共通サイドメニューと併用しながら、銘柄の現在状況とチャートを確認します。',
+  investmentCalendarTitle: '投資カレンダー',
+  investmentCalendarDescription: '公開情報から取得した予定です。取得元や更新タイミングにより差異があるため、重要日程は公式情報で確認してください。',
+  refreshCalendar: 'カレンダーを更新',
+  refreshingCalendar: '更新中...',
+  calendarRefreshSuccess: '投資カレンダーを更新しました。追加 {saved} 件 / 更新 {updated} 件。',
+  calendarRefreshError: '投資カレンダーを更新できませんでした。時間をおいて再実行してください。',
+  noCalendarEvents: '投資カレンダーはまだありません。',
   snapshotTitle: '現在スナップショット',
   latestAlertsTitle: '最新アラート',
   latestAiTitle: '最新AI論点カード',
@@ -190,6 +198,27 @@ function reportOriginLabel(executionSource: string | null | undefined): string {
   return 'report';
 }
 
+function eventTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    earnings: '決算',
+    ex_dividend: '権利落ち',
+    shareholder_meeting: '株主総会',
+    dividend_payment: '配当支払',
+    economic_indicator: '経済指標',
+    central_bank: '中央銀行',
+    market_holiday: '休場日',
+    ipo: 'IPO',
+    other: 'その他',
+  };
+  return labels[type] ?? type;
+}
+
+function importanceLabel(importance: string): string {
+  if (importance === 'high') return '重要';
+  if (importance === 'low') return '低';
+  return '中';
+}
+
 function hasCsvReport(application: SymbolStrategyApplicationItem): boolean {
   return Boolean(application.latest_reports_by_source?.csv_import);
 }
@@ -233,13 +262,14 @@ function getThesisPoints(structuredJson: any): string[] {
 
 type DetailSectionProps = {
   title: string;
+  description?: string;
   actions?: ReactNode;
   children: ReactNode;
 };
 
-function DetailSection({ title, actions, children }: DetailSectionProps) {
+function DetailSection({ title, description, actions, children }: DetailSectionProps) {
   return (
-    <SectionCard title={title} actions={actions}>
+    <SectionCard title={title} description={description} actions={actions}>
       {children}
     </SectionCard>
   );
@@ -1221,10 +1251,12 @@ function StrategyApplySelectionPanel({
 export default function SymbolDetail() {
   const [, params] = useRoute('/symbols/:symbolId');
   const symbolId = params?.symbolId;
-  const tvContainerRef = useRef<HTMLDivElement>(null);
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
   const [isRefreshingReferences, setIsRefreshingReferences] = useState(false);
+  const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
+  const [calendarRefreshMessage, setCalendarRefreshMessage] = useState<string | null>(null);
+  const [calendarRefreshError, setCalendarRefreshError] = useState<string | null>(null);
   const [referenceRefreshMessage, setReferenceRefreshMessage] = useState<string | null>(null);
   const [referenceRefreshTone, setReferenceRefreshTone] = useState<'info' | 'success'>('info');
   const [referenceRefreshError, setReferenceRefreshError] = useState<string | null>(null);
@@ -1265,35 +1297,14 @@ export default function SymbolDetail() {
       : null,
     swrFetcher,
   );
-
-  useEffect(() => {
-    if (!data?.chart?.widget_symbol || !tvContainerRef.current) return;
-
-    tvContainerRef.current.innerHTML = '';
-
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = () => {
-      if (typeof (window as any).TradingView !== 'undefined') {
-        new (window as any).TradingView.widget({
-          autosize: true,
-          symbol: data.chart?.widget_symbol,
-          interval: data.chart?.default_interval || 'D',
-          timezone: 'Asia/Tokyo',
-          theme: 'light',
-          style: '1',
-          locale: 'ja',
-          enable_publishing: false,
-          hide_top_toolbar: false,
-          hide_legend: false,
-          save_image: false,
-          container_id: tvContainerRef.current?.id,
-        });
-      }
-    };
-    tvContainerRef.current.appendChild(script);
-  }, [data?.chart?.widget_symbol, data?.chart?.default_interval]);
+  const {
+    data: calendarData,
+    error: calendarError,
+    mutate: mutateCalendar,
+  } = useSWR<InvestmentCalendarData>(
+    symbolId ? `/api/symbols/${symbolId}/calendar-events?limit=20` : null,
+    swrFetcher,
+  );
 
   if (isLoading) {
     return (
@@ -1395,6 +1406,26 @@ export default function SymbolDetail() {
     }
   }
 
+  async function handleRefreshCalendar() {
+    if (!symbolId) return;
+    setIsRefreshingCalendar(true);
+    setCalendarRefreshMessage(null);
+    setCalendarRefreshError(null);
+    try {
+      const result = await postApi<InvestmentCalendarRefreshData>(`/api/symbols/${symbolId}/calendar-events/refresh`, {});
+      setCalendarRefreshMessage(
+        LABELS.calendarRefreshSuccess
+          .replace('{saved}', String(result.saved_count))
+          .replace('{updated}', String(result.updated_count)),
+      );
+      await mutateCalendar();
+    } catch {
+      setCalendarRefreshError(LABELS.calendarRefreshError);
+    } finally {
+      setIsRefreshingCalendar(false);
+    }
+  }
+
   return (
     <AppLayout showSideRail>
       <div className="w-full space-y-4">
@@ -1409,18 +1440,6 @@ export default function SymbolDetail() {
           }
           actions={<TextLink href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}>{LABELS.compare}</TextLink>}
         />
-
-        {data.chart && data.chart.widget_symbol ? (
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h2 className="text-lg font-semibold text-slate-900">{LABELS.chartTitle}</h2>
-              <p className="mt-1 text-sm text-slate-600">{LABELS.chartDescription}</p>
-            </div>
-            <div className="h-[500px] w-full bg-white p-3">
-              <div id={`tv_chart_${data.symbol.id}`} ref={tvContainerRef} className="h-full w-full" />
-            </div>
-          </section>
-        ) : null}
 
         <DetailSection title={LABELS.snapshotTitle}>
           {data.current_snapshot ? (
@@ -1445,6 +1464,42 @@ export default function SymbolDetail() {
             </InfoCard>
           ) : (
             <EmptyText>{LABELS.snapshotUnavailable}</EmptyText>
+          )}
+        </DetailSection>
+
+        <DetailSection
+          title={LABELS.investmentCalendarTitle}
+          description={LABELS.investmentCalendarDescription}
+          actions={
+            <Button variant="secondary" onClick={handleRefreshCalendar} disabled={isRefreshingCalendar}>
+              {isRefreshingCalendar ? LABELS.refreshingCalendar : LABELS.refreshCalendar}
+            </Button>
+          }
+        >
+          {calendarRefreshMessage ? <InlineNotice tone="success" className="mb-3">{calendarRefreshMessage}</InlineNotice> : null}
+          {calendarRefreshError ? <InlineNotice tone="warning" className="mb-3">{calendarRefreshError}</InlineNotice> : null}
+          {calendarError ? <InlineNotice tone="warning" className="mb-3">{LABELS.calendarRefreshError}</InlineNotice> : null}
+          {(calendarData?.events ?? []).length === 0 ? (
+            <EmptyText>{LABELS.noCalendarEvents}</EmptyText>
+          ) : (
+            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
+              {(calendarData?.events ?? []).map((event: InvestmentCalendarEvent) => (
+                <div key={event.id} className="px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <strong className="text-slate-900">{event.title}</strong>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                      {importanceLabel(event.importance)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
+                    <span>{eventTypeLabel(event.event_type)}</span>
+                    {event.source_label ? <span>source: {event.source_label}</span> : null}
+                    {event.fetched_at ? <span>取得: {formatDate(event.fetched_at)}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </DetailSection>
 

@@ -652,3 +652,9 @@ pnpm exec prisma db seed
 - CSV import report summary は `BacktestImport` / parsed summary / TradingView 文脈、internal backtest report summary は `strategySnapshotJson.result_summary` / `artifact_pointer` / execution ID 文脈を主 input として扱う。
 - summary missing / failed / stale は provider 再生成や polling ではなく、read-only status / note と手動生成導線で扱う。
 - comparison entity、metrics normalization table、artifact diff、自動 AI 比較生成、DB / API / backend / Prisma schema 変更は対象外。
+
+## Investment calendar and SymbolDetail chart policy
+
+- SymbolDetail no longer embeds a TradingView chart widget. TradingView remains the external validation / CSV import / Pine workflow boundary.
+- Home and SymbolDetail now surface Investment Calendar events for daily checks. Calendar refresh is manual button driven; no scheduled crawler or recurring worker is introduced.
+- Required tests use seed / stub / fake calendar providers and do not require real external web access.

@@ -49,6 +49,51 @@ export type AlertEventDto = {
   related_ai_summary: AiSummaryDto | null;
 };
 
+export type InvestmentCalendarEvent = {
+  id: string;
+  scope?: 'symbol' | 'market' | string;
+  symbol_id: string | null;
+  symbol_code?: string | null;
+  display_name?: string | null;
+  event_date: string | null;
+  event_time: string | null;
+  timezone: string;
+  event_type: string;
+  title: string;
+  description?: string | null;
+  importance: 'high' | 'medium' | 'low' | string;
+  source_type: string;
+  source_name: string | null;
+  source_label: string | null;
+  source_url?: string | null;
+  status: string;
+  fetched_at: string | null;
+};
+
+export type InvestmentCalendarData = {
+  events: InvestmentCalendarEvent[];
+  meta: {
+    from: string;
+    to: string;
+    source?: string;
+    scope?: string;
+    symbol_id?: string;
+    manual_refresh_available?: boolean;
+  };
+};
+
+export type InvestmentCalendarRefreshData = {
+  status: 'succeeded';
+  saved_count: number;
+  updated_count: number;
+  skipped_count: number;
+  failed_count: number;
+  from: string;
+  to: string;
+  source: string;
+  manual_only: true;
+};
+
 export type ExternalReferenceDto = {
   id: string;
   referenceType: string;
@@ -98,6 +143,7 @@ export type HomeData = {
     date: string | null;
   } | null;
   key_events: any[];
+  investment_calendar?: InvestmentCalendarData;
 };
 
 export type WatchlistItemData = {
@@ -212,10 +258,6 @@ export type SymbolDetailData = {
     source_name: string;
   } | null;
   tradingview_symbol: string | null;
-  chart?: {
-    widget_symbol: string | null;
-    default_interval: string;
-  };
   recent_alerts: Array<{
     id: string;
     alert_name: string;

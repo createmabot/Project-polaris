@@ -60,6 +60,10 @@ describe('Home', () => {
             date: null,
           },
           key_events: [],
+          investment_calendar: {
+            events: [],
+            meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
+          },
         },
       };
     });
@@ -80,7 +84,9 @@ describe('Home', () => {
     expect(html).toContain('監視銘柄はまだありません。');
     expect(html).toContain('サマリーはまだありません。');
     expect(html).toContain('アラートはありません。');
-    expect(html).toContain('注目イベントはまだありません。');
+    expect(html).toContain('投資カレンダー');
+    expect(html).toContain('投資カレンダーはまだありません。');
+    expect(html).toContain('投資カレンダーを更新');
   });
 
   it('renders populated market/watchlist/positions/events blocks', () => {
@@ -191,6 +197,47 @@ describe('Home', () => {
             date: null,
           },
           key_events: [{ label: '決算発表', date: '2026-04-13' }],
+          investment_calendar: {
+            events: [
+              {
+                id: 'cal-1',
+                scope: 'symbol',
+                symbol_id: 'sym_7203',
+                symbol_code: '7203',
+                display_name: 'トヨタ自動車',
+                event_date: '2026-06-10',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'earnings',
+                title: 'トヨタ自動車 決算発表予定',
+                importance: 'high',
+                source_type: 'seed',
+                source_name: 'seed',
+                source_label: '決算予定',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
+              {
+                id: 'cal-market-1',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-05',
+                event_time: '21:30',
+                timezone: 'Asia/Tokyo',
+                event_type: 'economic_indicator',
+                title: '米雇用統計',
+                importance: 'high',
+                source_type: 'seed',
+                source_name: 'seed',
+                source_label: '経済指標',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
+            ],
+            meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
+          },
         },
       };
     });
@@ -221,8 +268,11 @@ describe('Home', () => {
     expect(html).not.toContain('Sony Group');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
-    expect(html).toContain('決算発表');
-    expect(html).toContain('日付: 2026-04-13');
+    expect(html).toContain('投資カレンダー');
+    expect(html).toContain('トヨタ自動車 決算発表予定');
+    expect(html).toContain('米雇用統計');
+    expect(html).toContain('市場全体');
+    expect(html).toContain('決算予定');
   });
 
   it('renders snapshot-dependent fields as hyphen when latest values are unavailable', () => {
@@ -317,6 +367,10 @@ describe('Home', () => {
             date: null,
           },
           key_events: [],
+          investment_calendar: {
+            events: [],
+            meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
+          },
         },
       };
     });

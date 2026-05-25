@@ -87,6 +87,26 @@ type Runtime = {
     changeRate: { toNumber: () => number } | null;
     asOf: Date;
   }>;
+  investmentCalendarEvents: Array<{
+    id: string;
+    symbolId: string | null;
+    eventDate: Date;
+    eventTime: string | null;
+    timezone: string;
+    eventType: string;
+    title: string;
+    description: string | null;
+    importance: string;
+    sourceType: string;
+    sourceName: string | null;
+    sourceLabel: string | null;
+    sourceUrl: string | null;
+    externalId?: string | null;
+    status: string;
+    fetchedAt: Date | null;
+    createdAt: Date;
+    symbol: any | null;
+  }>;
 };
 
 let runtime: Runtime;
@@ -253,6 +273,55 @@ function createRuntime(): Runtime {
         asOf: new Date('2026-04-12T06:00:00.000Z'),
       },
     ],
+    investmentCalendarEvents: [
+      {
+        id: 'cal-1',
+        symbolId: 'sym-7203',
+        eventDate: new Date('2026-06-10T00:00:00.000Z'),
+        eventTime: null,
+        timezone: 'Asia/Tokyo',
+        eventType: 'earnings',
+        title: 'トヨタ自動車 決算発表予定',
+        description: null,
+        importance: 'high',
+        sourceType: 'seed',
+        sourceName: 'seed',
+        sourceLabel: '決算予定',
+        sourceUrl: null,
+        externalId: 'seed-7203-earnings',
+        status: 'active',
+        fetchedAt: new Date('2026-05-26T00:00:00.000Z'),
+        createdAt: new Date('2026-05-26T00:00:00.000Z'),
+        symbol: {
+          id: 'sym-7203',
+          symbol: 'TYO:7203',
+          symbolCode: '7203',
+          marketCode: 'JP',
+          tradingviewSymbol: 'TYO:7203',
+          displayName: 'トヨタ自動車',
+        },
+      },
+      {
+        id: 'cal-market-1',
+        symbolId: null,
+        eventDate: new Date('2026-06-05T00:00:00.000Z'),
+        eventTime: '21:30',
+        timezone: 'Asia/Tokyo',
+        eventType: 'economic_indicator',
+        title: '米雇用統計',
+        description: null,
+        importance: 'high',
+        sourceType: 'seed',
+        sourceName: 'seed',
+        sourceLabel: '経済指標',
+        sourceUrl: null,
+        externalId: 'seed-market-payrolls',
+        status: 'active',
+        fetchedAt: new Date('2026-05-26T00:00:00.000Z'),
+        createdAt: new Date('2026-05-26T00:00:00.000Z'),
+        symbol: null,
+      },
+    ],
   };
 }
 
@@ -395,6 +464,51 @@ vi.mock('../src/db', () => {
         }).length;
       },
     },
+    investmentCalendarEvent: {
+      findMany: async ({ where }: any = {}) => runtime.investmentCalendarEvents
+        .filter((row) => {
+          if (where?.status && row.status !== where.status) return false;
+          if (where?.eventDate?.gte && row.eventDate.getTime() < (where.eventDate.gte as Date).getTime()) return false;
+          if (where?.eventDate?.lte && row.eventDate.getTime() > (where.eventDate.lte as Date).getTime()) return false;
+          if (where?.OR) {
+            return where.OR.some((condition: any) => {
+              if (condition.symbolId === null) return row.symbolId === null;
+              const ids: string[] = condition.symbolId?.in ?? [];
+              return row.symbolId ? ids.includes(row.symbolId) : false;
+            });
+          }
+          return true;
+        })
+        .sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime()),
+      findUnique: async ({ where }: any = {}) => {
+        const key = where?.sourceType_externalId;
+        if (!key) return null;
+        return runtime.investmentCalendarEvents.find((row) =>
+          row.sourceType === key.sourceType && row.externalId === key.externalId) ?? null;
+      },
+      upsert: async ({ where, update, create }: any) => {
+        const key = where?.sourceType_externalId;
+        const existingIndex = runtime.investmentCalendarEvents.findIndex((row) =>
+          row.sourceType === key.sourceType && row.externalId === key.externalId);
+        if (existingIndex >= 0) {
+          runtime.investmentCalendarEvents[existingIndex] = {
+            ...runtime.investmentCalendarEvents[existingIndex],
+            ...update,
+          };
+          return runtime.investmentCalendarEvents[existingIndex];
+        }
+        const symbol = [...runtime.watchlistItems.map((row) => row.symbol), ...runtime.positions.map((row) => row.symbol)]
+          .find((row) => row.id === create.symbolId) ?? null;
+        const row = {
+          id: `calendar-${runtime.investmentCalendarEvents.length + 1}`,
+          createdAt: new Date('2026-04-12T00:00:00.000Z'),
+          symbol,
+          ...create,
+        };
+        runtime.investmentCalendarEvents.push(row);
+        return row;
+      },
+    },
   };
 
   return { prisma };
@@ -516,6 +630,44 @@ describe('GET /api/home daily_summary query handling', () => {
       date: '2026-04-12',
       symbol_ids: ['sym-7203'],
     });
+    expect(body.data.investment_calendar.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          scope: 'symbol',
+          symbol_id: 'sym-7203',
+          event_type: 'earnings',
+          title: 'トヨタ自動車 決算発表予定',
+        }),
+        expect.objectContaining({
+          scope: 'market',
+          symbol_id: null,
+          event_type: 'economic_indicator',
+          title: '米雇用統計',
+        }),
+      ]),
+    );
+
+    await app.close();
+  });
+
+  it('refreshes home investment calendar from the stub provider', async () => {
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/home/investment-calendar/refresh',
+      payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toMatchObject({
+      status: 'succeeded',
+      source: 'stub',
+      manual_only: true,
+    });
+    expect(JSON.stringify(res.json())).not.toContain('http://');
+    expect(JSON.stringify(res.json())).not.toContain('stack');
+    expect(runtime.investmentCalendarEvents.length).toBeGreaterThan(2);
 
     await app.close();
   });

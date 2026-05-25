@@ -5,6 +5,11 @@ import { AppError, formatSuccess } from '../utils/response';
 import { getCurrentSnapshotForSymbol } from '../market/snapshot';
 import { HomeAiService } from '../ai/home-ai-service';
 import {
+  listSymbolCalendarEvents,
+  normalizeCalendarRefreshBody,
+  refreshInvestmentCalendarEvents,
+} from '../investment-calendar/service';
+import {
   getReferenceCountFromGenerationContext,
   normalizeInsufficientContext,
   withNormalizedInsufficientContext,
@@ -1232,6 +1237,63 @@ export async function symbolRoutes(fastify: FastifyInstance) {
     }
   });
 
+  fastify.get('/:symbolId/calendar-events', async (
+    request: FastifyRequest<{
+      Params: { symbolId: string };
+      Querystring: Record<string, unknown>;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { symbolId } = request.params;
+    const symbol = await prisma.symbol.findUnique({
+      where: { id: symbolId },
+      select: { id: true },
+    });
+    if (!symbol) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
+    }
+
+    const data = await listSymbolCalendarEvents(symbolId, request.query ?? {});
+    return reply.status(200).send(formatSuccess(request, data));
+  });
+
+  fastify.post('/:symbolId/calendar-events/refresh', async (
+    request: FastifyRequest<{
+      Params: { symbolId: string };
+      Body: { from?: unknown; to?: unknown };
+    }>,
+    reply: FastifyReply,
+  ) => {
+    const { symbolId } = request.params;
+    const symbol = await prisma.symbol.findUnique({
+      where: { id: symbolId },
+      select: {
+        id: true,
+        symbol: true,
+        symbolCode: true,
+        marketCode: true,
+        displayName: true,
+      },
+    });
+    if (!symbol) {
+      throw new AppError(404, 'NOT_FOUND', 'The specified symbol was not found.');
+    }
+
+    const range = normalizeCalendarRefreshBody(request.body ?? {});
+    const result = await refreshInvestmentCalendarEvents({
+      ...range,
+      symbols: [{
+        id: symbol.id,
+        symbol: symbol.symbol,
+        symbolCode: symbol.symbolCode,
+        marketCode: symbol.marketCode,
+        displayName: symbol.displayName,
+      }],
+      includeMarketEvents: false,
+    });
+    return reply.status(200).send(formatSuccess(request, result));
+  });
+
   fastify.get('/:symbolId', async (
     request: FastifyRequest<{ Params: { symbolId: string } }>,
     reply: FastifyReply
@@ -1359,10 +1421,6 @@ export async function symbolRoutes(fastify: FastifyInstance) {
       },
       current_snapshot: currentSnapshot,
       tradingview_symbol: symbol.tradingviewSymbol,
-      chart: {
-        widget_symbol: symbol.tradingviewSymbol || null,
-        default_interval: "D"
-      },
       recent_alerts: recentAlerts,
       latest_ai_thesis_summary: latestAiThesisSummaryRaw
         ? {
