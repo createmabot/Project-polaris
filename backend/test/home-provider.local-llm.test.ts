@@ -332,7 +332,11 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.options.num_predict).toBe(700);
     expect(body.messages[0].content).toContain('Flag unsupported_function_alias');
     expect(body.messages[0].content).toContain('setupActive should remain true until entry occurs');
+    expect(body.messages[0].content).toContain('does not reset setupActive := false');
+    expect(body.messages[0].content).toContain('entry_guard_risk');
+    expect(body.messages[0].content).toContain('strategy.position_size == 0');
     expect(body.messages[0].content).toContain('stop_order_guard_risk');
+    expect(body.messages[0].content).toContain('outside a strategy.position_size > 0 position guard');
     expect(body.messages[0].content).toContain('[plusDI, minusDI, adxValue] = ta.dmi');
     expect(body.messages[0].content).toContain('below or less than');
     expect(body.messages[0].content).toContain('flag oscillator plot or hline usage');
