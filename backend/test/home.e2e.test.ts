@@ -672,6 +672,70 @@ describe('GET /api/home daily_summary query handling', () => {
     await app.close();
   });
 
+  it('refreshes home investment calendar from Alpha Vantage fixtures without real external access', async () => {
+    const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
+    const previousKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDER = 'alpha_vantage';
+    process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = 'test-key';
+    vi.stubGlobal('fetch', vi.fn(async (url: URL) => {
+      const functionName = url.searchParams.get('function');
+      if (functionName === 'IPO_CALENDAR') {
+        return {
+          ok: true,
+          text: vi.fn(async () => 'symbol,name,ipoDate,priceRangeLow,priceRangeHigh,currency,exchange\nTEST,Test Holdings,2026-07-01,10,12,USD,NASDAQ\n'),
+          json: vi.fn(async () => ({})),
+        } as any;
+      }
+      return {
+        ok: true,
+        json: vi.fn(async () => ({
+          name: 'series',
+          data: [{ date: '2026-06-05', value: '100.0' }],
+        })),
+        text: vi.fn(async () => ''),
+      } as any;
+    }));
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-07-31', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        manual_only: true,
+      });
+      expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'alpha_vantage',
+          title: '米CPI',
+        }),
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'alpha_vantage',
+          eventType: 'ipo',
+          title: 'TEST IPO予定',
+        }),
+      ]));
+      expect(JSON.stringify(res.json())).not.toContain('test-key');
+      expect(JSON.stringify(res.json())).not.toContain('alphavantage.co');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
+      else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
+      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = previousKey;
+    }
+  });
+
   it('switches daily summary by summary_type', async () => {
     const app = await createApp();
 

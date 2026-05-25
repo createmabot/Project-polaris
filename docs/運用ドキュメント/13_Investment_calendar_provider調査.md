@@ -125,8 +125,8 @@ provider 方針分類:
 - source reliability: 中。
 - 利用規約上の懸念: free tier 制限、CSV parsing、US 中心。
 - 実装難易度: 低。
-- 北極星への採用候補: P1 の free API 候補。無料枠の rate limit と対象 event が実用に足りる範囲だけ採用する。
-- 備考: Home の market-level event を小さく始めるには扱いやすい。
+- 北極星への採用候補: P1 の free API provider として実装対象にする。無料枠の rate limit と対象 event が実用に足りる範囲だけ採用する。
+- 備考: Home の market-level event を小さく始めるには扱いやすい。CPI / retail sales / unemployment / nonfarm payroll は発表予定 calendar ではなく発表済み data series の observation date として扱う。将来予定と誤認させないため、`sourceLabel` / description に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。Earnings calendar は US symbol-level 寄りのため P1 では後続判断にする。
 - 参照: [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)
 
 ### FRED
@@ -314,13 +314,17 @@ provider 方針分類:
 ### Phase P1: market-level event provider
 
 - 対象: FOMC、日銀、米 CPI、米雇用統計、GDP、PPI、小売売上高、ISM / PMI、JPX / NYSE / Nasdaq 休場日。
-- source: Alpha Vantage / FRED / FMP の無料 API 範囲を優先し、FOMC / BOJ / holiday は official source / curated fixture の hybrid を検討する。
+- source: 初回は Alpha Vantage を実装する。FRED / FMP は比較候補として残す。FOMC / BOJ / holiday は official source / curated fixture の hybrid を後続検討する。
 - 実装:
-  - `INVESTMENT_CALENDAR_PROVIDER=public` の具体 provider mode を source 別に分割する。
-  - source ごとの timeout / retry upper bound / sanitized provider observation を追加する。
+  - `INVESTMENT_CALENDAR_PROVIDER=alpha_vantage` を追加する。
+  - `INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY` と timeout env を使う。
+  - API key missing、timeout、rate limit / provider rejection、invalid response を sanitized error に閉じる。
   - raw response は保存しない。
   - Home refresh だけを対象にする。
-- tests: fake provider fixture、normalization、failure sanitization、stale warning。
+  - CPI / retail sales / unemployment / nonfarm payroll は発表済み data series として扱い、将来予定ではないことを label / description で区別する。
+  - IPO calendar は market-level `ipo` event として扱う。
+  - Earnings calendar は P1 では後続判断にする。
+- tests: real API ではなく fixture response / mocked fetch、normalization、failure sanitization、raw response / API key / endpoint 実値非露出、stale warning。
 
 ### Phase P2: JP stock symbol-level provider
 
