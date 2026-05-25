@@ -290,6 +290,56 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.generatedScript).toContain('strategy("X"');
   });
 
+  it('uses reviewer hardening checklist for pine review', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            schema_name: 'pine_review_result',
+            schema_version: '1.0',
+            status: 'pass',
+            issues: [],
+            summary: {
+              issue_count: 0,
+              error_count: 0,
+              warning_count: 0,
+              repairable_issue_count: 0,
+            },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.reviewPineScript?.({
+      naturalLanguageSpec: '終値が50日移動平均を下回った場合に決済します。',
+      generatedScript: '//@version=6\nstrategy("X", overlay=true)\nplot(close)',
+      targetMarket: 'JP_STOCK',
+      targetTimeframe: 'D',
+      repairAttempt: 0,
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://localhost:11434/api/chat');
+    const body = JSON.parse(String(init.body));
+    expect(body.stream).toBe(false);
+    expect(body.think).toBe(false);
+    expect(body.options.num_predict).toBe(700);
+    expect(body.messages[0].content).toContain('Flag unsupported_function_alias');
+    expect(body.messages[0].content).toContain('setupActive should remain true until entry occurs');
+    expect(body.messages[0].content).toContain('stop_order_guard_risk');
+    expect(body.messages[0].content).toContain('[plusDI, minusDI, adxValue] = ta.dmi');
+    expect(body.messages[0].content).toContain('below or less than');
+    expect(body.messages[0].content).toContain('flag oscillator plot or hline usage');
+    expect(body.messages[0].content).not.toContain('gemma4-ns');
+    expect(result?.status).toBe('pass');
+  });
+
   it('extracts Pine JSON envelope from fenced output with surrounding explanation', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -1247,6 +1247,7 @@ LLM に要求する安全な strategy coding rule:
 - Pine generation は generator -> reviewer -> repair pipeline で扱い、LLM output は既存 normalization / validation / bounded repair を通す。repair は最大 2 回までで、無限 retry は行わない。
 - deterministic reviewer は明らかな Pine syntax / style / safety issue を structured issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine の review 結果は structured issue に正規化し、raw reviewer response は API / UI / 保存対象に出さない。
 - reviewer issue は retryable な場合に bounded repair の入力にできる。repair 後も既存 validation / normalization は維持する。
+- reviewer pipeline hardening では、unsupported function alias（`ta.crossabove` / `ta.crossbelow`）、setupActive premature reset、stopLossPrice の scope / guard、ADX / DMI unsafe pattern、below-vs-crossunder mismatch、overlay oscillator plot、narrative comment を追加チェック対象にする。
 - StrategyLab / StrategyVersionDetail の progress indicator は Pine generation job の status polling に基づく。start endpoint で job を開始し、status polling endpoint で queued / running / succeeded / failed と backend stage を取得する。
 - job stage は context loading、generator、deterministic / AI reviewer、bounded repair、validation / normalization、persistence の流れを sanitized に示す。SSE / WebSocket / streaming、endpoint / model / raw prompt / raw response / raw reviewer response 表示は導入しない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。

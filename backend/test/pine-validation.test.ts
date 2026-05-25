@@ -51,6 +51,20 @@ describe('assessGeneratedPineScript', () => {
     expect(assessed.warnings).toContain('Pine Script の unsupported plot.style_dashed を plot.style_linebr に補正しました。');
     expect(assessed.invalidReasonCodes).toContain('unsupported_plot_style');
   });
+
+  it('normalizes unsupported crossabove and crossbelow aliases', () => {
+    const assessed = assessGeneratedPineScript(
+      '//@version=6\nstrategy("ok", overlay=true)\nentryCondition = ta.crossabove(close, ta.sma(close, 20))\nexitCondition = ta.crossbelow(close, ta.sma(close, 20))',
+    );
+
+    expect(assessed.failureReason).toBeNull();
+    expect(assessed.normalizedScript).toContain('ta.crossover(close');
+    expect(assessed.normalizedScript).toContain('ta.crossunder(close');
+    expect(assessed.normalizedScript).not.toContain('ta.crossabove');
+    expect(assessed.normalizedScript).not.toContain('ta.crossbelow');
+    expect(assessed.warnings).toContain('Pineで未対応の可能性がある crossabove/crossbelow を crossover/crossunder に補正しました。');
+    expect(assessed.invalidReasonCodes).toContain('unsupported_function_alias');
+  });
 });
 
 describe('reviewGeneratedPineScriptDeterministic', () => {
@@ -98,5 +112,35 @@ hline(70)
     );
     expect(reviewed.summary.issue_count).toBeGreaterThanOrEqual(9);
     expect(reviewed.summary.error_count).toBeGreaterThanOrEqual(9);
+  });
+
+  it('detects reviewer hardening issues for aliases, setup reset, and stop guards', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("bad", overlay=true)
+var bool setupActive = false
+setupCondition = close < ta.vwap(hlc3)
+triggerCondition = ta.crossabove(close, ta.vwap(hlc3))
+if strategy.position_size == 0
+    if setupCondition
+        setupActive := true
+    else
+        setupActive := false
+entryCondition = setupActive and triggerCondition
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+if strategy.position_size > 0
+    stopLossPrice = strategy.position_avg_price * 0.95
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
+plot(strategy.position_size > 0 ? stopLossPrice : na)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining([
+        'unsupported_function_alias',
+        'setup_trigger_state_risk',
+        'block_local_variable_scope_risk',
+        'stop_order_guard_risk',
+      ]),
+    );
   });
 });
