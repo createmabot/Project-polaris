@@ -29,7 +29,7 @@
 
 Backtest AI summary は、CSV import report と internal backtest report で input 文脈が異なる。CSV は TradingView CSV import、internal は internal execution result summary と artifact metadata を主 input として扱う。
 
-Close internal backtest UI phase 1 後は、internal backtest の新規実行 / report conversion は主要 frontend 導線から外す。Stage 2A は docs-only の deprecation design とし、Stage 2B で report conversion endpoint を閉じる場合は internal conversion 起点の auto enqueue は新規には発生しない。既存 internal report の AI summary 文脈は後方互換として維持するが、TradingView / Pine / CSV import を検証結果取得の主導線として扱う。
+Close internal backtest UI phase 1 後は、internal backtest の新規実行 / report conversion は主要 frontend 導線から外す。Stage 2B では backend execution / conversion endpoint も HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` にしたため、internal conversion 起点の auto enqueue は新規には発生しない。既存 internal report の AI summary 文脈は後方互換として維持するが、TradingView / Pine / CSV import を検証結果取得の主導線として扱う。
 
 LLM strategy proposal は、投資助言ではなく StrategyLab で検証候補を作るための補助として扱う。現行は deterministic `stub` を default とし、`STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示設定時だけ local_llm provider を使える。Proposal history は sanitized run / candidate / selection の最小 backend persistence まで実装済み。Web search / deep research、citation 保存、provider cost cap の本格実装は後続判断とする。
 
@@ -67,7 +67,7 @@ Pine generation でも raw prompt、raw provider response、raw reviewer respons
 現行の Backtest AI summary auto enqueue は次を対象にする。
 
 - CSV import が `parsed` になり、Backtest report に紐づいた直後。
-- succeeded internal backtest execution が新規 Backtest report に変換された直後。Stage 2B で conversion endpoint を閉じた後は、この契機は legacy になり新規には発生しない。
+- succeeded internal backtest execution が新規 Backtest report に変換された直後。この契機は Stage 2B 以降 legacy であり、新規には発生しない。
 
 対象外:
 
@@ -395,7 +395,7 @@ AI summary auto enqueue、BacktestDetail の latest job status visibility、Stra
 
 完了済みとして扱うもの:
 
-- AI summary は CSV import parsed report、application 起点 CSV import parsed report、新規 internal backtest report conversion 直後の auto enqueue と duplicate guard まで完了している。Stage 2B で internal conversion endpoint を閉じた後は、CSV import 起点と generic Backtest manual generation を主導線にする。
+- AI summary は CSV import parsed report、application 起点 CSV import parsed report の auto enqueue と duplicate guard まで完了している。新規 internal backtest report conversion 直後の auto enqueue は Stage 2B 以降 legacy 完了範囲であり、CSV import 起点と generic Backtest manual generation を主導線にする。
 - BacktestDetail は latest AI summary job status を read-only に表示する。polling / live update ではなく、手動再読み込み時点の snapshot として扱う。
 - Strategy proposal は `stub` default、`local_llm` opt-in、Codex CLI manual import、provider cost / rate guard、provider event log、provider quality trend、optional benchmark sanitized record まで完了している。
 - Strategy proposal の rate guard は in-memory per-process の accidental load / 連打抑止であり、distributed hard guard ではない。

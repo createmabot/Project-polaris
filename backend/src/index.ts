@@ -21,7 +21,6 @@ import { internalBacktestRoutes } from './routes/internal-backtests';
 import { summaryRoutes } from './routes/summaries';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
-import { setupInternalBacktestWorker } from './queue/internal-backtests';
 import crypto from 'crypto';
 
 const fastify = Fastify({
@@ -74,7 +73,6 @@ const start = async () => {
 
     // Start background job worker
     setupWorker(fastify.log);
-    setupInternalBacktestWorker(fastify.log);
 
     await fastify.listen({ port: env.PORT, host: '0.0.0.0' });
     fastify.log.info(`Server listening on ${env.PORT}`);
