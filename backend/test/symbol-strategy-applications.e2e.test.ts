@@ -821,7 +821,6 @@ vi.mock('../src/db', () => {
   };
   return { prisma };
 });
-
 vi.mock('../src/ai/home-ai-service', () => ({
   HomeAiService: class {
     async generateBacktestSummary() {
@@ -2113,8 +2112,9 @@ describe('symbol strategy applications route', () => {
     await app.close();
   });
 
-  it('starts internal backtest for an active application and updates latest run', async () => {
-    runtime.runs = [];
+  it('returns 410 when starting an application-origin internal backtest', async () => {
+    const initialInternalExecutionCount = runtime.internalExecutions.size;
+    const initialRunCount = runtime.runs.length;
     const app = await createApp();
 
     const res = await app.inject({
@@ -2126,315 +2126,46 @@ describe('symbol strategy applications route', () => {
       },
     });
 
-    expect(res.statusCode).toBe(201);
-    expect(res.json().data.application_id).toBe('app-1');
-    expect(res.json().data.execution).toMatchObject({
-      strategy_rule_version_id: 'version-1',
-      status: 'queued',
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error).toMatchObject({
+      code: 'INTERNAL_BACKTEST_DEPRECATED',
+      message: 'internal backtest application flow is deprecated. Use TradingView validation and CSV import.',
+      details: {
+        replacement_flow: 'tradingview_csv_import',
+        stage: 'internal_backtest_stage_2b',
+      },
     });
-    expect(res.json().data.run).toMatchObject({
-      run_type: 'internal_backtest',
-      status: 'queued',
-      backtest_id: null,
-      backtest_import_id: null,
-      internal_backtest_execution_id: res.json().data.execution.id,
-    });
-    expect(enqueueInternalBacktestExecutionMock).toHaveBeenCalledWith(res.json().data.execution.id);
-    const savedExecution = runtime.internalExecutions.get(res.json().data.execution.id);
-    expect(savedExecution?.inputSnapshotJson.execution_target).toMatchObject({
-      symbol: '2148',
-      source_kind: 'daily_ohlcv',
-    });
-
-    const listRes = await app.inject({
-      method: 'GET',
-      url: '/api/symbols/sym-1/strategy-applications?status=active',
-    });
-    const application = listRes.json().data.applications[0];
-    expect(application.latest_run).toMatchObject({
-      run_type: 'internal_backtest',
-      status: 'queued',
-      backtest_id: null,
-      backtest_import_id: null,
-      internal_backtest_execution_id: res.json().data.execution.id,
-    });
-    expect(application.latest_backtest_report).toBeNull();
-    expect(application.run_count).toBe(1);
+    expect(enqueueInternalBacktestExecutionMock).not.toHaveBeenCalled();
+    expect(runtime.internalExecutions.size).toBe(initialInternalExecutionCount);
+    expect(runtime.runs).toHaveLength(initialRunCount);
 
     await app.close();
   });
 
-  it('converts a succeeded internal execution to an idempotent backtest report', async () => {
-    runtime.runs = [];
-    const initialImportCount = runtime.backtestImports.size;
-    const app = await createApp();
-
-    const startRes = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-        engine_config: { summary_mode: 'engine_estimated' },
-      },
-    });
-    expect(startRes.statusCode).toBe(201);
-    const executionId = startRes.json().data.execution.id;
-
-    const notReadyRes = await app.inject({
-      method: 'POST',
-      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
-    });
-    expect(notReadyRes.statusCode).toBe(409);
-    expect(notReadyRes.json().error.code).toBe('CONFLICT');
-
-    const execution = runtime.internalExecutions.get(executionId);
-    expect(execution).toBeTruthy();
-    runtime.internalExecutions.set(executionId, {
-      ...execution!,
-      status: 'succeeded',
-      finishedAt: new Date('2026-05-06T00:10:00.000Z'),
-      resultSummaryJson: {
-        total_return: 0.12,
-        trade_count: 4,
-      },
-      artifactPointerJson: {
-        equity_curve: 'artifact://equity',
-      },
-    });
-
-    const reportRes = await app.inject({
-      method: 'POST',
-      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
-      payload: {
-        title: '2148 internal report',
-      },
-    });
-    expect(reportRes.statusCode).toBe(201);
-    expect(reportRes.json().data.application_id).toBe('app-1');
-    expect(reportRes.json().data.run).toMatchObject({
-      run_type: 'internal_backtest',
-      status: 'succeeded',
-      backtest_import_id: null,
-      internal_backtest_execution_id: executionId,
-    });
-    expect(reportRes.json().data.backtest).toMatchObject({
-      title: '2148 internal report',
-      status: 'completed',
-      execution_source: 'internal_backtest',
-      market: 'TSE',
-      timeframe: 'D',
-    });
-    const backtestId = reportRes.json().data.backtest.id;
-    expect(reportRes.json().data.run.backtest_id).toBe(backtestId);
-    expect(runtime.backtestImports.size).toBe(initialImportCount);
-    expect(runtime.backtests.get(backtestId)?.strategySnapshotJson).toMatchObject({
-      execution_source: 'internal_backtest',
-      internal_backtest_execution_id: executionId,
-      result_summary: {
-        total_return: 0.12,
-        trade_count: 4,
-      },
-    });
-    await waitForBackgroundJobs();
-    expect([...runtime.aiJobs.values()]).toHaveLength(1);
-    expect([...runtime.aiJobs.values()][0]).toMatchObject({
-      jobType: 'generate_backtest_review_summary',
-      targetEntityType: 'backtest',
-      targetEntityId: backtestId,
-      status: 'succeeded',
-    });
-    expect([...runtime.aiJobs.values()][0].requestPayload).toMatchObject({
-      latest_import_id: null,
-      source_import_id: null,
-      source_internal_backtest_execution_id: executionId,
-      trigger: 'internal_backtest_report_auto',
-    });
-    expect([...runtime.aiSummaries.values()]).toHaveLength(1);
-    expect([...runtime.aiSummaries.values()][0]).toMatchObject({
-      summaryScope: 'backtest_review',
-      targetEntityType: 'backtest',
-      targetEntityId: backtestId,
-    });
-
-    const listRes = await app.inject({
-      method: 'GET',
-      url: '/api/symbols/sym-1/strategy-applications?status=active',
-    });
-    const application = listRes.json().data.applications[0];
-    expect(application.latest_run).toMatchObject({
-      run_type: 'internal_backtest',
-      backtest_id: backtestId,
-      internal_backtest_execution_id: executionId,
-    });
-    expect(application.latest_backtest_report).toMatchObject({
-      id: backtestId,
-      status: 'completed',
-      execution_source: 'internal_backtest',
-    });
-
-    const secondReportRes = await app.inject({
-      method: 'POST',
-      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
-    });
-    expect(secondReportRes.statusCode).toBe(200);
-    expect(secondReportRes.json().data.backtest.id).toBe(backtestId);
-    expect([...runtime.backtests.values()].filter((backtest) => backtest.id === backtestId)).toHaveLength(1);
-    await waitForBackgroundJobs();
-    expect([...runtime.aiJobs.values()]).toHaveLength(1);
-
-    await app.close();
-  });
-
-  it('returns the existing report when a guarded report link loses a race', async () => {
-    runtime.runs = [];
-    const app = await createApp();
-
-    const startRes = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-        engine_config: { summary_mode: 'engine_estimated' },
-      },
-    });
-    expect(startRes.statusCode).toBe(201);
-    const executionId = startRes.json().data.execution.id;
-    const runId = startRes.json().data.run.id;
-
-    const execution = runtime.internalExecutions.get(executionId);
-    runtime.internalExecutions.set(executionId, {
-      ...execution!,
-      status: 'succeeded',
-      finishedAt: new Date('2026-05-06T00:10:00.000Z'),
-      resultSummaryJson: { total_return: 0.07 },
-      artifactPointerJson: null,
-    });
-    runtime.backtests.set('backtest-concurrent', {
-      id: 'backtest-concurrent',
-      strategyRuleVersionId: 'version-1',
-      strategySnapshotJson: {
-        execution_source: 'internal_backtest',
-        internal_backtest_execution_id: executionId,
-      },
-      title: 'concurrent internal report',
-      status: 'completed',
-      executionSource: 'internal_backtest',
-      market: 'TSE',
-      timeframe: 'D',
-      createdAt: new Date('2026-05-06T00:09:00.000Z'),
-      updatedAt: new Date('2026-05-06T00:09:00.000Z'),
-    });
-    runtime.simulateReportLinkRace = {
-      runId,
-      backtestId: 'backtest-concurrent',
-    };
-
-    const reportRes = await app.inject({
-      method: 'POST',
-      url: `/api/symbol-strategy-applications/app-1/internal-backtests/${executionId}/report`,
-      payload: {
-        title: 'losing internal report',
-      },
-    });
-
-    expect(reportRes.statusCode).toBe(200);
-    expect(reportRes.json().data.run).toMatchObject({
-      id: runId,
-      backtest_id: 'backtest-concurrent',
-      internal_backtest_execution_id: executionId,
-    });
-    expect(reportRes.json().data.backtest).toMatchObject({
-      id: 'backtest-concurrent',
-      title: 'concurrent internal report',
-      execution_source: 'internal_backtest',
-    });
-    expect([...runtime.backtests.values()].some((backtest) => backtest.title === 'losing internal report')).toBe(false);
-    await waitForBackgroundJobs();
-    expect(runtime.aiJobs.size).toBe(0);
-
-    await app.close();
-  });
-
-  it('forces application symbol for application-origin internal backtest', async () => {
-    runtime.runs = [];
+  it('returns 410 when converting an internal backtest execution to a report', async () => {
+    const initialBacktestCount = runtime.backtests.size;
+    const initialAiJobCount = runtime.aiJobs.size;
     const app = await createApp();
 
     const res = await app.inject({
       method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
+      url: '/api/symbol-strategy-applications/app-1/internal-backtests/internal-1/report',
       payload: {
-        execution_target: {
-          symbol: '9999',
-          source_kind: 'daily_ohlcv',
-        },
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-        engine_config: { summary_mode: 'engine_estimated' },
+        title: 'legacy internal report',
       },
     });
 
-    expect(res.statusCode).toBe(201);
-    const savedExecution = runtime.internalExecutions.get(res.json().data.execution.id);
-    expect(savedExecution?.inputSnapshotJson.execution_target).toMatchObject({
-      symbol: '2148',
-      source_kind: 'daily_ohlcv',
-    });
-
-    await app.close();
-  });
-
-  it('rejects invalid internal backtest requests', async () => {
-    const app = await createApp();
-
-    const missingApplication = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/missing-app/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
+    expect(res.statusCode).toBe(410);
+    expect(res.json().error).toMatchObject({
+      code: 'INTERNAL_BACKTEST_DEPRECATED',
+      message: 'internal backtest application flow is deprecated. Use TradingView validation and CSV import.',
+      details: {
+        replacement_flow: 'tradingview_csv_import',
+        stage: 'internal_backtest_stage_2b',
       },
     });
-    const archivedApplication = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-archived/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-      },
-    });
-    const invalidBody = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
-      payload: {
-        data_range: { from: '2025/01/01', to: '2026-01-01' },
-      },
-    });
-
-    expect(missingApplication.statusCode).toBe(404);
-    expect(missingApplication.json().error.code).toBe('NOT_FOUND');
-    expect(archivedApplication.statusCode).toBe(400);
-    expect(archivedApplication.json().error.code).toBe('VALIDATION_ERROR');
-    expect(invalidBody.statusCode).toBe(400);
-    expect(invalidBody.json().error.code).toBe('VALIDATION_ERROR');
-
-    await app.close();
-  });
-
-  it('marks internal execution failed when application enqueue fails', async () => {
-    const app = await createApp();
-    enqueueInternalBacktestExecutionMock.mockRejectedValueOnce(new Error('redis_down'));
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-      },
-    });
-
-    expect(res.statusCode).toBe(503);
-    expect(res.json().error.code).toBe('QUEUE_ENQUEUE_FAILED');
-    const failedExecution = [...runtime.internalExecutions.values()][0];
-    expect(failedExecution.status).toBe('failed');
-    expect(failedExecution.errorCode).toBe('QUEUE_ENQUEUE_FAILED');
-    expect(runtime.runs.some((run) => run.internalBacktestExecutionId === failedExecution.id)).toBe(false);
+    expect(runtime.backtests.size).toBe(initialBacktestCount);
+    expect(runtime.aiJobs.size).toBe(initialAiJobCount);
 
     await app.close();
   });

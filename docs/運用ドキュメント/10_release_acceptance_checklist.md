@@ -35,9 +35,9 @@
 - 旧 numbered docs は履歴資料または詳細背景として残るが、現行仕様判断の正本として読ませない。現行判断は `docs/0.目次.md` と `docs/57.北極星 docs正本整理・読む順番（現行）.md` の分類に従う。
 - Required checks は `docs/運用ドキュメント/06_テストとCI.md` の CI required checks を正とする。Visual regression は `pnpm test:e2e:visual` の optional pilot であり required check ではない。
 - 現行 visual pilot の実装対象は `ApplicationDetail` の `application summary` stable container 1 件のみである。SymbolDetail、Home、BacktestDetail、BacktestComparisonDetail、StrategyLab、StrategyVersionDetail などの visual snapshot は未実装である。
-- AI summary auto-generation phase 1 は CSV import parsed report、application 起点 CSV import parsed report、新規 internal backtest report conversion の auto enqueue までを完了範囲とする。Internal backtest backend deprecation Stage 2B で conversion endpoint を閉じた後は、internal conversion 起点の auto enqueue は legacy 完了範囲として扱う。
+- AI summary auto-generation phase 1 は CSV import parsed report、application 起点 CSV import parsed report の auto enqueue までを完了範囲とする。新規 internal backtest report conversion の auto enqueue は Stage 2B 以降 legacy 完了範囲として扱い、新規には発生しない。
 - AI summary auto-generation phase 2 visibility は BacktestDetail / `GET /api/backtests/:backtestId` の latest job status read-only visibility までを完了範囲とする。
-- Artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定する。BacktestDetail は artifact pointer metadata 表示であり、download、signed URL、file token、diff の入口ではない。
+- Artifact 表示は BacktestDetail の artifact pointer metadata read-only 表示に限定する。Stage 2B 以降、internal_backtests engine_actual trades / equity JSON read endpoint は 410 であり、download、signed URL、file token、diff の入口ではない。
 - AI summary comparison は BacktestDetail の read-only helper までであり、provider 呼び出しや自動比較生成をしない。
 - Strategy proposal は一区切り完了済みの運用対象として扱う。`STRATEGY_PROPOSAL_PROVIDER` の default は `stub`、`local_llm` は opt-in、real local_llm / real Codex CLI は required test に入れない。
 - Codex CLI manual import の Web検索付き prompt option は prompt 文面の切替だけであり、backend Web search / deep research、`source_type=web` 解禁、URL / citation 保存、Web 検索済み flag 保存は行わない。
@@ -178,7 +178,7 @@ AI summary auto enqueue、latest job status visibility、Strategy proposal provi
 
 完了済みとして扱うもの:
 
-- AI summary auto enqueue は CSV import parsed report、application 起点 CSV import parsed report、新規 internal backtest report conversion 直後に限定する。Stage 2B で internal conversion endpoint を閉じた後は、internal conversion 起点は新規発生しない。
+- AI summary auto enqueue は CSV import parsed report、application 起点 CSV import parsed report 直後に限定する。新規 internal backtest report conversion 起点は Stage 2B 以降発生しない。
 - latest AI summary job status は BacktestDetail で read-only に確認する。
 - Strategy proposal は `stub` baseline、`local_llm` opt-in、Codex CLI manual import、provider quality trend、sanitized provider event log、cost / rate guard、optional benchmark sanitized record まで完了している。
 

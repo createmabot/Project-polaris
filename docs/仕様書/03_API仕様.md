@@ -57,47 +57,43 @@
   - active application に対して CSV import run / Backtest / BacktestImport を作成する。
   - parse success 時は Backtest AI summary auto enqueue の対象になる。
 - `POST /api/symbol-strategy-applications/:applicationId/internal-backtests`
-  - active application に対して internal backtest execution と run を作成する。
-  - Phase 1 では frontend の新規実行導線を閉じるが、backend route / response shape / DB 互換は維持する。削除可否は後続判断にする。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
+  - 新規実行は TradingView 検証と CSV import を主導線にする。
 - `POST /api/symbol-strategy-applications/:applicationId/internal-backtests/:executionId/report`
-  - succeeded execution から importless Backtest report を作成、または既存 report を返す。
-  - conversion success 時は Backtest AI summary auto enqueue の対象になる。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
+  - 既存 internal report は read-only legacy として表示維持するが、新規 conversion は行わない。
 
 ## 6. internal backtest
 
-Stage 2A internal backtest backend deprecation design:
+Stage 2B internal backtest backend deactivation:
 
-- Stage 2A は docs-only の廃止設計であり、backend route / worker / Prisma / DB / migration / tests は変更しない。
-- Stage 2B では `/api/internal-backtests` 系 route を 410 Gone にするか unregister して 404 にするかを決める。第一候補は、意図的な閉鎖を明示できる 410 Gone とする。
-- Stage 2B では application 起点の internal start / report conversion endpoint も 410 Gone または削除を判断する。第一候補は 410 Gone とし、historical internal report は read-only に維持する。
-- Stage 2B では internal backtest worker startup を止める候補を優先する。queued / running execution が残る場合は、運用で cancel / failed 扱いにするかを先に決める。
+- Stage 2B では `/api/internal-backtests` 系 route と application 起点の internal start / report conversion endpoint を HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` に固定する。
+- 410 response の details は `replacement_flow=tradingview_csv_import` と `stage=internal_backtest_stage_2b` に限定する。
+- internal backtest worker startup は停止する。`queue/internal-backtests.ts` と `internal-backtests/*` は Stage 2B では削除しない。
+- Prisma / DB / migration は変更せず、historical internal report は read-only legacy として表示維持する。
 - Stage 2C では route / service / queue / worker / tests の完全削除と、Prisma model / table / column / relation の drop を data audit 後に判断する。
 - API 選択肢は keep / 410 Gone / unregister 404 / complete delete。Stage 2B は 410 Gone、Stage 2C は complete delete を候補にする。
 - DB / Prisma 選択肢は keep / read-only legacy / drop。Stage 2B は keep、Stage 2C は data audit 後に drop 可否を判断する。
-- `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規 conversion は Stage 2B で閉じる候補にする。
+- `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規 conversion は Stage 2B で閉じる。
 - `SymbolStrategyApplicationRun.internalBacktestExecutionId` を drop すると historical relation を失うため、`Backtest.strategySnapshotJson` の `result_summary` / `artifact_pointer` / `internal_backtest_execution_id` snapshot だけで十分かを Stage 2C 前に確認する。
 
-- `GET /api/internal-backtests/data-source-failures`
-  - data source failure summary を返す。
+- `GET /api/internal-backtests/observability/data-source-unavailable-summary`
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
 - `POST /api/internal-backtests/executions`
-  - strategy version 起点の internal backtest execution を作成する。
-  - Phase 1 では StrategyVersionDetail の新規実行 UI からは呼び出さない。API contract は互換維持する。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
 - `GET /api/internal-backtests/executions/:executionId`
-  - execution detail を返す。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
 - `GET /api/internal-backtests/executions/:executionId/result`
-  - execution result を返す。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
 - `GET /api/internal-backtests/executions/:executionId/artifacts/engine_actual/trades-and-equity`
-  - engine actual の trades / equity artifact を read-only JSON として返す。
-  - execution ID、succeeded execution、stored artifact existence を前提にする。
-  - artifact path suffix は既知 endpoint に対応する whitelist に限定し、arbitrary route や path traversal を許可しない。
-  - frontend へ local path / absolute path を返さず、UI link は execution ID と既知 route から導く。
-  - 新規 download endpoint、file token、signed URL、backend proxy の本格実装は現時点では対象外。
+  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
+  - 既存 internal report の artifact pointer 表示は BacktestDetail の read-only legacy 表示として維持する。
 
 ## 7. AI summary
 
 - Backtest AI summary generation は既存 generate endpoint / button を維持する。
-- CSV import parsed report 作成直後と internal backtest report conversion 完了直後は、最小 auto enqueue 対象。
-- Stage 2B で internal report conversion endpoint を 410 Gone / delete する場合、internal conversion auto enqueue は新規には使われなくなる。generic Backtest AI summary manual generation と既存 AI summary 表示は維持する。
+- CSV import parsed report 作成直後は、最小 auto enqueue 対象。
+- internal report conversion endpoint は Stage 2B で 410 Gone にしたため、internal conversion auto enqueue は新規には発生しない。generic Backtest AI summary manual generation と既存 AI summary 表示は維持する。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
 ## 7-0. StrategyVersion Pine generation
