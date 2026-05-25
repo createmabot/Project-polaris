@@ -333,11 +333,14 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('Flag unsupported_function_alias');
     expect(body.messages[0].content).toContain('setupActive should remain true until entry occurs');
     expect(body.messages[0].content).toContain('does not reset setupActive := false');
+    expect(body.messages[0].content).toContain('Setup-state variable names may vary');
     expect(body.messages[0].content).toContain('entry_guard_risk');
     expect(body.messages[0].content).toContain('strategy.position_size == 0');
     expect(body.messages[0].content).toContain('stop_order_guard_risk');
     expect(body.messages[0].content).toContain('outside a strategy.position_size > 0 position guard');
     expect(body.messages[0].content).toContain('[plusDI, minusDI, adxValue] = ta.dmi');
+    expect(body.messages[0].content).toContain('donchian_current_bar_self_reference');
+    expect(body.messages[0].content).toContain('entry_time_atr_not_persisted');
     expect(body.messages[0].content).toContain('below or less than');
     expect(body.messages[0].content).toContain('flag oscillator plot or hline usage');
     expect(body.messages[0].content).toContain('Use severity error only for likely compile failures');

@@ -240,4 +240,110 @@ plot(strategy.position_size > 0 ? stopLossPrice : na)`);
     expect(reviewed.issues.map((issue) => issue.code)).not.toContain('entry_guard_risk');
     expect(reviewed.issues.map((issue) => issue.code)).not.toContain('stop_order_guard_risk');
   });
+
+  it('detects generic setup-state premature reset for non-setupActive variable names', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("generic setup state", overlay=true)
+var bool priceWasBelowBB = false
+lowerBand = ta.sma(close, 20) - ta.stdev(close, 20) * 2
+upperBand = ta.sma(close, 20) + ta.stdev(close, 20) * 2
+setupCondition = close < lowerBand
+triggerCondition = ta.crossover(close, upperBand)
+if strategy.position_size == 0
+    if setupCondition
+        priceWasBelowBB := true
+    else
+        priceWasBelowBB := false
+entryCondition = priceWasBelowBB and triggerCondition
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('setup_trigger_state_risk');
+  });
+
+  it('allows generic setup-state variables that persist until entry and reset after entry', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("generic setup state good", overlay=true)
+var bool priceWasBelowBB = false
+lowerBand = ta.sma(close, 20) - ta.stdev(close, 20) * 2
+upperBand = ta.sma(close, 20) + ta.stdev(close, 20) * 2
+setupCondition = close < lowerBand
+triggerCondition = ta.crossover(close, upperBand)
+if strategy.position_size == 0 and setupCondition
+    priceWasBelowBB := true
+entryCondition = priceWasBelowBB and triggerCondition
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    priceWasBelowBB := false`);
+
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('setup_trigger_state_risk');
+  });
+
+  it('detects Donchian current-bar self-reference in breakout logic', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("donchian bad", overlay=true)
+len = input.int(20)
+upperBand = ta.highest(high, len)
+lowerBand = ta.lowest(low, len)
+entryCondition = close > upperBand
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+exitCondition = close < lowerBand
+if strategy.position_size > 0 and exitCondition
+    strategy.close("Long")`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('donchian_current_bar_self_reference');
+  });
+
+  it('allows Donchian breakout logic that compares against prior channel values', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("donchian good", overlay=true)
+len = input.int(20)
+upperBand = ta.highest(high, len)
+lowerBand = ta.lowest(low, len)
+entryCondition = close > upperBand[1]
+if entryCondition and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+exitCondition = close < lowerBand[1]
+if strategy.position_size > 0 and exitCondition
+    strategy.close("Long")`);
+
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('donchian_current_bar_self_reference');
+  });
+
+  it('detects entry-time ATR misuse when stop uses current ATR directly', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("atr bad", overlay=true)
+ma50 = ta.sma(close, 50)
+atrValue = ta.atr(14)
+if close > ma50 and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+if strategy.position_size > 0
+    stopLossPrice = strategy.position_avg_price - atrValue * 2
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)`);
+
+    expect(reviewed.status).toBe('needs_repair');
+    expect(reviewed.issues.map((issue) => issue.code)).toContain('entry_time_atr_not_persisted');
+  });
+
+  it('allows entry-time ATR stops that persist ATR on the position-open transition', () => {
+    const reviewed = reviewGeneratedPineScriptDeterministic(`//@version=6
+strategy("atr good", overlay=true)
+ma50 = ta.sma(close, 50)
+atrValue = ta.atr(14)
+var float entryAtr = na
+if close > ma50 and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+if strategy.position_size > 0 and strategy.position_size[1] == 0
+    entryAtr := atrValue
+if strategy.position_size > 0 and not na(entryAtr)
+    stopLossPrice = strategy.position_avg_price - entryAtr * 2
+    strategy.exit("Stop Loss", "Long", stop=stopLossPrice)
+if strategy.position_size == 0 and strategy.position_size[1] > 0
+    entryAtr := na`);
+
+    expect(reviewed.issues.map((issue) => issue.code)).not.toContain('entry_time_atr_not_persisted');
+  });
 });

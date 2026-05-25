@@ -63,6 +63,8 @@ export type PineReviewIssueCode =
   | 'long_only_violation'
   | 'setup_trigger_same_bar'
   | 'entry_atr_na_capture'
+  | 'donchian_current_bar_self_reference'
+  | 'entry_time_atr_not_persisted'
   | 'provider_review_unavailable'
   | 'other';
 
@@ -348,6 +350,95 @@ function hasSetupResetAfterEntry(lines: string[], entryIndex: number): boolean {
   return false;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function collectSetupStateVariables(source: string): Set<string> {
+  const variables = new Set<string>();
+  const assignmentPattern = /\b([A-Za-z_][A-Za-z0-9_]*)\s*:=\s*true\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = assignmentPattern.exec(source)) !== null) {
+    const variableName = match[1];
+    if (
+      /setup|below|band|touched|pullback|active|armed|ready/i.test(variableName) &&
+      new RegExp(`\\b${escapeRegExp(variableName)}\\s*:=\\s*false\\b`, 'i').test(source)
+    ) {
+      variables.add(variableName);
+    }
+  }
+  return variables;
+}
+
+function hasPrematureSetupStateReset(source: string, stateVariable: string): boolean {
+  const escaped = escapeRegExp(stateVariable);
+  return (
+    new RegExp(`\\b${escaped}\\s*:=\\s*false\\b`, 'i').test(source) &&
+    new RegExp(`\\belse\\s*\\r?\\n\\s+${escaped}\\s*:=\\s*false\\b`, 'i').test(source) &&
+    new RegExp(`\\bentryCondition\\s*=\\s*${escaped}\\s+and\\s+[A-Za-z_][A-Za-z0-9_]*`, 'i').test(source)
+  );
+}
+
+function hasSetupStateResetAfterEntry(lines: string[], entryIndex: number, stateVariable: string): boolean {
+  const entryIndent = getIndent(lines[entryIndex] ?? '');
+  const resetPattern = new RegExp(`\\b${escapeRegExp(stateVariable)}\\s*:=\\s*false\\b`, 'i');
+  for (let i = entryIndex + 1; i < lines.length; i += 1) {
+    const line = lines[i] ?? '';
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('//')) continue;
+
+    const indent = getIndent(line);
+    if (indent < entryIndent) break;
+    if (indent === entryIndent && resetPattern.test(trimmed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function expressionUsesCurrentDonchianChannel(expression: string): boolean {
+  return /\bta\.(?:highest|lowest)\s*\(\s*(?:high|low)\s*,\s*[^)]*\)(?!\s*\[1\])/i.test(expression);
+}
+
+function hasDonchianCurrentBarSelfReference(source: string, assignments: Map<string, string>): boolean {
+  const currentChannelNames = new Set<string>();
+  for (const [name, expression] of assignments.entries()) {
+    if (expressionUsesCurrentDonchianChannel(expression)) {
+      currentChannelNames.add(name);
+    }
+  }
+
+  if (/\bclose\s*(?:>|>=|<|<=)\s*ta\.(?:highest|lowest)\s*\(\s*(?:high|low)\s*,\s*[^)]*\)(?!\s*\[1\])/i.test(source)) {
+    return true;
+  }
+
+  for (const name of currentChannelNames) {
+    const escaped = escapeRegExp(name);
+    if (new RegExp(`\\bclose\\s*(?:>|>=|<|<=)\\s*${escaped}\\b(?!\\s*\\[1\\])`, 'i').test(source)) {
+      return true;
+    }
+    if (new RegExp(`\\b(?:ta\\.crossover|ta\\.crossunder)\\s*\\(\\s*close\\s*,\\s*${escaped}\\s*\\)`, 'i').test(source)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasEntryTimeAtrMisuse(source: string): boolean {
+  const hasAtr = /\b(?:ta\.atr\s*\(|atr(?:Value|14|Length|Mult)?\b)/i.test(source);
+  if (!hasAtr) return false;
+  const hasPersistedEntryAtr =
+    /\b(?:var\s+)?float\s+entryAtr\s*=\s*na\b/i.test(source) &&
+    /\bentryAtr\s*:=\s*(?:atr|atrValue|atr14|ta\.atr\s*\()/i.test(source) &&
+    /\bstrategy\.position_size\s*>\s*0\s+and\s+strategy\.position_size\s*\[1\]\s*==\s*0\b/i.test(source);
+  if (hasPersistedEntryAtr) return false;
+  return (
+    /\bstopLossPrice\s*:?=\s*.+\bstrategy\.position_avg_price\b.+\b(?:atr|atrValue|atr14|ta\.atr\s*\()/i.test(source) ||
+    /\bstrategy\.exit\s*\([^)]*\bstop\s*=\s*[^)]*\bstrategy\.position_avg_price\b[^)]*\b(?:atr|atrValue|atr14|ta\.atr\s*\()/i.test(source)
+  );
+}
+
 export function reviewGeneratedPineScriptDeterministic(script: string | null): PineReviewResult {
   if (!script || !script.trim()) {
     return createPineReviewResult([]);
@@ -440,8 +531,45 @@ export function reviewGeneratedPineScriptDeterministic(script: string | null): P
       }
     });
   }
+  for (const stateVariable of collectSetupStateVariables(source)) {
+    if (hasPrematureSetupStateReset(source, stateVariable)) {
+      pushReviewIssue(
+        issues,
+        'setup_trigger_state_risk',
+        `Keep ${stateVariable} true after setup until entryCondition triggers, then reset after entry or explicit invalidation.`,
+      );
+    }
+    lines.forEach((line, index) => {
+      if (!entryLineNeedsFlatGuard(line)) return;
+      const conditionContext = expandConditionContext(getParentIfConditions(lines, index), assignments);
+      if (
+        new RegExp(`\\b${escapeRegExp(stateVariable)}\\b`, 'i').test(conditionContext) &&
+        !hasSetupStateResetAfterEntry(lines, index, stateVariable)
+      ) {
+        pushReviewIssue(
+          issues,
+          'setup_trigger_state_risk',
+          `Reset ${stateVariable} with ${stateVariable} := false in the entry block immediately after strategy.entry or an explicit invalidation.`,
+        );
+      }
+    });
+  }
   if (/\bif\s+strategy\.position_size\s*>\s*0\s+and\s+na\s*\(\s*entryAtr\s*\)/i.test(source)) {
     pushReviewIssue(issues, 'entry_atr_na_capture', 'Capture entry ATR on the position-open transition instead of na(entryAtr).');
+  }
+  if (hasDonchianCurrentBarSelfReference(source, assignments)) {
+    pushReviewIssue(
+      issues,
+      'donchian_current_bar_self_reference',
+      'Compare breakouts or exits against the prior Donchian channel value such as upperBand[1] / lowerBand[1], not the current bar channel.',
+    );
+  }
+  if (hasEntryTimeAtrMisuse(source)) {
+    pushReviewIssue(
+      issues,
+      'entry_time_atr_not_persisted',
+      'Persist ATR at the position-open transition in entryAtr and use that stored value for entry-time ATR stops.',
+    );
   }
 
   return createPineReviewResult(issues);
