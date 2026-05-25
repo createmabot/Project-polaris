@@ -1,7 +1,7 @@
 import { AlertSummaryContext } from './adapter';
 import { env } from '../env';
 import { reviewGeneratedPineScriptDeterministic } from '../strategy/pine';
-import type { PineReviewIssue, PineReviewResult } from '../strategy/pine';
+import type { PineReviewIssue, PineReviewIssueCode, PineReviewResult } from '../strategy/pine';
 import {
   BacktestSummaryContext,
   BacktestSummaryOutput,
@@ -45,6 +45,35 @@ type SanitizedPineReviewIssue = {
   code: string;
   severity: 'error' | 'warning' | 'info';
   repair_hint: string;
+};
+
+const PINE_REVIEW_REPAIR_PRIORITIES: Record<PineReviewIssueCode, number> = {
+  pine_syntax_risk: 100,
+  unsupported_color_alias: 90,
+  unsupported_color_namespace: 100,
+  unsupported_plot_style: 90,
+  unsupported_function_alias: 100,
+  dmi_property_access: 100,
+  unsupported_dmi_property_access: 100,
+  unsupported_adx_function: 100,
+  block_local_variable_scope_risk: 100,
+  na_type_inference_risk: 100,
+  uninitialized_stop_loss_price: 100,
+  stop_order_guard_risk: 95,
+  setup_trigger_state_risk: 90,
+  entry_guard_risk: 95,
+  below_vs_crossunder_mismatch: 0,
+  oscillator_plot_overlay_risk: 0,
+  overlay_oscillator_plot: 0,
+  entry_price_reference_risk: 95,
+  stop_order_semantics_risk: 95,
+  unused_state_variable: 0,
+  narrative_comment: 0,
+  long_only_violation: 100,
+  setup_trigger_same_bar: 90,
+  entry_atr_na_capture: 95,
+  provider_review_unavailable: 0,
+  other: 0,
 };
 
 export type PineGenerationProgressStage =
@@ -358,13 +387,15 @@ export class HomeAiService {
           ? await reviewOutput(normalizedGeneratedScript)
           : await this.reviewPineScriptWithProvider(context, normalizedGeneratedScript, attempt);
         const errorReviewIssues = review.issues.filter((issue) => issue.severity === 'error');
-        if (errorReviewIssues.length > 0) {
-          const sanitizedReviewIssues = this.sanitizePineReviewIssues(errorReviewIssues);
-          const reviewInvalidReasonCodes = errorReviewIssues.map((issue) => `reviewer_${issue.code}`);
-          const canRepairReview = attempt < maxRepairAttempts && errorReviewIssues.some((issue) => issue.repairable);
+        const blockingReviewIssues = this.selectBlockingPineReviewIssues(errorReviewIssues);
+        if (blockingReviewIssues.length > 0) {
+          const selectedRepairIssues = this.selectPineReviewRepairIssues(blockingReviewIssues);
+          const sanitizedRepairIssues = this.sanitizePineReviewIssues(selectedRepairIssues);
+          const reviewInvalidReasonCodes = blockingReviewIssues.map((issue) => `reviewer_${issue.code}`);
+          const canRepairReview = attempt < maxRepairAttempts && selectedRepairIssues.length > 0;
           lastFailureReason = 'pine_review_needs_repair';
           lastInvalidReasonCodes = Array.from(new Set([...combinedInvalidReasonCodes, ...reviewInvalidReasonCodes]));
-          lastReviewerIssues = sanitizedReviewIssues;
+          lastReviewerIssues = sanitizedRepairIssues;
 
           if (!canRepairReview) {
             return {
@@ -383,7 +414,7 @@ export class HomeAiService {
                 failureReason: 'pine_review_needs_repair',
                 invalidReasonCodes: lastInvalidReasonCodes,
                 reviewerSummary: review.summary,
-                reviewerIssues: sanitizedReviewIssues,
+                reviewerIssues: sanitizedRepairIssues,
               },
               log: {
                 ...run.log,
@@ -402,7 +433,7 @@ export class HomeAiService {
               invalidReasonCodes: lastInvalidReasonCodes,
               failureReason: 'pine_review_needs_repair',
               previousScript: normalizedGeneratedScript,
-              reviewIssues: sanitizedReviewIssues,
+              reviewIssues: sanitizedRepairIssues,
             },
           };
           aggregateWarnings.push(`Pine reviewer の指摘により、修復リトライ${attempt}回目を実行しました。`);
@@ -514,6 +545,27 @@ export class HomeAiService {
     } catch {
       // Progress reporting must not fail generation.
     }
+  }
+
+  private selectBlockingPineReviewIssues(issues: PineReviewIssue[]): PineReviewIssue[] {
+    return issues.filter((issue) => this.getPineReviewRepairPriority(issue.code) > 0);
+  }
+
+  private selectPineReviewRepairIssues(issues: PineReviewIssue[]): PineReviewIssue[] {
+    const selectedByCode = new Map<PineReviewIssueCode, PineReviewIssue>();
+    for (const issue of issues) {
+      if (issue.severity !== 'error' || !issue.repairable) continue;
+      if (this.getPineReviewRepairPriority(issue.code) <= 0) continue;
+      if (selectedByCode.has(issue.code)) continue;
+      selectedByCode.set(issue.code, issue);
+    }
+    return Array.from(selectedByCode.values())
+      .sort((left, right) => this.getPineReviewRepairPriority(right.code) - this.getPineReviewRepairPriority(left.code))
+      .slice(0, 3);
+  }
+
+  private getPineReviewRepairPriority(code: PineReviewIssueCode): number {
+    return PINE_REVIEW_REPAIR_PRIORITIES[code] ?? 0;
   }
 
   private sanitizePineReviewIssues(issues: PineReviewIssue[]): SanitizedPineReviewIssue[] {

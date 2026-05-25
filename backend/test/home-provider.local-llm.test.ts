@@ -340,8 +340,70 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('[plusDI, minusDI, adxValue] = ta.dmi');
     expect(body.messages[0].content).toContain('below or less than');
     expect(body.messages[0].content).toContain('flag oscillator plot or hline usage');
+    expect(body.messages[0].content).toContain('Use severity error only for likely compile failures');
+    expect(body.messages[0].content).toContain('Use warning for readability, plotting preferences');
+    expect(body.messages[0].content).toContain('Do not mark quality-only or readability-only observations as error');
     expect(body.messages[0].content).not.toContain('gemma4-ns');
     expect(result?.status).toBe('pass');
+  });
+
+  it('uses a dedicated pine repair prompt when repair request exists', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: '//@version=6\nstrategy("Repaired", overlay=true)\nplot(close)',
+            warnings: ['指定された reviewer 指摘のみを修正しました。'],
+            assumptions: [],
+            normalized_rule_json: { strategy_type: 'long_only' },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript({
+      ...createPineContext(),
+      repairRequest: {
+        attempt: 1,
+        invalidReasonCodes: ['reviewer_entry_guard_risk'],
+        failureReason: 'pine_review_needs_repair',
+        previousScript: '//@version=6\nstrategy("Needs repair", overlay=true)\nstrategy.entry("Long", strategy.long)',
+        reviewIssues: [
+          {
+            code: 'entry_guard_risk',
+            severity: 'error',
+            repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+          },
+        ],
+      },
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+    const systemPrompt = body.messages[0].content;
+    const userPayload = JSON.parse(body.messages[1].content);
+    expect(systemPrompt).toContain('Repair an existing Pine v6 strategy script');
+    expect(systemPrompt).toContain('Fix only the listed issue codes and repair hints');
+    expect(systemPrompt).toContain('Preserve unrelated strategy logic');
+    expect(systemPrompt).not.toContain('Do not reuse an ATR stop template for a percentage stop');
+    expect(userPayload.task).toBe('repair_pine_script');
+    expect(userPayload.regeneration_input).toBeUndefined();
+    expect(userPayload.repair_request.reviewIssues).toEqual([
+      {
+        code: 'entry_guard_risk',
+        severity: 'error',
+        repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+      },
+    ]);
+    expect(systemPrompt).not.toContain('gemma4-ns');
+    expect(body.messages[1].content).not.toContain('gemma4-ns');
+    expect(result.generatedScript).toContain('strategy("Repaired"');
   });
 
   it('extracts Pine JSON envelope from fenced output with surrounding explanation', async () => {

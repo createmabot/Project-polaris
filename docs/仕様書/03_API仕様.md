@@ -182,6 +182,7 @@ StrategyVersion Pine generation の market / timeframe:
 
 - `POST /api/strategy-versions/:versionId/pine/generate` と `POST /api/strategy-versions/:versionId/pine/regenerate` は、保存済み StrategyVersion の `market` / `timeframe` を Pine provider context に渡す。
 - job start endpoint（`/pine/generation-jobs` / `/pine/regeneration-jobs`）も同じ market / timeframe context を使い、sync endpoint と互換の validation / normalization / repair boundary を維持する。
+- reviewer repair は priority mapping に基づき、severity `error`、`repairable=true`、priority > 0 の issue だけを code で重複排除し、priority 順の最大 3 件を `repair_request.reviewIssues` に渡す。priority 0 の readability / plotting preference / below-vs-crossunder nuance / narrative comment などは repair を起動しない。
 - Pine generation の初回拡張対象は `market=JP_STOCK|US_STOCK`、canonical `timeframe=D|4H|1H` とする。`1D` が API / 既存データ / 外部入力から来た場合は `D` と同義として正規化する。
 - generated Pine のロジックは TradingView chart の symbol / timeframe 上で検証する前提とし、日足 / 時間足別の本格ロジック分岐や market data provider 拡張は行わない。
 - unsupported market / timeframe は Pine generation note の warning / assumption で明示し、既存 fallback 境界を維持する。

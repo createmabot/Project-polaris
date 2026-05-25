@@ -621,7 +621,7 @@ describe('HomeAiService', () => {
     );
   });
 
-  it('repairs when provider reviewer reports an error issue', async () => {
+  it('repairs when provider reviewer reports a blocking error issue', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();
     const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
@@ -660,10 +660,10 @@ describe('HomeAiService', () => {
           status: 'needs_repair',
           issues: [
             {
-              code: 'narrative_comment',
+              code: 'entry_guard_risk',
               severity: 'error',
-              message: 'Provider reviewer detected a repairable comment issue.',
-              repair_hint: 'Remove narrative generated_script comments.',
+              message: 'Provider reviewer detected an unguarded entry.',
+              repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
               repairable: true,
             },
           ],
@@ -697,18 +697,187 @@ describe('HomeAiService', () => {
     expect(reviewMock).toHaveBeenCalledTimes(2);
     expect((pineMock.mock.calls[1][0] as any).repairRequest.failureReason).toBe('pine_review_needs_repair');
     expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
-      'reviewer_narrative_comment',
+      'reviewer_entry_guard_risk',
     );
     expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
       {
-        code: 'narrative_comment',
+        code: 'entry_guard_risk',
         severity: 'error',
-        repair_hint: 'Remove narrative generated_script comments.',
+        repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
       },
     ]);
   });
 
-  it('passes below-vs-crossunder reviewer issues into bounded repair context', async () => {
+  it('selects only top-priority repairable reviewer issues for repair context', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockReset();
+    pineMock.mockImplementation(async (context: any) => ({
+      normalizedRuleJson: {},
+      generatedScript: context?.repairRequest
+        ? '//@version=6\nstrategy("selected-repaired", overlay=true)\nif close > ta.sma(close, 20) and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(close)'
+        : '//@version=6\nstrategy("selected", overlay=true)\nif close > ta.sma(close, 20) and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nplot(close)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    }));
+    reviewMock.mockImplementation(async (context: any) => {
+      if (context.repairAttempt > 0) {
+        return createPassingPineReview();
+      }
+      return {
+        schema_name: 'pine_review_result',
+        schema_version: '1.0',
+        status: 'needs_repair',
+        issues: [
+          {
+            code: 'setup_trigger_same_bar',
+            severity: 'error',
+            message: 'Setup and trigger are on the same bar.',
+            repair_hint: 'Use setupActive state.',
+            repairable: true,
+          },
+          {
+            code: 'unsupported_function_alias',
+            severity: 'error',
+            message: 'Unsupported cross alias.',
+            repair_hint: 'Use ta.crossover or ta.crossunder.',
+            repairable: true,
+          },
+          {
+            code: 'unsupported_function_alias',
+            severity: 'error',
+            message: 'Duplicate unsupported cross alias.',
+            repair_hint: 'Duplicate hint must be ignored.',
+            repairable: true,
+          },
+          {
+            code: 'long_only_violation',
+            severity: 'error',
+            message: 'Short entry in long-only strategy.',
+            repair_hint: 'Remove short-side entries.',
+            repairable: true,
+          },
+          {
+            code: 'entry_guard_risk',
+            severity: 'error',
+            message: 'Entry guard missing.',
+            repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+            repairable: true,
+          },
+          {
+            code: 'narrative_comment',
+            severity: 'error',
+            message: 'Readability issue.',
+            repair_hint: 'Remove narrative comments.',
+            repairable: true,
+          },
+          {
+            code: 'unsupported_adx_function',
+            severity: 'error',
+            message: 'Unsupported ADX.',
+            repair_hint: 'Use ta.dmi tuple output.',
+            repairable: false,
+          },
+        ],
+        summary: {
+          issue_count: 7,
+          error_count: 7,
+          warning_count: 0,
+          repairable_issue_count: 6,
+        },
+      };
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA20',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
+      {
+        code: 'unsupported_function_alias',
+        severity: 'error',
+        repair_hint: 'Use ta.crossover or ta.crossunder.',
+      },
+      {
+        code: 'long_only_violation',
+        severity: 'error',
+        repair_hint: 'Remove short-side entries.',
+      },
+      {
+        code: 'entry_guard_risk',
+        severity: 'error',
+        repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+      },
+    ]);
+    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toHaveLength(3);
+    expect(JSON.stringify((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues)).not.toContain(
+      'narrative_comment',
+    );
+    expect(JSON.stringify((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues)).not.toContain(
+      'unsupported_adx_function',
+    );
+  });
+
+  it('succeeds without repair when reviewer returns warning-only issues', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    reviewMock.mockReset();
+    reviewMock.mockResolvedValue({
+      schema_name: 'pine_review_result',
+      schema_version: '1.0',
+      status: 'pass',
+      issues: [
+        {
+          code: 'narrative_comment',
+          severity: 'warning',
+          message: 'Comment is verbose.',
+          repair_hint: 'Keep comments short when convenient.',
+          repairable: true,
+        },
+      ],
+      summary: {
+        issue_count: 1,
+        error_count: 0,
+        warning_count: 1,
+        repairable_issue_count: 1,
+      },
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 2, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.repairAttempts).toBe(0);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+    expect(result.output.invalidReasonCodes).toEqual([]);
+    expect(result.output.reviewerSummary?.warning_count).toBe(1);
+  });
+
+  it('does not repair priority-zero below-vs-crossunder reviewer nuance', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();
     const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
@@ -716,22 +885,10 @@ describe('HomeAiService', () => {
     pineMock.mockReset();
     reviewMock.mockReset();
     pineMock.mockImplementation(async (context: any) => {
-      if (!context?.repairRequest) {
-        return {
-          normalizedRuleJson: {},
-          generatedScript:
-            '//@version=6\nstrategy("below mismatch", overlay=true)\nma50 = ta.sma(close, 50)\nexitCondition = ta.crossunder(close, ma50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and exitCondition\n    strategy.close("Long")\nplot(ma50)',
-          warnings: [],
-          assumptions: [],
-          status: 'generated',
-          modelName: 'local-model',
-          promptVersion: 'v1',
-        };
-      }
       return {
         normalizedRuleJson: {},
         generatedScript:
-          '//@version=6\nstrategy("below repaired", overlay=true)\nma50 = ta.sma(close, 50)\nexitCondition = close < ma50\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and exitCondition\n    strategy.close("Long")\nplot(ma50)',
+          '//@version=6\nstrategy("below mismatch", overlay=true)\nma50 = ta.sma(close, 50)\nexitCondition = ta.crossunder(close, ma50)\nif close > ma50 and strategy.position_size == 0\n    strategy.entry("Long", strategy.long)\nif strategy.position_size > 0 and exitCondition\n    strategy.close("Long")\nplot(ma50)',
         warnings: [],
         assumptions: [],
         status: 'generated',
@@ -777,18 +934,9 @@ describe('HomeAiService', () => {
     );
 
     expect(result.output.status).toBe('generated');
-    expect(result.output.generatedScript).toContain('exitCondition = close < ma50');
-    expect(result.output.generatedScript).not.toContain('ta.crossunder(close, ma50)');
-    expect((pineMock.mock.calls[1][0] as any).repairRequest.invalidReasonCodes).toContain(
-      'reviewer_below_vs_crossunder_mismatch',
-    );
-    expect((pineMock.mock.calls[1][0] as any).repairRequest.reviewIssues).toEqual([
-      {
-        code: 'below_vs_crossunder_mismatch',
-        severity: 'error',
-        repair_hint: 'Use close < ma50 for a state-based exit instead of ta.crossunder(close, ma50).',
-      },
-    ]);
+    expect(result.output.generatedScript).toContain('ta.crossunder(close, ma50)');
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+    expect(result.output.invalidReasonCodes).toEqual([]);
   });
 
   it('falls back to deterministic reviewer when provider reviewer fails without leaking details', async () => {
@@ -856,6 +1004,61 @@ describe('HomeAiService', () => {
     ]);
     expect(JSON.stringify(result.output)).not.toContain('endpoint');
     expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not exceed configured max repair attempts for reviewer repair', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const reviewMock = provider.reviewPineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    reviewMock.mockReset();
+    pineMock.mockResolvedValue({
+      normalizedRuleJson: {},
+      generatedScript: '//@version=6\nstrategy("still bad", overlay=true)\nstrategy.entry("Long", strategy.long)',
+      warnings: [],
+      assumptions: [],
+      status: 'generated',
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    });
+    reviewMock.mockResolvedValue({
+      schema_name: 'pine_review_result',
+      schema_version: '1.0',
+      status: 'needs_repair',
+      issues: [
+        {
+          code: 'entry_guard_risk',
+          severity: 'error',
+          message: 'Entry guard missing.',
+          repair_hint: 'Guard strategy.entry with strategy.position_size == 0.',
+          repairable: true,
+        },
+      ],
+      summary: {
+        issue_count: 1,
+        error_count: 1,
+        warning_count: 0,
+        repairable_issue_count: 1,
+      },
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'buy above MA50',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 1, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('failed');
+    expect(result.output.repairAttempts).toBe(1);
+    expect(result.log.retryCount).toBe(1);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect(reviewMock).toHaveBeenCalledTimes(2);
   });
 
   it('fails when pine repair reaches retry limit', async () => {
