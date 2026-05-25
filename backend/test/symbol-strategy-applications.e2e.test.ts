@@ -5,10 +5,6 @@ import { symbolStrategyApplicationRoutes } from '../src/routes/symbol-strategy-a
 import { strategyRoutes } from '../src/routes/strategies';
 import { errorHandler } from '../src/utils/response';
 
-const { enqueueInternalBacktestExecutionMock } = vi.hoisted(() => ({
-  enqueueInternalBacktestExecutionMock: vi.fn(async () => ({ id: 'ibtx-job-1' })),
-}));
-
 type SymbolRow = {
   id: string;
   symbol: string;
@@ -37,7 +33,6 @@ type RunRow = {
   status: string;
   backtestId: string | null;
   backtestImportId: string | null;
-  internalBacktestExecutionId: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   errorCode: string | null;
@@ -69,23 +64,6 @@ type BacktestImportRow = {
   parseStatus: string;
   parseError: string | null;
   parsedSummaryJson: any;
-  createdAt: Date;
-  updatedAt: Date;
-};
-
-type InternalExecutionRow = {
-  id: string;
-  strategyRuleVersionId: string;
-  status: string;
-  requestedAt: Date;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  inputSnapshotJson: Record<string, unknown>;
-  resultSummaryJson: Record<string, unknown> | null;
-  artifactPointerJson: Record<string, unknown> | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  engineVersion: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -140,13 +118,11 @@ type Runtime = {
   runs: RunRow[];
   backtests: Map<string, BacktestRow>;
   backtestImports: Map<string, BacktestImportRow>;
-  internalExecutions: Map<string, InternalExecutionRow>;
   aiJobs: Map<string, AiJobRow>;
   aiSummaries: Map<string, AiSummaryRow>;
   nextApplicationId: number;
   nextBacktestId: number;
   nextBacktestImportId: number;
-  nextInternalExecutionId: number;
   nextRunId: number;
   simulateReportLinkRace: { runId: string; backtestId: string } | null;
 };
@@ -271,7 +247,6 @@ function createRuntime(): Runtime {
         status: 'succeeded',
         backtestId: 'backtest-old',
         backtestImportId: 'import-old',
-        internalBacktestExecutionId: null,
         startedAt: new Date('2026-05-02T00:00:00.000Z'),
         finishedAt: new Date('2026-05-02T00:00:00.000Z'),
         errorCode: null,
@@ -286,7 +261,6 @@ function createRuntime(): Runtime {
         status: 'succeeded',
         backtestId: 'backtest-1',
         backtestImportId: null,
-        internalBacktestExecutionId: 'internal-1',
         startedAt: new Date('2026-05-03T00:00:00.000Z'),
         finishedAt: new Date('2026-05-03T00:00:00.000Z'),
         errorCode: null,
@@ -336,13 +310,11 @@ function createRuntime(): Runtime {
         updatedAt: new Date('2026-05-02T00:00:00.000Z'),
       }],
     ]),
-    internalExecutions: new Map(),
     aiJobs: new Map(),
     aiSummaries: new Map(),
     nextApplicationId: 2,
     nextBacktestId: 2,
     nextBacktestImportId: 2,
-    nextInternalExecutionId: 2,
     nextRunId: 2,
     simulateReportLinkRace: null,
   };
@@ -417,11 +389,9 @@ vi.mock('../src/db', () => {
         runs: runtime.runs.map((run) => ({ ...run })),
         backtests: new Map([...runtime.backtests.entries()].map(([key, value]) => [key, { ...value }])),
         backtestImports: new Map([...runtime.backtestImports.entries()].map(([key, value]) => [key, { ...value }])),
-        internalExecutions: new Map([...runtime.internalExecutions.entries()].map(([key, value]) => [key, { ...value }])),
         nextApplicationId: runtime.nextApplicationId,
         nextBacktestId: runtime.nextBacktestId,
         nextBacktestImportId: runtime.nextBacktestImportId,
-        nextInternalExecutionId: runtime.nextInternalExecutionId,
         nextRunId: runtime.nextRunId,
         simulateReportLinkRace: runtime.simulateReportLinkRace,
       };
@@ -433,11 +403,9 @@ vi.mock('../src/db', () => {
         runtime.runs = snapshot.runs;
         runtime.backtests = snapshot.backtests;
         runtime.backtestImports = snapshot.backtestImports;
-        runtime.internalExecutions = snapshot.internalExecutions;
         runtime.nextApplicationId = snapshot.nextApplicationId;
         runtime.nextBacktestId = snapshot.nextBacktestId;
         runtime.nextBacktestImportId = snapshot.nextBacktestImportId;
-        runtime.nextInternalExecutionId = snapshot.nextInternalExecutionId;
         runtime.nextRunId = snapshot.nextRunId;
         runtime.simulateReportLinkRace = snapshot.simulateReportLinkRace;
         if (race) {
@@ -656,41 +624,6 @@ vi.mock('../src/db', () => {
         return aiSummary;
       },
     },
-    internalBacktestExecution: {
-      findUnique: async ({ where }: any) => runtime.internalExecutions.get(where.id) ?? null,
-      create: async ({ data }: any) => {
-        const now = new Date('2026-05-06T00:00:00.000Z');
-        const execution: InternalExecutionRow = {
-          id: `internal-created-${runtime.nextInternalExecutionId++}`,
-          strategyRuleVersionId: data.strategyRuleVersionId,
-          status: data.status ?? 'queued',
-          requestedAt: now,
-          startedAt: data.startedAt ?? null,
-          finishedAt: data.finishedAt ?? null,
-          inputSnapshotJson: data.inputSnapshotJson ?? {},
-          resultSummaryJson: data.resultSummaryJson ?? null,
-          artifactPointerJson: data.artifactPointerJson ?? null,
-          errorCode: data.errorCode ?? null,
-          errorMessage: data.errorMessage ?? null,
-          engineVersion: data.engineVersion ?? 'ibtx-v0',
-          createdAt: now,
-          updatedAt: now,
-        };
-        runtime.internalExecutions.set(execution.id, execution);
-        return execution;
-      },
-      update: async ({ where, data }: any) => {
-        const execution = runtime.internalExecutions.get(where.id);
-        if (!execution) throw new Error(`internal_execution_not_found:${where.id}`);
-        const updated = {
-          ...execution,
-          ...data,
-          updatedAt: new Date('2026-05-06T00:01:00.000Z'),
-        };
-        runtime.internalExecutions.set(updated.id, updated);
-        return updated;
-      },
-    },
     symbolStrategyApplicationRun: {
       count: async ({ where }: any) => {
         return runtime.runs.filter((run) => {
@@ -715,9 +648,6 @@ vi.mock('../src/db', () => {
           if (where?.applicationId && run.applicationId !== where.applicationId) return false;
           if (where?.runType && run.runType !== where.runType) return false;
           if ('backtestId' in (where ?? {}) && run.backtestId !== where.backtestId) return false;
-          if (where?.internalBacktestExecutionId && run.internalBacktestExecutionId !== where.internalBacktestExecutionId) {
-            return false;
-          }
           return true;
         }) ?? null;
       },
@@ -763,9 +693,6 @@ vi.mock('../src/db', () => {
                   }
                 : null,
               backtestImport: run.backtestImportId ? runtime.backtestImports.get(run.backtestImportId) ?? null : null,
-              internalBacktestExecution: run.internalBacktestExecutionId
-                ? runtime.internalExecutions.get(run.internalBacktestExecutionId) ?? null
-                : null,
             };
           });
       },
@@ -778,7 +705,6 @@ vi.mock('../src/db', () => {
           status: data.status,
           backtestId: data.backtestId ?? null,
           backtestImportId: data.backtestImportId ?? null,
-          internalBacktestExecutionId: data.internalBacktestExecutionId ?? null,
           startedAt: data.startedAt ?? null,
           finishedAt: data.finishedAt ?? null,
           errorCode: data.errorCode ?? null,
@@ -855,10 +781,6 @@ vi.mock('../src/ai/home-ai-service', () => ({
   },
 }));
 
-vi.mock('../src/queue/internal-backtests', () => ({
-  enqueueInternalBacktestExecution: enqueueInternalBacktestExecutionMock,
-}));
-
 async function createApp() {
   const app = Fastify({ logger: false });
   app.setErrorHandler(errorHandler);
@@ -877,8 +799,6 @@ async function waitForBackgroundJobs() {
 describe('symbol strategy applications route', () => {
   beforeEach(() => {
     runtime = createRuntime();
-    enqueueInternalBacktestExecutionMock.mockReset();
-    enqueueInternalBacktestExecutionMock.mockResolvedValue({ id: 'ibtx-job-1' });
   });
 
   it('returns empty active applications for a symbol', async () => {
@@ -922,7 +842,6 @@ describe('symbol strategy applications route', () => {
       status: 'succeeded',
       backtest_id: 'backtest-1',
       backtest_import_id: null,
-      internal_backtest_execution_id: 'internal-1',
     });
     expect(application.latest_backtest_report).toMatchObject({
       id: 'backtest-1',
@@ -1248,7 +1167,6 @@ describe('symbol strategy applications route', () => {
         status: 'succeeded',
         backtestId: 'backtest-csv-fallback',
         backtestImportId: 'import-old',
-        internalBacktestExecutionId: null,
         startedAt: new Date('2026-05-04T00:00:00.000Z'),
         finishedAt: new Date('2026-05-04T00:00:00.000Z'),
         errorCode: null,
@@ -1263,7 +1181,6 @@ describe('symbol strategy applications route', () => {
         status: 'queued',
         backtestId: null,
         backtestImportId: null,
-        internalBacktestExecutionId: 'internal-no-report',
         startedAt: null,
         finishedAt: null,
         errorCode: null,
@@ -1285,7 +1202,6 @@ describe('symbol strategy applications route', () => {
       id: 'run-internal-no-report',
       run_type: 'internal_backtest',
       backtest_id: null,
-      internal_backtest_execution_id: 'internal-no-report',
     });
     expect(symbolApplication.latest_backtest_report).toBeNull();
     expect(symbolApplication.latest_reports_by_source).toMatchObject({
@@ -1307,7 +1223,6 @@ describe('symbol strategy applications route', () => {
       id: 'run-internal-no-report',
       run_type: 'internal_backtest',
       backtest_id: null,
-      internal_backtest_execution_id: 'internal-no-report',
     });
     expect(application.latest_backtest_report).toMatchObject({
       id: 'backtest-csv-fallback',
@@ -1763,22 +1678,6 @@ describe('symbol strategy applications route', () => {
   });
 
   it('lists application-specific run history with linked summaries and any-run filters', async () => {
-    runtime.internalExecutions.set('internal-1', {
-      id: 'internal-1',
-      strategyRuleVersionId: 'version-1',
-      status: 'succeeded',
-      requestedAt: new Date('2026-05-03T00:00:00.000Z'),
-      startedAt: new Date('2026-05-03T00:01:00.000Z'),
-      finishedAt: new Date('2026-05-03T00:10:00.000Z'),
-      inputSnapshotJson: {},
-      resultSummaryJson: null,
-      artifactPointerJson: null,
-      errorCode: null,
-      errorMessage: null,
-      engineVersion: 'ibtx-v0',
-      createdAt: new Date('2026-05-03T00:00:00.000Z'),
-      updatedAt: new Date('2026-05-03T00:10:00.000Z'),
-    });
     const app = await createApp();
 
     const res = await app.inject({
@@ -1801,11 +1700,6 @@ describe('symbol strategy applications route', () => {
       status: 'succeeded',
       linked_backtest: { id: 'backtest-1' },
       linked_backtest_import: null,
-      linked_internal_backtest_execution: {
-        id: 'internal-1',
-        status: 'succeeded',
-        engine_version: 'ibtx-v0',
-      },
     });
 
     const csvRes = await app.inject({
@@ -1823,7 +1717,6 @@ describe('symbol strategy applications route', () => {
         file_name: 'old.csv',
         parse_status: 'parsed',
       },
-      linked_internal_backtest_execution: null,
     });
 
     await app.close();
@@ -1859,22 +1752,6 @@ describe('symbol strategy applications route', () => {
         },
       },
     });
-    runtime.internalExecutions.set('internal-1', {
-      id: 'internal-1',
-      strategyRuleVersionId: 'version-1',
-      status: 'succeeded',
-      requestedAt: new Date('2026-05-03T00:00:00.000Z'),
-      startedAt: new Date('2026-05-03T00:01:00.000Z'),
-      finishedAt: new Date('2026-05-03T00:10:00.000Z'),
-      inputSnapshotJson: {},
-      resultSummaryJson: null,
-      artifactPointerJson: null,
-      errorCode: null,
-      errorMessage: null,
-      engineVersion: 'ibtx-v0',
-      createdAt: new Date('2026-05-03T00:00:00.000Z'),
-      updatedAt: new Date('2026-05-03T00:10:00.000Z'),
-    });
     const app = await createApp();
 
     const res = await app.inject({
@@ -1895,7 +1772,6 @@ describe('symbol strategy applications route', () => {
       report_origin: 'internal_backtest',
       importless_report: true,
       linked_run: { id: 'run-latest', run_type: 'internal_backtest' },
-      linked_internal_backtest_execution: { id: 'internal-1' },
       metrics: {
         period_from: '2026-03-01',
         trade_count: 4,
@@ -1979,7 +1855,6 @@ describe('symbol strategy applications route', () => {
     expect(res.json().data.run).toMatchObject({
       run_type: 'csv_import',
       status: 'succeeded',
-      internal_backtest_execution_id: null,
     });
     expect(res.json().data.backtest).toMatchObject({
       status: 'imported',
@@ -2112,61 +1987,4 @@ describe('symbol strategy applications route', () => {
     await app.close();
   });
 
-  it('returns 410 when starting an application-origin internal backtest', async () => {
-    const initialInternalExecutionCount = runtime.internalExecutions.size;
-    const initialRunCount = runtime.runs.length;
-    const app = await createApp();
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests',
-      payload: {
-        data_range: { from: '2025-01-01', to: '2026-01-01' },
-        engine_config: { summary_mode: 'engine_estimated' },
-      },
-    });
-
-    expect(res.statusCode).toBe(410);
-    expect(res.json().error).toMatchObject({
-      code: 'INTERNAL_BACKTEST_DEPRECATED',
-      message: 'internal backtest application flow is deprecated. Use TradingView validation and CSV import.',
-      details: {
-        replacement_flow: 'tradingview_csv_import',
-        stage: 'internal_backtest_stage_2b',
-      },
-    });
-    expect(enqueueInternalBacktestExecutionMock).not.toHaveBeenCalled();
-    expect(runtime.internalExecutions.size).toBe(initialInternalExecutionCount);
-    expect(runtime.runs).toHaveLength(initialRunCount);
-
-    await app.close();
-  });
-
-  it('returns 410 when converting an internal backtest execution to a report', async () => {
-    const initialBacktestCount = runtime.backtests.size;
-    const initialAiJobCount = runtime.aiJobs.size;
-    const app = await createApp();
-
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/symbol-strategy-applications/app-1/internal-backtests/internal-1/report',
-      payload: {
-        title: 'legacy internal report',
-      },
-    });
-
-    expect(res.statusCode).toBe(410);
-    expect(res.json().error).toMatchObject({
-      code: 'INTERNAL_BACKTEST_DEPRECATED',
-      message: 'internal backtest application flow is deprecated. Use TradingView validation and CSV import.',
-      details: {
-        replacement_flow: 'tradingview_csv_import',
-        stage: 'internal_backtest_stage_2b',
-      },
-    });
-    expect(runtime.backtests.size).toBe(initialBacktestCount);
-    expect(runtime.aiJobs.size).toBe(initialAiJobCount);
-
-    await app.close();
-  });
 });

@@ -459,7 +459,6 @@ model StrategyRuleVersion {
   pineScripts PineScript[]
   pineRevisionInputs PineRevisionInput[]
   pineGenerationJobs PineGenerationJob[]
-  internalBacktestExecutions InternalBacktestExecution[]
   symbolStrategyApplications SymbolStrategyApplication[]
 }
 
@@ -668,38 +667,6 @@ model BacktestComparison {
   @@map("backtest_comparisons")
 }
 
-enum InternalBacktestExecutionStatus {
-  queued
-  running
-  succeeded
-  failed
-  canceled
-}
-
-model InternalBacktestExecution {
-  id                    String                          @id @default(uuid())
-  strategyRuleVersionId String
-  strategyRuleVersion   StrategyRuleVersion             @relation(fields: [strategyRuleVersionId], references: [id])
-  status                InternalBacktestExecutionStatus @default(queued)
-  requestedAt           DateTime                        @default(now())
-  startedAt             DateTime?
-  finishedAt            DateTime?
-  inputSnapshotJson     Json
-  resultSummaryJson     Json?
-  artifactPointerJson   Json?
-  errorCode             String?
-  errorMessage          String?
-  engineVersion         String                          @default("ibtx-v0")
-  createdAt             DateTime                        @default(now())
-  updatedAt             DateTime                        @updatedAt
-  artifacts             InternalBacktestExecutionArtifact[]
-  symbolStrategyApplicationRuns SymbolStrategyApplicationRun[]
-
-  @@index([strategyRuleVersionId, requestedAt])
-  @@index([status, requestedAt])
-  @@map("internal_backtest_executions")
-}
-
 model SymbolStrategyApplication {
   id                    String              @id @default(uuid())
   symbolId              String
@@ -733,8 +700,6 @@ model SymbolStrategyApplicationRun {
   backtest                    Backtest?                 @relation(fields: [backtestId], references: [id], onDelete: SetNull)
   backtestImportId            String?
   backtestImport              BacktestImport?           @relation(fields: [backtestImportId], references: [id], onDelete: SetNull)
-  internalBacktestExecutionId String?
-  internalBacktestExecution   InternalBacktestExecution? @relation(fields: [internalBacktestExecutionId], references: [id], onDelete: SetNull)
   startedAt                   DateTime?
   finishedAt                  DateTime?
   errorCode                   String?
@@ -747,71 +712,5 @@ model SymbolStrategyApplicationRun {
   @@index([runType, status])
   @@index([backtestId])
   @@index([backtestImportId])
-  @@index([internalBacktestExecutionId])
   @@map("symbol_strategy_application_runs")
-}
-
-model InternalBacktestExecutionArtifact {
-  id          String                    @id @default(uuid())
-  executionId String                    @map("execution_id")
-  execution   InternalBacktestExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
-  kind        String
-  path        String
-  payloadJson Json                      @map("payload_json")
-  createdAt   DateTime                  @default(now()) @map("created_at")
-  updatedAt   DateTime                  @updatedAt @map("updated_at")
-
-  @@unique([executionId, kind])
-  @@unique([path])
-  @@index([executionId, createdAt])
-  @@map("internal_backtest_execution_artifacts")
-}
-
-model InternalBacktestDataSourceFailureEvent {
-  id                 String   @id @default(uuid())
-  executionId        String?  @map("execution_id")
-  providerName       String?  @map("provider_name")
-  internalReasonCode String?  @map("internal_reason_code")
-  symbol             String?
-  market             String?
-  timeframe          String?
-  rangeFrom          String?  @map("range_from")
-  rangeTo            String?  @map("range_to")
-  elapsedMs          Int?     @map("elapsed_ms")
-  httpStatus         Int?     @map("http_status")
-  endpointKind       String?  @map("endpoint_kind")
-  occurredAt         DateTime @default(now()) @map("occurred_at")
-  createdAt          DateTime @default(now()) @map("created_at")
-
-  @@index([occurredAt])
-  @@index([internalReasonCode])
-  @@index([providerName])
-  @@map("internal_backtest_data_source_failure_events")
-}
-
-model InternalBacktestDataSourceRetryOutcomeEvent {
-  id                 String   @id @default(uuid())
-  executionId        String?  @map("execution_id")
-  providerName       String?  @map("provider_name")
-  internalReasonCode String?  @map("internal_reason_code")
-  symbol             String?
-  market             String?
-  timeframe          String?
-  rangeFrom          String?  @map("range_from")
-  rangeTo            String?  @map("range_to")
-  elapsedMs          Int?     @map("elapsed_ms")
-  httpStatus         Int?     @map("http_status")
-  endpointKind       String?  @map("endpoint_kind")
-  retryTarget        Boolean  @default(false) @map("retry_target")
-  retryAttempted     Boolean  @default(false) @map("retry_attempted")
-  retryAttempts      Int      @default(1) @map("retry_attempts")
-  outcome            String
-  occurredAt         DateTime @default(now()) @map("occurred_at")
-  createdAt          DateTime @default(now()) @map("created_at")
-
-  @@index([occurredAt])
-  @@index([internalReasonCode])
-  @@index([providerName])
-  @@index([outcome])
-  @@map("internal_backtest_data_source_retry_outcome_events")
 }

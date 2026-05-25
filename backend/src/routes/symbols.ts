@@ -268,7 +268,6 @@ function toSymbolApplicationView(application: any, latestReportRuns?: LatestAppl
           updated_at: latestRun.updatedAt,
           backtest_id: latestRun.backtestId,
           backtest_import_id: latestRun.backtestImportId,
-          internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
         }
       : null,
     latest_backtest_report: latestBacktest

@@ -1,6 +1,6 @@
 # 北極星 API 現行仕様
 
-更新日: 2026-05-25
+更新日: 2026-05-26
 分類: 仕様書
 
 ## 1. 目的
@@ -56,44 +56,24 @@
 - `POST /api/symbol-strategy-applications/:applicationId/csv-import`
   - active application に対して CSV import run / Backtest / BacktestImport を作成する。
   - parse success 時は Backtest AI summary auto enqueue の対象になる。
-- `POST /api/symbol-strategy-applications/:applicationId/internal-backtests`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-  - 新規実行は TradingView 検証と CSV import を主導線にする。
-- `POST /api/symbol-strategy-applications/:applicationId/internal-backtests/:executionId/report`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-  - 既存 internal report は read-only legacy として表示維持するが、新規 conversion は行わない。
+- application 起点 internal backtest start / report conversion endpoint は Stage 2C cleanup で削除済み。
+- 新規検証結果取得は TradingView 検証と CSV import を主導線にする。
 
 ## 6. internal backtest
 
-Stage 2B internal backtest backend deactivation:
+Stage 2C internal backtest backend cleanup:
 
-- Stage 2B では `/api/internal-backtests` 系 route と application 起点の internal start / report conversion endpoint を HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` に固定する。
-- 410 response の details は `replacement_flow=tradingview_csv_import` と `stage=internal_backtest_stage_2b` に限定する。
-- internal backtest worker startup は停止する。`queue/internal-backtests.ts` と `internal-backtests/*` は Stage 2B では削除しない。
-- Prisma / DB / migration は変更せず、historical internal report は read-only legacy として表示維持する。
-- Stage 2C では route / service / queue / worker / tests の完全削除と、Prisma model / table / column / relation の drop を data audit 後に判断する。
-- API 選択肢は keep / 410 Gone / unregister 404 / complete delete。Stage 2B は 410 Gone、Stage 2C は complete delete を候補にする。
-- DB / Prisma 選択肢は keep / read-only legacy / drop。Stage 2B は keep、Stage 2C は data audit 後に drop 可否を判断する。
-- `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規 conversion は Stage 2B で閉じる。
-- `SymbolStrategyApplicationRun.internalBacktestExecutionId` を drop すると historical relation を失うため、`Backtest.strategySnapshotJson` の `result_summary` / `artifact_pointer` / `internal_backtest_execution_id` snapshot だけで十分かを Stage 2C 前に確認する。
-
-- `GET /api/internal-backtests/observability/data-source-unavailable-summary`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-- `POST /api/internal-backtests/executions`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-- `GET /api/internal-backtests/executions/:executionId`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-- `GET /api/internal-backtests/executions/:executionId/result`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-- `GET /api/internal-backtests/executions/:executionId/artifacts/engine_actual/trades-and-equity`
-  - Stage 2B 以降は HTTP 410 / `INTERNAL_BACKTEST_DEPRECATED` を返す。
-  - 既存 internal report の artifact pointer 表示は BacktestDetail の read-only legacy 表示として維持する。
+- `/api/internal-backtests/*` route は Stage 2C cleanup で削除済み。現行 API contract には含めない。
+- application 起点 internal start / report conversion endpoint も削除済み。
+- internal backtest execution / artifact / data source event tables、worker、queue、service、market data provider、audit command は削除済み。
+- `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規作成 / conversion は行わない。
+- historical internal report は `Backtest.strategySnapshotJson` の `result_summary` / `artifact_pointer` / `internal_backtest_execution_id` snapshot だけで説明する。DB execution relation は参照しない。
 
 ## 7. AI summary
 
 - Backtest AI summary generation は既存 generate endpoint / button を維持する。
 - CSV import parsed report 作成直後は、最小 auto enqueue 対象。
-- internal report conversion endpoint は Stage 2B で 410 Gone にしたため、internal conversion auto enqueue は新規には発生しない。generic Backtest AI summary manual generation と既存 AI summary 表示は維持する。
+- internal report conversion endpoint は削除済みのため、internal conversion auto enqueue は新規には発生しない。generic Backtest AI summary manual generation と既存 AI summary 表示は維持する。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
 ## 7-0. StrategyVersion Pine generation

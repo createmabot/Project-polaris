@@ -1,15 +1,15 @@
 # 北極星 artifact metadata / retention 運用
 
-更新日: 2026-05-15
+更新日: 2026-05-26
 分類: 運用ドキュメント
 
 ## 1. 目的
 
 本資料は、artifact pointer metadata、retention policy、file access boundary の運用確認観点をまとめる。仕様正本は `docs/仕様書/09_AI_summary_artifact仕様.md`、Backtest report との関係は `docs/仕様書/08_Backtest_Report仕様.md` を参照する。
 
-設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さない。artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定し、新規 download / diff / retention job は未実装として扱う。
+設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さない。Stage 2C cleanup 後は internal backtest artifact read endpoint / table は削除済みであり、historical report の artifact pointer は snapshot metadata としてのみ扱う。
 
-Internal backtest backend deprecation Stage 2A では、artifact file access endpoint は互換維持のまま残す。Stage 2B で `/api/internal-backtests` を 410 Gone または unregister する場合、file access も新規利用ではなく historical internal report の read-only metadata 確認へ縮退する。
+Internal backtest backend deprecation Stage 2C では、artifact file access endpoint も削除済みである。新規利用ではなく historical internal report の read-only metadata 確認へ縮退する。
 
 ## 2. 現行運用の範囲
 
@@ -19,7 +19,6 @@ Internal backtest backend deprecation Stage 2A では、artifact file access end
 - BacktestDetail で raw artifact JSON を保存済み pointer metadata として確認する。raw JSON でも path 系値は非表示または sanitized 表示として扱う。
 - artifact pointer がない場合は absence explanation として扱う。
 - ApplicationDetail / SymbolDetail からは BacktestDetail に遷移して詳細を確認する。
-- internal_backtests の既存 `engine_actual` trades / equity JSON read endpoint は、execution ID と既知 route に限定して確認する。
 
 現行で行わないこと:
 
@@ -76,17 +75,15 @@ UI / docs / PR / log に残さないもの:
 
 ## 6. file access boundary
 
-現行の file access は、internal_backtests の既存 `engine_actual` trades / equity JSON read endpoint に限定する。
+現行の file access は存在しない。BacktestDetail は snapshot に残った artifact pointer metadata の summary / raw JSON 表示に限定する。
 
 運用境界:
 
-- execution ID を入口にする。
-- succeeded execution と stored artifact existence を前提に確認する。
-- artifact path suffix は whitelist 化された既知 suffix のみ扱う。
-- UI link は execution ID と既知 route から導く。
+- execution / artifact table や internal route を前提にしない。
+- stored artifact file existence を保証しない。
+- artifact path suffix から file access link を作らない。
 - frontend へ raw path、local path、absolute path を渡さない。
 - BacktestDetail には download 導線を追加せず、metadata 表示に留める。
-- 詳細 artifact file access は StrategyVersionDetail / existing route の範囲に限定する。
 
 避けること:
 

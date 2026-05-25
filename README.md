@@ -216,82 +216,13 @@ pnpm run down
   - inline comparison
   - saved pairwise comparison
 
-### 北極星内バックテストエンジン（最小実装 + 段階固定）
-- 次フェーズ着手前の最小責務のみ固定済み:
-  - execution job（状態遷移の正本）
-  - execution input snapshot（実行条件固定）
-  - execution result summary（主要指標）
-  - execution artifact pointer（詳細結果参照）
-- 最小 API は `start / status / result` を基準とし、状態遷移は `queued -> running -> succeeded|failed|canceled` を正とする
-- 実装土台（最小）:
-  - `POST /api/internal-backtests/executions`（`queued` で job 作成 + queue enqueue）
-  - `GET /api/internal-backtests/executions/:executionId`（status 取得）
-  - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` 時のみ結果取得）
-  - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`（内部運用向け: reason code 別件数と直近失敗 execution を確認）
-    - `retry_effect` で selective retry 効果（retry 対象件数 / retry 実施件数 / retry 後成功件数 / retry 後失敗件数）も確認可能
-  - `POST` では execution input snapshot の最小検証を実施（`strategy_rule_version_id` と `data_range` は必須、`market/timeframe` は optional）
-  - `market/timeframe` は request 値を優先し、未指定時は strategy version 側の値で補完
-  - worker 骨組みで `queued -> running -> succeeded|failed` を最小遷移
-  - 成功時に `resultSummaryJson` / `artifactPointerJson` を最小保存（`schema_version: \"1.0\"` の summary）
-  - `artifactPointerJson` は `type` / `execution_id` / `path` の最小 shape を採用
-  - worker は status 遷移と永続化に責務を限定し、実行処理本体は service/adapter 境界へ分離
-- 実データ接続（最小）:
-  - `engine_estimated` は日足 OHLCV（`JP_STOCK` / `D`）の最小 provider 経路を利用
-  - provider 応答は adapter 層で normalize し、再現性情報として `data_source_snapshot`（`source_kind` / `market` / `timeframe` / `from` / `to` / `fetched_at` / `data_revision` / `bar_count`）を保存
-  - provider failure / unsupported は `DATA_SOURCE_UNAVAILABLE` に統一
-  - provider fetch には selective retry（最小）を導入:
-    - retry対象: `provider_timeout` / `provider_network_error` / `provider_http_error(5xx)`
-    - retry非対象: `provider_parse_error` / `provider_invalid_response` / `provider_not_configured` / `provider_unsupported_target` / `provider_http_error(4xx)`
-    - `provider_http_error(429)` は現時点観測（24h/7d）で改善根拠が不足するため非対象維持
-    - 追加試行は 1 回のみ（最大 2 試行）、最終失敗時の outward 契約は従来どおり `DATA_SOURCE_UNAVAILABLE`
-  - 内部観測性として provider failure reason を構造化ログ + DB永続化イベントで保持し、summary API は DB 集計を返す（consumer 向け契約は変更しない）
-  - `INTERNAL_BACKTEST_MARKET_DATA_PROVIDER` 未指定時は `test=stub`, `development/production=yahoo`
-  - `DATA_SOURCE_UNAVAILABLE` 運用確認は summary API（DB集計）を正本として扱う
-- 役割分担は維持:
-  - TradingView: 表示 / 監視 / 一次検証
-  - 北極星: 自然言語変換 / 履歴保存 / レポート / 内製実行結果管理
-
-#### internal-backtests provider failure 最小 runbook
-- 参照 endpoint:
-  - `GET /api/internal-backtests/observability/data-source-unavailable-summary?window=24h|7d`
-  - `GET /api/internal-backtests/executions/:executionId`
-  - `GET /api/internal-backtests/executions/:executionId/result`（`succeeded` のみ）
-- `window` 使い分け:
-  - `24h`: 当日障害の一次切り分け
-  - `7d`: 傾向確認（特定 reason の反復有無）
-- 読み順:
-  1. `total_failures` で発生規模を確認
-  2. `by_reason[]` で主要 reason（件数上位）を確認
-  3. `recent_failures[]` で直近 `execution_id` を取得
-  4. `retry_effect` で selective retry 効果を確認（`retried_and_succeeded_count` と `retried_and_failed_count` の差分を最小判断）
-  5. `GET /executions/:executionId` で `status/error_code` を確認
-  6. `status=failed` かつ `error_code=DATA_SOURCE_UNAVAILABLE` を確認後、`symbol/market/timeframe/from/to/http_status/endpoint_kind` で原因切り分け
-- reason code 別の最小確認観点:
-  - `provider_http_error`: `http_status` と `endpoint_kind` を先に確認
-  - `provider_timeout`: 同時間帯で連続発生しているか確認
-  - `provider_network_error`: 一時的通信障害かを `recent_failures` で時系列確認
-  - `provider_invalid_response`: provider 応答 shape 崩れの可能性を確認
-  - `provider_parse_error`: parser 前提と応答フォーマット差分を確認
-  - `provider_not_configured`: 環境変数/起動設定を確認
-  - `provider_unsupported_target`: `execution_target` と `market/timeframe` の組み合わせを確認
-- 契約上の注意:
-  - consumer 向け outward error code は常に `DATA_SOURCE_UNAVAILABLE` のまま
-  - internal reason code は運用切り分け専用（UI/public API 契約は変更しない）
-
-#### internal-backtests observability 週次確認（最小）
-- 毎週確認する項目:
-  - `total_failures`
-  - `by_reason`
-  - `retry_effect`（`retry_targeted_count`, `retry_attempted_count`, `retried_and_succeeded_count`, `retried_and_failed_count`, `not_retried_failed_count`）
-  - `recent_failures`
-- `window` の使い分け:
-  - `24h`: 直近状態の一次判断
-  - `7d`: 反復傾向の判断
-- `provider_http_error(429)` の再判定条件（全条件一致時のみ検討）:
-  1. `window=7d` で 429 件数 `>= 5`
-  2. 429 件数が `provider_http_error` 全体の `>= 20%`
-  3. 429 発生日が週内 `>= 3日`
-- 上記未達時は 429 非対象を維持し、週次レビューへ理由を記録する。
+### internal backtest legacy cleanup
+- internal backtest は Pine strategy を実行するものではなかったため、検証結果取得の主導線から外した。
+- PR #433 で UI の新規実行導線を閉じ、PR #436 で backend route を 410 Gone 化し、Stage 2C で legacy execution / artifact / worker / service / audit tooling を削除した。
+- 現行の検証主導線は TradingView で Pine strategy を検証し、CSV import で Backtest report を取り込む流れである。
+- historical `execution_source=internal_backtest` report は削除せず、`Backtest.strategySnapshotJson` の `internal_backtest_execution_id` / `result_summary` / `artifact_pointer` snapshot を read-only legacy metadata として表示する。
+- internal backtest execution / artifact tables、worker、route、market data provider、audit command は現行 runtime には存在しない。
+- Backtest AI summary 汎用 flow、CSV import auto enqueue、comparison、Pine generation、Strategy proposal は維持する。
 
 ### ルール version 再閲覧（MVP最小）
 - API:
@@ -680,7 +611,7 @@ pnpm exec prisma db seed
 - AI summary / artifact operations の運用境界は `docs/53.北極星 P3現在地と残課題整理（P3）.md` を正本とする。
 - CSV import report と internal backtest report では AI summary input と artifact の扱いが異なる。
 - artifact metadata / retention / file access boundary の現行仕様は `docs/仕様書/09_AI_summary_artifact仕様.md`、運用確認は `docs/運用ドキュメント/09_artifact_metadata_retention運用.md` を参照する。
-- artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定し、新規 download / signed URL / file token は後続判断とする。
+- Stage 2C cleanup 後、internal backtest artifact read endpoint / table は存在しない。historical internal report の artifact pointer は Backtest snapshot metadata として read-only 表示する。
 - artifact download / diff、AI summary 同士の比較は後続判断とする。
 
 ### AI summary / artifact operations completion

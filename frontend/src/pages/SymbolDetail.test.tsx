@@ -194,7 +194,6 @@ const symbolApplicationsFixture = {
         updated_at: '2026-05-04T00:00:00.000Z',
         backtest_id: 'backtest_1',
         backtest_import_id: 'import_1',
-        internal_backtest_execution_id: null,
       },
       latest_backtest_report: {
         id: 'backtest_1',
@@ -256,7 +255,6 @@ const symbolApplicationsFixture = {
         updated_at: '2026-05-06T00:00:00.000Z',
         backtest_id: null,
         backtest_import_id: null,
-        internal_backtest_execution_id: 'execution_1',
       },
       latest_backtest_report: null,
       latest_reports_by_source: {

@@ -24,20 +24,6 @@ type ApplicationHistoryQuery = {
   with_metrics?: unknown;
 };
 
-const INTERNAL_BACKTEST_DEPRECATED_DETAILS = {
-  replacement_flow: 'tradingview_csv_import',
-  stage: 'internal_backtest_stage_2b',
-} as const;
-
-function internalBacktestDeprecatedError() {
-  return new AppError(
-    410,
-    'INTERNAL_BACKTEST_DEPRECATED',
-    'internal backtest application flow is deprecated. Use TradingView validation and CSV import.',
-    INTERNAL_BACKTEST_DEPRECATED_DETAILS,
-  );
-}
-
 function normalizeRequiredString(value: unknown, fieldName: string): string {
   if (typeof value !== 'string' || value.trim().length === 0) {
     throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} is required`);
@@ -145,7 +131,6 @@ function toCsvImportResponse(payload: {
     status: string;
     backtestId: string | null;
     backtestImportId: string | null;
-    internalBacktestExecutionId: string | null;
     createdAt: Date;
     updatedAt: Date;
   };
@@ -180,7 +165,6 @@ function toCsvImportResponse(payload: {
       status: payload.run.status,
       backtest_id: payload.run.backtestId,
       backtest_import_id: payload.run.backtestImportId,
-      internal_backtest_execution_id: payload.run.internalBacktestExecutionId,
       created_at: payload.run.createdAt,
       updated_at: payload.run.updatedAt,
     },
@@ -296,27 +280,6 @@ function toLinkedBacktestImport(backtestImport: {
   };
 }
 
-function toLinkedInternalExecution(execution: {
-  id: string;
-  status: string;
-  requestedAt: Date;
-  startedAt: Date | null;
-  finishedAt: Date | null;
-  engineVersion: string;
-  errorCode: string | null;
-} | null) {
-  if (!execution) return null;
-  return {
-    id: execution.id,
-    status: execution.status,
-    requested_at: execution.requestedAt,
-    started_at: execution.startedAt,
-    finished_at: execution.finishedAt,
-    engine_version: execution.engineVersion,
-    error_code: execution.errorCode,
-  };
-}
-
 function toApplicationHistoryRun(run: {
   id: string;
   runType: string;
@@ -329,7 +292,6 @@ function toApplicationHistoryRun(run: {
   updatedAt: Date;
   backtest: Parameters<typeof toLinkedBacktest>[0];
   backtestImport: Parameters<typeof toLinkedBacktestImport>[0];
-  internalBacktestExecution: Parameters<typeof toLinkedInternalExecution>[0];
 }) {
   return {
     id: run.id,
@@ -343,7 +305,6 @@ function toApplicationHistoryRun(run: {
     error_message: run.errorMessage,
     linked_backtest: toLinkedBacktest(run.backtest),
     linked_backtest_import: toLinkedBacktestImport(run.backtestImport),
-    linked_internal_backtest_execution: toLinkedInternalExecution(run.internalBacktestExecution),
   };
 }
 
@@ -435,7 +396,6 @@ function toApplicationReport(run: {
   backtestImport: {
     parsedSummaryJson: unknown;
   } | null;
-  internalBacktestExecution: Parameters<typeof toLinkedInternalExecution>[0];
 }, withMetrics: boolean) {
   if (!run.backtest) return null;
   const reportOrigin = run.runType === 'internal_backtest' ? 'internal_backtest' : 'csv_import';
@@ -458,7 +418,6 @@ function toApplicationReport(run: {
       started_at: run.startedAt,
       finished_at: run.finishedAt,
     },
-    linked_internal_backtest_execution: toLinkedInternalExecution(run.internalBacktestExecution),
     metrics: withMetrics ? buildReportMetricsSummary(run.backtest, run.backtestImport) : null,
     importless_report: run.runType === 'internal_backtest',
     backtest_detail_link: {
@@ -601,7 +560,6 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
         include: {
           backtest: true,
           backtestImport: true,
-          internalBacktestExecution: true,
         },
       }),
     ]);
@@ -680,7 +638,6 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
       include: {
         backtest: true,
         backtestImport: true,
-        internalBacktestExecution: true,
       },
     });
     const sortedRuns = allRuns
@@ -931,7 +888,6 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
           status: runStatus,
           backtestId: updatedBacktest.id,
           backtestImportId: backtestImport.id,
-          internalBacktestExecutionId: null,
           startedAt,
           finishedAt,
           errorCode: parseResult.ok ? null : 'CSV_PARSE_FAILED',
@@ -964,17 +920,4 @@ export async function symbolStrategyApplicationRoutes(fastify: FastifyInstance) 
     })));
   });
 
-  fastify.post('/:applicationId/internal-backtests', async (
-    _request: FastifyRequest,
-    _reply: FastifyReply,
-  ) => {
-    throw internalBacktestDeprecatedError();
-  });
-
-  fastify.post('/:applicationId/internal-backtests/:executionId/report', async (
-    _request: FastifyRequest,
-    _reply: FastifyReply,
-  ) => {
-    throw internalBacktestDeprecatedError();
-  });
 }

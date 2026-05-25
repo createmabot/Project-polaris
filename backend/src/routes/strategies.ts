@@ -89,7 +89,6 @@ function toStrategySymbolApplicationResponse(application: any) {
           status: latestRun.status,
           backtest_id: latestRun.backtestId,
           backtest_import_id: latestRun.backtestImportId,
-          internal_backtest_execution_id: latestRun.internalBacktestExecutionId,
           created_at: latestRun.createdAt,
           updated_at: latestRun.updatedAt,
         }

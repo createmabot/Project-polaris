@@ -306,7 +306,7 @@ export default function ApplicationDetail() {
                       <TextLink href={`/backtests/${run.linked_backtest.id}`}>{LABELS.openBacktest}</TextLink>
                     ) : null}
                   </div>
-                  <div className="mt-3 grid gap-2 md:grid-cols-3">
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
                     <Surface variant="nested">
                       <strong className="block text-slate-700">linked backtest</strong>
                       {run.linked_backtest ? (
@@ -325,18 +325,6 @@ export default function ApplicationDetail() {
                         <KeyValueList className="mt-2 gap-1">
                           <KeyValueRow label="file">{run.linked_backtest_import.file_name}</KeyValueRow>
                           <KeyValueRow label="parse"><StatusBadge status={run.linked_backtest_import.parse_status} className="px-2 py-0.5" /></KeyValueRow>
-                        </KeyValueList>
-                      ) : (
-                        <p className="mt-2">-</p>
-                      )}
-                    </Surface>
-                    <Surface variant="nested">
-                      <strong className="block text-slate-700">linked execution</strong>
-                      {run.linked_internal_backtest_execution ? (
-                        <KeyValueList className="mt-2 gap-1">
-                          <KeyValueRow label="execution_id"><code>{run.linked_internal_backtest_execution.id}</code></KeyValueRow>
-                          <KeyValueRow label="status"><StatusBadge status={run.linked_internal_backtest_execution.status} className="px-2 py-0.5" /></KeyValueRow>
-                          <KeyValueRow label="engine"><code>{run.linked_internal_backtest_execution.engine_version}</code></KeyValueRow>
                         </KeyValueList>
                       ) : (
                         <p className="mt-2">-</p>
