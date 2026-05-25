@@ -65,6 +65,18 @@
 
 ## 6. internal backtest
 
+Stage 2A internal backtest backend deprecation design:
+
+- Stage 2A は docs-only の廃止設計であり、backend route / worker / Prisma / DB / migration / tests は変更しない。
+- Stage 2B では `/api/internal-backtests` 系 route を 410 Gone にするか unregister して 404 にするかを決める。第一候補は、意図的な閉鎖を明示できる 410 Gone とする。
+- Stage 2B では application 起点の internal start / report conversion endpoint も 410 Gone または削除を判断する。第一候補は 410 Gone とし、historical internal report は read-only に維持する。
+- Stage 2B では internal backtest worker startup を止める候補を優先する。queued / running execution が残る場合は、運用で cancel / failed 扱いにするかを先に決める。
+- Stage 2C では route / service / queue / worker / tests の完全削除と、Prisma model / table / column / relation の drop を data audit 後に判断する。
+- API 選択肢は keep / 410 Gone / unregister 404 / complete delete。Stage 2B は 410 Gone、Stage 2C は complete delete を候補にする。
+- DB / Prisma 選択肢は keep / read-only legacy / drop。Stage 2B は keep、Stage 2C は data audit 後に drop 可否を判断する。
+- `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規 conversion は Stage 2B で閉じる候補にする。
+- `SymbolStrategyApplicationRun.internalBacktestExecutionId` を drop すると historical relation を失うため、`Backtest.strategySnapshotJson` の `result_summary` / `artifact_pointer` / `internal_backtest_execution_id` snapshot だけで十分かを Stage 2C 前に確認する。
+
 - `GET /api/internal-backtests/data-source-failures`
   - data source failure summary を返す。
 - `POST /api/internal-backtests/executions`
@@ -85,6 +97,7 @@
 
 - Backtest AI summary generation は既存 generate endpoint / button を維持する。
 - CSV import parsed report 作成直後と internal backtest report conversion 完了直後は、最小 auto enqueue 対象。
+- Stage 2B で internal report conversion endpoint を 410 Gone / delete する場合、internal conversion auto enqueue は新規には使われなくなる。generic Backtest AI summary manual generation と既存 AI summary 表示は維持する。
 - display-triggered enqueue、batch / scheduled enqueue、failed job auto retry は現時点では対象外。
 
 ## 7-0. StrategyVersion Pine generation

@@ -9,6 +9,8 @@
 
 設計 docs と UI visibility 整理は完了扱いである。現行運用では path 系 metadata を UI にそのまま出さない。artifact file access は既存 internal_backtests engine_actual trades / equity JSON read endpoint に限定し、新規 download / diff / retention job は未実装として扱う。
 
+Internal backtest backend deprecation Stage 2A では、artifact file access endpoint は互換維持のまま残す。Stage 2B で `/api/internal-backtests` を 410 Gone または unregister する場合、file access も新規利用ではなく historical internal report の read-only metadata 確認へ縮退する。
+
 ## 2. 現行運用の範囲
 
 現行で行うこと:
