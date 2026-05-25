@@ -20,6 +20,10 @@ type CalendarSymbol = {
   displayName: string | null;
 };
 
+function toSourceType(provider: InvestmentCalendarProvider): 'seed' | 'public_provider' {
+  return provider.name === 'stub' ? 'seed' : 'public_provider';
+}
+
 export function toCalendarEventView(row: any, scope?: 'symbol' | 'market') {
   const isMarket = !row.symbolId;
   return {
@@ -137,7 +141,7 @@ export async function refreshInvestmentCalendarEvents(
     const existing = await (prisma as any).investmentCalendarEvent.findUnique({
       where: {
         sourceType_externalId: {
-          sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+          sourceType: toSourceType(provider),
           externalId: event.externalId,
         },
       },
@@ -146,7 +150,7 @@ export async function refreshInvestmentCalendarEvents(
     await (prisma as any).investmentCalendarEvent.upsert({
       where: {
         sourceType_externalId: {
-          sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+          sourceType: toSourceType(provider),
           externalId: event.externalId,
         },
       },
@@ -174,7 +178,7 @@ export async function refreshInvestmentCalendarEvents(
         title: event.title,
         description: event.description ?? null,
         importance: event.importance,
-        sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+        sourceType: toSourceType(provider),
         sourceName: event.sourceName,
         sourceLabel: event.sourceLabel ?? null,
         sourceUrl: event.sourceUrl ?? null,
@@ -195,7 +199,7 @@ export async function refreshInvestmentCalendarEvents(
     failed_count: 0,
     from: input.from,
     to: input.to,
-    source: provider.name === 'public' ? 'public_provider' : 'stub',
+    source: provider.name === 'stub' ? 'stub' : 'public_provider',
     manual_only: true,
   };
 }

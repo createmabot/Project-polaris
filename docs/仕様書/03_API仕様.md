@@ -214,9 +214,9 @@ StrategyVersion Pine generation の market / timeframe:
 
 refresh failure は sanitized error に閉じる。raw external response、endpoint 実値、secret、stack trace は API response に出さない。
 
-現時点の refresh は provider boundary / stub provider / manual refresh flow までを正本とする。real public provider 接続は後続フェーズで source ごとに個別実装する。provider 接続方針は `docs/運用ドキュメント/13_Investment_calendar_provider調査.md` を参照する。
+`INVESTMENT_CALENDAR_PROVIDER=alpha_vantage` を設定した場合、Home の manual refresh は Alpha Vantage の無料 API 範囲を使い、market-level event を `source_type=public_provider` として保存できる。P1 では CPI / retail sales / unemployment / nonfarm payroll は発表済み data series の observation date として扱い、将来予定と誤認させないため `source_label` に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。Earnings calendar と日本株 symbol-level event は後続判断とする。
 
-後続 provider 実装でも、外部取得はユーザー操作による manual refresh 起点に限定する。scheduled job、crawler 常駐、notification、reminder、external calendar sync はこの API の責務に含めない。required test は fake / fixture provider を使い、real external provider / real web access を required check にしない。
+後続 provider 実装でも、外部取得はユーザー操作による manual refresh 起点に限定する。scheduled job、crawler 常駐、notification、reminder、external calendar sync はこの API の責務に含めない。required test は fake / fixture provider を使い、real Alpha Vantage / real external provider / real web access を required check にしない。
 
 `source_url` を返す場合も、raw payload や provider endpoint 実値は返さない。UI で link 化する場合は http / https の safe URL に限定する。
 

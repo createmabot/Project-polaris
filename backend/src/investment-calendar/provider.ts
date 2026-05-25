@@ -1,4 +1,5 @@
 import { AppError } from '../utils/response';
+import { AlphaVantageInvestmentCalendarProvider } from './alpha-vantage-provider';
 import {
   normalizeProviderEvent,
 } from './normalization';
@@ -24,6 +25,7 @@ function getCalendarFetchTimeoutMs() {
 }
 
 function getConfiguredProviderName(): InvestmentCalendarProviderName {
+  if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'alpha_vantage') return 'alpha_vantage';
   return process.env.INVESTMENT_CALENDAR_PROVIDER === 'public' ? 'public' : 'stub';
 }
 
@@ -133,6 +135,7 @@ export class PublicInvestmentCalendarProvider implements InvestmentCalendarProvi
 export function createInvestmentCalendarProvider(
   providerName: InvestmentCalendarProviderName = getConfiguredProviderName(),
 ): InvestmentCalendarProvider {
+  if (providerName === 'alpha_vantage') return new AlphaVantageInvestmentCalendarProvider();
   if (providerName === 'public') return new PublicInvestmentCalendarProvider();
   return new StubInvestmentCalendarProvider();
 }
