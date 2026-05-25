@@ -261,7 +261,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).not.toContain('内製バックテスト（最小）');
     expect(html).not.toContain('内製バックテストを開始');
     expect(html).not.toContain('/api/internal-backtests/executions');
-    expect(html).toContain('TradingView検証用バックテストを作成');
+    expect(html).not.toContain('TradingView 検証用バックテスト');
+    expect(html).not.toContain('TradingView検証用バックテストを作成');
+    expect(html).not.toContain('TradingViewでバックテストを実行し、その結果CSVを取り込むためのコンテナを作成します。');
     expect(html).toContain('Pine生成対象は JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）');
   });
 
