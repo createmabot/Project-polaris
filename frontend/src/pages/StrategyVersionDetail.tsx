@@ -11,6 +11,7 @@ import { TextArea } from '../components/ui/FormFields';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
+import { buildPineGenerationJobFailureMessage } from '../utils/pineGenerationJob';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
@@ -798,7 +799,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setPineGenerationJob(response.job);
       const completedJob = await pollPineGenerationJob(response.job.id);
       if (completedJob.status !== 'succeeded') {
-        throw new Error(completedJob.error?.message ?? 'Pine の再生成に失敗しました。');
+        throw new Error(buildPineGenerationJobFailureMessage(completedJob.error, 'Pine の再生成に失敗しました。'));
       }
       await mutate();
       await mutatePine();
@@ -839,7 +840,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setPineGenerationJob(response.job);
       const completedJob = await pollPineGenerationJob(response.job.id);
       if (completedJob.status !== 'succeeded') {
-        throw new Error(completedJob.error?.message ?? 'Pine の修正再生成に失敗しました。');
+        throw new Error(buildPineGenerationJobFailureMessage(completedJob.error, 'Pine の修正再生成に失敗しました。'));
       }
       await mutate();
       await mutatePine();

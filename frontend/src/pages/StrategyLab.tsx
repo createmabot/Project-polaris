@@ -13,6 +13,7 @@ import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PaginationControls from '../components/ui/PaginationControls';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
+import { buildPineGenerationJobFailureMessage } from '../utils/pineGenerationJob';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import Surface from '../components/ui/Surface';
@@ -741,7 +742,7 @@ export default function StrategyLab() {
       setPineGenerationJob(started.job);
       const completedJob = await pollPineGenerationJob(version.strategy_version.id, started.job.id);
       if (completedJob.status !== 'succeeded') {
-        throw new Error(completedJob.error?.message ?? 'Pine生成に失敗しました。条件を見直して再試行してください。');
+        throw new Error(buildPineGenerationJobFailureMessage(completedJob.error));
       }
 
       const [latestVersion, latestPine] = await Promise.all([

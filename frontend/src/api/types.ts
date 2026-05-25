@@ -504,6 +504,12 @@ export type PineGenerationJob = {
   error: {
     code: string;
     message: string;
+    invalid_reason_codes?: string[];
+    pine_reviewer_issues?: Array<{
+      code: string;
+      severity: 'error' | 'warning' | 'info' | string;
+      repair_hint: string;
+    }>;
   } | null;
   error_code?: string | null;
   error_message?: string | null;
