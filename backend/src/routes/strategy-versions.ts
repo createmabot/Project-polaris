@@ -215,6 +215,15 @@ type PineGenerationStageEvent = {
   occurred_at: string;
 };
 
+type PineGenerationJobErrorDetails = {
+  invalid_reason_codes: string[];
+  pine_reviewer_issues: Array<{
+    code: string;
+    severity: 'error' | 'warning' | 'info';
+    repair_hint: string;
+  }>;
+};
+
 const PINE_GENERATION_STAGES: PineGenerationJobStage[] = [
   '生成リクエスト送信',
   'LLMでPine生成',
@@ -253,6 +262,43 @@ function appendPineStage(history: unknown, stage: PineGenerationJobStage, status
   return current;
 }
 
+function sanitizePineGenerationJobErrorDetails(value: unknown): PineGenerationJobErrorDetails {
+  if (!value || typeof value !== 'object') {
+    return { invalid_reason_codes: [], pine_reviewer_issues: [] };
+  }
+  const record = value as Record<string, unknown>;
+  const invalidReasonCodes = Array.isArray(record.invalid_reason_codes)
+    ? record.invalid_reason_codes
+        .filter((item): item is string => typeof item === 'string' && /^[a-z0-9_]+$/i.test(item))
+        .slice(0, 16)
+    : [];
+  const pineReviewerIssues = Array.isArray(record.pine_reviewer_issues)
+    ? record.pine_reviewer_issues.flatMap((item) => {
+        if (!item || typeof item !== 'object') {
+          return [];
+        }
+        const issue = item as Record<string, unknown>;
+        const code = typeof issue.code === 'string' && /^[a-z0-9_]+$/i.test(issue.code) ? issue.code : null;
+        const severity: 'error' | 'warning' | 'info' | null =
+          issue.severity === 'error' || issue.severity === 'warning' || issue.severity === 'info'
+            ? issue.severity
+            : null;
+        const repairHint = typeof issue.repair_hint === 'string' ? issue.repair_hint.trim() : '';
+        if (!code || !severity || !repairHint || repairHint.length > 180) {
+          return [];
+        }
+        if (/https?:\/\/|endpoint|model|secret|token|credential|stack|local path/i.test(repairHint)) {
+          return [];
+        }
+        return [{ code, severity, repair_hint: repairHint }];
+      }).slice(0, 8)
+    : [];
+  return {
+    invalid_reason_codes: invalidReasonCodes,
+    pine_reviewer_issues: pineReviewerIssues,
+  };
+}
+
 function toPineGenerationJobResponse(job: {
   id: string;
   strategyRuleVersionId: string | null;
@@ -263,6 +309,7 @@ function toPineGenerationJobResponse(job: {
   resultPineScriptId: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+  errorDetailsJson?: unknown;
   createdAt: Date;
   updatedAt: Date;
   completedAt: Date | null;
@@ -274,6 +321,7 @@ function toPineGenerationJobResponse(job: {
     必要に応じて修正: 80,
     最終確認: job.status === 'queued' ? 5 : 100,
   };
+  const errorDetails = sanitizePineGenerationJobErrorDetails(job.errorDetailsJson);
   return {
     id: job.id,
     strategy_version_id: job.strategyRuleVersionId,
@@ -295,6 +343,8 @@ function toPineGenerationJobResponse(job: {
       ? {
           code: job.errorCode,
           message: job.errorMessage ?? 'Pine生成に失敗しました。条件を見直して再試行してください。',
+          invalid_reason_codes: errorDetails.invalid_reason_codes,
+          pine_reviewer_issues: errorDetails.pine_reviewer_issues,
         }
       : null,
     error_code: job.errorCode,
@@ -469,6 +519,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         repair_attempts: repairAttempts,
         invalid_reason_codes: invalidReasonCodes,
         pine_reviewer: output.reviewerSummary ?? null,
+        pine_reviewer_issues: output.reviewerIssues ?? [],
         provider: log.provider,
         fallback_to_stub: log.fallbackToStub,
         regeneration: params.revisionInput
@@ -532,6 +583,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         failure_reason: failureReason,
         repair_attempts: repairAttempts,
         invalid_reason_codes: invalidReasonCodes,
+        pine_reviewer_issues: output.reviewerIssues ?? [],
       },
     };
   };
@@ -558,14 +610,15 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       resultPineScriptId?: string | null;
       errorCode?: string | null;
       errorMessage?: string | null;
+      errorDetails?: PineGenerationJobErrorDetails | null;
     } = {},
   ) => {
-    const job = await prisma.pineGenerationJob.findUnique({ where: { id: jobId } });
+    const job = await pineGenerationJobClient().findUnique({ where: { id: jobId } });
     if (!job) {
       return;
     }
     const finalStage: PineGenerationJobStage = '最終確認';
-    await prisma.pineGenerationJob.update({
+    await pineGenerationJobClient().update({
       where: { id: jobId },
       data: {
         status,
@@ -574,16 +627,22 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         resultPineScriptId: params.resultPineScriptId ?? null,
         errorCode: params.errorCode ?? null,
         errorMessage: params.errorMessage ?? null,
+        errorDetailsJson: params.errorDetails ? params.errorDetails as Prisma.InputJsonValue : Prisma.JsonNull,
         completedAt: new Date(),
       },
     });
   };
 
-  const failPineGenerationJob = async (jobId: string, errorCode = 'PINE_GENERATION_FAILED') => {
+  const failPineGenerationJob = async (
+    jobId: string,
+    errorCode = 'PINE_GENERATION_FAILED',
+    errorDetails?: PineGenerationJobErrorDetails | null,
+  ) => {
     const safeErrorCode = /^[A-Z0-9_]+$/.test(errorCode) ? errorCode : 'PINE_GENERATION_FAILED';
     await completePineGenerationJob(jobId, 'failed', {
       errorCode: safeErrorCode,
       errorMessage: 'Pine生成に失敗しました。条件を見直して再試行してください。',
+      errorDetails: errorDetails ?? null,
     });
   };
 
@@ -624,7 +683,15 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
   const schedulePineGenerationJob = (
     jobId: string,
-    run: () => Promise<{ pine: { status: 'generated' | 'failed'; pine_script_id: string | null; failure_reason?: string | null } }>,
+    run: () => Promise<{
+      pine: {
+        status: 'generated' | 'failed';
+        pine_script_id: string | null;
+        failure_reason?: string | null;
+        invalid_reason_codes?: string[];
+        pine_reviewer_issues?: PineGenerationJobErrorDetails['pine_reviewer_issues'];
+      };
+    }>,
   ) => {
     setTimeout(() => {
       void (async () => {
@@ -637,7 +704,10 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
             });
             return;
           }
-          await failPineGenerationJob(jobId, result.pine.failure_reason ?? 'PINE_GENERATION_FAILED');
+          await failPineGenerationJob(jobId, result.pine.failure_reason ?? 'PINE_GENERATION_FAILED', {
+            invalid_reason_codes: result.pine.invalid_reason_codes ?? [],
+            pine_reviewer_issues: result.pine.pine_reviewer_issues ?? [],
+          });
         } catch {
           await failPineGenerationJob(jobId);
         }

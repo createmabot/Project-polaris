@@ -1,7 +1,7 @@
 import { AlertSummaryContext } from './adapter';
 import { env } from '../env';
 import { reviewGeneratedPineScriptDeterministic } from '../strategy/pine';
-import type { PineReviewResult } from '../strategy/pine';
+import type { PineReviewIssue, PineReviewResult } from '../strategy/pine';
 import {
   BacktestSummaryContext,
   BacktestSummaryOutput,
@@ -40,6 +40,12 @@ type PineRepairValidation = {
 };
 
 type PineReview = (script: string) => PineReviewResult | Promise<PineReviewResult>;
+
+type SanitizedPineReviewIssue = {
+  code: string;
+  severity: 'error' | 'warning' | 'info';
+  repair_hint: string;
+};
 
 export type PineGenerationProgressStage =
   | '生成リクエスト送信'
@@ -303,6 +309,7 @@ export class HomeAiService {
     let lastRun: { output: PineGenerationOutput; log: HomeAiExecutionLog } | null = null;
     let lastFailureReason: string | null = null;
     let lastInvalidReasonCodes: string[] = [];
+    let lastReviewerIssues: SanitizedPineReviewIssue[] = [];
 
     await this.emitPineProgress(options?.onProgress, '生成リクエスト送信', 5);
 
@@ -352,10 +359,12 @@ export class HomeAiService {
           : await this.reviewPineScriptWithProvider(context, normalizedGeneratedScript, attempt);
         const errorReviewIssues = review.issues.filter((issue) => issue.severity === 'error');
         if (errorReviewIssues.length > 0) {
+          const sanitizedReviewIssues = this.sanitizePineReviewIssues(errorReviewIssues);
           const reviewInvalidReasonCodes = errorReviewIssues.map((issue) => `reviewer_${issue.code}`);
           const canRepairReview = attempt < maxRepairAttempts && errorReviewIssues.some((issue) => issue.repairable);
           lastFailureReason = 'pine_review_needs_repair';
           lastInvalidReasonCodes = Array.from(new Set([...combinedInvalidReasonCodes, ...reviewInvalidReasonCodes]));
+          lastReviewerIssues = sanitizedReviewIssues;
 
           if (!canRepairReview) {
             return {
@@ -374,6 +383,7 @@ export class HomeAiService {
                 failureReason: 'pine_review_needs_repair',
                 invalidReasonCodes: lastInvalidReasonCodes,
                 reviewerSummary: review.summary,
+                reviewerIssues: sanitizedReviewIssues,
               },
               log: {
                 ...run.log,
@@ -392,6 +402,7 @@ export class HomeAiService {
               invalidReasonCodes: lastInvalidReasonCodes,
               failureReason: 'pine_review_needs_repair',
               previousScript: normalizedGeneratedScript,
+              reviewIssues: sanitizedReviewIssues,
             },
           };
           aggregateWarnings.push(`Pine reviewer の指摘により、修復リトライ${attempt}回目を実行しました。`);
@@ -469,6 +480,7 @@ export class HomeAiService {
         repairAttempts: maxRepairAttempts,
         failureReason: lastFailureReason ?? 'Pine generation failed after retries.',
         invalidReasonCodes: lastInvalidReasonCodes,
+        reviewerIssues: lastReviewerIssues,
       },
       log: {
         ...lastRun.log,
@@ -502,6 +514,22 @@ export class HomeAiService {
     } catch {
       // Progress reporting must not fail generation.
     }
+  }
+
+  private sanitizePineReviewIssues(issues: PineReviewIssue[]): SanitizedPineReviewIssue[] {
+    return issues.slice(0, 8).map((issue) => ({
+      code: /^[a-z_]+$/i.test(issue.code) ? issue.code : 'other',
+      severity: issue.severity,
+      repair_hint: this.sanitizePineReviewText(issue.repair_hint || issue.message),
+    }));
+  }
+
+  private sanitizePineReviewText(value: string): string {
+    const trimmed = value.replace(/\s+/g, ' ').trim();
+    const redacted = /https?:\/\/|endpoint|model|secret|token|credential|stack|local path/i.test(trimmed)
+      ? 'Fix the sanitized Pine reviewer issue without exposing provider details.'
+      : trimmed;
+    return redacted.slice(0, 180);
   }
 
   private shouldFallbackToStub(): boolean {

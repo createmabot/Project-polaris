@@ -1,6 +1,6 @@
 # 北極星 API 現行仕様
 
-更新日: 2026-05-24
+更新日: 2026-05-25
 分類: 仕様書
 
 ## 1. 目的
@@ -90,13 +90,13 @@
 - `POST /api/strategy-versions/:versionId/pine/generate` は保存済み StrategyVersion の natural language rule / market / timeframe を使って Pine を生成する。
 - `POST /api/strategy-versions/:versionId/pine/regenerate` は既存 `pine_script_id` と、ユーザーが TradingView 等で確認した `compile_error_text` / `validation_note` / `revision_request` を使って修正再生成する。
 - `POST /api/strategy-versions/:versionId/pine/generation-jobs` と `POST /api/strategy-versions/:versionId/pine/regeneration-jobs` は Pine generation job を開始し、`job.id` と初期 `status` を返す。既存 sync endpoint は互換維持のため残す。
-- `GET /api/strategy-versions/:versionId/pine/generation-jobs/:jobId` は Pine generation job の status polling endpoint とする。response は `status=queued|running|succeeded|failed`、現在 `stage`、`progress_percent`、完了時の sanitized `result` を返す。
+- `GET /api/strategy-versions/:versionId/pine/generation-jobs/:jobId` は Pine generation job の status polling endpoint とする。response は `status=queued|running|succeeded|failed`、現在 `stage`、`progress_percent`、完了時の sanitized `result` を返す。失敗時の `error` には、必要に応じて sanitized `invalid_reason_codes` と `pine_reviewer_issues` を含める。
 - Pine generation は `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` で provider を切り替える。既定は `local_llm` の LLM-first path とし、deterministic generator は baseline / emergency fallback / test fixture 用であり、API の主品質経路とは扱わない。`openai_api` は明示 opt-in / cost guard 設計後の後続候補として扱う。
 - generated Pine は generator -> reviewer -> repair pipeline で扱い、保存前に既存 normalization / 最小 validation を通す。
 - deterministic reviewer は明らかな Pine syntax / style / safety issue を構造化 issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine を structured issue として review するだけで、raw reviewer response は response / 保存対象に含めない。
 - 空 output、`//@version` 不足、`strategy(...)|indicator(...)` 不足、Markdown fence / 説明文混入、reviewer issue など retryable な invalid output は bounded repair（最大 2 回）に回す。
 - job stage は queued / context_loading / generating / reviewing / repairing / validating / persisting / completed / failed 程度の backend stage を sanitized に表す。進捗取得は polling で行い、SSE / WebSocket / streaming は導入しない。
-- response は既存 `pine.repair_attempts` / `pine.invalid_reason_codes` / `pine.failure_reason` を使い、provider / repair の状態を sanitized に返す。
+- response は既存 `pine.repair_attempts` / `pine.invalid_reason_codes` / `pine.failure_reason` を使い、provider / repair の状態を sanitized に返す。job polling の failed response では、repair で解消できなかった reviewer issue を `pine_reviewer_issues` として code / severity / repair_hint の範囲に限定して返せる。
 - raw prompt、raw provider response、raw reviewer response、provider endpoint、model 実値、secret、local path、stack trace は response に含めない。
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
 - Pine generation / regeneration は Strategy / StrategyVersion 保存、backtest、AI summary を自動起動しない。
