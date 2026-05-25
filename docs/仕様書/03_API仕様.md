@@ -214,4 +214,10 @@ StrategyVersion Pine generation の market / timeframe:
 
 refresh failure は sanitized error に閉じる。raw external response、endpoint 実値、secret、stack trace は API response に出さない。
 
+現時点の refresh は provider boundary / stub provider / manual refresh flow までを正本とする。real public provider 接続は後続フェーズで source ごとに個別実装する。provider 接続方針は `docs/運用ドキュメント/13_Investment_calendar_provider調査.md` を参照する。
+
+後続 provider 実装でも、外部取得はユーザー操作による manual refresh 起点に限定する。scheduled job、crawler 常駐、notification、reminder、external calendar sync はこの API の責務に含めない。required test は fake / fixture provider を使い、real external provider / real web access を required check にしない。
+
+`source_url` を返す場合も、raw payload や provider endpoint 実値は返さない。UI で link 化する場合は http / https の safe URL に限定する。
+
 `GET /api/symbols/:symbolId` は TradingView chart widget config を返さない。`tradingview_symbol` は webhook / Pine / CSV import の symbol mapping として維持する。
