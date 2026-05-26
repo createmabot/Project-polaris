@@ -216,6 +216,8 @@ refresh failure は sanitized error に閉じる。raw external response、endpo
 
 `INVESTMENT_CALENDAR_PROVIDER=alpha_vantage` を設定した場合、Home の manual refresh は Alpha Vantage の無料 API 範囲を使い、market-level event を `source_type=public_provider` として保存できる。P1 では CPI / retail sales / unemployment / nonfarm payroll は発表済み data series の observation date として扱い、将来予定と誤認させないため `source_label` に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。Earnings calendar と日本株 symbol-level event は後続判断とする。
 
+`INVESTMENT_CALENDAR_PROVIDER=jquants` を設定した場合、Home / SymbolDetail の manual refresh は J-Quants 無料 plan 範囲の日本株 event を `source_type=public_provider` として保存できる。P2 では決算発表予定日を `earnings`、取引カレンダー上の休場日を `market_holiday` として扱う。配当金情報、TDnet / 適時開示、有料 plan / addon / Premium 専用データは扱わない。J-Quants response は正規化済み calendar event に変換し、raw response、API key、endpoint 実値、stack trace は API response に含めない。provider unavailable、rate limit、timeout、invalid response は sanitized error として返す。
+
 後続 provider 実装でも、外部取得はユーザー操作による manual refresh 起点に限定する。scheduled job、crawler 常駐、notification、reminder、external calendar sync はこの API の責務に含めない。required test は fake / fixture provider を使い、real Alpha Vantage / real external provider / real web access を required check にしない。
 
 `source_url` を返す場合も、raw payload や provider endpoint 実値は返さない。UI で link 化する場合は http / https の safe URL に限定する。

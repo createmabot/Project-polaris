@@ -736,6 +736,83 @@ describe('GET /api/home daily_summary query handling', () => {
     }
   });
 
+  it('refreshes home investment calendar from J-Quants fixtures without real external access', async () => {
+    const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
+    const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-refresh-token';
+    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
+      const urlText = String(url);
+      if (urlText.includes('/token/auth_refresh')) {
+        return { ok: true, status: 200, json: vi.fn(async () => ({ idToken: 'test-id-token' })) } as any;
+      }
+      if (urlText.includes('/fins/announcement')) {
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            announcement: [
+              { Code: '72030', Date: '2026-06-10', CompanyName: 'トヨタ自動車', FiscalQuarter: 'FY' },
+            ],
+          })),
+        } as any;
+      }
+      if (urlText.includes('/markets/trading_calendar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            trading_calendar: [
+              { Date: '2026-06-15', HolidayDivision: '0' },
+              { Date: '2026-06-16', HolidayDivision: '1' },
+            ],
+          })),
+        } as any;
+      }
+      return { ok: false, status: 500, json: vi.fn(async () => ({})) } as any;
+    }));
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        manual_only: true,
+      });
+      expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'jquants',
+          eventType: 'earnings',
+          symbolId: 'sym-7203',
+        }),
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'jquants',
+          eventType: 'market_holiday',
+          symbolId: null,
+        }),
+      ]));
+      expect(JSON.stringify(res.json())).not.toContain('test-refresh-token');
+      expect(JSON.stringify(res.json())).not.toContain('api.jquants.com');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
+      else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
+      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+    }
+  });
+
   it('switches daily summary by summary_type', async () => {
     const app = await createApp();
 
