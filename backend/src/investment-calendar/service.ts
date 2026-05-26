@@ -350,13 +350,13 @@ export function createSymbolCalendarProvider(symbol: CalendarSymbol): Investment
   if (configuredNames.includes('jquants') && isJapaneseStockSymbol(symbol)) {
     return createInvestmentCalendarProvider('jquants');
   }
+  const symbolProviderName = configuredNames.find((name): name is InvestmentCalendarProviderName =>
+    name === 'public' || name === 'stub');
+  if (symbolProviderName) {
+    return createInvestmentCalendarProvider(symbolProviderName);
+  }
   if (configuredNames.length === 1) {
     return createInvestmentCalendarProvider(configuredNames[0]);
   }
-  if (configuredNames.includes('alpha_vantage')) {
-    return createInvestmentCalendarProvider('alpha_vantage');
-  }
-  const firstNonMarketProvider = configuredNames.find((name): name is InvestmentCalendarProviderName =>
-    name === 'stub' || name === 'public');
-  return createInvestmentCalendarProvider(firstNonMarketProvider ?? 'stub');
+  return createInvestmentCalendarProvider('alpha_vantage');
 }
