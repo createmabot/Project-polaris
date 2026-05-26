@@ -127,6 +127,101 @@ describe('investment calendar APIs', () => {
     await app.close();
   });
 
+  it('refreshes symbol calendar events from J-Quants fixtures without real external access', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
+    const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const urlText = String(url);
+      expect((init?.headers as Record<string, string>)?.['x-api-key']).toBe('test-api-key');
+      if (urlText.includes('/equities/earnings-calendar')) {
+        expect(urlText).toContain('from=2026-06-01');
+        expect(urlText).toContain('to=2026-06-30');
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            data: [
+              { Code: '72030', Date: '2026-06-10', CompanyName: 'トヨタ自動車', FiscalQuarter: 'FY' },
+              { Code: '99990', Date: '2026-06-11', CompanyName: '未登録銘柄', FiscalQuarter: 'FY' },
+            ],
+          })),
+        } as any;
+      }
+      return { ok: false, status: 500, json: vi.fn(async () => ({})) } as any;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/symbols/sym-7203/calendar-events/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        manual_only: true,
+      });
+      expect(runtime.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'jquants',
+          eventType: 'earnings',
+          symbolId: 'sym-7203',
+          title: 'トヨタ自動車 決算発表予定',
+        }),
+      ]));
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/markets/calendar'))).toBe(false);
+      expect(JSON.stringify(res.json())).not.toContain('test-api-key');
+      expect(JSON.stringify(res.json())).not.toContain('api.jquants.com');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+      if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
+      else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
+      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+    }
+  });
+
+  it('prefers a symbol-capable provider over Alpha Vantage for symbol refresh', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,stub';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/symbols/sym-7203/calendar-events/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'stub',
+        saved_count: 1,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+    }
+  });
+
   it('keeps only http and https provider source URLs', () => {
     const base = {
       externalId: 'provider-event-1',

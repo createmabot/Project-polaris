@@ -5,6 +5,7 @@ import { AppError, formatSuccess } from '../utils/response';
 import { getCurrentSnapshotForSymbol } from '../market/snapshot';
 import { HomeAiService } from '../ai/home-ai-service';
 import {
+  createSymbolCalendarProvider,
   listSymbolCalendarEvents,
   normalizeCalendarRefreshBody,
   refreshInvestmentCalendarEvents,
@@ -1290,7 +1291,7 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         displayName: symbol.displayName,
       }],
       includeMarketEvents: false,
-    });
+    }, createSymbolCalendarProvider(symbol));
     return reply.status(200).send(formatSuccess(request, result));
   });
 

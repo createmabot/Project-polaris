@@ -1,4 +1,6 @@
 import { AppError } from '../utils/response';
+import { AlphaVantageInvestmentCalendarProvider } from './alpha-vantage-provider';
+import { JQuantsInvestmentCalendarProvider } from './jquants-provider';
 import {
   normalizeProviderEvent,
 } from './normalization';
@@ -24,7 +26,27 @@ function getCalendarFetchTimeoutMs() {
 }
 
 function getConfiguredProviderName(): InvestmentCalendarProviderName {
+  if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'alpha_vantage') return 'alpha_vantage';
+  if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'jquants') return 'jquants';
   return process.env.INVESTMENT_CALENDAR_PROVIDER === 'public' ? 'public' : 'stub';
+}
+
+function parseProviderName(value: string): InvestmentCalendarProviderName | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'alpha_vantage') return 'alpha_vantage';
+  if (normalized === 'jquants') return 'jquants';
+  if (normalized === 'public') return 'public';
+  if (normalized === 'stub') return 'stub';
+  return null;
+}
+
+export function getConfiguredProviderNames(): InvestmentCalendarProviderName[] {
+  const configuredList = process.env.INVESTMENT_CALENDAR_PROVIDERS
+    ?.split(',')
+    .map(parseProviderName)
+    .filter((name): name is InvestmentCalendarProviderName => name !== null) ?? [];
+  const deduped = Array.from(new Set(configuredList));
+  return deduped.length > 0 ? deduped : [getConfiguredProviderName()];
 }
 
 export class StubInvestmentCalendarProvider implements InvestmentCalendarProvider {
@@ -133,6 +155,14 @@ export class PublicInvestmentCalendarProvider implements InvestmentCalendarProvi
 export function createInvestmentCalendarProvider(
   providerName: InvestmentCalendarProviderName = getConfiguredProviderName(),
 ): InvestmentCalendarProvider {
+  if (providerName === 'alpha_vantage') return new AlphaVantageInvestmentCalendarProvider();
+  if (providerName === 'jquants') return new JQuantsInvestmentCalendarProvider();
   if (providerName === 'public') return new PublicInvestmentCalendarProvider();
   return new StubInvestmentCalendarProvider();
+}
+
+export function createInvestmentCalendarProviders(
+  providerNames: InvestmentCalendarProviderName[] = getConfiguredProviderNames(),
+): InvestmentCalendarProvider[] {
+  return providerNames.map((providerName) => createInvestmentCalendarProvider(providerName));
 }

@@ -9,8 +9,13 @@ import {
   normalizeStatus,
   toDateRangeWhere,
 } from './normalization';
-import { createInvestmentCalendarProvider, InvestmentCalendarProvider } from './provider';
-import { InvestmentCalendarFetchInput, InvestmentCalendarRefreshResult } from './types';
+import {
+  createInvestmentCalendarProvider,
+  createInvestmentCalendarProviders,
+  getConfiguredProviderNames,
+  InvestmentCalendarProvider,
+} from './provider';
+import { InvestmentCalendarFetchInput, InvestmentCalendarProviderName, InvestmentCalendarRefreshResult } from './types';
 
 type CalendarSymbol = {
   id: string;
@@ -19,6 +24,10 @@ type CalendarSymbol = {
   marketCode: string | null;
   displayName: string | null;
 };
+
+function toSourceType(provider: InvestmentCalendarProvider): 'seed' | 'public_provider' {
+  return provider.name === 'stub' ? 'seed' : 'public_provider';
+}
 
 export function toCalendarEventView(row: any, scope?: 'symbol' | 'market') {
   const isMarket = !row.symbolId;
@@ -137,7 +146,7 @@ export async function refreshInvestmentCalendarEvents(
     const existing = await (prisma as any).investmentCalendarEvent.findUnique({
       where: {
         sourceType_externalId: {
-          sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+          sourceType: toSourceType(provider),
           externalId: event.externalId,
         },
       },
@@ -146,7 +155,7 @@ export async function refreshInvestmentCalendarEvents(
     await (prisma as any).investmentCalendarEvent.upsert({
       where: {
         sourceType_externalId: {
-          sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+          sourceType: toSourceType(provider),
           externalId: event.externalId,
         },
       },
@@ -174,7 +183,7 @@ export async function refreshInvestmentCalendarEvents(
         title: event.title,
         description: event.description ?? null,
         importance: event.importance,
-        sourceType: provider.name === 'public' ? 'public_provider' : 'seed',
+        sourceType: toSourceType(provider),
         sourceName: event.sourceName,
         sourceLabel: event.sourceLabel ?? null,
         sourceUrl: event.sourceUrl ?? null,
@@ -195,8 +204,67 @@ export async function refreshInvestmentCalendarEvents(
     failed_count: 0,
     from: input.from,
     to: input.to,
-    source: provider.name === 'public' ? 'public_provider' : 'stub',
+    source: provider.name === 'stub' ? 'stub' : 'public_provider',
     manual_only: true,
+  };
+}
+
+function toProviderRefreshSummary(
+  provider: InvestmentCalendarProvider,
+  result: InvestmentCalendarRefreshResult,
+): NonNullable<InvestmentCalendarRefreshResult['providers']>[number] {
+  return {
+    provider: provider.name,
+    status: 'succeeded',
+    saved_count: result.saved_count,
+    updated_count: result.updated_count,
+    skipped_count: result.skipped_count,
+    failed_count: result.failed_count,
+    error_code: null,
+  };
+}
+
+function toProviderFailureSummary(
+  provider: InvestmentCalendarProvider,
+  error: unknown,
+): NonNullable<InvestmentCalendarRefreshResult['providers']>[number] {
+  return {
+    provider: provider.name,
+    status: 'failed',
+    saved_count: 0,
+    updated_count: 0,
+    skipped_count: 0,
+    failed_count: 1,
+    error_code: error instanceof AppError ? error.code : 'INVESTMENT_CALENDAR_REFRESH_FAILED',
+  };
+}
+
+function summarizeProviderResults(
+  input: InvestmentCalendarFetchInput,
+  providerResults: NonNullable<InvestmentCalendarRefreshResult['providers']>,
+): InvestmentCalendarRefreshResult {
+  const savedCount = providerResults.reduce((sum, result) => sum + result.saved_count, 0);
+  const updatedCount = providerResults.reduce((sum, result) => sum + result.updated_count, 0);
+  const skippedCount = providerResults.reduce((sum, result) => sum + result.skipped_count, 0);
+  const failedCount = providerResults.reduce((sum, result) => sum + result.failed_count, 0);
+  const succeededCount = providerResults.filter((result) => result.status === 'succeeded').length;
+  const status = succeededCount === providerResults.length
+    ? 'succeeded'
+    : succeededCount > 0
+      ? 'partial_success'
+      : 'failed';
+  const source = providerResults.length === 1 && providerResults[0].provider === 'stub' ? 'stub' : 'public_provider';
+  return {
+    status,
+    saved_count: savedCount,
+    updated_count: updatedCount,
+    skipped_count: skippedCount,
+    failed_count: failedCount,
+    from: input.from,
+    to: input.to,
+    source,
+    manual_only: true,
+    providers: providerResults,
   };
 }
 
@@ -252,10 +320,43 @@ export async function refreshHomeInvestmentCalendar(input: { from?: unknown; to?
   const range = normalizeDateRange(input);
   const symbols = await getHomeCalendarSymbols();
   const includeMarketEvents = input.include_market_events !== false;
-  return refreshInvestmentCalendarEvents({
+  const fetchInput = {
     from: range.from,
     to: range.to,
     symbols,
     includeMarketEvents,
-  });
+  };
+  const providers = createInvestmentCalendarProviders();
+  const providerResults: NonNullable<InvestmentCalendarRefreshResult['providers']> = [];
+  for (const provider of providers) {
+    try {
+      const result = await refreshInvestmentCalendarEvents(fetchInput, provider);
+      providerResults.push(toProviderRefreshSummary(provider, result));
+    } catch (error) {
+      providerResults.push(toProviderFailureSummary(provider, error));
+    }
+  }
+  return summarizeProviderResults(fetchInput, providerResults);
+}
+
+function isJapaneseStockSymbol(symbol: CalendarSymbol) {
+  const market = (symbol.marketCode ?? '').trim().toUpperCase();
+  const code = (symbol.symbolCode ?? symbol.symbol ?? '').trim().toUpperCase();
+  return market.includes('JP') || market.includes('TSE') || market.includes('TYO') || /^\d{4,5}$/.test(code);
+}
+
+export function createSymbolCalendarProvider(symbol: CalendarSymbol): InvestmentCalendarProvider {
+  const configuredNames = getConfiguredProviderNames();
+  if (configuredNames.includes('jquants') && isJapaneseStockSymbol(symbol)) {
+    return createInvestmentCalendarProvider('jquants');
+  }
+  const symbolProviderName = configuredNames.find((name): name is InvestmentCalendarProviderName =>
+    name === 'public' || name === 'stub');
+  if (symbolProviderName) {
+    return createInvestmentCalendarProvider(symbolProviderName);
+  }
+  if (configuredNames.length === 1) {
+    return createInvestmentCalendarProvider(configuredNames[0]);
+  }
+  return createInvestmentCalendarProvider('alpha_vantage');
 }
