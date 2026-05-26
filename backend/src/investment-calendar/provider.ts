@@ -31,6 +31,24 @@ function getConfiguredProviderName(): InvestmentCalendarProviderName {
   return process.env.INVESTMENT_CALENDAR_PROVIDER === 'public' ? 'public' : 'stub';
 }
 
+function parseProviderName(value: string): InvestmentCalendarProviderName | null {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'alpha_vantage') return 'alpha_vantage';
+  if (normalized === 'jquants') return 'jquants';
+  if (normalized === 'public') return 'public';
+  if (normalized === 'stub') return 'stub';
+  return null;
+}
+
+export function getConfiguredProviderNames(): InvestmentCalendarProviderName[] {
+  const configuredList = process.env.INVESTMENT_CALENDAR_PROVIDERS
+    ?.split(',')
+    .map(parseProviderName)
+    .filter((name): name is InvestmentCalendarProviderName => name !== null) ?? [];
+  const deduped = Array.from(new Set(configuredList));
+  return deduped.length > 0 ? deduped : [getConfiguredProviderName()];
+}
+
 export class StubInvestmentCalendarProvider implements InvestmentCalendarProvider {
   readonly name = 'stub' as const;
 
@@ -141,4 +159,10 @@ export function createInvestmentCalendarProvider(
   if (providerName === 'jquants') return new JQuantsInvestmentCalendarProvider();
   if (providerName === 'public') return new PublicInvestmentCalendarProvider();
   return new StubInvestmentCalendarProvider();
+}
+
+export function createInvestmentCalendarProviders(
+  providerNames: InvestmentCalendarProviderName[] = getConfiguredProviderNames(),
+): InvestmentCalendarProvider[] {
+  return providerNames.map((providerName) => createInvestmentCalendarProvider(providerName));
 }

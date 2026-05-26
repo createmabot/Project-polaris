@@ -76,6 +76,7 @@ describe('JQuantsInvestmentCalendarProvider', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
+    delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
     process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
     process.env.INVESTMENT_CALENDAR_JQUANTS_TIMEOUT_MS = '1000';
   });

@@ -128,9 +128,10 @@ describe('investment calendar APIs', () => {
   });
 
   it('refreshes symbol calendar events from J-Quants fixtures without real external access', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
     const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
-    process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
     process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
     const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const urlText = String(url);
@@ -183,10 +184,41 @@ describe('investment calendar APIs', () => {
     } finally {
       await app.close();
       vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
       if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
       else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+    }
+  });
+
+  it('prefers a symbol-capable provider over Alpha Vantage for symbol refresh', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,stub';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/symbols/sym-7203/calendar-events/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'stub',
+        saved_count: 1,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
     }
   });
 

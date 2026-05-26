@@ -46,6 +46,7 @@ describe('AlphaVantageInvestmentCalendarProvider', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
+    delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
     process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = 'test-key';
     process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_TIMEOUT_MS = '1000';
   });

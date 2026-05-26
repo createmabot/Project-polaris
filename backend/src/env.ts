@@ -45,6 +45,7 @@ const envSchema = z.object({
   AI_ENABLE_STUB_FALLBACK: envBoolean.default(false),
 
   // ── Investment calendar manual refresh ──
+  INVESTMENT_CALENDAR_PROVIDERS: z.string().optional(),
   INVESTMENT_CALENDAR_PROVIDER: z.enum(['stub', 'public', 'alpha_vantage', 'jquants']).default('stub'),
   INVESTMENT_CALENDAR_PUBLIC_SOURCE_URL_TEMPLATE: z.string().url().optional(),
   INVESTMENT_CALENDAR_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),

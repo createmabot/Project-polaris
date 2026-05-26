@@ -651,8 +651,9 @@ describe('GET /api/home daily_summary query handling', () => {
   });
 
   it('refreshes home investment calendar from the stub provider', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
-    process.env.INVESTMENT_CALENDAR_PROVIDER = 'stub';
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'stub';
     const app = await createApp();
 
     try {
@@ -673,15 +674,18 @@ describe('GET /api/home daily_summary query handling', () => {
       expect(runtime.investmentCalendarEvents.length).toBeGreaterThan(2);
     } finally {
       await app.close();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
     }
   });
 
   it('refreshes home investment calendar from Alpha Vantage fixtures without real external access', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
     const previousKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
-    process.env.INVESTMENT_CALENDAR_PROVIDER = 'alpha_vantage';
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage';
     process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn(async (url: URL) => {
       const functionName = url.searchParams.get('function');
@@ -735,6 +739,8 @@ describe('GET /api/home daily_summary query handling', () => {
     } finally {
       await app.close();
       vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
       if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
@@ -743,9 +749,10 @@ describe('GET /api/home daily_summary query handling', () => {
   });
 
   it('refreshes home investment calendar from J-Quants fixtures without real external access', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
     const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
-    process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'jquants';
     process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
     vi.stubGlobal('fetch', vi.fn(async (url: URL | string, init?: RequestInit) => {
       const urlText = String(url);
@@ -814,10 +821,201 @@ describe('GET /api/home daily_summary query handling', () => {
     } finally {
       await app.close();
       vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
       if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
       else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+    }
+  });
+
+  it('aggregates Alpha Vantage and J-Quants home calendar providers', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    const previousAlphaKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    const previousJquantsKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
+    process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = 'test-alpha-key';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-jquants-key';
+    vi.stubGlobal('fetch', vi.fn(async (url: URL | string, init?: RequestInit) => {
+      const urlText = String(url);
+      if (urlText.includes('alphavantage')) {
+        const functionName = (url as URL).searchParams.get('function');
+        if (functionName === 'IPO_CALENDAR') {
+          return {
+            ok: true,
+            text: vi.fn(async () => 'symbol,name,ipoDate,priceRangeLow,priceRangeHigh,currency,exchange\nTEST,Test Holdings,2026-07-01,10,12,USD,NASDAQ\n'),
+            json: vi.fn(async () => ({})),
+          } as any;
+        }
+        return {
+          ok: true,
+          json: vi.fn(async () => ({
+            name: 'series',
+            data: [{ date: '2026-06-05', value: '100.0' }],
+          })),
+          text: vi.fn(async () => ''),
+        } as any;
+      }
+      expect((init?.headers as Record<string, string>)?.['x-api-key']).toBe('test-jquants-key');
+      if (urlText.includes('/equities/earnings-calendar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            data: [{ Code: '72030', Date: '2026-06-10', CompanyName: 'トヨタ自動車', FiscalQuarter: 'FY' }],
+          })),
+        } as any;
+      }
+      if (urlText.includes('/markets/calendar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            data: [{ Date: '2026-06-15', HolDiv: '1' }],
+          })),
+        } as any;
+      }
+      return { ok: false, status: 500, json: vi.fn(async () => ({})), text: vi.fn(async () => '') } as any;
+    }));
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-07-31', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        manual_only: true,
+        providers: [
+          expect.objectContaining({ provider: 'alpha_vantage', status: 'succeeded', error_code: null }),
+          expect.objectContaining({ provider: 'jquants', status: 'succeeded', error_code: null }),
+        ],
+      });
+      expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'economic_indicator' }),
+        expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'ipo' }),
+        expect.objectContaining({ sourceName: 'jquants', eventType: 'earnings' }),
+        expect.objectContaining({ sourceName: 'jquants', eventType: 'market_holiday' }),
+      ]));
+      expect(JSON.stringify(res.json())).not.toContain('test-alpha-key');
+      expect(JSON.stringify(res.json())).not.toContain('test-jquants-key');
+      expect(JSON.stringify(res.json())).not.toContain('alphavantage.co');
+      expect(JSON.stringify(res.json())).not.toContain('api.jquants.com');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+      if (previousAlphaKey === undefined) delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = previousAlphaKey;
+      if (previousJquantsKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousJquantsKey;
+    }
+  });
+
+  it('returns partial_success when one investment calendar provider fails', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    const previousAlphaKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    const previousJquantsKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
+    delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-jquants-key';
+    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
+      const urlText = String(url);
+      if (urlText.includes('/equities/earnings-calendar')) {
+        return {
+          ok: true,
+          status: 200,
+          json: vi.fn(async () => ({
+            data: [{ Code: '72030', Date: '2026-06-10', CompanyName: 'トヨタ自動車', FiscalQuarter: 'FY' }],
+          })),
+        } as any;
+      }
+      if (urlText.includes('/markets/calendar')) {
+        return { ok: true, status: 200, json: vi.fn(async () => ({ data: [] })) } as any;
+      }
+      return { ok: false, status: 500, json: vi.fn(async () => ({})) } as any;
+    }));
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'partial_success',
+        failed_count: 1,
+        providers: [
+          expect.objectContaining({
+            provider: 'alpha_vantage',
+            status: 'failed',
+            error_code: 'INVESTMENT_CALENDAR_PROVIDER_UNAVAILABLE',
+          }),
+          expect.objectContaining({ provider: 'jquants', status: 'succeeded' }),
+        ],
+      });
+      expect(JSON.stringify(res.json())).not.toContain('test-jquants-key');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+      if (previousAlphaKey === undefined) delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = previousAlphaKey;
+      if (previousJquantsKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousJquantsKey;
+    }
+  });
+
+  it('returns failed when all investment calendar providers fail', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    const previousAlphaKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    const previousJquantsKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
+    delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+    delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'failed',
+        saved_count: 0,
+        updated_count: 0,
+        failed_count: 2,
+        providers: [
+          expect.objectContaining({ provider: 'alpha_vantage', status: 'failed' }),
+          expect.objectContaining({ provider: 'jquants', status: 'failed' }),
+        ],
+      });
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+      expect(JSON.stringify(res.json())).not.toContain('http');
+    } finally {
+      await app.close();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+      if (previousAlphaKey === undefined) delete process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = previousAlphaKey;
+      if (previousJquantsKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousJquantsKey;
     }
   });
 
