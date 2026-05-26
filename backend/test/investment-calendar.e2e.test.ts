@@ -129,22 +129,20 @@ describe('investment calendar APIs', () => {
 
   it('refreshes symbol calendar events from J-Quants fixtures without real external access', async () => {
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
-    const previousToken = process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
+    const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
     process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
-    process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = 'test-refresh-token';
-    const fetchMock = vi.fn(async (url: URL | string) => {
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
+    const fetchMock = vi.fn(async (url: URL | string, init?: RequestInit) => {
       const urlText = String(url);
-      if (urlText.includes('/token/auth_refresh')) {
-        return { ok: true, status: 200, json: vi.fn(async () => ({ idToken: 'test-id-token' })) } as any;
-      }
-      if (urlText.includes('/fins/announcement')) {
-        expect(urlText).not.toContain('from=');
-        expect(urlText).not.toContain('to=');
+      expect((init?.headers as Record<string, string>)?.['x-api-key']).toBe('test-api-key');
+      if (urlText.includes('/equities/earnings-calendar')) {
+        expect(urlText).toContain('from=2026-06-01');
+        expect(urlText).toContain('to=2026-06-30');
         return {
           ok: true,
           status: 200,
           json: vi.fn(async () => ({
-            announcement: [
+            data: [
               { Code: '72030', Date: '2026-06-10', CompanyName: 'トヨタ自動車', FiscalQuarter: 'FY' },
               { Code: '99990', Date: '2026-06-11', CompanyName: '未登録銘柄', FiscalQuarter: 'FY' },
             ],
@@ -178,8 +176,8 @@ describe('investment calendar APIs', () => {
           title: 'トヨタ自動車 決算発表予定',
         }),
       ]));
-      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/markets/trading_calendar'))).toBe(false);
-      expect(JSON.stringify(res.json())).not.toContain('test-refresh-token');
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/markets/calendar'))).toBe(false);
+      expect(JSON.stringify(res.json())).not.toContain('test-api-key');
       expect(JSON.stringify(res.json())).not.toContain('api.jquants.com');
       expect(JSON.stringify(res.json())).not.toContain('stack');
     } finally {
@@ -187,8 +185,8 @@ describe('investment calendar APIs', () => {
       vi.unstubAllGlobals();
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
-      if (previousToken === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
-      else process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = previousToken;
+      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
     }
   });
 

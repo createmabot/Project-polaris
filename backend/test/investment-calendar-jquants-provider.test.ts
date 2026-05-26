@@ -31,12 +31,12 @@ function jsonResponse(payload: unknown, ok = true, status = ok ? 200 : 500) {
 }
 
 function mockJQuantsFetch() {
-  return vi.fn(async (url: URL | string) => {
+  return vi.fn(async (url: URL | string, init?: RequestInit) => {
     const urlText = String(url);
-    if (urlText.includes('/token/auth_refresh')) return jsonResponse({ idToken: 'test-id-token' });
-    if (urlText.includes('/fins/announcement')) {
+    expect((init?.headers as Record<string, string>)?.['x-api-key']).toBe('test-api-key');
+    if (urlText.includes('/equities/earnings-calendar')) {
       return jsonResponse({
-        announcement: [
+        data: [
           {
             Code: '72030',
             Date: '2026-06-10',
@@ -58,12 +58,12 @@ function mockJQuantsFetch() {
         ],
       });
     }
-    if (urlText.includes('/markets/trading_calendar')) {
+    if (urlText.includes('/markets/calendar')) {
       return jsonResponse({
-        trading_calendar: [
-          { Date: '2026-06-15', HolidayDivision: '0' },
-          { Date: '2026-06-16', HolidayDivision: '1' },
-          { Date: '2026-06-17', HolidayDivision: '2' },
+        data: [
+          { Date: '2026-06-15', HolDiv: '1' },
+          { Date: '2026-06-16', HolDiv: '0' },
+          { Date: '2026-06-17', HolDiv: '2' },
         ],
       });
     }
@@ -76,7 +76,7 @@ describe('JQuantsInvestmentCalendarProvider', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
-    process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = 'test-refresh-token';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-api-key';
     process.env.INVESTMENT_CALENDAR_JQUANTS_TIMEOUT_MS = '1000';
   });
 
@@ -110,13 +110,17 @@ describe('JQuantsInvestmentCalendarProvider', () => {
       }),
     ]));
     expect(events).toHaveLength(2);
-    expect(JSON.stringify(events)).not.toContain('test-refresh-token');
+    expect(JSON.stringify(events)).not.toContain('test-api-key');
     expect(JSON.stringify(events)).not.toContain('api.jquants.com');
     expect(JSON.stringify(events)).not.toContain('raw');
-    const announcementCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/fins/announcement'));
+    const announcementCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/equities/earnings-calendar'));
     expect(announcementCall).toBeTruthy();
-    expect(String(announcementCall?.[0])).not.toContain('from=');
-    expect(String(announcementCall?.[0])).not.toContain('to=');
+    expect(String(announcementCall?.[0])).toContain('from=2026-06-01');
+    expect(String(announcementCall?.[0])).toContain('to=2026-07-31');
+    const calendarCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/markets/calendar'));
+    expect(calendarCall).toBeTruthy();
+    expect(String(calendarCall?.[0])).not.toContain('from=');
+    expect(String(calendarCall?.[0])).not.toContain('to=');
   });
 
   it('skips market events for symbol-only refresh', async () => {
@@ -131,36 +135,29 @@ describe('JQuantsInvestmentCalendarProvider', () => {
         symbolCode: '7203',
       }),
     ]);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/markets/trading_calendar'))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/markets/calendar'))).toBe(false);
   });
 
   it('fails with a sanitized missing API key error', async () => {
-    delete process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
     delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
 
     await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_PROVIDER_UNAVAILABLE',
-      details: { provider: 'jquants', reason: 'missing_refresh_token' },
+      details: { provider: 'jquants', reason: 'missing_api_key' },
     });
   });
 
-  it('fails with a sanitized invalid refresh token error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
-      if (String(url).includes('/token/auth_refresh')) return jsonResponse({ message: 'invalid raw provider message' }, false, 400);
-      return jsonResponse({});
-    }));
+  it('fails with a sanitized invalid API key error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'invalid raw provider message' }, false, 401)));
 
     await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_REFRESH_FAILED',
-      details: { provider: 'jquants', reason: 'invalid_or_expired_refresh_token' },
+      details: { provider: 'jquants', reason: 'provider_rejected_or_rate_limited' },
     });
   });
 
   it('fails with a sanitized provider rejection error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
-      if (String(url).includes('/token/auth_refresh')) return jsonResponse({ idToken: 'test-id-token' });
-      return jsonResponse({ message: 'rate limited raw provider body' }, false, 429);
-    }));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'rate limited raw provider body' }, false, 429)));
 
     await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_REFRESH_FAILED',
@@ -169,10 +166,7 @@ describe('JQuantsInvestmentCalendarProvider', () => {
   });
 
   it('fails with a sanitized invalid response error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
-      if (String(url).includes('/token/auth_refresh')) return jsonResponse({ idToken: 'test-id-token' });
-      return jsonResponse({ unexpected: true });
-    }));
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ unexpected: true })));
 
     await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_INVALID_RESPONSE',
