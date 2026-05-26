@@ -126,12 +126,45 @@ describe('AlphaVantageInvestmentCalendarProvider', () => {
   });
 
   it('fails with a sanitized provider rejection error', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ Note: 'rate limited raw provider note' })));
+    const fetchMock = vi.fn(async (url: URL) => {
+      const functionName = url.searchParams.get('function');
+      if (functionName === 'IPO_CALENDAR') return textResponse('Note: rate limited raw provider note');
+      return jsonResponse({ Note: 'rate limited raw provider note' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
 
     await expect(new AlphaVantageInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_REFRESH_FAILED',
       details: { provider: 'alpha_vantage', reason: 'provider_rejected_or_rate_limited' },
     });
+  });
+
+  it('skips rejected Alpha Vantage endpoints when at least one endpoint succeeds', async () => {
+    const fetchMock = vi.fn(async (url: URL) => {
+      const functionName = url.searchParams.get('function');
+      if (functionName === 'CPI') return jsonResponse(economicPayload('2026-05-13'));
+      if (functionName === 'IPO_CALENDAR') {
+        return textResponse('symbol,name,ipoDate,priceRangeLow,priceRangeHigh,currency,exchange\nTEST,Test Holdings,2026-07-01,10,12,USD,NASDAQ\n');
+      }
+      return jsonResponse({ Information: 'provider rejected endpoint for this key' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const events = await new AlphaVantageInvestmentCalendarProvider().fetchEvents(createInput());
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        externalId: 'alpha-vantage-cpi-2026-05-13',
+        eventType: 'economic_indicator',
+      }),
+      expect.objectContaining({
+        externalId: 'alpha-vantage-ipo-TEST-2026-07-01',
+        eventType: 'ipo',
+      }),
+    ]);
+    expect(JSON.stringify(events)).not.toContain('provider rejected');
+    expect(JSON.stringify(events)).not.toContain('test-key');
+    expect(JSON.stringify(events)).not.toContain('alphavantage.co');
   });
 
   it('creates alpha_vantage provider mode from env', () => {
