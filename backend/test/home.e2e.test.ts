@@ -651,25 +651,31 @@ describe('GET /api/home daily_summary query handling', () => {
   });
 
   it('refreshes home investment calendar from the stub provider', async () => {
+    const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
+    process.env.INVESTMENT_CALENDAR_PROVIDER = 'stub';
     const app = await createApp();
 
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/home/investment-calendar/refresh',
-      payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
-    });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30', include_market_events: true },
+      });
 
-    expect(res.statusCode).toBe(200);
-    expect(res.json().data).toMatchObject({
-      status: 'succeeded',
-      source: 'stub',
-      manual_only: true,
-    });
-    expect(JSON.stringify(res.json())).not.toContain('http://');
-    expect(JSON.stringify(res.json())).not.toContain('stack');
-    expect(runtime.investmentCalendarEvents.length).toBeGreaterThan(2);
-
-    await app.close();
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'stub',
+        manual_only: true,
+      });
+      expect(JSON.stringify(res.json())).not.toContain('http://');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+      expect(runtime.investmentCalendarEvents.length).toBeGreaterThan(2);
+    } finally {
+      await app.close();
+      if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
+      else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
+    }
   });
 
   it('refreshes home investment calendar from Alpha Vantage fixtures without real external access', async () => {
@@ -738,15 +744,17 @@ describe('GET /api/home daily_summary query handling', () => {
 
   it('refreshes home investment calendar from J-Quants fixtures without real external access', async () => {
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
-    const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    const previousToken = process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
     process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
-    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-refresh-token';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = 'test-refresh-token';
     vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
       const urlText = String(url);
       if (urlText.includes('/token/auth_refresh')) {
         return { ok: true, status: 200, json: vi.fn(async () => ({ idToken: 'test-id-token' })) } as any;
       }
       if (urlText.includes('/fins/announcement')) {
+        expect(urlText).not.toContain('from=');
+        expect(urlText).not.toContain('to=');
         return {
           ok: true,
           status: 200,
@@ -808,8 +816,8 @@ describe('GET /api/home daily_summary query handling', () => {
       vi.unstubAllGlobals();
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
-      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
-      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = previousToken;
     }
   });
 

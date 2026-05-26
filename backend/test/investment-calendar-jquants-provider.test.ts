@@ -76,7 +76,7 @@ describe('JQuantsInvestmentCalendarProvider', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     process.env = { ...ORIGINAL_ENV };
-    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-refresh-token';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = 'test-refresh-token';
     process.env.INVESTMENT_CALENDAR_JQUANTS_TIMEOUT_MS = '1000';
   });
 
@@ -113,6 +113,10 @@ describe('JQuantsInvestmentCalendarProvider', () => {
     expect(JSON.stringify(events)).not.toContain('test-refresh-token');
     expect(JSON.stringify(events)).not.toContain('api.jquants.com');
     expect(JSON.stringify(events)).not.toContain('raw');
+    const announcementCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/fins/announcement'));
+    expect(announcementCall).toBeTruthy();
+    expect(String(announcementCall?.[0])).not.toContain('from=');
+    expect(String(announcementCall?.[0])).not.toContain('to=');
   });
 
   it('skips market events for symbol-only refresh', async () => {
@@ -131,11 +135,24 @@ describe('JQuantsInvestmentCalendarProvider', () => {
   });
 
   it('fails with a sanitized missing API key error', async () => {
+    delete process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
     delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
 
     await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_PROVIDER_UNAVAILABLE',
-      details: { provider: 'jquants', reason: 'missing_api_key' },
+      details: { provider: 'jquants', reason: 'missing_refresh_token' },
+    });
+  });
+
+  it('fails with a sanitized invalid refresh token error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: URL | string) => {
+      if (String(url).includes('/token/auth_refresh')) return jsonResponse({ message: 'invalid raw provider message' }, false, 400);
+      return jsonResponse({});
+    }));
+
+    await expect(new JQuantsInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
+      code: 'INVESTMENT_CALENDAR_REFRESH_FAILED',
+      details: { provider: 'jquants', reason: 'invalid_or_expired_refresh_token' },
     });
   });
 

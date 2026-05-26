@@ -129,15 +129,17 @@ describe('investment calendar APIs', () => {
 
   it('refreshes symbol calendar events from J-Quants fixtures without real external access', async () => {
     const previousProvider = process.env.INVESTMENT_CALENDAR_PROVIDER;
-    const previousKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
+    const previousToken = process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
     process.env.INVESTMENT_CALENDAR_PROVIDER = 'jquants';
-    process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-refresh-token';
+    process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = 'test-refresh-token';
     const fetchMock = vi.fn(async (url: URL | string) => {
       const urlText = String(url);
       if (urlText.includes('/token/auth_refresh')) {
         return { ok: true, status: 200, json: vi.fn(async () => ({ idToken: 'test-id-token' })) } as any;
       }
       if (urlText.includes('/fins/announcement')) {
+        expect(urlText).not.toContain('from=');
+        expect(urlText).not.toContain('to=');
         return {
           ok: true,
           status: 200,
@@ -185,8 +187,8 @@ describe('investment calendar APIs', () => {
       vi.unstubAllGlobals();
       if (previousProvider === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDER;
       else process.env.INVESTMENT_CALENDAR_PROVIDER = previousProvider;
-      if (previousKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
-      else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousKey;
+      if (previousToken === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN;
+      else process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN = previousToken;
     }
   });
 
