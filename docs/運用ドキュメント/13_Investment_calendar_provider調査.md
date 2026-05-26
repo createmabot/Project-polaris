@@ -324,6 +324,7 @@ provider 方針分類:
   - CPI / retail sales / unemployment / nonfarm payroll は発表済み data series として扱い、将来予定ではないことを label / description で区別する。
   - IPO calendar は market-level `ipo` event として扱う。
   - Earnings calendar は P1 では後続判断にする。
+  - 無料 API key では一部 endpoint が premium / rate limit / provider rejection になる場合があるため、endpoint 単位の best-effort refresh とする。少なくとも 1 endpoint が正常に読めた場合は取得できた event だけを保存し、全 endpoint が拒否された場合のみ sanitized failure とする。
 - tests: real API ではなく fixture response / mocked fetch、normalization、failure sanitization、raw response / API key / endpoint 実値非露出、stale warning。
 
 ### Phase P2: JP stock symbol-level provider

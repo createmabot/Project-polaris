@@ -91,6 +91,13 @@ function assertNoProviderError(payload: unknown) {
   }
 }
 
+function isProviderRejectedOrRateLimited(error: unknown) {
+  return error instanceof AppError
+    && error.code === 'INVESTMENT_CALENDAR_REFRESH_FAILED'
+    && (error.details as { provider?: unknown; reason?: unknown } | undefined)?.provider === 'alpha_vantage'
+    && (error.details as { provider?: unknown; reason?: unknown } | undefined)?.reason === 'provider_rejected_or_rate_limited';
+}
+
 function normalizeEconomicPayload(
   payload: unknown,
   config: EconomicSeriesConfig,
@@ -212,27 +219,45 @@ export class AlphaVantageInvestmentCalendarProvider implements InvestmentCalenda
     if (!apiKey) throw providerUnavailable('missing_api_key');
 
     const events: InvestmentCalendarProviderEvent[] = [];
+    let successfulSourceCount = 0;
+    let skippedProviderRejectionCount = 0;
     for (const config of ECONOMIC_SERIES) {
-      const response = await fetchAlphaVantage(config.functionName, apiKey);
-      if (!response.ok) throw providerRefreshFailed('provider_http_error');
-      let payload: unknown;
       try {
-        payload = await response.json();
-      } catch {
-        throw providerInvalidResponse('economic_json_invalid');
+        const response = await fetchAlphaVantage(config.functionName, apiKey);
+        if (!response.ok) throw providerRefreshFailed('provider_http_error');
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          throw providerInvalidResponse('economic_json_invalid');
+        }
+        events.push(...normalizeEconomicPayload(payload, config, input));
+        successfulSourceCount += 1;
+      } catch (error) {
+        if (!isProviderRejectedOrRateLimited(error)) throw error;
+        skippedProviderRejectionCount += 1;
       }
-      events.push(...normalizeEconomicPayload(payload, config, input));
     }
 
-    const ipoResponse = await fetchAlphaVantage('IPO_CALENDAR', apiKey);
-    if (!ipoResponse.ok) throw providerRefreshFailed('provider_http_error');
-    let csvText: string;
     try {
-      csvText = await ipoResponse.text();
-    } catch {
-      throw providerInvalidResponse('ipo_csv_invalid');
+      const ipoResponse = await fetchAlphaVantage('IPO_CALENDAR', apiKey);
+      if (!ipoResponse.ok) throw providerRefreshFailed('provider_http_error');
+      let csvText: string;
+      try {
+        csvText = await ipoResponse.text();
+      } catch {
+        throw providerInvalidResponse('ipo_csv_invalid');
+      }
+      events.push(...normalizeIpoCsv(csvText, input));
+      successfulSourceCount += 1;
+    } catch (error) {
+      if (!isProviderRejectedOrRateLimited(error)) throw error;
+      skippedProviderRejectionCount += 1;
     }
-    events.push(...normalizeIpoCsv(csvText, input));
+
+    if (successfulSourceCount === 0 && skippedProviderRejectionCount > 0) {
+      throw providerRefreshFailed('provider_rejected_or_rate_limited');
+    }
 
     return events;
   }
