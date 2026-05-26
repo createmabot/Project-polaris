@@ -140,7 +140,13 @@ export default function Home() {
       const result = await postApi<InvestmentCalendarRefreshData>('/api/home/investment-calendar/refresh', {
         include_market_events: true,
       });
-      setCalendarMessage(`投資カレンダーを更新しました。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+      if (result.status === 'failed') {
+        setCalendarError('投資カレンダーを更新できませんでした。時間をおいて再実行してください。');
+      } else if (result.status === 'partial_success') {
+        setCalendarError(`一部のカレンダー取得に失敗しました。取得できた予定は保存されています。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+      } else {
+        setCalendarMessage(`投資カレンダーを更新しました。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+      }
       await mutate();
     } catch {
       setCalendarError('投資カレンダーを更新できませんでした。時間をおいて再実行してください。');

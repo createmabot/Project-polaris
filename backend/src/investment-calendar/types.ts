@@ -29,7 +29,7 @@ export type InvestmentCalendarProviderEvent = {
 };
 
 export type InvestmentCalendarRefreshResult = {
-  status: 'succeeded';
+  status: 'succeeded' | 'partial_success' | 'failed';
   saved_count: number;
   updated_count: number;
   skipped_count: number;
@@ -38,4 +38,13 @@ export type InvestmentCalendarRefreshResult = {
   to: string;
   source: 'stub' | 'public_provider';
   manual_only: true;
+  providers?: Array<{
+    provider: string;
+    status: 'succeeded' | 'failed' | 'skipped';
+    saved_count: number;
+    updated_count: number;
+    skipped_count: number;
+    failed_count: number;
+    error_code?: string | null;
+  }>;
 };

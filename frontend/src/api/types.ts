@@ -83,7 +83,7 @@ export type InvestmentCalendarData = {
 };
 
 export type InvestmentCalendarRefreshData = {
-  status: 'succeeded';
+  status: 'succeeded' | 'partial_success' | 'failed';
   saved_count: number;
   updated_count: number;
   skipped_count: number;
@@ -92,6 +92,15 @@ export type InvestmentCalendarRefreshData = {
   to: string;
   source: string;
   manual_only: true;
+  providers?: Array<{
+    provider: string;
+    status: 'succeeded' | 'failed' | 'skipped' | string;
+    saved_count: number;
+    updated_count: number;
+    skipped_count: number;
+    failed_count: number;
+    error_code?: string | null;
+  }>;
 };
 
 export type ExternalReferenceDto = {

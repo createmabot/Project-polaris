@@ -306,6 +306,7 @@ provider 方針分類:
 - 現在の UI では Home が watchlist / positions / market overview の日次確認画面であり、market-level event の効果が大きい。
 - FOMC、日銀、米 CPI、米雇用統計、休場日は投資判断上の共通重要 event で、銘柄別 data source より source 選定が比較的単純。
 - J-Quants は P2 で日本株 symbol-level の決算発表予定日と market-level の取引カレンダーに接続済み。配当金情報と TDnet API は paid / 有料前提のため採用しない。
+- P3 として、単一 provider 選択ではなく `INVESTMENT_CALENDAR_PROVIDERS=alpha_vantage,jquants` による multi-provider aggregation を使う。Home refresh では Alpha Vantage の US macro / IPO と J-Quants の日本株 earnings / JP market holiday を同じ `InvestmentCalendarEvent` table に保存する。provider 間で実質同じ event が重なる場合も、初回は source 別 event として扱い、cross-provider duplicate merge は後続判断にする。
 - manual refresh と cache で十分運用でき、scheduled job / crawler を追加しなくてよい。
 - required tests は provider response fixture と normalization tests で固定できる。
 
