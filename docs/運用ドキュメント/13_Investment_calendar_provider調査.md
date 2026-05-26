@@ -36,11 +36,11 @@ provider 方針分類:
 - 対象 market: 日本株。
 - 日本株対応: 高い。P2 では無料 plan 範囲の決算発表予定日と取引カレンダーを実装対象にする。
 - API 形式: REST API。
-- 認証: J-Quants refresh token から ID token を取得する。北極星の env は `INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN` を正とし、旧互換 alias として `INVESTMENT_CALENDAR_JQUANTS_API_KEY` も読む。
+- 認証: J-Quants V2 の API key 認証方式を使う。北極星の env は `INVESTMENT_CALENDAR_JQUANTS_API_KEY` を正とし、V1 の refresh token / ID token flow は使わない。
 - 無料枠: Free plan で決算発表予定日と取引カレンダーを対象にする。配当金情報は無料範囲外として扱い、P2 では実装しない。
 - 商用 / 個人利用条件: 個人向け service として案内されているが、J-Quants data を閲覧可能な形で再配布しない。北極星では raw data を保存・表示せず、正規化済み calendar event のみ保存する。
 - レート制限: Free plan は小さい API call 制限があるため、manual refresh only、watchlist / positions の symbol de-dupe、N+1 回避を前提にする。
-- 取得できる日付範囲: Free plan の提供範囲に従う。`/fins/announcement` は次営業日の決算発表予定 API として扱い、任意の `from` / `to` range query は付けない。最新データの遅延 / 除外期間があるため、重要日程は公式情報で確認する。
+- 取得できる日付範囲: Free plan の提供範囲に従う。V2 では決算発表予定を `/equities/earnings-calendar`、取引カレンダーを `/markets/calendar` として扱う。取引カレンダーは query なしで取得し、北極星側で date range filter する。最新データの遅延 / 除外期間があるため、重要日程は公式情報で確認する。
 - freshness: JPX 系 source で信頼性は高いが、event type ごとの更新 timing は実装前に確認する。
 - source reliability: 高。
 - 利用規約上の懸念: API credential、free plan 条件、redistribution 条件。
