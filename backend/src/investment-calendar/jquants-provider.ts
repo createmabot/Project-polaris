@@ -7,8 +7,10 @@ const JQUANTS_BASE_URL = 'https://api.jquants.com/v1';
 
 type CalendarSymbol = InvestmentCalendarFetchInput['symbols'][number];
 
-function getApiKey() {
-  return process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY?.trim() || null;
+function getRefreshToken() {
+  return process.env.INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN?.trim()
+    || process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY?.trim()
+    || null;
 }
 
 function getTimeoutMs() {
@@ -141,7 +143,30 @@ async function fetchJson(url: URL, init?: RequestInit): Promise<unknown> {
 async function fetchIdToken(refreshToken: string): Promise<string> {
   const url = new URL(`${JQUANTS_BASE_URL}/token/auth_refresh`);
   url.searchParams.set('refreshtoken', refreshToken);
-  const payload = await fetchJson(url, { method: 'POST' });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      signal: AbortSignal.timeout(getTimeoutMs()),
+    });
+  } catch {
+    throw providerRefreshFailed('fetch_failed_or_timeout');
+  }
+
+  if (response.status === 400 || response.status === 401 || response.status === 403) {
+    throw providerRefreshFailed('invalid_or_expired_refresh_token');
+  }
+  if (response.status === 429) {
+    throw providerRefreshFailed('provider_rejected_or_rate_limited');
+  }
+  if (!response.ok) throw providerRefreshFailed('provider_http_error');
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw providerInvalidResponse('auth_json_invalid');
+  }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw providerInvalidResponse('auth_payload_not_object');
   }
@@ -247,16 +272,13 @@ export class JQuantsInvestmentCalendarProvider implements InvestmentCalendarProv
   readonly name = 'jquants' as const;
 
   async fetchEvents(input: InvestmentCalendarFetchInput): Promise<InvestmentCalendarProviderEvent[]> {
-    const apiKey = getApiKey();
-    if (!apiKey) throw providerUnavailable('missing_api_key');
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) throw providerUnavailable('missing_refresh_token');
 
-    const idToken = await fetchIdToken(apiKey);
+    const idToken = await fetchIdToken(refreshToken);
     const events: InvestmentCalendarProviderEvent[] = [];
     if (input.symbols.length > 0) {
-      const announcementPayload = await fetchJquantsData('/fins/announcement', idToken, {
-        from: toProviderDate(input.from),
-        to: toProviderDate(input.to),
-      });
+      const announcementPayload = await fetchJquantsData('/fins/announcement', idToken, {});
       events.push(...normalizeAnnouncementRows(announcementPayload, input));
     }
 

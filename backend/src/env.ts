@@ -50,6 +50,7 @@ const envSchema = z.object({
   INVESTMENT_CALENDAR_FETCH_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
   INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY: z.string().optional(),
   INVESTMENT_CALENDAR_ALPHA_VANTAGE_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
+  INVESTMENT_CALENDAR_JQUANTS_REFRESH_TOKEN: z.string().optional(),
   INVESTMENT_CALENDAR_JQUANTS_API_KEY: z.string().optional(),
   INVESTMENT_CALENDAR_JQUANTS_TIMEOUT_MS: z.coerce.number().int().positive().default(10000),
 
