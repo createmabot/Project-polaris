@@ -31,22 +31,22 @@ provider 方針分類:
 
 ### J-Quants API
 
-- provider 方針分類: `free_api_candidate` / `needs_plan_check`。
-- 対象 event: 決算発表予定、配当権利落ち、配当支払予定、休場日、上場会社基本情報。
+- provider 方針分類: `free_api_candidate`。
+- 対象 event: 決算発表予定日、取引カレンダー / 休場日、上場会社基本情報。
 - 対象 market: 日本株。
-- 日本株対応: 高い。JPX の J-Quants 説明では、配当、決算発表予定、上場会社情報、取引カレンダーが dataset として示されている。
+- 日本株対応: 高い。P2 では無料 plan 範囲の決算発表予定日と取引カレンダーを実装対象にする。
 - API 形式: REST API。
 - 認証: J-Quants account / token。
-- 無料枠: 無料 plan があり、公開情報上は決算発表予定日、取引カレンダー、配当金情報などが無料 plan 対象に含まれる。ただし提供期間、遅延、rate limit、利用条件は実装直前に再確認する。
-- 商用 / 個人利用条件: 個人向け service として案内されているが、再配布・商用条件は契約 / plan 確認が必要。
-- レート制限: free plan の上限確認が必要。manual refresh なら watchlist / positions の小規模利用と相性がよい。
-- 取得できる日付範囲: dataset / plan 依存。
+- 無料枠: Free plan で決算発表予定日と取引カレンダーを対象にする。配当金情報は無料範囲外として扱い、P2 では実装しない。
+- 商用 / 個人利用条件: 個人向け service として案内されているが、J-Quants data を閲覧可能な形で再配布しない。北極星では raw data を保存・表示せず、正規化済み calendar event のみ保存する。
+- レート制限: Free plan は小さい API call 制限があるため、manual refresh only、watchlist / positions の symbol de-dupe、N+1 回避を前提にする。
+- 取得できる日付範囲: Free plan の提供範囲に従う。最新データの遅延 / 除外期間があるため、重要日程は公式情報で確認する。
 - freshness: JPX 系 source で信頼性は高いが、event type ごとの更新 timing は実装前に確認する。
 - source reliability: 高。
 - 利用規約上の懸念: API credential、free plan 条件、redistribution 条件。
 - 実装難易度: 中。
-- 北極星への採用候補: P2 の日本株 symbol-level provider 第一候補。
-- 備考: 無料 plan の範囲で決算予定 / 配当予定 / 休場日を同じ provider family に寄せられる場合は優先する。無料枠で不足する event は paid plan へ進まず後続判断にする。
+- 北極星への採用候補: P2 として実装。SymbolDetail / Home の日本株決算発表予定日と Home の東京市場休場日を対象にする。
+- 備考: 配当金情報、TDnet / 適時開示、有料 plan / addon / Premium 専用 data は採用しない。無料枠で不足する event は paid plan へ進まず後続判断にする。
 - 参照: [J-Quants API | Japan Exchange Group](https://www.jpx.co.jp/english/markets/other-data-services/j-quants-api/index.html)、[J-Quants Trading Calendar](https://jpx.gitbook.io/j-quants-en/api-reference/trading_calendar/holiday_division)
 
 ### TDnet API
@@ -276,18 +276,18 @@ provider 方針分類:
 - market-level event を先に実用化する。
 - 対象: FOMC、日銀、米 CPI / 雇用統計、JPX / NYSE / Nasdaq 休場日。
 - source: Alpha Vantage / FRED / FMP の無料 API 範囲を優先し、FOMC / BOJ / exchange holidays は official source / curated fixture と組み合わせる。
-- symbol-level 日本株 event は J-Quants 無料 plan の利用条件確認まで stub / seed 維持。
+- symbol-level 日本株 event は P2 で J-Quants 無料 plan 範囲の決算発表予定日まで接続済み。配当系は無料範囲外として stub / seed または後続判断に留める。
 - manual refresh only。
 - 長所: Home の実用価値が早く上がる。実装を小さく切れる。required tests を fixture 化しやすい。
 - 短所: SymbolDetail の銘柄別 event は初回では限定的。
 
 ### Option B: 日本株重視構成
 
-- 日本株の決算予定 / 配当 / 休場日を優先する。
+- 日本株の決算予定 / 休場日を優先する。配当系は無料範囲外として扱う。
 - source: J-Quants の無料 plan を第一候補、EDINET は filing enrichment に限定。TDnet API は paid API のため採用しない。
 - market-level event は FOMC / BOJ / holiday 程度に抑える。
 - 長所: 日本株ユーザーの銘柄別確認価値が高い。
-- 短所: J-Quants free plan / credential / 利用条件確認が先に必要。無料枠で不足する決算・配当・権利落ちは広範囲 scraping せず後続判断になる。
+- 短所: J-Quants credential と Free plan の提供範囲 / rate limit を考慮する必要がある。無料枠で不足する配当・権利落ちは広範囲 scraping せず後続判断になる。
 
 ### Option C: 経済指標重視構成
 
@@ -305,7 +305,7 @@ provider 方針分類:
 
 - 現在の UI では Home が watchlist / positions / market overview の日次確認画面であり、market-level event の効果が大きい。
 - FOMC、日銀、米 CPI、米雇用統計、休場日は投資判断上の共通重要 event で、銘柄別 data source より source 選定が比較的単純。
-- J-Quants は日本株 symbol-level では有力だが、free plan、credential、再配布条件、coverage 確認を先に行う必要がある。TDnet API は paid API のため採用しない。
+- J-Quants は P2 で日本株 symbol-level の決算発表予定日と market-level の取引カレンダーに接続済み。配当金情報と TDnet API は paid / 有料前提のため採用しない。
 - manual refresh と cache で十分運用でき、scheduled job / crawler を追加しなくてよい。
 - required tests は provider response fixture と normalization tests で固定できる。
 
@@ -328,13 +328,16 @@ provider 方針分類:
 
 ### Phase P2: JP stock symbol-level provider
 
-- 対象: 決算発表予定、配当権利落ち、配当支払予定。
-- source: J-Quants 無料 plan 第一候補。無料 plan で不足する event は paid plan へ進まず後続判断にする。
+- 対象: 決算発表予定日、取引カレンダー / 休場日。
+- 対象外: 配当金情報、配当権利落ち、配当支払予定、TDnet / 適時開示、有料 plan / addon / Premium 専用 data。
+- source: J-Quants 無料 plan。無料 plan で不足する event は paid plan へ進まず後続判断にする。
 - 実装:
   - watchlist / positions / SymbolDetail の symbolCode を J-Quants code に正規化する。
   - `sourceType + externalId` の dedupe を維持する。
-  - SymbolDetail refresh を対象にする。
-- tests: J-Quants fixture、unknown symbol skip、duplicate upsert、provider failure。
+  - SymbolDetail refresh は対象 symbol の決算発表予定日だけを取得する。
+  - Home refresh は watchlist / positions の決算発表予定日と market-level の東京市場休場日を取得する。
+  - manual refresh only を維持し、scheduled job / crawler は追加しない。
+- tests: real API ではなく J-Quants fixture / mocked fetch、unknown symbol skip、duplicate upsert、provider failure、raw response / API key / endpoint 実値非露出。
 
 ### Phase P3: disclosure / filing enrichment
 

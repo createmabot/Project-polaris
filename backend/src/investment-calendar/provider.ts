@@ -1,5 +1,6 @@
 import { AppError } from '../utils/response';
 import { AlphaVantageInvestmentCalendarProvider } from './alpha-vantage-provider';
+import { JQuantsInvestmentCalendarProvider } from './jquants-provider';
 import {
   normalizeProviderEvent,
 } from './normalization';
@@ -26,6 +27,7 @@ function getCalendarFetchTimeoutMs() {
 
 function getConfiguredProviderName(): InvestmentCalendarProviderName {
   if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'alpha_vantage') return 'alpha_vantage';
+  if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'jquants') return 'jquants';
   return process.env.INVESTMENT_CALENDAR_PROVIDER === 'public' ? 'public' : 'stub';
 }
 
@@ -136,6 +138,7 @@ export function createInvestmentCalendarProvider(
   providerName: InvestmentCalendarProviderName = getConfiguredProviderName(),
 ): InvestmentCalendarProvider {
   if (providerName === 'alpha_vantage') return new AlphaVantageInvestmentCalendarProvider();
+  if (providerName === 'jquants') return new JQuantsInvestmentCalendarProvider();
   if (providerName === 'public') return new PublicInvestmentCalendarProvider();
   return new StubInvestmentCalendarProvider();
 }

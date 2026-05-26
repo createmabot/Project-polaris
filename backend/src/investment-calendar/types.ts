@@ -1,4 +1,4 @@
-export type InvestmentCalendarProviderName = 'stub' | 'public' | 'alpha_vantage';
+export type InvestmentCalendarProviderName = 'stub' | 'public' | 'alpha_vantage' | 'jquants';
 
 export type InvestmentCalendarFetchInput = {
   from: string;
