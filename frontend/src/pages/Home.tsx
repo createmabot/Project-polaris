@@ -128,6 +128,12 @@ function eventTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
+function importanceLabel(importance: string): string {
+  if (importance === 'high') return '高';
+  if (importance === 'low') return '低';
+  return '中';
+}
+
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -264,7 +270,7 @@ function calendarChipClass(event: InvestmentCalendarEvent): string {
         ? 'border-slate-200 bg-slate-50 text-slate-700'
         : 'border-sky-200 bg-sky-50 text-sky-900';
   const stale = event.is_stale ? ' ring-1 ring-amber-300' : '';
-  return `rounded-md border px-1.5 py-1 text-[11px] leading-4 ${tone}${stale}`;
+  return `group relative rounded-md border px-1.5 py-0.5 text-[11px] leading-4 outline-none ${tone}${stale}`;
 }
 
 function calendarEventTitle(event: InvestmentCalendarEvent): string {
@@ -288,6 +294,43 @@ function calendarChipPrefix(event: InvestmentCalendarEvent): string {
   if (event.event_type === 'market_holiday') return '休場';
   if (event.event_type === 'ipo') return 'IPO';
   return eventTypeLabel(event.event_type);
+}
+
+function calendarEventScopeLabel(event: InvestmentCalendarEvent): string {
+  if (event.scope === 'market') return '市場全体';
+  return event.symbol_code || event.display_name || '-';
+}
+
+function CalendarEventHoverDetail({ event }: { event: InvestmentCalendarEvent }) {
+  return (
+    <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 hidden w-72 rounded-lg border border-slate-200 bg-white p-2.5 text-[11px] leading-5 text-slate-700 shadow-xl shadow-slate-300/40 group-hover:block group-focus-within:block">
+      <div className="font-semibold text-slate-950">{event.title}</div>
+      <div className="mt-1 grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-2 gap-y-0.5">
+        <span className="text-slate-500">種別</span>
+        <span>{eventTypeLabel(event.event_type)}</span>
+        <span className="text-slate-500">日付</span>
+        <span>{event.event_date}{event.event_time ? ` ${event.event_time}` : ''}</span>
+        <span className="text-slate-500">重要度</span>
+        <span>{importanceLabel(event.importance)}</span>
+        <span className="text-slate-500">対象</span>
+        <span>{calendarEventScopeLabel(event)}</span>
+        <span className="text-slate-500">provider</span>
+        <span>{providerLabel(event.provider, event.source_name)}</span>
+        <span className="text-slate-500">source</span>
+        <span>{event.source_label || event.source_name || event.source_type || '-'}</span>
+        <span className="text-slate-500">取得</span>
+        <span>{event.fetched_at ? formatCalendarFetchedAt(event.fetched_at).replace('取得: ', '') : '-'}</span>
+      </div>
+      {event.is_stale ? (
+        <div className="mt-1 rounded-md bg-amber-50 px-2 py-1 font-medium text-amber-800">
+          取得情報が古い可能性があります。
+        </div>
+      ) : null}
+      {event.description ? (
+        <p className="mt-1 max-h-16 overflow-hidden text-slate-600">{event.description}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function MarketTile({
@@ -605,7 +648,7 @@ export default function Home() {
               )
             ) : (
               <div className="space-y-4">
-                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <div className="overflow-visible rounded-xl border border-slate-200 bg-white">
                   <div className="min-w-[44rem]">
                     <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
                       <Button variant="secondary" onClick={() => handleCalendarMonthChange(-1)}>
@@ -624,16 +667,16 @@ export default function Home() {
                       ))}
                     </div>
                     {calendarMonth.weeks.map((week, weekIndex) => (
-                        <div key={`${calendarMonth.key}-week-${weekIndex}`} className="grid grid-cols-7 border-b border-slate-200 last:border-b-0">
+                        <div key={`${calendarMonth.key}-week-${weekIndex}`} className="grid grid-cols-7 items-start border-b border-slate-200 last:border-b-0">
                           {week.map((day, dayIndex) => {
                             const visibleEvents = day.events.slice(0, MAX_CALENDAR_EVENTS_PER_DAY);
                             const hiddenCount = Math.max(0, day.events.length - visibleEvents.length);
                             return (
                               <div
                                 key={day.date}
-                                className={`min-h-28 border-r border-slate-200 p-1.5 last:border-r-0 ${calendarDayClass(day, dayIndex)}`}
+                                className={`min-h-8 border-r border-slate-200 p-1 last:border-r-0 ${calendarDayClass(day, dayIndex)}`}
                               >
-                                <div className="mb-1 flex items-center justify-between gap-1">
+                                <div className={`${day.events.length > 0 ? 'mb-1' : ''} flex min-h-5 items-center justify-between gap-1`}>
                                   <span className={`text-xs font-semibold ${day.inMonth ? 'text-slate-700' : 'text-slate-400'}`}>
                                     {day.day}
                                   </span>
@@ -643,15 +686,21 @@ export default function Home() {
                                     </span>
                                   ) : null}
                                 </div>
-                                <div className="space-y-1">
+                                <div className="space-y-0.5">
                                   {visibleEvents.map((event) => (
-                                    <div key={event.id} className={calendarChipClass(event)} title={calendarEventTitle(event)}>
+                                    <div
+                                      key={event.id}
+                                      className={calendarChipClass(event)}
+                                      title={calendarEventTitle(event)}
+                                      tabIndex={0}
+                                    >
                                       <div className="flex items-center gap-1.5">
                                         <span className="shrink-0 rounded bg-white/70 px-1 text-[10px] font-semibold">
                                           {calendarChipPrefix(event)}
                                         </span>
                                         <span className="min-w-0 truncate font-semibold">{event.title}</span>
                                       </div>
+                                      <CalendarEventHoverDetail event={event} />
                                     </div>
                                   ))}
                                   {hiddenCount > 0 ? (
