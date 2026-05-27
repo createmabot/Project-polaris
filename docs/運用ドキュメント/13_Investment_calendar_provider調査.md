@@ -47,6 +47,8 @@ provider 方針分類:
 - 実装難易度: 中。
 - 北極星への採用候補: P2 として実装。SymbolDetail / Home の日本株決算発表予定日と Home の東京市場休場日を対象にする。
 - 備考: 配当金情報、TDnet / 適時開示、有料 plan / addon / Premium 専用 data は採用しない。無料枠で不足する event は paid plan へ進まず後続判断にする。
+- real API smoke: J-Quants earnings response shape と normalization は、provider response 内に存在する銘柄を使った SymbolDetail refresh e2e で確認済み。earnings event 保存まで成功し、一時 Symbol / event は cleanup 済み。対象期間内に該当銘柄が provider response に含まれない場合は正常 0 件になり得るため、0 件を provider failure と混同しない。
+- smoke 記録方針: raw response、raw 銘柄コード、API key、endpoint 実値は docs / PR / log に残さない。必要な調査は row count、field names、該当件数など sanitized summary に限定する。
 - 参照: [J-Quants API | Japan Exchange Group](https://www.jpx.co.jp/english/markets/other-data-services/j-quants-api/index.html)、[J-Quants Trading Calendar](https://jpx.gitbook.io/j-quants-en/api-reference/trading_calendar/holiday_division)
 
 ### TDnet API
