@@ -357,7 +357,9 @@ provider 方針分類:
 
 - 今回実装: Alpha Vantage の `REAL_GDP` を quarterly data series として追加し、Home の `economic_indicator` event `米GDP` として扱う。これは発表済み data series の observation date であり、将来予定ではない。
 - P4 実装: PPI を Alpha Vantage の best-effort endpoint として追加する。FOMC 日程、日銀金融政策決定会合、米国市場休場日 / 短縮取引日は `official_market` provider で扱う。
-- `official_market`: default は bundled curated fixture event を使い、任意の official source URL が設定された場合だけ manual refresh 時に fetch する。required test は fixture HTML / fixture JSON / mocked fetch のみで、real website access は使わない。
+- P4 追加: 日本市場の SQ / メジャーSQを `official_market` provider の rule-based event として扱う。SQ は毎月第2金曜日、メジャーSQは 3 / 6 / 9 / 12 月の第2金曜日として生成し、`derivatives_settlement` event に正規化する。
+- `official_market`: default は bundled curated fixture event と rule-based SQ event を使い、任意の official source URL が設定された場合だけ manual refresh 時に fetch する。required test は fixture HTML / fixture JSON / mocked fetch / rule-based test のみで、real website access は使わない。
+- SQ / メジャーSQの休場日補正は初回未実装。必要なら J-Quants 取引カレンダーとの突合で後続補正する。
 - 見送り: 有料 API、非公式 calendar scraping、各社 IR scraping、scheduled crawler。
 
 ### Phase P4: freshness / source quality

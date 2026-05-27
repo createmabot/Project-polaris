@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  generateJpSqEvents,
   OfficialMarketInvestmentCalendarProvider,
   parseOfficialMarketEvents,
 } from '../src/investment-calendar/official-market-provider';
@@ -99,6 +100,67 @@ describe('OfficialMarketInvestmentCalendarProvider', () => {
     ]));
   });
 
+  it('generates monthly JP SQ events in the requested range', () => {
+    const events = generateJpSqEvents({
+      from: '2026-05-01',
+      to: '2026-08-31',
+    });
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        externalId: 'official-market-jp-sq-2026-05-08',
+        eventType: 'derivatives_settlement',
+        title: 'SQ',
+        importance: 'medium',
+        sourceName: 'official_market',
+        sourceLabel: '日本市場 SQ',
+      }),
+      expect.objectContaining({
+        externalId: 'official-market-jp-major-sq-2026-06-12',
+        eventType: 'derivatives_settlement',
+        title: 'メジャーSQ',
+        importance: 'high',
+        sourceLabel: '日本市場 メジャーSQ',
+      }),
+      expect.objectContaining({
+        externalId: 'official-market-jp-sq-2026-07-10',
+        title: 'SQ',
+      }),
+      expect.objectContaining({
+        externalId: 'official-market-jp-sq-2026-08-14',
+        title: 'SQ',
+      }),
+    ]));
+    expect(events).toHaveLength(4);
+  });
+
+  it('treats March, June, September, and December as major SQ', () => {
+    const events = generateJpSqEvents({
+      from: '2026-03-01',
+      to: '2026-12-31',
+    });
+
+    expect(events.filter((event) => event.title === 'メジャーSQ').map((event) => event.eventDate)).toEqual([
+      '2026-03-13',
+      '2026-06-12',
+      '2026-09-11',
+      '2026-12-11',
+    ]);
+    expect(events.find((event) => event.eventDate === '2026-04-10')).toMatchObject({
+      title: 'SQ',
+      importance: 'medium',
+    });
+  });
+
+  it('does not generate JP SQ events outside the requested date range', () => {
+    const events = generateJpSqEvents({
+      from: '2026-06-13',
+      to: '2026-07-09',
+    });
+
+    expect(events).toEqual([]);
+  });
+
   it('returns bundled official market events without real external access by default', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -110,6 +172,7 @@ describe('OfficialMarketInvestmentCalendarProvider', () => {
       expect.objectContaining({ eventType: 'central_bank', sourceName: 'federal_reserve' }),
       expect.objectContaining({ eventType: 'central_bank', sourceName: 'boj' }),
       expect.objectContaining({ eventType: 'market_holiday', sourceName: 'nyse' }),
+      expect.objectContaining({ eventType: 'derivatives_settlement', sourceName: 'official_market' }),
     ]));
     expect(JSON.stringify(events)).not.toContain('http');
     expect(JSON.stringify(events)).not.toContain('raw');
@@ -132,7 +195,7 @@ describe('OfficialMarketInvestmentCalendarProvider', () => {
 
     const events = await new OfficialMarketInvestmentCalendarProvider().fetchEvents(createInput());
 
-    expect(events).toHaveLength(3);
+    expect(events).toHaveLength(7);
     expect(JSON.stringify(events)).not.toContain('official.test');
     expect(JSON.stringify(events)).not.toContain('stack');
   });
@@ -143,7 +206,11 @@ describe('OfficialMarketInvestmentCalendarProvider', () => {
     process.env.INVESTMENT_CALENDAR_OFFICIAL_MARKET_US_HOLIDAY_URL = 'https://official.test/us-holidays';
     vi.stubGlobal('fetch', vi.fn(async () => textResponse('unavailable', false, 500)));
 
-    await expect(new OfficialMarketInvestmentCalendarProvider().fetchEvents(createInput())).rejects.toMatchObject({
+    await expect(new OfficialMarketInvestmentCalendarProvider().fetchEvents({
+      ...createInput(),
+      from: '2026-05-01',
+      to: '2026-05-07',
+    })).rejects.toMatchObject({
       code: 'INVESTMENT_CALENDAR_REFRESH_FAILED',
       details: { provider: 'official_market', reason: 'all_sources_failed' },
     });

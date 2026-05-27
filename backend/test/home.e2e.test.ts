@@ -918,6 +918,8 @@ describe('GET /api/home daily_summary query handling', () => {
         expect.objectContaining({ sourceName: 'federal_reserve', eventType: 'central_bank' }),
         expect.objectContaining({ sourceName: 'boj', eventType: 'central_bank' }),
         expect.objectContaining({ sourceName: 'nyse', eventType: 'market_holiday' }),
+        expect.objectContaining({ sourceName: 'official_market', eventType: 'derivatives_settlement', title: 'メジャーSQ' }),
+        expect.objectContaining({ sourceName: 'official_market', eventType: 'derivatives_settlement', title: 'SQ' }),
       ]));
       expect(JSON.stringify(res.json())).not.toContain('test-alpha-key');
       expect(JSON.stringify(res.json())).not.toContain('test-jquants-key');
@@ -964,6 +966,19 @@ describe('GET /api/home daily_summary query handling', () => {
         expect.objectContaining({ sourceName: 'federal_reserve', eventType: 'central_bank', title: 'FOMC' }),
         expect.objectContaining({ sourceName: 'boj', eventType: 'central_bank', title: '日銀金融政策決定会合' }),
         expect.objectContaining({ sourceName: 'nyse', eventType: 'market_holiday' }),
+        expect.objectContaining({
+          sourceName: 'official_market',
+          eventType: 'derivatives_settlement',
+          title: 'SQ',
+          sourceLabel: '日本市場 SQ',
+        }),
+        expect.objectContaining({
+          sourceName: 'official_market',
+          eventType: 'derivatives_settlement',
+          title: 'メジャーSQ',
+          importance: 'high',
+          sourceLabel: '日本市場 メジャーSQ',
+        }),
       ]));
       expect(JSON.stringify(res.json())).not.toContain('http');
       expect(JSON.stringify(res.json())).not.toContain('stack');
