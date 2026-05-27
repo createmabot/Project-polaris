@@ -463,8 +463,16 @@ describe('Home', () => {
     expect(html).toContain('FOMC');
     expect(html).toContain('メジャーSQ');
     expect(html).toContain('大SQ');
-    expect(html).not.toContain('市場全体');
-    expect(html).not.toContain('決算予定');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('group-hover:block');
+    expect(html).toContain('group-focus-within:block');
+    expect(html).toContain('種別');
+    expect(html).toContain('重要度');
+    expect(html).toContain('provider');
+    expect(html).toContain('source');
+    expect(html).toContain('市場全体');
+    expect(html).toContain('決算予定');
+    expect(html).toContain('min-h-8');
   });
 
   it('renders snapshot-dependent fields as hyphen when latest values are unavailable', () => {
