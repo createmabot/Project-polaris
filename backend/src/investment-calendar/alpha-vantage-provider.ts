@@ -9,6 +9,8 @@ type EconomicSeriesConfig = {
   functionName: string;
   title: string;
   externalPrefix: string;
+  sourceLabel?: string;
+  queryParams?: Record<string, string>;
 };
 
 const ECONOMIC_SERIES: EconomicSeriesConfig[] = [
@@ -16,6 +18,13 @@ const ECONOMIC_SERIES: EconomicSeriesConfig[] = [
   { functionName: 'RETAIL_SALES', title: '米小売売上高', externalPrefix: 'retail-sales' },
   { functionName: 'UNEMPLOYMENT', title: '米失業率', externalPrefix: 'unemployment' },
   { functionName: 'NONFARM_PAYROLL', title: '米雇用統計', externalPrefix: 'nonfarm-payroll' },
+  {
+    functionName: 'REAL_GDP',
+    title: '米GDP',
+    externalPrefix: 'real-gdp',
+    sourceLabel: 'GDP（発表済みデータ由来）',
+    queryParams: { interval: 'quarterly' },
+  },
 ];
 
 function getApiKey() {
@@ -66,16 +75,23 @@ function providerInvalidResponse(reason: string): AppError {
   );
 }
 
-function buildAlphaVantageUrl(functionName: string, apiKey: string) {
+function buildAlphaVantageUrl(functionName: string, apiKey: string, queryParams: Record<string, string> = {}) {
   const url = new URL(ALPHA_VANTAGE_BASE_URL);
   url.searchParams.set('function', functionName);
+  for (const [key, value] of Object.entries(queryParams)) {
+    url.searchParams.set(key, value);
+  }
   url.searchParams.set('apikey', apiKey);
   return url;
 }
 
-async function fetchAlphaVantage(functionName: string, apiKey: string): Promise<Response> {
+async function fetchAlphaVantage(
+  functionName: string,
+  apiKey: string,
+  queryParams: Record<string, string> = {},
+): Promise<Response> {
   try {
-    return await fetch(buildAlphaVantageUrl(functionName, apiKey), {
+    return await fetch(buildAlphaVantageUrl(functionName, apiKey, queryParams), {
       signal: AbortSignal.timeout(getTimeoutMs()),
     });
   } catch {
@@ -130,7 +146,7 @@ function normalizeEconomicPayload(
         description: 'Alpha Vantage の発表済み経済指標データ系列に基づく日付です。将来予定ではありません。',
         importance: 'high',
         sourceName: 'alpha_vantage',
-        sourceLabel: '発表済みデータ由来',
+        sourceLabel: config.sourceLabel ?? '発表済みデータ由来',
         sourceUrl: null,
       });
     })
@@ -223,7 +239,7 @@ export class AlphaVantageInvestmentCalendarProvider implements InvestmentCalenda
     let skippedProviderRejectionCount = 0;
     for (const config of ECONOMIC_SERIES) {
       try {
-        const response = await fetchAlphaVantage(config.functionName, apiKey);
+        const response = await fetchAlphaVantage(config.functionName, apiKey, config.queryParams);
         if (!response.ok) throw providerRefreshFailed('provider_http_error');
         let payload: unknown;
         try {

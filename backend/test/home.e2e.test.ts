@@ -729,6 +729,11 @@ describe('GET /api/home daily_summary query handling', () => {
         expect.objectContaining({
           sourceType: 'public_provider',
           sourceName: 'alpha_vantage',
+          title: '米GDP',
+        }),
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'alpha_vantage',
           eventType: 'ipo',
           title: 'TEST IPO予定',
         }),
@@ -899,6 +904,7 @@ describe('GET /api/home daily_summary query handling', () => {
       });
       expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
         expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'economic_indicator' }),
+        expect.objectContaining({ sourceName: 'alpha_vantage', title: '米GDP' }),
         expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'ipo' }),
         expect.objectContaining({ sourceName: 'jquants', eventType: 'earnings' }),
         expect.objectContaining({ sourceName: 'jquants', eventType: 'market_holiday' }),
