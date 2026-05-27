@@ -253,6 +253,42 @@ describe('Home', () => {
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
               },
+              {
+                id: 'cal-market-3',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-17',
+                event_time: null,
+                timezone: 'America/New_York',
+                event_type: 'central_bank',
+                title: 'FOMC',
+                importance: 'high',
+                source_type: 'public_provider',
+                source_name: 'federal_reserve',
+                source_label: 'FOMC calendar',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
+              {
+                id: 'cal-market-4',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-07-03',
+                event_time: null,
+                timezone: 'America/New_York',
+                event_type: 'market_holiday',
+                title: '米国市場 短縮取引',
+                importance: 'medium',
+                source_type: 'public_provider',
+                source_name: 'nyse',
+                source_label: 'US market holiday',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
             ],
             meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
           },
@@ -291,6 +327,10 @@ describe('Home', () => {
     expect(html).toContain('米雇用統計');
     expect(html).toContain('米GDP');
     expect(html).toContain('GDP（発表済みデータ由来）');
+    expect(html).toContain('FOMC');
+    expect(html).toContain('中央銀行');
+    expect(html).toContain('米国市場 短縮取引');
+    expect(html).toContain('US market holiday');
     expect(html).toContain('市場全体');
     expect(html).toContain('決算予定');
   });

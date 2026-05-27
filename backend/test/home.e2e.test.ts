@@ -734,6 +734,11 @@ describe('GET /api/home daily_summary query handling', () => {
         expect.objectContaining({
           sourceType: 'public_provider',
           sourceName: 'alpha_vantage',
+          title: '米PPI',
+        }),
+        expect.objectContaining({
+          sourceType: 'public_provider',
+          sourceName: 'alpha_vantage',
           eventType: 'ipo',
           title: 'TEST IPO予定',
         }),
@@ -835,11 +840,11 @@ describe('GET /api/home daily_summary query handling', () => {
     }
   });
 
-  it('aggregates Alpha Vantage and J-Quants home calendar providers', async () => {
+  it('aggregates Alpha Vantage, J-Quants, and official market home calendar providers', async () => {
     const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
     const previousAlphaKey = process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY;
     const previousJquantsKey = process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
-    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants';
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'alpha_vantage,jquants,official_market';
     process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = 'test-alpha-key';
     process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = 'test-jquants-key';
     vi.stubGlobal('fetch', vi.fn(async (url: URL | string, init?: RequestInit) => {
@@ -900,14 +905,19 @@ describe('GET /api/home daily_summary query handling', () => {
         providers: [
           expect.objectContaining({ provider: 'alpha_vantage', status: 'succeeded', error_code: null }),
           expect.objectContaining({ provider: 'jquants', status: 'succeeded', error_code: null }),
+          expect.objectContaining({ provider: 'official_market', status: 'succeeded', error_code: null }),
         ],
       });
       expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
         expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'economic_indicator' }),
         expect.objectContaining({ sourceName: 'alpha_vantage', title: '米GDP' }),
+        expect.objectContaining({ sourceName: 'alpha_vantage', title: '米PPI' }),
         expect.objectContaining({ sourceName: 'alpha_vantage', eventType: 'ipo' }),
         expect.objectContaining({ sourceName: 'jquants', eventType: 'earnings' }),
         expect.objectContaining({ sourceName: 'jquants', eventType: 'market_holiday' }),
+        expect.objectContaining({ sourceName: 'federal_reserve', eventType: 'central_bank' }),
+        expect.objectContaining({ sourceName: 'boj', eventType: 'central_bank' }),
+        expect.objectContaining({ sourceName: 'nyse', eventType: 'market_holiday' }),
       ]));
       expect(JSON.stringify(res.json())).not.toContain('test-alpha-key');
       expect(JSON.stringify(res.json())).not.toContain('test-jquants-key');
@@ -923,6 +933,45 @@ describe('GET /api/home daily_summary query handling', () => {
       else process.env.INVESTMENT_CALENDAR_ALPHA_VANTAGE_API_KEY = previousAlphaKey;
       if (previousJquantsKey === undefined) delete process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY;
       else process.env.INVESTMENT_CALENDAR_JQUANTS_API_KEY = previousJquantsKey;
+    }
+  });
+
+  it('refreshes home investment calendar from official market fixtures without real external access', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'official_market';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/home/investment-calendar/refresh',
+        payload: { from: '2026-05-01', to: '2026-08-31', include_market_events: true },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        manual_only: true,
+        providers: [
+          expect.objectContaining({ provider: 'official_market', status: 'succeeded', error_code: null }),
+        ],
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(runtime.investmentCalendarEvents).toEqual(expect.arrayContaining([
+        expect.objectContaining({ sourceName: 'federal_reserve', eventType: 'central_bank', title: 'FOMC' }),
+        expect.objectContaining({ sourceName: 'boj', eventType: 'central_bank', title: '日銀金融政策決定会合' }),
+        expect.objectContaining({ sourceName: 'nyse', eventType: 'market_holiday' }),
+      ]));
+      expect(JSON.stringify(res.json())).not.toContain('http');
+      expect(JSON.stringify(res.json())).not.toContain('stack');
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
     }
   });
 

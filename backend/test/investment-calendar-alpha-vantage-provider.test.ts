@@ -68,6 +68,7 @@ describe('AlphaVantageInvestmentCalendarProvider', () => {
         expect(url.searchParams.get('interval')).toBe('quarterly');
         return jsonResponse(economicPayload('2026-07-01'));
       }
+      if (functionName === 'PPI') return jsonResponse(economicPayload('2026-07-15'));
       if (functionName === 'IPO_CALENDAR') {
         return textResponse('symbol,name,ipoDate,priceRangeLow,priceRangeHigh,currency,exchange\nTEST,Test Holdings,2026-07-01,10,12,USD,NASDAQ\nOLD,Old Holdings,2025-01-01,10,12,USD,NYSE\n');
       }
@@ -97,8 +98,14 @@ describe('AlphaVantageInvestmentCalendarProvider', () => {
         title: '米GDP',
         sourceLabel: 'GDP（発表済みデータ由来）',
       }),
+      expect.objectContaining({
+        externalId: 'alpha-vantage-ppi-2026-07-15',
+        eventType: 'economic_indicator',
+        title: '米PPI',
+        sourceLabel: 'PPI（発表済みデータ由来）',
+      }),
     ]));
-    expect(events).toHaveLength(6);
+    expect(events).toHaveLength(7);
     expect(JSON.stringify(events)).not.toContain('test-key');
     expect(JSON.stringify(events)).not.toContain('alphavantage.co');
     expect(JSON.stringify(events)).not.toContain('raw');

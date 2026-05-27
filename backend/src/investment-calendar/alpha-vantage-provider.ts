@@ -25,6 +25,12 @@ const ECONOMIC_SERIES: EconomicSeriesConfig[] = [
     sourceLabel: 'GDP（発表済みデータ由来）',
     queryParams: { interval: 'quarterly' },
   },
+  {
+    functionName: 'PPI',
+    title: '米PPI',
+    externalPrefix: 'ppi',
+    sourceLabel: 'PPI（発表済みデータ由来）',
+  },
 ];
 
 function getApiKey() {

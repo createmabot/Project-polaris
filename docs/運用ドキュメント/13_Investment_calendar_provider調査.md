@@ -128,7 +128,7 @@ provider 方針分類:
 - 利用規約上の懸念: free tier 制限、CSV parsing、US 中心。
 - 実装難易度: 低。
 - 北極星への採用候補: P1 の free API provider として実装対象にする。無料枠の rate limit と対象 event が実用に足りる範囲だけ採用する。
-- 備考: Home の market-level event を小さく始めるには扱いやすい。CPI / retail sales / unemployment / nonfarm payroll / real GDP は発表予定 calendar ではなく発表済み data series の observation date として扱う。将来予定と誤認させないため、`sourceLabel` / description に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。PPI は公式 docs 上で無料 API function を確認できていないため後続候補に残す。Earnings calendar は US symbol-level 寄りのため P1 では後続判断にする。
+- 備考: Home の market-level event を小さく始めるには扱いやすい。CPI / retail sales / unemployment / nonfarm payroll / real GDP / PPI は発表予定 calendar ではなく発表済み data series の observation date として扱う。将来予定と誤認させないため、`sourceLabel` / description に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。PPI は provider 側で拒否される場合があるため endpoint 単位の best-effort 対象にする。Earnings calendar は US symbol-level 寄りのため P1 では後続判断にする。
 - 参照: [Alpha Vantage API Documentation](https://www.alphavantage.co/documentation/)
 
 ### FRED
@@ -324,9 +324,9 @@ provider 方針分類:
   - API key missing、timeout、rate limit / provider rejection、invalid response を sanitized error に閉じる。
   - raw response は保存しない。
   - Home refresh だけを対象にする。
-  - CPI / retail sales / unemployment / nonfarm payroll / real GDP は発表済み data series として扱い、将来予定ではないことを label / description で区別する。
+  - CPI / retail sales / unemployment / nonfarm payroll / real GDP / PPI は発表済み data series として扱い、将来予定ではないことを label / description で区別する。
   - IPO calendar は market-level `ipo` event として扱う。
-  - PPI は Alpha Vantage 公式 docs で無料 API function を確認できていないため後続候補に残す。
+  - PPI は provider 側で拒否される場合があるため、endpoint 単位の best-effort refresh に閉じる。
   - Earnings calendar は P1 では後続判断にする。
   - 無料 API key では一部 endpoint が premium / rate limit / provider rejection になる場合があるため、endpoint 単位の best-effort refresh とする。少なくとも 1 endpoint が正常に読めた場合は取得できた event だけを保存し、全 endpoint が拒否された場合のみ sanitized failure とする。
 - tests: real API ではなく fixture response / mocked fetch、normalization、failure sanitization、raw response / API key / endpoint 実値非露出、stale warning。
@@ -356,7 +356,8 @@ provider 方針分類:
 ### Phase P3: market event expansion
 
 - 今回実装: Alpha Vantage の `REAL_GDP` を quarterly data series として追加し、Home の `economic_indicator` event `米GDP` として扱う。これは発表済み data series の observation date であり、将来予定ではない。
-- docs / backlog に残す: PPI、FOMC 日程、日銀金融政策決定会合、米国市場休場日 / 短縮取引日。PPI は Alpha Vantage 公式 docs で無料 API function を確認できていない。FOMC / BOJ / US holidays は公式 source parser / curated seed の設計が必要。
+- P4 実装: PPI を Alpha Vantage の best-effort endpoint として追加する。FOMC 日程、日銀金融政策決定会合、米国市場休場日 / 短縮取引日は `official_market` provider で扱う。
+- `official_market`: default は bundled curated fixture event を使い、任意の official source URL が設定された場合だけ manual refresh 時に fetch する。required test は fixture HTML / fixture JSON / mocked fetch のみで、real website access は使わない。
 - 見送り: 有料 API、非公式 calendar scraping、各社 IR scraping、scheduled crawler。
 
 ### Phase P4: freshness / source quality
