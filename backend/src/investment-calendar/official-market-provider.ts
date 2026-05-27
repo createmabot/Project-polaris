@@ -12,6 +12,8 @@ type OfficialFixtureEvent = {
   description?: string | null;
 };
 
+const MAJOR_SQ_MONTHS = new Set([3, 6, 9, 12]);
+
 const BUILTIN_FOMC_FIXTURE = JSON.stringify({
   events: [
     { date: '2026-06-17', title: 'FOMC' },
@@ -66,6 +68,65 @@ function isCalendarDate(value: string) {
 
 function isInRange(date: string, from: string, to: string) {
   return date >= from && date <= to;
+}
+
+function formatDateParts(year: number, month: number, day: number) {
+  return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+function secondFridayOfMonth(year: number, month: number) {
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const firstDayOfWeek = firstDay.getUTCDay();
+  const daysUntilFriday = (5 - firstDayOfWeek + 7) % 7;
+  return 1 + daysUntilFriday + 7;
+}
+
+function monthCursorRange(from: string, to: string): Array<{ year: number; month: number }> {
+  const [fromYear, fromMonth] = from.split('-').map((value) => Number(value));
+  const [toYear, toMonth] = to.split('-').map((value) => Number(value));
+  const months: Array<{ year: number; month: number }> = [];
+  if (!Number.isInteger(fromYear) || !Number.isInteger(fromMonth) || !Number.isInteger(toYear) || !Number.isInteger(toMonth)) {
+    return months;
+  }
+
+  let year = fromYear;
+  let month = fromMonth;
+  while (year < toYear || (year === toYear && month <= toMonth)) {
+    months.push({ year, month });
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+  return months;
+}
+
+export function generateJpSqEvents(input: Pick<InvestmentCalendarFetchInput, 'from' | 'to'>): InvestmentCalendarProviderEvent[] {
+  return monthCursorRange(input.from, input.to)
+    .map(({ year, month }): InvestmentCalendarProviderEvent | null => {
+      const date = formatDateParts(year, month, secondFridayOfMonth(year, month));
+      if (!isCalendarDate(date) || !isInRange(date, input.from, input.to)) return null;
+
+      const isMajorSq = MAJOR_SQ_MONTHS.has(month);
+      return normalizeProviderEvent({
+        externalId: `official-market-jp-${isMajorSq ? 'major-sq' : 'sq'}-${date}`,
+        symbolCode: null,
+        eventDate: date,
+        eventTime: null,
+        timezone: 'Asia/Tokyo',
+        eventType: 'derivatives_settlement',
+        title: isMajorSq ? 'メジャーSQ' : 'SQ',
+        description: isMajorSq
+          ? '株価指数先物・オプション等の特別清算指数算出日として扱う市場イベントです。'
+          : '株価指数オプション等の特別清算指数算出日として扱う市場イベントです。',
+        importance: isMajorSq ? 'high' : 'medium',
+        sourceName: 'official_market',
+        sourceLabel: isMajorSq ? '日本市場 メジャーSQ' : '日本市場 SQ',
+        sourceUrl: null,
+      });
+    })
+    .filter((event): event is InvestmentCalendarProviderEvent => event !== null);
 }
 
 function getSourceUrl(source: OfficialMarketSource): string | null {
@@ -235,7 +296,10 @@ export class OfficialMarketInvestmentCalendarProvider implements InvestmentCalen
       }
     }
 
-    if (successCount === 0 && failureCount > 0) {
+    const sqEvents = generateJpSqEvents(input);
+    events.push(...sqEvents);
+
+    if (successCount === 0 && failureCount > 0 && sqEvents.length === 0) {
       throw providerRefreshFailed('all_sources_failed');
     }
 

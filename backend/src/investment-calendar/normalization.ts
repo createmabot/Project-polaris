@@ -9,6 +9,7 @@ export const INVESTMENT_CALENDAR_EVENT_TYPES = [
   'economic_indicator',
   'central_bank',
   'market_holiday',
+  'derivatives_settlement',
   'ipo',
   'other',
 ] as const;

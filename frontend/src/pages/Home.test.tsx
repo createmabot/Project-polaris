@@ -289,6 +289,42 @@ describe('Home', () => {
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
               },
+              {
+                id: 'cal-market-5',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-12',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'derivatives_settlement',
+                title: 'メジャーSQ',
+                importance: 'high',
+                source_type: 'public_provider',
+                source_name: 'official_market',
+                source_label: '日本市場 メジャーSQ',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
+              {
+                id: 'cal-market-6',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-07-10',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'derivatives_settlement',
+                title: 'SQ',
+                importance: 'medium',
+                source_type: 'public_provider',
+                source_name: 'official_market',
+                source_label: '日本市場 SQ',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
             ],
             meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
           },
@@ -331,6 +367,11 @@ describe('Home', () => {
     expect(html).toContain('中央銀行');
     expect(html).toContain('米国市場 短縮取引');
     expect(html).toContain('US market holiday');
+    expect(html).toContain('メジャーSQ');
+    expect(html).toContain('日本市場 メジャーSQ');
+    expect(html).toContain('日本市場 SQ');
+    expect(html).toContain('重要');
+    expect(html).toContain('中');
     expect(html).toContain('市場全体');
     expect(html).toContain('決算予定');
   });

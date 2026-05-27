@@ -207,6 +207,7 @@ function eventTypeLabel(type: string): string {
     economic_indicator: '経済指標',
     central_bank: '中央銀行',
     market_holiday: '休場日',
+    derivatives_settlement: 'SQ',
     ipo: 'IPO',
     other: 'その他',
   };
