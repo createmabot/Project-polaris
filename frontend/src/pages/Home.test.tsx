@@ -221,6 +221,63 @@ describe('Home', () => {
                 fetched_at: '2026-05-26T00:00:00.000Z',
               },
               {
+                id: 'cal-1-extra-1',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-10',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'central_bank',
+                title: '日銀金融政策決定会合',
+                importance: 'high',
+                source_type: 'public_provider',
+                source_name: 'boj',
+                source_label: '金融政策決定会合',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'official_market',
+              },
+              {
+                id: 'cal-1-extra-2',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-10',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'economic_indicator',
+                title: '米CPI',
+                importance: 'high',
+                source_type: 'public_provider',
+                source_name: 'alpha_vantage',
+                source_label: 'CPI（発表済みデータ由来）',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'alpha_vantage',
+              },
+              {
+                id: 'cal-1-extra-3',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-06-10',
+                event_time: null,
+                timezone: 'Asia/Tokyo',
+                event_type: 'ipo',
+                title: 'IPO',
+                importance: 'medium',
+                source_type: 'public_provider',
+                source_name: 'alpha_vantage',
+                source_label: 'IPO calendar',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'alpha_vantage',
+              },
+              {
                 id: 'cal-market-1',
                 scope: 'market',
                 symbol_id: null,
@@ -381,7 +438,12 @@ describe('Home', () => {
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
     expect(html).toContain('投資カレンダー');
+    expect(html).toContain('2026年6月');
+    expect(html).toContain('2026年7月');
+    expect(html).toContain('日');
+    expect(html).toContain('月');
     expect(html).toContain('トヨタ自動車 決算発表予定');
+    expect(html).toContain('+1件');
     expect(html).toContain('米雇用統計');
     expect(html).toContain('米GDP');
     expect(html).toContain('GDP（発表済みデータ由来）');

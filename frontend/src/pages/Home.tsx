@@ -19,6 +19,21 @@ const SUMMARY_OPTIONS: Array<{ value: HomeSummaryType; label: string }> = [
   { value: 'morning', label: '朝' },
   { value: 'evening', label: '夜' },
 ];
+const CALENDAR_WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+const MAX_CALENDAR_EVENTS_PER_DAY = 3;
+
+type CalendarDayCell = {
+  date: string;
+  day: number;
+  inMonth: boolean;
+  events: InvestmentCalendarEvent[];
+};
+
+type CalendarMonth = {
+  key: string;
+  label: string;
+  weeks: CalendarDayCell[][];
+};
 
 export function buildHomeApiPath(summaryType: HomeSummaryType, date: string | null): string {
   const params = new URLSearchParams();
@@ -119,6 +134,128 @@ function importanceLabel(importance: string): string {
   return '中';
 }
 
+function parseDateOnly(value: string | null): Date | null {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+  return date;
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+
+function addMonths(date: Date, months: number): Date {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1);
+}
+
+function calendarEventRank(event: InvestmentCalendarEvent): number {
+  if (event.importance === 'high') return 0;
+  if (event.importance === 'medium') return 1;
+  if (event.importance === 'low') return 2;
+  return 3;
+}
+
+function buildCalendarMonths(events: InvestmentCalendarEvent[]): CalendarMonth[] {
+  const datedEvents = events
+    .map((event) => ({ event, date: parseDateOnly(event.event_date) }))
+    .filter((item): item is { event: InvestmentCalendarEvent; date: Date } => item.date !== null)
+    .sort((a, b) => {
+      const dateDiff = a.date.getTime() - b.date.getTime();
+      if (dateDiff !== 0) return dateDiff;
+      const rankDiff = calendarEventRank(a.event) - calendarEventRank(b.event);
+      if (rankDiff !== 0) return rankDiff;
+      return (a.event.event_time ?? '').localeCompare(b.event.event_time ?? '');
+    });
+  if (datedEvents.length === 0) return [];
+
+  const eventsByDate = new Map<string, InvestmentCalendarEvent[]>();
+  for (const { event, date } of datedEvents) {
+    const key = formatDateKey(date);
+    const items = eventsByDate.get(key) ?? [];
+    items.push(event);
+    eventsByDate.set(key, items);
+  }
+
+  const firstEventDate = datedEvents[0].date;
+  const lastEventDate = datedEvents[datedEvents.length - 1].date;
+  const firstMonth = new Date(firstEventDate.getFullYear(), firstEventDate.getMonth(), 1);
+  const lastMonth = new Date(lastEventDate.getFullYear(), lastEventDate.getMonth(), 1);
+  const months: CalendarMonth[] = [];
+
+  for (let cursor = firstMonth; cursor.getTime() <= lastMonth.getTime(); cursor = addMonths(cursor, 1)) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const gridStart = addDays(monthStart, -monthStart.getDay());
+    const gridEnd = addDays(monthEnd, 6 - monthEnd.getDay());
+    const weeks: CalendarDayCell[][] = [];
+    let week: CalendarDayCell[] = [];
+
+    for (let day = gridStart; day.getTime() <= gridEnd.getTime(); day = addDays(day, 1)) {
+      const key = formatDateKey(day);
+      week.push({
+        date: key,
+        day: day.getDate(),
+        inMonth: day.getMonth() === cursor.getMonth(),
+        events: eventsByDate.get(key) ?? [],
+      });
+      if (week.length === 7) {
+        weeks.push(week);
+        week = [];
+      }
+    }
+
+    months.push({
+      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
+      label: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月`,
+      weeks,
+    });
+  }
+
+  return months;
+}
+
+function calendarChipClass(event: InvestmentCalendarEvent): string {
+  const tone =
+    event.importance === 'high'
+      ? 'border-rose-200 bg-rose-50 text-rose-900'
+      : event.importance === 'low'
+        ? 'border-slate-200 bg-slate-50 text-slate-700'
+        : 'border-sky-200 bg-sky-50 text-sky-900';
+  const stale = event.is_stale ? ' ring-1 ring-amber-300' : '';
+  return `rounded-md border px-1.5 py-1 text-[11px] leading-4 ${tone}${stale}`;
+}
+
+function calendarEventTitle(event: InvestmentCalendarEvent): string {
+  const parts = [
+    event.title,
+    `importance: ${importanceLabel(event.importance)}`,
+    event.source_label ? `source: ${event.source_label}` : null,
+    `provider: ${providerLabel(event.provider, event.source_name)}`,
+    event.fetched_at ? formatCalendarFetchedAt(event.fetched_at) : null,
+    event.is_stale ? '取得情報が古い可能性があります' : null,
+  ];
+  return parts.filter(Boolean).join(' / ');
+}
+
 function MarketTile({
   kind,
   name,
@@ -157,6 +294,11 @@ export default function Home() {
   const homeApiPath = useMemo(() => buildHomeApiPath('latest', summaryDate), [summaryDate]);
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
+  const investmentCalendarEvents = data?.investment_calendar?.events ?? [];
+  const calendarMonths = useMemo(
+    () => buildCalendarMonths(investmentCalendarEvents),
+    [investmentCalendarEvents],
+  );
 
   if (isLoading) {
     return (
@@ -223,7 +365,6 @@ export default function Home() {
     }
   }
 
-  const investmentCalendarEvents = data.investment_calendar?.events ?? [];
   const calendarStaleCount = data.investment_calendar?.meta?.stale_event_count ?? 0;
   const calendarProviderStatuses = data.investment_calendar?.meta?.provider_statuses ?? [];
   const dailySummary = selectedDailySummary ?? data.daily_summary;
@@ -413,25 +554,73 @@ export default function Home() {
                   ))}
                 </div>
               )
+            ) : calendarMonths.length === 0 ? (
+              <EmptyState title="表示できる日付の投資カレンダーはありません。" />
             ) : (
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-                {investmentCalendarEvents.map((event: InvestmentCalendarEvent) => (
-                  <div key={event.id} className="px-3 py-2 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <strong className="text-slate-800">{event.title}</strong>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                        {importanceLabel(event.importance)}
-                      </span>
-                    </div>
-                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                      <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
-                      <span>{eventTypeLabel(event.event_type)}</span>
-                      <span>{event.scope === 'market' ? '市場全体' : event.display_name ?? event.symbol_code ?? '-'}</span>
-                      <span>provider: {providerLabel(event.provider, event.source_name)}</span>
-                      <span>{event.source_type}</span>
-                      {event.source_label ? <span>source: {event.source_label}</span> : null}
-                      {event.fetched_at ? <span>{formatCalendarFetchedAt(event.fetched_at)}</span> : null}
-                      {event.is_stale ? <span className="font-semibold text-amber-700">取得情報が古い可能性があります</span> : null}
+              <div className="space-y-4">
+                {calendarMonths.map((month) => (
+                  <div key={month.key} className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <div className="min-w-[44rem]">
+                      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
+                        <h3 className="text-sm font-semibold text-slate-900">{month.label}</h3>
+                      </div>
+                      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
+                        {CALENDAR_WEEKDAY_LABELS.map((label) => (
+                          <div key={label} className="border-r border-slate-200 px-2 py-1.5 last:border-r-0">
+                            {label}
+                          </div>
+                        ))}
+                      </div>
+                      {month.weeks.map((week, weekIndex) => (
+                        <div key={`${month.key}-week-${weekIndex}`} className="grid grid-cols-7 border-b border-slate-200 last:border-b-0">
+                          {week.map((day) => {
+                            const visibleEvents = day.events.slice(0, MAX_CALENDAR_EVENTS_PER_DAY);
+                            const hiddenCount = Math.max(0, day.events.length - visibleEvents.length);
+                            return (
+                              <div
+                                key={day.date}
+                                className={`min-h-28 border-r border-slate-200 p-1.5 last:border-r-0 ${
+                                  day.inMonth ? 'bg-white' : 'bg-slate-50/70 text-slate-400'
+                                }`}
+                              >
+                                <div className="mb-1 flex items-center justify-between gap-1">
+                                  <span className={`text-xs font-semibold ${day.inMonth ? 'text-slate-700' : 'text-slate-400'}`}>
+                                    {day.day}
+                                  </span>
+                                  {day.events.length > 0 ? (
+                                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                                      {day.events.length}件
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="space-y-1">
+                                  {visibleEvents.map((event) => (
+                                    <div key={event.id} className={calendarChipClass(event)} title={calendarEventTitle(event)}>
+                                      <div className="flex items-center gap-1">
+                                        <span className="shrink-0 rounded bg-white/70 px-1 text-[10px] font-semibold">
+                                          {eventTypeLabel(event.event_type)}
+                                        </span>
+                                        <span className="min-w-0 truncate font-semibold">{event.title}</span>
+                                      </div>
+                                      <div className="mt-0.5 flex items-center gap-1 text-[10px] opacity-80">
+                                        <span className="truncate">{event.scope === 'market' ? '市場全体' : event.display_name ?? event.symbol_code ?? '-'}</span>
+                                        <span>·</span>
+                                        <span className="truncate">{providerLabel(event.provider, event.source_name)}</span>
+                                        {event.is_stale ? <span className="font-semibold text-amber-700">stale</span> : null}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {hiddenCount > 0 ? (
+                                    <div className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-1 text-[11px] font-semibold text-slate-500">
+                                      +{hiddenCount}件
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
