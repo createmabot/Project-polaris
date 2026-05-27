@@ -214,6 +214,27 @@ StrategyVersion Pine generation の market / timeframe:
 
 refresh failure は sanitized error に閉じる。raw external response、endpoint 実値、secret、stack trace は API response に出さない。
 
+calendar event row は既存の `fetched_at`、`source_name`、`source_label`、`source_type` に加え、optional に `provider` と `is_stale` を返せる。`provider` は表示用の正規化 provider 名で、Alpha Vantage / J-Quants / official_market / seed などを返す。`is_stale` は `fetched_at` ベースの警告用 boolean で、event_date が過去かどうかでは判断しない。
+
+Home / Symbol calendar の `investment_calendar.meta` は optional freshness metadata を返せる。
+
+```json
+{
+  "last_fetched_at": "2026-05-28T01:30:00.000Z",
+  "stale_event_count": 0,
+  "provider_statuses": [
+    {
+      "provider": "alpha_vantage",
+      "status": "succeeded",
+      "last_fetched_at": "2026-05-28T01:30:00.000Z",
+      "stale_event_count": 0
+    }
+  ]
+}
+```
+
+`provider_statuses` は現在の表示対象 event から算出した read metadata であり、refresh history table ではない。provider refresh の成否は refresh response の `providers[]` に sanitized summary として返す。raw response、endpoint 実値、API key、stack trace は含めない。
+
 `INVESTMENT_CALENDAR_PROVIDERS=alpha_vantage,jquants,official_market` のように comma-separated provider list を設定した場合、Home の manual refresh は設定順に provider を実行し、provider 別 summary を `providers[]` に返す。`INVESTMENT_CALENDAR_PROVIDERS` がある場合はこれを優先し、未設定の場合は後方互換として `INVESTMENT_CALENDAR_PROVIDER` を使う。Home refresh の status は `succeeded | partial_success | failed` を返す。1 provider でも成功した場合は `succeeded` または `partial_success` とし、取得できた event は保存する。全 provider が失敗した場合は `failed` を返すが、provider error details は provider name、sanitized error code、count に限定する。
 
 `INVESTMENT_CALENDAR_PROVIDER=alpha_vantage` を設定した場合、Home の manual refresh は Alpha Vantage の無料 API 範囲を使い、market-level event を `source_type=public_provider` として保存できる。P1 / P3 / P4 では CPI / retail sales / unemployment / nonfarm payroll / real GDP / PPI は発表済み data series の observation date として扱い、将来予定と誤認させないため `source_label` に発表済みデータ由来であることを残す。IPO calendar は `ipo` event として扱う。PPI endpoint が無料 key で拒否された場合は endpoint 単位で skip し、取得できた event だけ保存する。Earnings calendar と日本株 symbol-level event は後続判断とする。

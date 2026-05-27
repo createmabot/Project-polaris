@@ -214,6 +214,52 @@ function eventTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
+function formatCalendarFetchedAt(value: string | null): string {
+  if (!value) return '取得: -';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '取得: -';
+  return `取得: ${date.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function providerLabel(provider: string | null | undefined, sourceName?: string | null): string {
+  const value = provider || sourceName || '';
+  const labels: Record<string, string> = {
+    alpha_vantage: 'Alpha Vantage',
+    jquants: 'J-Quants',
+    official_market: 'official_market',
+    seed: 'seed',
+    stub: 'stub',
+    federal_reserve: 'official_market',
+    boj: 'official_market',
+    nyse: 'official_market',
+  };
+  return labels[value] ?? (value || '-');
+}
+
+function providerStatusLabel(status: string): string {
+  if (status === 'succeeded') return '成功';
+  if (status === 'failed') return '失敗';
+  if (status === 'skipped') return 'スキップ';
+  return status;
+}
+
+function formatSymbolCalendarRefreshMessage(result: InvestmentCalendarRefreshData): string {
+  const provider = result.provider || result.providers?.[0]?.provider;
+  const providerPart = provider ? `${providerLabel(provider)}: ${providerStatusLabel(result.status)}。` : '';
+  const zeroNote = result.saved_count === 0 && result.updated_count === 0
+    ? '指定期間にこの銘柄の決算発表予定は見つかりませんでした。これは正常な0件の可能性があります。'
+    : '';
+  return `${providerPart}${LABELS.calendarRefreshSuccess
+    .replace('{saved}', String(result.saved_count))
+    .replace('{updated}', String(result.updated_count))}${zeroNote ? ` ${zeroNote}` : ''}`;
+}
+
 function importanceLabel(importance: string): string {
   if (importance === 'high') return '重要';
   if (importance === 'low') return '低';
@@ -1414,11 +1460,7 @@ export default function SymbolDetail() {
     setCalendarRefreshError(null);
     try {
       const result = await postApi<InvestmentCalendarRefreshData>(`/api/symbols/${symbolId}/calendar-events/refresh`, {});
-      setCalendarRefreshMessage(
-        LABELS.calendarRefreshSuccess
-          .replace('{saved}', String(result.saved_count))
-          .replace('{updated}', String(result.updated_count)),
-      );
+      setCalendarRefreshMessage(formatSymbolCalendarRefreshMessage(result));
       await mutateCalendar();
     } catch {
       setCalendarRefreshError(LABELS.calendarRefreshError);
@@ -1480,6 +1522,11 @@ export default function SymbolDetail() {
           {calendarRefreshMessage ? <InlineNotice tone="success" className="mb-3">{calendarRefreshMessage}</InlineNotice> : null}
           {calendarRefreshError ? <InlineNotice tone="warning" className="mb-3">{calendarRefreshError}</InlineNotice> : null}
           {calendarError ? <InlineNotice tone="warning" className="mb-3">{LABELS.calendarRefreshError}</InlineNotice> : null}
+          {(calendarData?.meta?.stale_event_count ?? 0) > 0 ? (
+            <InlineNotice tone="warning" className="mb-3">
+              取得情報が古い可能性があります。カレンダーを更新してください。
+            </InlineNotice>
+          ) : null}
           {(calendarData?.events ?? []).length === 0 ? (
             <EmptyText>{LABELS.noCalendarEvents}</EmptyText>
           ) : (
@@ -1495,8 +1542,11 @@ export default function SymbolDetail() {
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
                     <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
                     <span>{eventTypeLabel(event.event_type)}</span>
+                    <span>provider: {providerLabel(event.provider, event.source_name)}</span>
+                    <span>{event.source_type}</span>
                     {event.source_label ? <span>source: {event.source_label}</span> : null}
-                    {event.fetched_at ? <span>取得: {formatDate(event.fetched_at)}</span> : null}
+                    {event.fetched_at ? <span>{formatCalendarFetchedAt(event.fetched_at)}</span> : null}
+                    {event.is_stale ? <span className="font-semibold text-amber-700">取得情報が古い可能性があります</span> : null}
                   </div>
                 </div>
               ))}

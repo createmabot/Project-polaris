@@ -68,6 +68,20 @@ export type InvestmentCalendarEvent = {
   source_url?: string | null;
   status: string;
   fetched_at: string | null;
+  provider?: string | null;
+  is_stale?: boolean;
+};
+
+export type InvestmentCalendarProviderStatus = {
+  provider: string;
+  status: 'succeeded' | 'failed' | 'skipped' | string;
+  last_fetched_at?: string | null;
+  stale_event_count?: number;
+  saved_count?: number;
+  updated_count?: number;
+  skipped_count?: number;
+  failed_count?: number;
+  error_code?: string | null;
 };
 
 export type InvestmentCalendarData = {
@@ -79,6 +93,9 @@ export type InvestmentCalendarData = {
     scope?: string;
     symbol_id?: string;
     manual_refresh_available?: boolean;
+    last_fetched_at?: string | null;
+    stale_event_count?: number;
+    provider_statuses?: InvestmentCalendarProviderStatus[];
   };
 };
 
@@ -92,15 +109,8 @@ export type InvestmentCalendarRefreshData = {
   to: string;
   source: string;
   manual_only: true;
-  providers?: Array<{
-    provider: string;
-    status: 'succeeded' | 'failed' | 'skipped' | string;
-    saved_count: number;
-    updated_count: number;
-    skipped_count: number;
-    failed_count: number;
-    error_code?: string | null;
-  }>;
+  provider?: string;
+  providers?: InvestmentCalendarProviderStatus[];
 };
 
 export type ExternalReferenceDto = {
