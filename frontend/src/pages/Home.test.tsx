@@ -71,7 +71,10 @@ describe('Home', () => {
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(mockUseSWR).toHaveBeenCalledWith('/api/home?summary_type=latest', expect.any(Function));
-    expect(html).toContain('概況、AIサマリー、アラート、注目イベントを確認します。');
+    expect(html.match(/北極星/g) ?? []).toHaveLength(1);
+    expect(html).not.toContain('概況、AIサマリー、アラート、注目イベントを確認します。');
+    expect(html).not.toContain('銘柄比較を開く');
+    expect(html).not.toContain('ルール検証ラボを開く');
     expect(html).not.toContain('日次確認の見方');
     expect(html).not.toContain('Daily workspace');
     expect(html).toContain('AIデイリーサマリー');
@@ -351,6 +354,8 @@ describe('Home', () => {
 
     const html = renderToStaticMarkup(<Home />);
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
+    expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=morning')).toBe(false);
+    expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=evening')).toBe(false);
     expect(html).toContain('指数');
     expect(html).toContain('為替');
     expect(html).toContain('セクター');

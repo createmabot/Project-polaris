@@ -1,10 +1,9 @@
 import useSWR from 'swr';
 import { useMemo, useState } from 'react';
-import { postApi, swrFetcher } from '../api/client';
+import { fetchApi, postApi, swrFetcher } from '../api/client';
 import { HomeData, InvestmentCalendarEvent, InvestmentCalendarRefreshData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
-import PageHeader from '../components/layout/PageHeader';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import LoadingState from '../components/ui/LoadingState';
@@ -149,10 +148,13 @@ function MarketTile({
 export default function Home() {
   const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
   const [summaryDate] = useState<string | null>(null);
+  const [selectedDailySummary, setSelectedDailySummary] = useState<HomeData['daily_summary'] | null>(null);
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
-  const homeApiPath = useMemo(() => buildHomeApiPath(summaryType, summaryDate), [summaryType, summaryDate]);
+  const homeApiPath = useMemo(() => buildHomeApiPath('latest', summaryDate), [summaryDate]);
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
 
@@ -178,6 +180,21 @@ export default function Home() {
         <EmptyState title="Home データが見つかりません" />
       </div>
     );
+  }
+
+  async function handleSummaryTypeChange(nextSummaryType: HomeSummaryType) {
+    if (nextSummaryType === summaryType || isSummaryLoading) return;
+    setSummaryType(nextSummaryType);
+    setSummaryError(null);
+    setIsSummaryLoading(true);
+    try {
+      const summaryData = await fetchApi<HomeData>(buildHomeApiPath(nextSummaryType, summaryDate));
+      setSelectedDailySummary(summaryData.daily_summary ?? null);
+    } catch {
+      setSummaryError('AIデイリーサマリーを更新できませんでした。時間をおいて再実行してください。');
+    } finally {
+      setIsSummaryLoading(false);
+    }
   }
 
   async function handleRefreshCalendar() {
@@ -209,6 +226,7 @@ export default function Home() {
   const investmentCalendarEvents = data.investment_calendar?.events ?? [];
   const calendarStaleCount = data.investment_calendar?.meta?.stale_event_count ?? 0;
   const calendarProviderStatuses = data.investment_calendar?.meta?.provider_statuses ?? [];
+  const dailySummary = selectedDailySummary ?? data.daily_summary;
 
   return (
     <AppLayout
@@ -219,17 +237,6 @@ export default function Home() {
       sideRailMutateHome={canShareSideRailHomeData ? mutate : undefined}
     >
       <div className="w-full">
-        <PageHeader
-          title="北極星"
-          description="概況、AIサマリー、アラート、注目イベントを確認します。"
-          actions={
-            <>
-              <TextLink href="/compare">銘柄比較を開く</TextLink>
-              <TextLink href="/strategy-lab">ルール検証ラボを開く</TextLink>
-            </>
-          }
-        />
-
         <div className="grid gap-4">
           <SectionCard title="マーケット概況" className="p-4" headingClassName="text-base font-semibold text-slate-900">
               {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
@@ -281,7 +288,8 @@ export default function Home() {
                     <button
                       key={option.value}
                       type="button"
-                      onClick={() => setSummaryType(option.value)}
+                      onClick={() => handleSummaryTypeChange(option.value)}
+                      disabled={isSummaryLoading}
                       className={`rounded-full border px-2.5 py-1 text-xs font-medium ${
                         selected
                           ? 'border-sky-600 bg-sky-100 text-sky-900'
@@ -296,13 +304,18 @@ export default function Home() {
               </div>
             }
           >
+            {summaryError ? (
+              <InlineNotice tone="warning" className="mb-3">
+                {summaryError}
+              </InlineNotice>
+            ) : null}
             <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
-              {data.daily_summary && data.daily_summary.status === 'available' ? (
+              {dailySummary && dailySummary.status === 'available' ? (
                 <div>
                   <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
-                    {data.daily_summary.body_markdown ?? '-'}
+                    {dailySummary.body_markdown ?? '-'}
                   </p>
-                  {data.daily_summary.insufficient_context ? (
+                  {dailySummary.insufficient_context ? (
                     <p className="mt-2 text-xs text-slate-500">
                       参考情報が不足しているため、要約の精度が限定的です。
                     </p>

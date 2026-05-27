@@ -161,6 +161,7 @@ seed 後は以下で最小動作確認が可能です。
    - 最新アラート
    - 注目イベント
    - `Home` 本体に watchlist / positions の詳細一覧が重複していないこと
+   - Home 最上部に大型 hero header、比較 CTA、ルール検証ラボ CTA がないこと
 
 2. watchlist_symbols から SymbolDetail へ遷移  
 左の共通サイドメニューの `監視` タブから銘柄名リンクを押し、`/symbols/:symbolId` へ遷移できることを確認する。
@@ -169,7 +170,7 @@ seed 後は以下で最小動作確認が可能です。
 左の共通サイドメニューの `保有` タブへ切り替え、銘柄名リンク（`symbol_id` がある行）を押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
 4. daily_summary の latest / morning / evening 切替  
-Home の `最新 / 朝 / 夜` を切り替え、表示が更新されることを確認する。
+Home の `最新 / 朝 / 夜` を切り替え、AIデイリーサマリー section だけが更新されることを確認する。Home 全体の loading、scroll reset、SideRail 再取得、投資カレンダー消失が起きないことも確認する。
 
 5. SymbolDetail の AI論点カード表示  
 `/symbols/:symbolId` で AI論点カードが `available` の場合、タイトル・本文（または論点リスト）・生成日時が表示されることを確認する。
