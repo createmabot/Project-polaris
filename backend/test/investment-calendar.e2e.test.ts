@@ -222,6 +222,36 @@ describe('investment calendar APIs', () => {
     }
   });
 
+  it('does not apply official market provider to symbol-level refresh', async () => {
+    const previousProviders = process.env.INVESTMENT_CALENDAR_PROVIDERS;
+    process.env.INVESTMENT_CALENDAR_PROVIDERS = 'official_market';
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const app = await createApp();
+
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/symbols/sym-7203/calendar-events/refresh',
+        payload: { from: '2026-06-01', to: '2026-06-30' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().data).toMatchObject({
+        status: 'succeeded',
+        source: 'public_provider',
+        saved_count: 0,
+        updated_count: 0,
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+      vi.unstubAllGlobals();
+      if (previousProviders === undefined) delete process.env.INVESTMENT_CALENDAR_PROVIDERS;
+      else process.env.INVESTMENT_CALENDAR_PROVIDERS = previousProviders;
+    }
+  });
+
   it('keeps only http and https provider source URLs', () => {
     const base = {
       externalId: 'provider-event-1',

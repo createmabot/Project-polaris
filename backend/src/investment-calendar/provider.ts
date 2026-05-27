@@ -1,6 +1,7 @@
 import { AppError } from '../utils/response';
 import { AlphaVantageInvestmentCalendarProvider } from './alpha-vantage-provider';
 import { JQuantsInvestmentCalendarProvider } from './jquants-provider';
+import { OfficialMarketInvestmentCalendarProvider } from './official-market-provider';
 import {
   normalizeProviderEvent,
 } from './normalization';
@@ -28,6 +29,7 @@ function getCalendarFetchTimeoutMs() {
 function getConfiguredProviderName(): InvestmentCalendarProviderName {
   if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'alpha_vantage') return 'alpha_vantage';
   if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'jquants') return 'jquants';
+  if (process.env.INVESTMENT_CALENDAR_PROVIDER === 'official_market') return 'official_market';
   return process.env.INVESTMENT_CALENDAR_PROVIDER === 'public' ? 'public' : 'stub';
 }
 
@@ -35,6 +37,7 @@ function parseProviderName(value: string): InvestmentCalendarProviderName | null
   const normalized = value.trim().toLowerCase();
   if (normalized === 'alpha_vantage') return 'alpha_vantage';
   if (normalized === 'jquants') return 'jquants';
+  if (normalized === 'official_market') return 'official_market';
   if (normalized === 'public') return 'public';
   if (normalized === 'stub') return 'stub';
   return null;
@@ -157,6 +160,7 @@ export function createInvestmentCalendarProvider(
 ): InvestmentCalendarProvider {
   if (providerName === 'alpha_vantage') return new AlphaVantageInvestmentCalendarProvider();
   if (providerName === 'jquants') return new JQuantsInvestmentCalendarProvider();
+  if (providerName === 'official_market') return new OfficialMarketInvestmentCalendarProvider();
   if (providerName === 'public') return new PublicInvestmentCalendarProvider();
   return new StubInvestmentCalendarProvider();
 }
