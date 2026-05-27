@@ -235,6 +235,24 @@ describe('Home', () => {
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
               },
+              {
+                id: 'cal-market-2',
+                scope: 'market',
+                symbol_id: null,
+                symbol_code: null,
+                display_name: null,
+                event_date: '2026-07-01',
+                event_time: null,
+                timezone: 'America/New_York',
+                event_type: 'economic_indicator',
+                title: '米GDP',
+                importance: 'high',
+                source_type: 'public_provider',
+                source_name: 'alpha_vantage',
+                source_label: 'GDP（発表済みデータ由来）',
+                status: 'active',
+                fetched_at: '2026-05-26T00:00:00.000Z',
+              },
             ],
             meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
           },
@@ -271,6 +289,8 @@ describe('Home', () => {
     expect(html).toContain('投資カレンダー');
     expect(html).toContain('トヨタ自動車 決算発表予定');
     expect(html).toContain('米雇用統計');
+    expect(html).toContain('米GDP');
+    expect(html).toContain('GDP（発表済みデータ由来）');
     expect(html).toContain('市場全体');
     expect(html).toContain('決算予定');
   });
