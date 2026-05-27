@@ -12,7 +12,7 @@ vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-import Home, { buildHomeApiPath } from './Home';
+import Home, { buildHomeApiPath, getInitialCalendarMonthKey } from './Home';
 
 const sideRailWatchlistFixture = {
   watchlist: { id: 'wl-1', name: 'default', description: null },
@@ -93,6 +93,14 @@ describe('Home', () => {
   });
 
   it('renders populated market/watchlist/positions/events blocks', () => {
+    const currentMonthKey = getInitialCalendarMonthKey(new Date());
+    const nextMonthDate = new Date();
+    nextMonthDate.setMonth(nextMonthDate.getMonth() + 1, 1);
+    const nextMonthKey = getInitialCalendarMonthKey(nextMonthDate);
+    const [currentYear, currentMonth] = currentMonthKey.split('-').map(Number);
+    const [nextYear, nextMonth] = nextMonthKey.split('-').map(Number);
+    const currentMonthLabel = `${currentYear}年${currentMonth}月`;
+    const nextMonthLabel = `${nextYear}年${nextMonth}月`;
     mockUseSWR.mockReset();
     mockUseSWR.mockImplementation((key: string) => {
       if (key === '/api/watchlist-items') {
@@ -208,7 +216,7 @@ describe('Home', () => {
                 symbol_id: 'sym_7203',
                 symbol_code: '7203',
                 display_name: 'トヨタ自動車',
-                event_date: '2026-06-10',
+                event_date: `${currentMonthKey}-10`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'earnings',
@@ -226,7 +234,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-10',
+                event_date: `${currentMonthKey}-10`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'central_bank',
@@ -245,7 +253,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-10',
+                event_date: `${currentMonthKey}-10`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'economic_indicator',
@@ -264,7 +272,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-10',
+                event_date: `${currentMonthKey}-10`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'ipo',
@@ -283,7 +291,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-05',
+                event_date: `${currentMonthKey}-05`,
                 event_time: '21:30',
                 timezone: 'Asia/Tokyo',
                 event_type: 'economic_indicator',
@@ -301,7 +309,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-07-01',
+                event_date: `${nextMonthKey}-01`,
                 event_time: null,
                 timezone: 'America/New_York',
                 event_type: 'economic_indicator',
@@ -321,7 +329,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-17',
+                event_date: `${currentMonthKey}-17`,
                 event_time: null,
                 timezone: 'America/New_York',
                 event_type: 'central_bank',
@@ -340,7 +348,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-07-03',
+                event_date: `${nextMonthKey}-03`,
                 event_time: null,
                 timezone: 'America/New_York',
                 event_type: 'market_holiday',
@@ -359,7 +367,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-06-12',
+                event_date: `${currentMonthKey}-12`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'derivatives_settlement',
@@ -378,7 +386,7 @@ describe('Home', () => {
                 symbol_id: null,
                 symbol_code: null,
                 display_name: null,
-                event_date: '2026-07-10',
+                event_date: `${nextMonthKey}-10`,
                 event_time: null,
                 timezone: 'Asia/Tokyo',
                 event_type: 'derivatives_settlement',
@@ -438,26 +446,23 @@ describe('Home', () => {
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
     expect(html).toContain('投資カレンダー');
-    expect(html).toContain('2026年6月');
-    expect(html).toContain('2026年7月');
+    expect(html).toContain(currentMonthLabel);
+    expect(html).not.toContain(nextMonthLabel);
+    expect(html).toContain('前月');
+    expect(html).toContain('次月');
     expect(html).toContain('日');
     expect(html).toContain('月');
     expect(html).toContain('トヨタ自動車 決算発表予定');
     expect(html).toContain('+1件');
     expect(html).toContain('米雇用統計');
-    expect(html).toContain('米GDP');
-    expect(html).toContain('GDP（発表済みデータ由来）');
     expect(html).toContain('provider: Alpha Vantage');
     expect(html).toContain('取得:');
     expect(html).toContain('取得情報が古い可能性があります');
     expect(html).toContain('Alpha Vantage: 取得:');
     expect(html).toContain('FOMC');
     expect(html).toContain('中央銀行');
-    expect(html).toContain('米国市場 短縮取引');
-    expect(html).toContain('US market holiday');
     expect(html).toContain('メジャーSQ');
     expect(html).toContain('日本市場 メジャーSQ');
-    expect(html).toContain('日本市場 SQ');
     expect(html).toContain('重要');
     expect(html).toContain('中');
     expect(html).toContain('市場全体');

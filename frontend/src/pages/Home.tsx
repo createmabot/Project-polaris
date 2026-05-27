@@ -159,6 +159,24 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function formatMonthKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function parseMonthKey(value: string): Date {
+  const match = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!match) return new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  return new Date(year, month - 1, 1);
+}
+
+export function getInitialCalendarMonthKey(now: Date = new Date()): string {
+  return formatMonthKey(now);
+}
+
 function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
@@ -174,7 +192,7 @@ function calendarEventRank(event: InvestmentCalendarEvent): number {
   return 3;
 }
 
-function buildCalendarMonths(events: InvestmentCalendarEvent[]): CalendarMonth[] {
+function buildCalendarMonth(events: InvestmentCalendarEvent[], monthKey: string): CalendarMonth {
   const datedEvents = events
     .map((event) => ({ event, date: parseDateOnly(event.event_date) }))
     .filter((item): item is { event: InvestmentCalendarEvent; date: Date } => item.date !== null)
@@ -185,7 +203,6 @@ function buildCalendarMonths(events: InvestmentCalendarEvent[]): CalendarMonth[]
       if (rankDiff !== 0) return rankDiff;
       return (a.event.event_time ?? '').localeCompare(b.event.event_time ?? '');
     });
-  if (datedEvents.length === 0) return [];
 
   const eventsByDate = new Map<string, InvestmentCalendarEvent[]>();
   for (const { event, date } of datedEvents) {
@@ -195,42 +212,54 @@ function buildCalendarMonths(events: InvestmentCalendarEvent[]): CalendarMonth[]
     eventsByDate.set(key, items);
   }
 
-  const firstEventDate = datedEvents[0].date;
-  const lastEventDate = datedEvents[datedEvents.length - 1].date;
-  const firstMonth = new Date(firstEventDate.getFullYear(), firstEventDate.getMonth(), 1);
-  const lastMonth = new Date(lastEventDate.getFullYear(), lastEventDate.getMonth(), 1);
-  const months: CalendarMonth[] = [];
+  const cursor = parseMonthKey(monthKey);
+  const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+  const gridStart = addDays(monthStart, -monthStart.getDay());
+  const gridEnd = addDays(monthEnd, 6 - monthEnd.getDay());
+  const weeks: CalendarDayCell[][] = [];
+  let week: CalendarDayCell[] = [];
 
-  for (let cursor = firstMonth; cursor.getTime() <= lastMonth.getTime(); cursor = addMonths(cursor, 1)) {
-    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
-    const gridStart = addDays(monthStart, -monthStart.getDay());
-    const gridEnd = addDays(monthEnd, 6 - monthEnd.getDay());
-    const weeks: CalendarDayCell[][] = [];
-    let week: CalendarDayCell[] = [];
-
-    for (let day = gridStart; day.getTime() <= gridEnd.getTime(); day = addDays(day, 1)) {
-      const key = formatDateKey(day);
-      week.push({
-        date: key,
-        day: day.getDate(),
-        inMonth: day.getMonth() === cursor.getMonth(),
-        events: eventsByDate.get(key) ?? [],
-      });
-      if (week.length === 7) {
-        weeks.push(week);
-        week = [];
-      }
-    }
-
-    months.push({
-      key: `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`,
-      label: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月`,
-      weeks,
+  for (let day = gridStart; day.getTime() <= gridEnd.getTime(); day = addDays(day, 1)) {
+    const key = formatDateKey(day);
+    const inMonth = day.getMonth() === cursor.getMonth();
+    week.push({
+      date: key,
+      day: day.getDate(),
+      inMonth,
+      events: inMonth ? eventsByDate.get(key) ?? [] : [],
     });
+    if (week.length === 7) {
+      weeks.push(week);
+      week = [];
+    }
   }
 
-  return months;
+  return {
+    key: formatMonthKey(cursor),
+    label: `${cursor.getFullYear()}年${cursor.getMonth() + 1}月`,
+    weeks,
+  };
+}
+
+function countCalendarMonthEvents(month: CalendarMonth): number {
+  return month.weeks.reduce(
+    (total, week) => total + week.reduce((weekTotal, day) => weekTotal + day.events.length, 0),
+    0,
+  );
+}
+
+function calendarWeekdayClass(index: number): string {
+  if (index === 0) return 'bg-rose-50 text-rose-700';
+  if (index === 6) return 'bg-sky-50 text-sky-700';
+  return 'bg-slate-50 text-slate-500';
+}
+
+function calendarDayClass(day: CalendarDayCell, weekdayIndex: number): string {
+  if (!day.inMonth) return 'bg-slate-50/70 text-slate-400';
+  if (weekdayIndex === 0) return 'bg-rose-50/45';
+  if (weekdayIndex === 6) return 'bg-sky-50/45';
+  return 'bg-white';
 }
 
 function calendarChipClass(event: InvestmentCalendarEvent): string {
@@ -291,14 +320,16 @@ export default function Home() {
   const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
   const [calendarMessage, setCalendarMessage] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [calendarVisibleMonth, setCalendarVisibleMonth] = useState(() => getInitialCalendarMonthKey());
   const homeApiPath = useMemo(() => buildHomeApiPath('latest', summaryDate), [summaryDate]);
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
   const investmentCalendarEvents = data?.investment_calendar?.events ?? [];
-  const calendarMonths = useMemo(
-    () => buildCalendarMonths(investmentCalendarEvents),
-    [investmentCalendarEvents],
+  const calendarMonth = useMemo(
+    () => buildCalendarMonth(investmentCalendarEvents, calendarVisibleMonth),
+    [investmentCalendarEvents, calendarVisibleMonth],
   );
+  const calendarMonthEventCount = countCalendarMonthEvents(calendarMonth);
 
   if (isLoading) {
     return (
@@ -365,9 +396,39 @@ export default function Home() {
     }
   }
 
+  function handleCalendarMonthChange(monthOffset: number) {
+    setCalendarVisibleMonth((current) => formatMonthKey(addMonths(parseMonthKey(current), monthOffset)));
+  }
+
   const calendarStaleCount = data.investment_calendar?.meta?.stale_event_count ?? 0;
   const calendarProviderStatuses = data.investment_calendar?.meta?.provider_statuses ?? [];
   const dailySummary = selectedDailySummary ?? data.daily_summary;
+  const hasCalendarMeta =
+    Boolean(calendarMessage) ||
+    Boolean(calendarError) ||
+    calendarStaleCount > 0 ||
+    calendarProviderStatuses.length > 0;
+  const calendarMeta = hasCalendarMeta ? (
+    <div className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+      {calendarMessage ? <InlineNotice tone="success">{calendarMessage}</InlineNotice> : null}
+      {calendarError ? <InlineNotice tone="warning">{calendarError}</InlineNotice> : null}
+      {calendarStaleCount > 0 ? (
+        <InlineNotice tone="warning">
+          取得情報が古い可能性があります。カレンダーを更新してください。
+        </InlineNotice>
+      ) : null}
+      {calendarProviderStatuses.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {calendarProviderStatuses.map((status) => (
+            <span key={status.provider} className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+              {providerLabel(status.provider)}: {status.last_fetched_at ? formatCalendarFetchedAt(status.last_fetched_at) : '取得: -'}
+              {status.stale_event_count ? ` / stale ${status.stale_event_count}` : ''}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
     <AppLayout
@@ -522,23 +583,6 @@ export default function Home() {
               </Button>
             }
           >
-            {calendarMessage ? <InlineNotice tone="success" className="mb-3">{calendarMessage}</InlineNotice> : null}
-            {calendarError ? <InlineNotice tone="warning" className="mb-3">{calendarError}</InlineNotice> : null}
-            {calendarStaleCount > 0 ? (
-              <InlineNotice tone="warning" className="mb-3">
-                取得情報が古い可能性があります。カレンダーを更新してください。
-              </InlineNotice>
-            ) : null}
-            {calendarProviderStatuses.length > 0 ? (
-              <div className="mb-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                {calendarProviderStatuses.map((status) => (
-                  <span key={status.provider} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
-                    {providerLabel(status.provider)}: {status.last_fetched_at ? formatCalendarFetchedAt(status.last_fetched_at) : '取得: -'}
-                    {status.stale_event_count ? ` / stale ${status.stale_event_count}` : ''}
-                  </span>
-                ))}
-              </div>
-            ) : null}
             {investmentCalendarEvents.length === 0 ? (
               data.key_events.length === 0 ? (
                 <EmptyState title="投資カレンダーはまだありません。" />
@@ -554,34 +598,35 @@ export default function Home() {
                   ))}
                 </div>
               )
-            ) : calendarMonths.length === 0 ? (
-              <EmptyState title="表示できる日付の投資カレンダーはありません。" />
             ) : (
               <div className="space-y-4">
-                {calendarMonths.map((month) => (
-                  <div key={month.key} className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                    <div className="min-w-[44rem]">
-                      <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                        <h3 className="text-sm font-semibold text-slate-900">{month.label}</h3>
-                      </div>
-                      <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-semibold text-slate-500">
-                        {CALENDAR_WEEKDAY_LABELS.map((label) => (
-                          <div key={label} className="border-r border-slate-200 px-2 py-1.5 last:border-r-0">
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                  <div className="min-w-[44rem]">
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+                      <Button variant="secondary" onClick={() => handleCalendarMonthChange(-1)}>
+                        前月
+                      </Button>
+                      <h3 className="text-sm font-semibold text-slate-900">{calendarMonth.label}</h3>
+                      <Button variant="secondary" onClick={() => handleCalendarMonthChange(1)}>
+                        次月
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-7 border-b border-slate-200 text-center text-[11px] font-semibold">
+                      {CALENDAR_WEEKDAY_LABELS.map((label, index) => (
+                          <div key={label} className={`border-r border-slate-200 px-2 py-1.5 last:border-r-0 ${calendarWeekdayClass(index)}`}>
                             {label}
                           </div>
-                        ))}
-                      </div>
-                      {month.weeks.map((week, weekIndex) => (
-                        <div key={`${month.key}-week-${weekIndex}`} className="grid grid-cols-7 border-b border-slate-200 last:border-b-0">
-                          {week.map((day) => {
+                      ))}
+                    </div>
+                    {calendarMonth.weeks.map((week, weekIndex) => (
+                        <div key={`${calendarMonth.key}-week-${weekIndex}`} className="grid grid-cols-7 border-b border-slate-200 last:border-b-0">
+                          {week.map((day, dayIndex) => {
                             const visibleEvents = day.events.slice(0, MAX_CALENDAR_EVENTS_PER_DAY);
                             const hiddenCount = Math.max(0, day.events.length - visibleEvents.length);
                             return (
                               <div
                                 key={day.date}
-                                className={`min-h-28 border-r border-slate-200 p-1.5 last:border-r-0 ${
-                                  day.inMonth ? 'bg-white' : 'bg-slate-50/70 text-slate-400'
-                                }`}
+                                className={`min-h-28 border-r border-slate-200 p-1.5 last:border-r-0 ${calendarDayClass(day, dayIndex)}`}
                               >
                                 <div className="mb-1 flex items-center justify-between gap-1">
                                   <span className={`text-xs font-semibold ${day.inMonth ? 'text-slate-700' : 'text-slate-400'}`}>
@@ -620,12 +665,17 @@ export default function Home() {
                             );
                           })}
                         </div>
-                      ))}
-                    </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+                {calendarMonthEventCount === 0 ? (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    この月の投資カレンダー予定はありません。前月・次月で表示月を切り替えられます。
+                  </p>
+                ) : null}
               </div>
             )}
+            {calendarMeta}
           </SectionCard>
         </div>
       </div>
