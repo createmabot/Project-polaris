@@ -453,20 +453,18 @@ describe('Home', () => {
     expect(html).toContain('日');
     expect(html).toContain('月');
     expect(html).toContain('トヨタ自動車 決算発表予定');
+    expect(html).toContain('決算 7203');
     expect(html).toContain('+1件');
     expect(html).toContain('米雇用統計');
-    expect(html).toContain('provider: Alpha Vantage');
+    expect(html).not.toContain('provider: Alpha Vantage');
     expect(html).toContain('取得:');
     expect(html).toContain('取得情報が古い可能性があります');
     expect(html).toContain('Alpha Vantage: 取得:');
     expect(html).toContain('FOMC');
-    expect(html).toContain('中央銀行');
     expect(html).toContain('メジャーSQ');
-    expect(html).toContain('日本市場 メジャーSQ');
-    expect(html).toContain('重要');
-    expect(html).toContain('中');
-    expect(html).toContain('市場全体');
-    expect(html).toContain('決算予定');
+    expect(html).toContain('大SQ');
+    expect(html).not.toContain('市場全体');
+    expect(html).not.toContain('決算予定');
   });
 
   it('renders snapshot-dependent fields as hyphen when latest values are unavailable', () => {
