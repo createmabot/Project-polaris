@@ -290,7 +290,7 @@ function createRuntime(): Runtime {
         sourceUrl: null,
         externalId: 'seed-7203-earnings',
         status: 'active',
-        fetchedAt: new Date('2026-05-26T00:00:00.000Z'),
+        fetchedAt: new Date('2000-01-01T00:00:00.000Z'),
         createdAt: new Date('2026-05-26T00:00:00.000Z'),
         symbol: {
           id: 'sym-7203',
@@ -643,9 +643,22 @@ describe('GET /api/home daily_summary query handling', () => {
           symbol_id: null,
           event_type: 'economic_indicator',
           title: '米雇用統計',
+          provider: 'seed',
+          is_stale: false,
         }),
       ]),
     );
+    expect(body.data.investment_calendar.meta).toMatchObject({
+      last_fetched_at: '2026-05-26T00:00:00.000Z',
+      stale_event_count: 0,
+      provider_statuses: expect.arrayContaining([
+        expect.objectContaining({
+          provider: 'seed',
+          status: 'succeeded',
+          stale_event_count: 0,
+        }),
+      ]),
+    });
 
     await app.close();
   });

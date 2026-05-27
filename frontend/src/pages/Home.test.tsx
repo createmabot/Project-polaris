@@ -251,7 +251,9 @@ describe('Home', () => {
                 source_name: 'alpha_vantage',
                 source_label: 'GDP（発表済みデータ由来）',
                 status: 'active',
-                fetched_at: '2026-05-26T00:00:00.000Z',
+                fetched_at: '2000-01-01T00:00:00.000Z',
+                provider: 'alpha_vantage',
+                is_stale: true,
               },
               {
                 id: 'cal-market-3',
@@ -270,6 +272,7 @@ describe('Home', () => {
                 source_label: 'FOMC calendar',
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'official_market',
               },
               {
                 id: 'cal-market-4',
@@ -288,6 +291,7 @@ describe('Home', () => {
                 source_label: 'US market holiday',
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'official_market',
               },
               {
                 id: 'cal-market-5',
@@ -306,6 +310,7 @@ describe('Home', () => {
                 source_label: '日本市場 メジャーSQ',
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'official_market',
               },
               {
                 id: 'cal-market-6',
@@ -324,9 +329,21 @@ describe('Home', () => {
                 source_label: '日本市場 SQ',
                 status: 'active',
                 fetched_at: '2026-05-26T00:00:00.000Z',
+                provider: 'official_market',
               },
             ],
-            meta: { from: '2026-05-26', to: '2026-07-25', source: 'watchlist_positions_and_market_events', manual_refresh_available: true },
+            meta: {
+              from: '2026-05-26',
+              to: '2026-07-25',
+              source: 'watchlist_positions_and_market_events',
+              manual_refresh_available: true,
+              last_fetched_at: '2026-05-26T00:00:00.000Z',
+              stale_event_count: 1,
+              provider_statuses: [
+                { provider: 'alpha_vantage', status: 'succeeded', last_fetched_at: '2000-01-01T00:00:00.000Z', stale_event_count: 1 },
+                { provider: 'official_market', status: 'succeeded', last_fetched_at: '2026-05-26T00:00:00.000Z', stale_event_count: 0 },
+              ],
+            },
           },
         },
       };
@@ -363,6 +380,10 @@ describe('Home', () => {
     expect(html).toContain('米雇用統計');
     expect(html).toContain('米GDP');
     expect(html).toContain('GDP（発表済みデータ由来）');
+    expect(html).toContain('provider: Alpha Vantage');
+    expect(html).toContain('取得:');
+    expect(html).toContain('取得情報が古い可能性があります');
+    expect(html).toContain('Alpha Vantage: 取得:');
     expect(html).toContain('FOMC');
     expect(html).toContain('中央銀行');
     expect(html).toContain('米国市場 短縮取引');

@@ -25,8 +25,34 @@ type CalendarSymbol = {
   displayName: string | null;
 };
 
+const PUBLIC_PROVIDER_STALE_DAYS = 14;
+const OFFICIAL_MARKET_STALE_DAYS = 30;
+
 function toSourceType(provider: InvestmentCalendarProvider): 'seed' | 'public_provider' {
   return provider.name === 'stub' ? 'seed' : 'public_provider';
+}
+
+function resolveCalendarProviderName(row: any): string {
+  if (row.sourceType === 'seed') return 'seed';
+  const sourceName = typeof row.sourceName === 'string' ? row.sourceName : '';
+  if (sourceName === 'federal_reserve' || sourceName === 'boj' || sourceName === 'nyse' || sourceName === 'official_market') {
+    return 'official_market';
+  }
+  return sourceName || row.sourceType || 'unknown';
+}
+
+function getCalendarStaleThresholdDays(row: any): number | null {
+  if (row.sourceType !== 'public_provider') return null;
+  return resolveCalendarProviderName(row) === 'official_market'
+    ? OFFICIAL_MARKET_STALE_DAYS
+    : PUBLIC_PROVIDER_STALE_DAYS;
+}
+
+function isCalendarEventStale(row: any, now = new Date()): boolean {
+  const thresholdDays = getCalendarStaleThresholdDays(row);
+  if (!thresholdDays || !(row.fetchedAt instanceof Date)) return false;
+  const ageMs = now.getTime() - row.fetchedAt.getTime();
+  return ageMs >= thresholdDays * 24 * 60 * 60 * 1000;
 }
 
 export function toCalendarEventView(row: any, scope?: 'symbol' | 'market') {
@@ -50,6 +76,39 @@ export function toCalendarEventView(row: any, scope?: 'symbol' | 'market') {
     source_url: row.sourceUrl ?? null,
     status: row.status,
     fetched_at: row.fetchedAt instanceof Date ? row.fetchedAt.toISOString() : null,
+    provider: resolveCalendarProviderName(row),
+    is_stale: isCalendarEventStale(row),
+  };
+}
+
+function buildCalendarFreshnessMeta(events: any[]) {
+  const lastFetchedAt = events.reduce<Date | null>((latest, event) => {
+    if (!(event.fetchedAt instanceof Date)) return latest;
+    return latest === null || event.fetchedAt.getTime() > latest.getTime() ? event.fetchedAt : latest;
+  }, null);
+  const providerMap = new Map<string, { provider: string; lastFetchedAt: Date | null; staleEventCount: number }>();
+
+  for (const event of events) {
+    const provider = resolveCalendarProviderName(event);
+    const current = providerMap.get(provider) ?? { provider, lastFetchedAt: null, staleEventCount: 0 };
+    if (event.fetchedAt instanceof Date && (current.lastFetchedAt === null || event.fetchedAt.getTime() > current.lastFetchedAt.getTime())) {
+      current.lastFetchedAt = event.fetchedAt;
+    }
+    if (isCalendarEventStale(event)) current.staleEventCount += 1;
+    providerMap.set(provider, current);
+  }
+
+  return {
+    last_fetched_at: lastFetchedAt ? lastFetchedAt.toISOString() : null,
+    stale_event_count: events.filter((event) => isCalendarEventStale(event)).length,
+    provider_statuses: Array.from(providerMap.values())
+      .sort((a, b) => a.provider.localeCompare(b.provider))
+      .map((status) => ({
+        provider: status.provider,
+        status: 'succeeded',
+        last_fetched_at: status.lastFetchedAt ? status.lastFetchedAt.toISOString() : null,
+        stale_event_count: status.staleEventCount,
+      })),
   };
 }
 
@@ -105,6 +164,7 @@ export async function listSymbolCalendarEvents(symbolId: string, query: Record<s
       symbol_id: symbolId,
       from: normalized.from,
       to: normalized.to,
+      ...buildCalendarFreshnessMeta(events),
     },
   };
 }
@@ -206,6 +266,18 @@ export async function refreshInvestmentCalendarEvents(
     to: input.to,
     source: provider.name === 'stub' ? 'stub' : 'public_provider',
     manual_only: true,
+    provider: provider.name,
+    providers: [toProviderRefreshSummary(provider, {
+      status: 'succeeded',
+      saved_count: savedCount,
+      updated_count: updatedCount,
+      skipped_count: skippedCount,
+      failed_count: 0,
+      from: input.from,
+      to: input.to,
+      source: provider.name === 'stub' ? 'stub' : 'public_provider',
+      manual_only: true,
+    })],
   };
 }
 
@@ -312,6 +384,7 @@ export async function listHomeInvestmentCalendar(from?: string, to?: string) {
       to: range.to,
       source: 'watchlist_positions_and_market_events',
       manual_refresh_available: true,
+      ...buildCalendarFreshnessMeta(events),
     },
   };
 }

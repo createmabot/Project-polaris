@@ -90,6 +90,9 @@ describe('investment calendar APIs', () => {
   });
 
   it('returns symbol calendar events without raw provider details', async () => {
+    runtime.events[0].sourceType = 'public_provider';
+    runtime.events[0].sourceName = 'jquants';
+    runtime.events[0].fetchedAt = new Date('2000-01-01T00:00:00.000Z');
     const app = await createApp();
     const res = await app.inject({
       method: 'GET',
@@ -103,6 +106,18 @@ describe('investment calendar APIs', () => {
       event_type: 'earnings',
       title: 'トヨタ自動車 決算発表予定',
       source_label: '決算予定',
+      provider: 'jquants',
+      is_stale: true,
+    });
+    expect(body.data.meta).toMatchObject({
+      stale_event_count: 1,
+      provider_statuses: [
+        expect.objectContaining({
+          provider: 'jquants',
+          status: 'succeeded',
+          stale_event_count: 1,
+        }),
+      ],
     });
     expect(JSON.stringify(body)).not.toContain('stack');
     expect(JSON.stringify(body)).not.toContain('raw');

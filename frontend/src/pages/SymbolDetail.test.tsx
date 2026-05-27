@@ -327,9 +327,21 @@ function getCommonSWRResult(key: string | null) {
             source_label: '決算予定',
             status: 'active',
             fetched_at: '2026-05-26T00:00:00.000Z',
+            provider: 'seed',
+            is_stale: false,
           },
         ],
-        meta: { from: '2026-05-26', to: '2026-07-25', scope: 'symbol', symbol_id: 'sym-1' },
+        meta: {
+          from: '2026-05-26',
+          to: '2026-07-25',
+          scope: 'symbol',
+          symbol_id: 'sym-1',
+          last_fetched_at: '2026-05-26T00:00:00.000Z',
+          stale_event_count: 0,
+          provider_statuses: [
+            { provider: 'seed', status: 'succeeded', last_fetched_at: '2026-05-26T00:00:00.000Z', stale_event_count: 0 },
+          ],
+        },
       },
     };
   }
@@ -491,6 +503,8 @@ describe('SymbolDetail', () => {
     expect(html).toContain('カレンダーを更新');
     expect(html).toContain('Toyota earnings');
     expect(html).toContain('決算予定');
+    expect(html).toContain('provider: seed');
+    expect(html).toContain('取得:');
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');
     expect(html).toContain('保存済みストラテジー適用');

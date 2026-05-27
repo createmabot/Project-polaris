@@ -364,11 +364,9 @@ provider 方針分類:
 
 ### Phase P4: freshness / source quality
 
-- stale warning。
-- provider observation。
-- source reliability label。
-- refresh history。
-- provider-specific error code と retry guidance。
+- 実装済み: event row に provider label、source type、`fetched_at`、stale warning を表示する。Home / Symbol calendar API は optional metadata として `last_fetched_at`、`provider_statuses`、`stale_event_count` を返す。
+- 実装済み: Home manual refresh result の `providers[]` を使い、`partial_success` 時も provider 別 status / count / sanitized error code を UI で確認できる。
+- 後続: provider observation table、refresh history table、source reliability label、stale threshold の調整、provider-specific retry guidance。
 
 ## 7. 採用しないもの
 

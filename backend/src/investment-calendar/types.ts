@@ -38,6 +38,7 @@ export type InvestmentCalendarRefreshResult = {
   to: string;
   source: 'stub' | 'public_provider';
   manual_only: true;
+  provider?: string;
   providers?: Array<{
     provider: string;
     status: 'succeeded' | 'failed' | 'skipped';

@@ -41,6 +41,53 @@ function formatDate(value: string | null): string {
   return date.toLocaleString('ja-JP');
 }
 
+function formatCalendarFetchedAt(value: string | null): string {
+  if (!value) return '取得: -';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '取得: -';
+  return `取得: ${date.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function providerLabel(provider: string | null | undefined, sourceName?: string | null): string {
+  const value = provider || sourceName || '';
+  const labels: Record<string, string> = {
+    alpha_vantage: 'Alpha Vantage',
+    jquants: 'J-Quants',
+    official_market: 'official_market',
+    seed: 'seed',
+    stub: 'stub',
+    federal_reserve: 'official_market',
+    boj: 'official_market',
+    nyse: 'official_market',
+  };
+  return labels[value] ?? (value || '-');
+}
+
+function providerStatusLabel(status: string): string {
+  if (status === 'succeeded') return '成功';
+  if (status === 'failed') return '失敗';
+  if (status === 'skipped') return 'スキップ';
+  return status;
+}
+
+function formatProviderRefreshSummary(result: InvestmentCalendarRefreshData): string {
+  const providers = result.providers ?? [];
+  if (providers.length === 0) return '';
+  return providers
+    .map((provider) => {
+      const counts = `追加 ${provider.saved_count ?? 0} / 更新 ${provider.updated_count ?? 0} / skip ${provider.skipped_count ?? 0}`;
+      const error = provider.error_code ? ` / ${provider.error_code}` : '';
+      return `${providerLabel(provider.provider)}: ${providerStatusLabel(provider.status)} (${counts}${error})`;
+    })
+    .join(' / ');
+}
+
 function formatCompactNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return value.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
@@ -142,11 +189,14 @@ export default function Home() {
         include_market_events: true,
       });
       if (result.status === 'failed') {
-        setCalendarError('投資カレンダーを更新できませんでした。時間をおいて再実行してください。');
+        const summary = formatProviderRefreshSummary(result);
+        setCalendarError(`投資カレンダーを更新できませんでした。時間をおいて再実行してください。${summary ? ` ${summary}` : ''}`);
       } else if (result.status === 'partial_success') {
-        setCalendarError(`一部のカレンダー取得に失敗しました。取得できた予定は保存されています。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+        const summary = formatProviderRefreshSummary(result);
+        setCalendarError(`一部のカレンダー取得に失敗しました。取得できた予定は保存されています。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。${summary ? ` ${summary}` : ''}`);
       } else {
-        setCalendarMessage(`投資カレンダーを更新しました。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。`);
+        const summary = formatProviderRefreshSummary(result);
+        setCalendarMessage(`投資カレンダーを更新しました。追加 ${result.saved_count} 件 / 更新 ${result.updated_count} 件。${summary ? ` ${summary}` : ''}`);
       }
       await mutate();
     } catch {
@@ -157,6 +207,8 @@ export default function Home() {
   }
 
   const investmentCalendarEvents = data.investment_calendar?.events ?? [];
+  const calendarStaleCount = data.investment_calendar?.meta?.stale_event_count ?? 0;
+  const calendarProviderStatuses = data.investment_calendar?.meta?.provider_statuses ?? [];
 
   return (
     <AppLayout
@@ -318,6 +370,21 @@ export default function Home() {
           >
             {calendarMessage ? <InlineNotice tone="success" className="mb-3">{calendarMessage}</InlineNotice> : null}
             {calendarError ? <InlineNotice tone="warning" className="mb-3">{calendarError}</InlineNotice> : null}
+            {calendarStaleCount > 0 ? (
+              <InlineNotice tone="warning" className="mb-3">
+                取得情報が古い可能性があります。カレンダーを更新してください。
+              </InlineNotice>
+            ) : null}
+            {calendarProviderStatuses.length > 0 ? (
+              <div className="mb-3 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                {calendarProviderStatuses.map((status) => (
+                  <span key={status.provider} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+                    {providerLabel(status.provider)}: {status.last_fetched_at ? formatCalendarFetchedAt(status.last_fetched_at) : '取得: -'}
+                    {status.stale_event_count ? ` / stale ${status.stale_event_count}` : ''}
+                  </span>
+                ))}
+              </div>
+            ) : null}
             {investmentCalendarEvents.length === 0 ? (
               data.key_events.length === 0 ? (
                 <EmptyState title="投資カレンダーはまだありません。" />
@@ -347,7 +414,11 @@ export default function Home() {
                       <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
                       <span>{eventTypeLabel(event.event_type)}</span>
                       <span>{event.scope === 'market' ? '市場全体' : event.display_name ?? event.symbol_code ?? '-'}</span>
+                      <span>provider: {providerLabel(event.provider, event.source_name)}</span>
+                      <span>{event.source_type}</span>
                       {event.source_label ? <span>source: {event.source_label}</span> : null}
+                      {event.fetched_at ? <span>{formatCalendarFetchedAt(event.fetched_at)}</span> : null}
+                      {event.is_stale ? <span className="font-semibold text-amber-700">取得情報が古い可能性があります</span> : null}
                     </div>
                   </div>
                 ))}
