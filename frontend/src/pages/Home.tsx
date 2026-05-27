@@ -128,12 +128,6 @@ function eventTypeLabel(type: string): string {
   return labels[type] ?? type;
 }
 
-function importanceLabel(importance: string): string {
-  if (importance === 'high') return '重要';
-  if (importance === 'low') return '低';
-  return '中';
-}
-
 function parseDateOnly(value: string | null): Date | null {
   if (!value) return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
@@ -276,13 +270,24 @@ function calendarChipClass(event: InvestmentCalendarEvent): string {
 function calendarEventTitle(event: InvestmentCalendarEvent): string {
   const parts = [
     event.title,
-    `importance: ${importanceLabel(event.importance)}`,
-    event.source_label ? `source: ${event.source_label}` : null,
-    `provider: ${providerLabel(event.provider, event.source_name)}`,
-    event.fetched_at ? formatCalendarFetchedAt(event.fetched_at) : null,
-    event.is_stale ? '取得情報が古い可能性があります' : null,
+    event.symbol_code ? `symbol: ${event.symbol_code}` : null,
+    event.event_time ? `time: ${event.event_time}` : null,
   ];
   return parts.filter(Boolean).join(' / ');
+}
+
+function calendarChipPrefix(event: InvestmentCalendarEvent): string {
+  if (event.event_type === 'earnings') return event.symbol_code ? `決算 ${event.symbol_code}` : '決算';
+  if (event.event_type === 'economic_indicator') return event.title.includes('CPI') ? 'CPI' : '指標';
+  if (event.event_type === 'central_bank') {
+    if (event.title.includes('日銀')) return '日銀';
+    if (event.title.includes('FOMC')) return 'FOMC';
+    return '中銀';
+  }
+  if (event.event_type === 'derivatives_settlement') return event.title.includes('メジャー') ? '大SQ' : 'SQ';
+  if (event.event_type === 'market_holiday') return '休場';
+  if (event.event_type === 'ipo') return 'IPO';
+  return eventTypeLabel(event.event_type);
 }
 
 function MarketTile({
@@ -575,7 +580,7 @@ export default function Home() {
           <SectionCard
             title="投資カレンダー"
             description="監視・保有銘柄の予定と市場イベントをまとめて確認します。"
-            className="p-4"
+            className="order-first p-4"
             headingClassName="text-base font-semibold text-slate-900"
             actions={
               <Button variant="secondary" onClick={handleRefreshCalendar} disabled={isRefreshingCalendar}>
@@ -641,17 +646,11 @@ export default function Home() {
                                 <div className="space-y-1">
                                   {visibleEvents.map((event) => (
                                     <div key={event.id} className={calendarChipClass(event)} title={calendarEventTitle(event)}>
-                                      <div className="flex items-center gap-1">
+                                      <div className="flex items-center gap-1.5">
                                         <span className="shrink-0 rounded bg-white/70 px-1 text-[10px] font-semibold">
-                                          {eventTypeLabel(event.event_type)}
+                                          {calendarChipPrefix(event)}
                                         </span>
                                         <span className="min-w-0 truncate font-semibold">{event.title}</span>
-                                      </div>
-                                      <div className="mt-0.5 flex items-center gap-1 text-[10px] opacity-80">
-                                        <span className="truncate">{event.scope === 'market' ? '市場全体' : event.display_name ?? event.symbol_code ?? '-'}</span>
-                                        <span>·</span>
-                                        <span className="truncate">{providerLabel(event.provider, event.source_name)}</span>
-                                        {event.is_stale ? <span className="font-semibold text-amber-700">stale</span> : null}
                                       </div>
                                     </div>
                                   ))}
