@@ -1,7 +1,7 @@
 import useSWR from 'swr';
 import { useMemo, useState } from 'react';
 import { fetchApi, postApi, swrFetcher } from '../api/client';
-import { HomeData, InvestmentCalendarEvent, InvestmentCalendarRefreshData } from '../api/types';
+import { DailySummaryData, HomeData, InvestmentCalendarEvent, InvestmentCalendarRefreshData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import { SIDE_RAIL_HOME_API_PATH } from '../components/layout/SideRail';
 import EmptyState from '../components/ui/EmptyState';
@@ -45,6 +45,15 @@ export function buildHomeApiPath(summaryType: HomeSummaryType, date: string | nu
   return `/api/home?${params.toString()}`;
 }
 
+export function buildDailySummaryApiPath(summaryType: HomeSummaryType, date: string | null): string {
+  const params = new URLSearchParams();
+  params.set('type', summaryType);
+  if (date) {
+    params.set('date', date);
+  }
+  return `/api/summaries/daily?${params.toString()}`;
+}
+
 function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
@@ -54,6 +63,45 @@ function formatDate(value: string | null): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleString('ja-JP');
+}
+
+function formatSummaryGeneratedAt(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return `生成: ${date.toLocaleString('ja-JP', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
+function summarySlotLabel(summaryType: HomeSummaryType): string {
+  if (summaryType === 'morning') return '朝';
+  if (summaryType === 'evening') return '夜';
+  return '最新';
+}
+
+function summarySelectionLabel(summary: DailySummaryData | null, selectedType: HomeSummaryType): string {
+  if (summary?.date) return `対象日: ${summary.date}`;
+  if (selectedType === 'morning') return '対象: 保存済みの朝サマリー';
+  if (selectedType === 'evening') return '対象: 保存済みの夜サマリー';
+  return '対象: 保存済み最新';
+}
+
+function summaryUnavailableTitle(summaryType: HomeSummaryType): string {
+  if (summaryType === 'morning') return '朝のサマリーはまだありません。';
+  if (summaryType === 'evening') return '夜のサマリーはまだありません。';
+  return 'サマリーはまだありません。';
+}
+
+function summaryUnavailableDetail(insufficientContext: boolean): string {
+  if (insufficientContext) {
+    return 'マーケット snapshot / アラート / 参照情報が不足している可能性があります。';
+  }
+  return 'この slot のサマリーはまだ生成されていません。';
 }
 
 function formatCalendarFetchedAt(value: string | null): string {
@@ -369,7 +417,7 @@ function MarketTile({
 export default function Home() {
   const [summaryType, setSummaryType] = useState<HomeSummaryType>('latest');
   const [summaryDate] = useState<string | null>(null);
-  const [selectedDailySummary, setSelectedDailySummary] = useState<HomeData['daily_summary'] | null>(null);
+  const [selectedDailySummary, setSelectedDailySummary] = useState<DailySummaryData | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isRefreshingCalendar, setIsRefreshingCalendar] = useState(false);
@@ -413,12 +461,12 @@ export default function Home() {
 
   async function handleSummaryTypeChange(nextSummaryType: HomeSummaryType) {
     if (nextSummaryType === summaryType || isSummaryLoading) return;
-    setSummaryType(nextSummaryType);
     setSummaryError(null);
     setIsSummaryLoading(true);
     try {
-      const summaryData = await fetchApi<HomeData>(buildHomeApiPath(nextSummaryType, summaryDate));
-      setSelectedDailySummary(summaryData.daily_summary ?? null);
+      const summaryData = await fetchApi<DailySummaryData>(buildDailySummaryApiPath(nextSummaryType, summaryDate));
+      setSelectedDailySummary(summaryData);
+      setSummaryType(nextSummaryType);
     } catch {
       setSummaryError('AIデイリーサマリーを更新できませんでした。時間をおいて再実行してください。');
     } finally {
@@ -496,7 +544,12 @@ export default function Home() {
     >
       <div className="w-full">
         <div className="grid gap-4">
-          <SectionCard title="マーケット概況" className="p-4" headingClassName="text-base font-semibold text-slate-900">
+          <SectionCard
+            title="マーケット概況"
+            description="最近のアラート銘柄、為替、セクター snapshot をまとめて確認します。"
+            className="p-4"
+            headingClassName="text-base font-semibold text-slate-900"
+          >
               {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
               asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
               asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
@@ -506,7 +559,7 @@ export default function Home() {
                   {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
                     <MarketTile
                       key={`index-${index}`}
-                      kind="指数"
+                      kind="注目銘柄"
                       name={item.display_name ?? '-'}
                       price={item.price}
                       changeRate={item.change_rate}
@@ -568,19 +621,37 @@ export default function Home() {
               </InlineNotice>
             ) : null}
             <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2.5">
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-600">
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                  種別: {summarySlotLabel(summaryType)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                  {summarySelectionLabel(dailySummary, summaryType)}
+                </span>
+                {dailySummary?.generated_at ? (
+                  <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                    {formatSummaryGeneratedAt(dailySummary.generated_at)}
+                  </span>
+                ) : null}
+              </div>
               {dailySummary && dailySummary.status === 'available' ? (
                 <div>
+                  {dailySummary.title ? (
+                    <div className="mb-2 text-sm font-semibold text-slate-900">{dailySummary.title}</div>
+                  ) : null}
                   <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">
                     {dailySummary.body_markdown ?? '-'}
                   </p>
                   {dailySummary.insufficient_context ? (
-                    <p className="mt-2 text-xs text-slate-500">
+                    <InlineNotice tone="warning" className="mt-2">
                       参考情報が不足しているため、要約の精度が限定的です。
-                    </p>
+                    </InlineNotice>
                   ) : null}
                 </div>
               ) : (
-                <EmptyState title="サマリーはまだありません。" />
+                <EmptyState title={summaryUnavailableTitle(summaryType)}>
+                  {summaryUnavailableDetail(Boolean(dailySummary?.insufficient_context))}
+                </EmptyState>
               )}
             </div>
           </SectionCard>

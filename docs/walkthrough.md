@@ -156,8 +156,8 @@ seed 後は以下で最小動作確認が可能です。
 1. Home 表示ブロック確認  
 `http://localhost:5173/` を開き、以下を確認する。
    - 共通サイドメニュー（監視 / 保有タブ、折りたたみ）
-   - マーケット概況
-   - AIデイリーサマリー
+   - マーケット概況（注目銘柄 / 為替 / セクター）
+   - AIデイリーサマリー（slot / 生成日時 / 保存済み選択表示）
    - 最新アラート
    - 注目イベント
    - `Home` 本体に watchlist / positions の詳細一覧が重複していないこと
@@ -170,7 +170,7 @@ seed 後は以下で最小動作確認が可能です。
 左の共通サイドメニューの `保有` タブへ切り替え、銘柄名リンク（`symbol_id` がある行）を押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
 4. daily_summary の latest / morning / evening 切替  
-Home の `最新 / 朝 / 夜` を切り替え、AIデイリーサマリー section だけが更新されることを確認する。Home 全体の loading、scroll reset、SideRail 再取得、投資カレンダー消失が起きないことも確認する。
+Home の `最新 / 朝 / 夜` を切り替え、AIデイリーサマリー section だけが summary 専用 API で更新されることを確認する。slot、生成日時、対象日または保存済み選択、unavailable 時の材料不足 / 未生成説明が読めること、Home 全体の loading、scroll reset、SideRail 再取得、投資カレンダー消失が起きないことも確認する。
 
 5. SymbolDetail の AI論点カード表示  
 `/symbols/:symbolId` で AI論点カードが `available` の場合、タイトル・本文（または論点リスト）・生成日時が表示されることを確認する。

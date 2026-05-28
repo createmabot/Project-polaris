@@ -123,6 +123,18 @@ export type ExternalReferenceDto = {
   summaryText: string | null;
 };
 
+export type DailySummaryData = {
+  id: string | null;
+  title: string | null;
+  body_markdown: string | null;
+  structured_json: Record<string, unknown> | null;
+  generated_at: string | null;
+  status: 'available' | 'unavailable';
+  insufficient_context: boolean;
+  summary_type: 'latest' | 'morning' | 'evening';
+  date: string | null;
+};
+
 export type HomeData = {
   market_overview: any;
   watchlist_symbols: Array<{
@@ -150,17 +162,7 @@ export type HomeData = {
     unrealized_pnl: number | null;
   }>;
   recent_alerts: AlertEventDto[];
-  daily_summary: {
-    id: string | null;
-    title: string | null;
-    body_markdown: string | null;
-    structured_json: Record<string, unknown> | null;
-    generated_at: string | null;
-    status: 'available' | 'unavailable';
-    insufficient_context: boolean;
-    summary_type: 'latest' | 'morning' | 'evening';
-    date: string | null;
-  } | null;
+  daily_summary: DailySummaryData | null;
   key_events: any[];
   investment_calendar?: InvestmentCalendarData;
 };
