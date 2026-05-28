@@ -3,7 +3,12 @@ import { prisma } from '../db';
 import { formatSuccess } from '../utils/response';
 import { getCurrentSnapshotsForSymbols } from '../market/snapshot';
 import { rebuildPositionsReadModel } from '../home/positions-read-model';
-import { HOME_SECTOR_MASTER } from '../home/sector-master';
+import {
+  HOME_FX_MASTER,
+  HOME_INDEX_MASTER,
+  HOME_SECTOR_MASTER,
+  type HomeMarketOverviewMasterRow,
+} from '../home/market-overview-master';
 import { listHomeInvestmentCalendar, refreshHomeInvestmentCalendar } from '../investment-calendar/service';
 import {
   normalizeDate,
@@ -22,115 +27,6 @@ type HomeCalendarRefreshBody = {
   include_market_events?: unknown;
 };
 
-
-function buildMarketOverviewFromRecentAlerts(
-  recentAlerts: Array<{
-    symbol: {
-      id: string;
-      symbol?: string | null;
-      symbolCode?: string | null;
-      marketCode?: string | null;
-      tradingviewSymbol?: string | null;
-      displayName?: string | null;
-    } | null;
-    current_snapshot?: {
-      last_price?: number | null;
-      change?: number | null;
-      change_percent?: number | null;
-    } | null;
-  }>,
-) {
-  const seen = new Set<string>();
-  const indices: Array<{
-    code: string;
-    display_name: string;
-    price: number;
-    change_value: number | null;
-    change_rate: number | null;
-  }> = [];
-  const fx: Array<{
-    code: string;
-    display_name: string;
-    price: number;
-    change_value: number | null;
-    change_rate: number | null;
-  }> = [];
-
-  const FX_CODE_PATTERN = /^[A-Z]{6}$/;
-  const FX_TV_PREFIXES = ['FOREX:', 'FX_IDC:'];
-
-  function normalizeCandidate(value?: string | null): string {
-    return (value ?? '').trim().toUpperCase();
-  }
-
-  function normalizeFxCode(value?: string | null): string {
-    return normalizeCandidate(value).replace(/[^A-Z]/g, '');
-  }
-
-  function isFxSymbol(symbol: {
-    symbol?: string | null;
-    symbolCode?: string | null;
-    marketCode?: string | null;
-    tradingviewSymbol?: string | null;
-  }): boolean {
-    const marketCode = normalizeCandidate(symbol.marketCode);
-    if (marketCode === 'FX' || marketCode === 'FOREX') {
-      return true;
-    }
-
-    const tradingview = normalizeCandidate(symbol.tradingviewSymbol);
-    if (FX_TV_PREFIXES.some((prefix) => tradingview.startsWith(prefix))) {
-      return true;
-    }
-
-    // If market code is explicitly non-FX, do not classify as FX by ticker pattern.
-    if (marketCode) {
-      return false;
-    }
-
-    const symbolCode = normalizeFxCode(symbol.symbolCode);
-    const symbolText = normalizeFxCode(symbol.symbol);
-    return FX_CODE_PATTERN.test(symbolCode) || FX_CODE_PATTERN.test(symbolText);
-  }
-
-  for (const alert of recentAlerts) {
-    const symbol = alert.symbol;
-    const snapshot = alert.current_snapshot;
-    if (!symbol?.id || seen.has(symbol.id)) continue;
-    if (!snapshot || typeof snapshot.last_price !== 'number' || !Number.isFinite(snapshot.last_price)) {
-      continue;
-    }
-
-    seen.add(symbol.id);
-    const symbolCode = (symbol.symbolCode ?? '').trim();
-    const fallbackCode = (symbol.symbol ?? '').trim();
-    const code = symbolCode || fallbackCode || symbol.id;
-    const row = {
-      code,
-      display_name: symbol.displayName ?? code,
-      price: snapshot.last_price,
-      change_value:
-        typeof snapshot.change === 'number' && Number.isFinite(snapshot.change) ? snapshot.change : null,
-      change_rate:
-        typeof snapshot.change_percent === 'number' && Number.isFinite(snapshot.change_percent)
-          ? snapshot.change_percent
-          : null,
-    };
-
-    if (isFxSymbol(symbol)) {
-      fx.push(row);
-    } else {
-      indices.push(row);
-    }
-  }
-
-  return {
-    indices,
-    fx,
-    sectors: [],
-  };
-}
-
 function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number') {
     return Number.isFinite(value) ? value : null;
@@ -142,9 +38,13 @@ function toFiniteNumber(value: unknown): number | null {
   return null;
 }
 
-async function buildHomeSectors(prismaAny: any) {
-  const sectorCodes = HOME_SECTOR_MASTER.map((row) => row.code);
-  if (sectorCodes.length === 0) return [];
+async function buildHomeMarketOverviewRows(
+  prismaAny: any,
+  snapshotType: string,
+  masterRows: HomeMarketOverviewMasterRow[],
+) {
+  const targetCodes = masterRows.map((row) => row.code);
+  if (targetCodes.length === 0) return [];
 
   const rows: Array<{
     snapshotType?: string;
@@ -155,8 +55,8 @@ async function buildHomeSectors(prismaAny: any) {
     asOf?: Date | string | null;
   }> = await prismaAny.marketSnapshot.findMany({
     where: {
-      snapshotType: 'sector',
-      targetCode: { in: sectorCodes },
+      snapshotType,
+      targetCode: { in: targetCodes },
     },
     orderBy: [{ asOf: 'desc' }],
   });
@@ -168,7 +68,7 @@ async function buildHomeSectors(prismaAny: any) {
     latestByCode.set(code, row);
   }
 
-  return HOME_SECTOR_MASTER
+  return masterRows
     .slice()
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((master) => {
@@ -191,6 +91,18 @@ async function buildHomeSectors(prismaAny: any) {
       };
     })
     .filter((row): row is NonNullable<typeof row> => row !== null);
+}
+
+function buildHomeIndices(prismaAny: any) {
+  return buildHomeMarketOverviewRows(prismaAny, 'index', HOME_INDEX_MASTER);
+}
+
+function buildHomeFx(prismaAny: any) {
+  return buildHomeMarketOverviewRows(prismaAny, 'fx', HOME_FX_MASTER);
+}
+
+function buildHomeSectors(prismaAny: any) {
+  return buildHomeMarketOverviewRows(prismaAny, 'sector', HOME_SECTOR_MASTER);
 }
 
 function toJstDateText(input?: Date | string | null): string | null {
@@ -427,10 +339,12 @@ export async function homeRoutes(fastify: FastifyInstance) {
     });
     const key_events = buildKeyEventsFromRecentAlerts(recentAlerts);
     const investment_calendar = await listHomeInvestmentCalendar();
-    const market_overview_from_alerts = buildMarketOverviewFromRecentAlerts(recentAlerts);
+    const indices = await buildHomeIndices(prismaAny);
+    const fx = await buildHomeFx(prismaAny);
     const sectors = await buildHomeSectors(prismaAny);
     const market_overview = {
-      ...market_overview_from_alerts,
+      indices,
+      fx,
       sectors,
     };
 
