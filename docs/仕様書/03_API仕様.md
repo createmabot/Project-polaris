@@ -205,6 +205,14 @@ StrategyVersion Pine generation の market / timeframe:
 - application-specific endpoints: `docs/54.北極星 application-specific runs endpoint 設計（次フェーズ）.md`, `docs/55.北極星 application-specific reports endpoint 設計（次フェーズ）.md`
 - AI summary auto-generation: `docs/56.北極星 AI summary 自動生成運用設計（次フェーズ）.md`
 
+## Home / daily summary API
+
+- `GET /api/home`: `summary_type=latest|morning|evening` と `date=YYYY-MM-DD` を受け付け、`daily_summary` を返す。`market_overview.indices` は互換維持の field 名だが、現行実装では recent alerts に紐づく non-FX symbol snapshot bucket であり、UI では `注目銘柄` として表示する。`market_overview.fx` は FX 判定された snapshot、`market_overview.sectors` は `market_snapshots(snapshot_type=sector)` と `HOME_SECTOR_MASTER` 由来の sector snapshot。
+- `GET /api/summaries/daily?type=latest|morning|evening&date=YYYY-MM-DD`: Home の AIデイリーサマリー tab 切替で使う summary 専用 API。Home 全体の watchlist / positions / market_overview / investment_calendar を再計算せず、`daily_summary` 相当の summary view だけを返す。
+- `POST /api/summaries/daily/generate`: `type=morning|evening` の手動生成 API。`latest` は生成対象外。Home 表示や tab 切替を契機にした自動生成、polling、scheduled generation は行わない。
+
+`daily_summary` は `status=available|unavailable`、`insufficient_context`、`summary_type`、`date`、`generated_at` を持つ。`date=null` の場合は指定日ではなく保存済み summary からの選択であり、UI では `保存済み最新` / `保存済みの朝サマリー` / `保存済みの夜サマリー` として明示する。raw prompt、raw provider response、endpoint 実値、model 実値、secret は API response に出さない。
+
 ## 投資カレンダー API
 
 - `GET /api/symbols/:symbolId/calendar-events`: 銘柄別 calendar events を返す。query は `from` / `to` / `event_type` / `importance` / `status` / `limit`。

@@ -12,7 +12,7 @@ vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
 }));
 
-import Home, { buildHomeApiPath, getInitialCalendarMonthKey } from './Home';
+import Home, { buildDailySummaryApiPath, buildHomeApiPath, getInitialCalendarMonthKey } from './Home';
 
 const sideRailWatchlistFixture = {
   watchlist: { id: 'wl-1', name: 'default', description: null },
@@ -29,6 +29,9 @@ describe('Home', () => {
     expect(buildHomeApiPath('latest', null)).toBe('/api/home?summary_type=latest');
     expect(buildHomeApiPath('morning', null)).toBe('/api/home?summary_type=morning');
     expect(buildHomeApiPath('evening', '2026-04-12')).toBe('/api/home?summary_type=evening&date=2026-04-12');
+    expect(buildDailySummaryApiPath('latest', null)).toBe('/api/summaries/daily?type=latest');
+    expect(buildDailySummaryApiPath('morning', null)).toBe('/api/summaries/daily?type=morning');
+    expect(buildDailySummaryApiPath('evening', '2026-04-12')).toBe('/api/summaries/daily?type=evening&date=2026-04-12');
   });
 
   it('renders empty placeholders for home mvp blocks', () => {
@@ -86,6 +89,7 @@ describe('Home', () => {
     expect(html).toContain('マーケット概況データはまだありません。');
     expect(html).toContain('監視銘柄はまだありません。');
     expect(html).toContain('サマリーはまだありません。');
+    expect(html).toContain('マーケット snapshot / アラート / 参照情報が不足している可能性があります。');
     expect(html).toContain('アラートはありません。');
     expect(html).toContain('投資カレンダー');
     expect(html).toContain('投資カレンダーはまだありません。');
@@ -421,7 +425,9 @@ describe('Home', () => {
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=morning')).toBe(false);
     expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=evening')).toBe(false);
-    expect(html).toContain('指数');
+    expect(html).toContain('最近のアラート銘柄、為替、セクター snapshot をまとめて確認します。');
+    expect(html).toContain('注目銘柄');
+    expect(html).not.toContain('指数');
     expect(html).toContain('為替');
     expect(html).toContain('セクター');
     expect(html).toContain('日経平均');
@@ -443,6 +449,10 @@ describe('Home', () => {
     expect(html).toContain('+ 監視');
     expect(html).not.toContain('詳細管理');
     expect(html).not.toContain('Sony Group');
+    expect(html).toContain('本日の注目ポイント');
+    expect(html).toContain('種別: 最新');
+    expect(html).toContain('対象: 保存済み最新');
+    expect(html).toContain('生成:');
     expect(html).toContain('自動車株が堅調');
     expect(html).toContain('href="/alerts/alert_1"');
     expect(html).toContain('投資カレンダー');

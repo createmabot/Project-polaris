@@ -1188,7 +1188,7 @@ describe('GET /api/home daily_summary query handling', () => {
     await app.close();
   });
 
-  it('builds market_overview.fx from recent alerts and keeps indices unchanged', async () => {
+  it('builds market_overview fx from recent alerts and keeps non-FX symbols in compatibility indices bucket', async () => {
     runtime.alerts.unshift({
       id: 'alert-fx-1',
       symbolId: 'sym-usdjpy',
