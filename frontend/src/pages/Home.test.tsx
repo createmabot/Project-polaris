@@ -452,6 +452,8 @@ describe('Home', () => {
     expect(html).toContain('次月');
     expect(html).toContain('日');
     expect(html).toContain('月');
+    expect(html).toContain('今日');
+    expect(html).toContain('ring-amber-300');
     expect(html).toContain('トヨタ自動車 決算発表予定');
     expect(html).toContain('決算 7203');
     expect(html).toContain('+1件');

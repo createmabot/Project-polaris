@@ -26,6 +26,7 @@ type CalendarDayCell = {
   date: string;
   day: number;
   inMonth: boolean;
+  isToday: boolean;
   events: InvestmentCalendarEvent[];
 };
 
@@ -192,7 +193,11 @@ function calendarEventRank(event: InvestmentCalendarEvent): number {
   return 3;
 }
 
-function buildCalendarMonth(events: InvestmentCalendarEvent[], monthKey: string): CalendarMonth {
+function buildCalendarMonth(
+  events: InvestmentCalendarEvent[],
+  monthKey: string,
+  todayKey: string = formatDateKey(new Date()),
+): CalendarMonth {
   const datedEvents = events
     .map((event) => ({ event, date: parseDateOnly(event.event_date) }))
     .filter((item): item is { event: InvestmentCalendarEvent; date: Date } => item.date !== null)
@@ -227,6 +232,7 @@ function buildCalendarMonth(events: InvestmentCalendarEvent[], monthKey: string)
       date: key,
       day: day.getDate(),
       inMonth,
+      isToday: inMonth && key === todayKey,
       events: inMonth ? eventsByDate.get(key) ?? [] : [],
     });
     if (week.length === 7) {
@@ -256,10 +262,11 @@ function calendarWeekdayClass(index: number): string {
 }
 
 function calendarDayClass(day: CalendarDayCell, weekdayIndex: number): string {
-  if (!day.inMonth) return 'bg-slate-50/70 text-slate-400';
-  if (weekdayIndex === 0) return 'bg-rose-50/45';
-  if (weekdayIndex === 6) return 'bg-sky-50/45';
-  return 'bg-white';
+  const todayClass = day.isToday ? ' ring-2 ring-inset ring-amber-300' : '';
+  if (!day.inMonth) return `bg-slate-50/70 text-slate-400${todayClass}`;
+  if (weekdayIndex === 0) return `bg-rose-50/45${todayClass}`;
+  if (weekdayIndex === 6) return `bg-sky-50/45${todayClass}`;
+  return `bg-white${todayClass}`;
 }
 
 function calendarChipClass(event: InvestmentCalendarEvent): string {
@@ -373,9 +380,10 @@ export default function Home() {
   const { data, error, isLoading, mutate } = useSWR<HomeData>(homeApiPath, swrFetcher);
   const canShareSideRailHomeData = homeApiPath === SIDE_RAIL_HOME_API_PATH;
   const investmentCalendarEvents = data?.investment_calendar?.events ?? [];
+  const todayDateKey = formatDateKey(new Date());
   const calendarMonth = useMemo(
-    () => buildCalendarMonth(investmentCalendarEvents, calendarVisibleMonth),
-    [investmentCalendarEvents, calendarVisibleMonth],
+    () => buildCalendarMonth(investmentCalendarEvents, calendarVisibleMonth, todayDateKey),
+    [investmentCalendarEvents, calendarVisibleMonth, todayDateKey],
   );
   const calendarMonthEventCount = countCalendarMonthEvents(calendarMonth);
 
@@ -680,11 +688,18 @@ export default function Home() {
                                   <span className={`text-xs font-semibold ${day.inMonth ? 'text-slate-700' : 'text-slate-400'}`}>
                                     {day.day}
                                   </span>
-                                  {day.events.length > 0 ? (
-                                    <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
-                                      {day.events.length}件
-                                    </span>
-                                  ) : null}
+                                  <span className="flex items-center gap-1">
+                                    {day.isToday ? (
+                                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">
+                                        今日
+                                      </span>
+                                    ) : null}
+                                    {day.events.length > 0 ? (
+                                      <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">
+                                        {day.events.length}件
+                                      </span>
+                                    ) : null}
+                                  </span>
                                 </div>
                                 <div className="space-y-0.5">
                                   {visibleEvents.map((event) => (
