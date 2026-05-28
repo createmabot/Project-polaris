@@ -293,6 +293,13 @@ const emptyActiveSymbolApplicationsFixture = {
   applications: [],
 };
 
+function currentCalendarDate(day = 10): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}-${String(day).padStart(2, '0')}`;
+}
+
 function getCommonSWRResult(key: string | null) {
   if (key === '/api/home?summary_type=latest') {
     return { isLoading: false, error: null, data: sideRailHomeFixture };
@@ -316,7 +323,7 @@ function getCommonSWRResult(key: string | null) {
             symbol_id: 'sym-1',
             symbol_code: '7203',
             display_name: 'Toyota',
-            event_date: '2026-06-10',
+            event_date: currentCalendarDate(10),
             event_time: null,
             timezone: 'Asia/Tokyo',
             event_type: 'earnings',
@@ -325,6 +332,66 @@ function getCommonSWRResult(key: string | null) {
             source_type: 'seed',
             source_name: 'seed',
             source_label: '決算予定',
+            status: 'active',
+            fetched_at: '2026-05-26T00:00:00.000Z',
+            provider: 'seed',
+            is_stale: false,
+          },
+          {
+            id: 'cal-2',
+            scope: 'symbol',
+            symbol_id: 'sym-1',
+            symbol_code: '7203',
+            display_name: 'Toyota',
+            event_date: currentCalendarDate(10),
+            event_time: null,
+            timezone: 'Asia/Tokyo',
+            event_type: 'shareholder_meeting',
+            title: 'Toyota meeting',
+            importance: 'medium',
+            source_type: 'seed',
+            source_name: 'seed',
+            source_label: '株主総会',
+            status: 'active',
+            fetched_at: '2026-05-26T00:00:00.000Z',
+            provider: 'seed',
+            is_stale: false,
+          },
+          {
+            id: 'cal-3',
+            scope: 'symbol',
+            symbol_id: 'sym-1',
+            symbol_code: '7203',
+            display_name: 'Toyota',
+            event_date: currentCalendarDate(10),
+            event_time: null,
+            timezone: 'Asia/Tokyo',
+            event_type: 'ex_dividend',
+            title: 'Toyota ex-dividend',
+            importance: 'medium',
+            source_type: 'seed',
+            source_name: 'seed',
+            source_label: '権利落ち',
+            status: 'active',
+            fetched_at: '2026-05-26T00:00:00.000Z',
+            provider: 'seed',
+            is_stale: false,
+          },
+          {
+            id: 'cal-4',
+            scope: 'symbol',
+            symbol_id: 'sym-1',
+            symbol_code: '7203',
+            display_name: 'Toyota',
+            event_date: currentCalendarDate(10),
+            event_time: null,
+            timezone: 'Asia/Tokyo',
+            event_type: 'dividend_payment',
+            title: 'Toyota dividend',
+            importance: 'low',
+            source_type: 'seed',
+            source_name: 'seed',
+            source_label: '配当支払',
             status: 'active',
             fetched_at: '2026-05-26T00:00:00.000Z',
             provider: 'seed',
@@ -500,10 +567,24 @@ describe('SymbolDetail', () => {
     expect(html).not.toContain('tv_chart_');
     expect(html).not.toContain('s3.tradingview.com');
     expect(html).toContain('投資カレンダー');
+    expect(html).toContain('この銘柄に関係する予定を確認します。');
     expect(html).toContain('カレンダーを更新');
+    expect(html).toContain('前月');
+    expect(html).toContain('次月');
+    expect(html).toContain('今日');
+    expect(html).toContain('日</div>');
+    expect(html).toContain('土</div>');
+    expect(html).toContain('min-h-8');
+    expect(html).toContain('ring-amber-300');
     expect(html).toContain('Toyota earnings');
+    expect(html).toContain('決算 7203');
+    expect(html).toContain('+1件');
+    expect(html).toContain('group-hover:block');
+    expect(html).toContain('group-focus-within:block');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain('決算予定');
-    expect(html).toContain('provider: seed');
+    expect(html).toContain('provider');
+    expect(html).toContain('seed');
     expect(html).toContain('取得:');
     expect(html).toContain('ストラテジー / 検証結果');
     expect(html).toContain('この銘柄に適用したストラテジーと検証結果をここに集約します。');

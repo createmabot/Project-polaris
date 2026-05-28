@@ -7,7 +7,6 @@ import {
   StrategyVersionListData,
   SymbolAiSummaryData,
   InvestmentCalendarData,
-  InvestmentCalendarEvent,
   InvestmentCalendarRefreshData,
   SymbolDetailData,
   SymbolReferenceRefreshData,
@@ -30,6 +29,7 @@ import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import Surface from '../components/ui/Surface';
 import TextLink from '../components/ui/TextLink';
+import InvestmentCalendarGrid, { formatProviderRefreshSummary } from '../components/investment-calendar/InvestmentCalendarGrid';
 
 const LABELS = {
   backToHome: 'ホームへ戻る',
@@ -38,12 +38,12 @@ const LABELS = {
   market: '市場',
   processingStatus: '処理状態',
   investmentCalendarTitle: '投資カレンダー',
-  investmentCalendarDescription: '公開情報から取得した予定です。取得元や更新タイミングにより差異があるため、重要日程は公式情報で確認してください。',
+  investmentCalendarDescription: 'この銘柄に関係する予定を確認します。取得元や更新タイミングにより差異があるため、重要日程は公式情報で確認してください。',
   refreshCalendar: 'カレンダーを更新',
   refreshingCalendar: '更新中...',
   calendarRefreshSuccess: '投資カレンダーを更新しました。追加 {saved} 件 / 更新 {updated} 件。',
   calendarRefreshError: '投資カレンダーを更新できませんでした。時間をおいて再実行してください。',
-  noCalendarEvents: '投資カレンダーはまだありません。',
+  noCalendarEvents: 'この銘柄の投資カレンダーはまだありません。手動更新で取得できる場合があります。',
   snapshotTitle: '現在スナップショット',
   latestAlertsTitle: '最新アラート',
   latestAiTitle: '最新AI論点カード',
@@ -198,72 +198,15 @@ function reportOriginLabel(executionSource: string | null | undefined): string {
   return 'report';
 }
 
-function eventTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    earnings: '決算',
-    ex_dividend: '権利落ち',
-    shareholder_meeting: '株主総会',
-    dividend_payment: '配当支払',
-    economic_indicator: '経済指標',
-    central_bank: '中央銀行',
-    market_holiday: '休場日',
-    derivatives_settlement: 'SQ',
-    ipo: 'IPO',
-    other: 'その他',
-  };
-  return labels[type] ?? type;
-}
-
-function formatCalendarFetchedAt(value: string | null): string {
-  if (!value) return '取得: -';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '取得: -';
-  return `取得: ${date.toLocaleString('ja-JP', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
-}
-
-function providerLabel(provider: string | null | undefined, sourceName?: string | null): string {
-  const value = provider || sourceName || '';
-  const labels: Record<string, string> = {
-    alpha_vantage: 'Alpha Vantage',
-    jquants: 'J-Quants',
-    official_market: 'official_market',
-    seed: 'seed',
-    stub: 'stub',
-    federal_reserve: 'official_market',
-    boj: 'official_market',
-    nyse: 'official_market',
-  };
-  return labels[value] ?? (value || '-');
-}
-
-function providerStatusLabel(status: string): string {
-  if (status === 'succeeded') return '成功';
-  if (status === 'failed') return '失敗';
-  if (status === 'skipped') return 'スキップ';
-  return status;
-}
-
 function formatSymbolCalendarRefreshMessage(result: InvestmentCalendarRefreshData): string {
-  const provider = result.provider || result.providers?.[0]?.provider;
-  const providerPart = provider ? `${providerLabel(provider)}: ${providerStatusLabel(result.status)}。` : '';
+  const summary = formatProviderRefreshSummary(result);
   const zeroNote = result.saved_count === 0 && result.updated_count === 0
-    ? '指定期間にこの銘柄の決算発表予定は見つかりませんでした。これは正常な0件の可能性があります。'
+    ? 'この銘柄の対象期間には新しい予定がありませんでした。決算発表予定は、対象期間に該当銘柄がない場合 0 件になることがあります。'
     : '';
-  return `${providerPart}${LABELS.calendarRefreshSuccess
+  const base = LABELS.calendarRefreshSuccess
     .replace('{saved}', String(result.saved_count))
-    .replace('{updated}', String(result.updated_count))}${zeroNote ? ` ${zeroNote}` : ''}`;
-}
-
-function importanceLabel(importance: string): string {
-  if (importance === 'high') return '重要';
-  if (importance === 'low') return '低';
-  return '中';
+    .replace('{updated}', String(result.updated_count));
+  return `${base}${summary ? ` ${summary}` : ''}${zeroNote ? ` ${zeroNote}` : ''}`;
 }
 
 function hasCsvReport(application: SymbolStrategyApplicationItem): boolean {
@@ -1519,39 +1462,15 @@ export default function SymbolDetail() {
             </Button>
           }
         >
-          {calendarRefreshMessage ? <InlineNotice tone="success" className="mb-3">{calendarRefreshMessage}</InlineNotice> : null}
-          {calendarRefreshError ? <InlineNotice tone="warning" className="mb-3">{calendarRefreshError}</InlineNotice> : null}
           {calendarError ? <InlineNotice tone="warning" className="mb-3">{LABELS.calendarRefreshError}</InlineNotice> : null}
-          {(calendarData?.meta?.stale_event_count ?? 0) > 0 ? (
-            <InlineNotice tone="warning" className="mb-3">
-              取得情報が古い可能性があります。カレンダーを更新してください。
-            </InlineNotice>
-          ) : null}
-          {(calendarData?.events ?? []).length === 0 ? (
-            <EmptyText>{LABELS.noCalendarEvents}</EmptyText>
-          ) : (
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-              {(calendarData?.events ?? []).map((event: InvestmentCalendarEvent) => (
-                <div key={event.id} className="px-3 py-2 text-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <strong className="text-slate-900">{event.title}</strong>
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                      {importanceLabel(event.importance)}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-                    <span>{event.event_date ?? '-'}{event.event_time ? ` ${event.event_time}` : ''}</span>
-                    <span>{eventTypeLabel(event.event_type)}</span>
-                    <span>provider: {providerLabel(event.provider, event.source_name)}</span>
-                    <span>{event.source_type}</span>
-                    {event.source_label ? <span>source: {event.source_label}</span> : null}
-                    {event.fetched_at ? <span>{formatCalendarFetchedAt(event.fetched_at)}</span> : null}
-                    {event.is_stale ? <span className="font-semibold text-amber-700">取得情報が古い可能性があります</span> : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <InvestmentCalendarGrid
+            events={calendarData?.events ?? []}
+            meta={calendarData?.meta}
+            emptyTitle={LABELS.noCalendarEvents}
+            monthEmptyNote="この月の銘柄イベントはありません。前月・次月で表示月を切り替えられます。"
+            refreshMessage={calendarRefreshMessage}
+            refreshError={calendarRefreshError}
+          />
         </DetailSection>
 
         <DetailSection title={LABELS.latestAlertsTitle}>
