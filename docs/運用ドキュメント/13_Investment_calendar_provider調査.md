@@ -339,7 +339,7 @@ provider 方針分類:
 - 実装:
   - watchlist / positions / SymbolDetail の symbolCode を J-Quants code に正規化する。
   - `sourceType + externalId` の dedupe を維持する。
-  - SymbolDetail refresh は対象 symbol の決算発表予定日だけを取得する。
+  - SymbolDetail refresh は対象 symbol の決算発表予定日だけを取得する。SymbolDetail の表示は Home と同じ compact calendar grid UX に揃えるが、market-level event は無理に混ぜず、対象銘柄に関係する event を中心に扱う。
   - Home refresh は watchlist / positions の決算発表予定日と market-level の東京市場休場日を取得する。
   - manual refresh only を維持し、scheduled job / crawler は追加しない。
 - tests: real API ではなく J-Quants fixture / mocked fetch、unknown symbol skip、duplicate upsert、provider failure、raw response / API key / endpoint 実値非露出。
