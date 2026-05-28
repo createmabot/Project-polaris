@@ -237,6 +237,51 @@ function createRuntime(): Runtime {
     ],
     marketSnapshots: [
       {
+        id: 'index-nikkei-new',
+        snapshotType: 'index',
+        targetCode: 'NIKKEI_225',
+        price: { toNumber: () => 39000 },
+        changeValue: { toNumber: () => 320 },
+        changeRate: { toNumber: () => 0.83 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'index-nikkei-old',
+        snapshotType: 'index',
+        targetCode: 'NIKKEI_225',
+        price: { toNumber: () => 38800 },
+        changeValue: { toNumber: () => 120 },
+        changeRate: { toNumber: () => 0.31 },
+        asOf: new Date('2026-04-11T06:00:00.000Z'),
+      },
+      {
+        id: 'index-topix',
+        snapshotType: 'index',
+        targetCode: 'TOPIX',
+        price: { toNumber: () => 2780.5 },
+        changeValue: { toNumber: () => 12.2 },
+        changeRate: { toNumber: () => 0.44 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'index-sp500',
+        snapshotType: 'index',
+        targetCode: 'SP500',
+        price: { toNumber: () => 5320.4 },
+        changeValue: { toNumber: () => 18.3 },
+        changeRate: { toNumber: () => 0.35 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
+        id: 'fx-usdjpy',
+        snapshotType: 'fx',
+        targetCode: 'USDJPY',
+        price: { toNumber: () => 149.82 },
+        changeValue: { toNumber: () => 0.45 },
+        changeRate: { toNumber: () => 0.3 },
+        asOf: new Date('2026-04-12T06:00:00.000Z'),
+      },
+      {
         id: 'sector-transport-new',
         snapshotType: 'sector',
         targetCode: 'TOPIX_TRANSPORT',
@@ -568,14 +613,42 @@ describe('GET /api/home daily_summary query handling', () => {
     expect(body.data.recent_alerts).toHaveLength(1);
     expect(body.data.recent_alerts[0].related_ai_summary.id).toBe('alert-summary-1');
     expect(body.data.recent_alerts[0].current_snapshot.last_price).toBe(3000);
-    expect(body.data.market_overview.indices).toHaveLength(1);
-    expect(body.data.market_overview.indices[0]).toMatchObject({
-      code: '7203',
-      display_name: '7203',
-      price: 3000,
-      change_rate: 1.23,
-    });
-    expect(body.data.market_overview.fx).toEqual([]);
+    expect(body.data.market_overview.indices).toEqual([
+      {
+        code: 'NIKKEI_225',
+        display_name: '日経平均',
+        price: 39000,
+        change_value: 320,
+        change_rate: 0.83,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'TOPIX',
+        display_name: 'TOPIX',
+        price: 2780.5,
+        change_value: 12.2,
+        change_rate: 0.44,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+      {
+        code: 'SP500',
+        display_name: 'S&P 500',
+        price: 5320.4,
+        change_value: 18.3,
+        change_rate: 0.35,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
+    expect(body.data.market_overview.fx).toEqual([
+      {
+        code: 'USDJPY',
+        display_name: 'USD/JPY',
+        price: 149.82,
+        change_value: 0.45,
+        change_rate: 0.3,
+        as_of: '2026-04-12T06:00:00.000Z',
+      },
+    ]);
     expect(body.data.market_overview.sectors).toEqual([
       {
         code: 'TOPIX_TRANSPORT',
@@ -1188,7 +1261,7 @@ describe('GET /api/home daily_summary query handling', () => {
     await app.close();
   });
 
-  it('builds market_overview fx from recent alerts and keeps non-FX symbols in compatibility indices bucket', async () => {
+  it('builds market_overview from fixed market snapshot masters and keeps recent alerts separate', async () => {
     runtime.alerts.unshift({
       id: 'alert-fx-1',
       symbolId: 'sym-usdjpy',
@@ -1210,16 +1283,35 @@ describe('GET /api/home daily_summary query handling', () => {
     expect(res.statusCode).toBe(200);
 
     const body = res.json();
-    expect(body.data.market_overview.indices).toHaveLength(1);
-    expect(body.data.market_overview.indices[0].code).toBe('7203');
+    expect(body.data.market_overview.indices).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: 'NIKKEI_225',
+        display_name: '日経平均',
+        price: 39000,
+      }),
+      expect.objectContaining({
+        code: 'TOPIX',
+        display_name: 'TOPIX',
+        price: 2780.5,
+      }),
+      expect.objectContaining({
+        code: 'SP500',
+        display_name: 'S&P 500',
+        price: 5320.4,
+      }),
+    ]));
+    expect(body.data.market_overview.indices.map((row: any) => row.code)).not.toContain('7203');
     expect(body.data.market_overview.fx).toHaveLength(1);
     expect(body.data.market_overview.fx[0]).toMatchObject({
       code: 'USDJPY',
-      display_name: 'USDJPY',
+      display_name: 'USD/JPY',
       price: 149.82,
       change_value: 0.45,
       change_rate: 0.3,
     });
+    expect(body.data.recent_alerts.map((alert: any) => alert.symbol?.id)).toEqual(
+      expect.arrayContaining(['sym-7203', 'sym-usdjpy']),
+    );
 
     await app.close();
   });

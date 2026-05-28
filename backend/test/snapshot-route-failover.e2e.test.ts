@@ -199,6 +199,9 @@ vi.mock('../src/db', () => {
       findMany: async () => [],
       count: async () => 1,
     },
+    investmentCalendarEvent: {
+      findMany: async () => [],
+    },
     position: {
       findMany: async () => [],
     },
@@ -294,8 +297,7 @@ describe('comparison/home routes current_snapshot failover', () => {
     expect(body.error).toBeNull();
     expect(body.data.recent_alerts[0].current_snapshot.source_name).toBe('stooq_daily');
     assertSnapshotShape(body.data.recent_alerts[0].current_snapshot);
-    expect(body.data.market_overview.indices.length).toBeGreaterThan(0);
-    expect(body.data.market_overview.indices[0].price).toBeTypeOf('number');
+    expect(body.data.market_overview.indices).toEqual([]);
     expect(body.data.market_overview.fx).toEqual([]);
     expect(body.data.market_overview.sectors).toEqual([]);
     await app.close();

@@ -87,6 +87,7 @@ describe('Home', () => {
     expect(html).toContain('夜');
     expect(html).toContain('マーケット概況');
     expect(html).toContain('マーケット概況データはまだありません。');
+    expect(html).toContain('固定対象の主要指標・為替・セクター snapshot が保存されると表示されます。');
     expect(html).toContain('監視銘柄はまだありません。');
     expect(html).toContain('サマリーはまだありません。');
     expect(html).toContain('マーケット snapshot / アラート / 参照情報が不足している可能性があります。');
@@ -160,7 +161,11 @@ describe('Home', () => {
         error: null,
         data: {
           market_overview: {
-            indices: [{ display_name: '日経平均', price: 39000, change_rate: 1.2 }],
+            indices: [
+              { display_name: '日経平均', price: 39000, change_rate: 1.2 },
+              { display_name: 'TOPIX', price: 2780.5, change_rate: 0.4 },
+              { display_name: 'S&P 500', price: 5320.4, change_rate: 0.35 },
+            ],
             fx: [{ display_name: 'USD/JPY', price: 149.2, change_rate: 0.3 }],
             sectors: [{ display_name: '半導体', change_rate: 2.1 }],
           },
@@ -425,12 +430,16 @@ describe('Home', () => {
     expect(mockUseSWR.mock.calls.filter(([key]) => key === '/api/home?summary_type=latest')).toHaveLength(1);
     expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=morning')).toBe(false);
     expect(mockUseSWR.mock.calls.some(([key]) => key === '/api/home?summary_type=evening')).toBe(false);
-    expect(html).toContain('最近のアラート銘柄、為替、セクター snapshot をまとめて確認します。');
-    expect(html).toContain('注目銘柄');
+    expect(html).toContain('主要指標、為替、固定ウォッチ対象セクターの snapshot を表示します。');
+    expect(html).toContain('主要指標');
+    expect(html).not.toContain('注目銘柄');
+    expect(html).not.toContain('アラート銘柄');
     expect(html).not.toContain('指数');
     expect(html).toContain('為替');
     expect(html).toContain('セクター');
     expect(html).toContain('日経平均');
+    expect(html).toContain('TOPIX');
+    expect(html).toContain('S&amp;P 500');
     expect(html).toContain('USD/JPY');
     expect(html).toContain('半導体');
     expect(html).toContain('値 39,000');

@@ -283,6 +283,100 @@ async function main() {
     });
   }
 
+  const marketOverviewSnapshots = [
+    {
+      id: '00000000-0000-4000-8000-000000000081',
+      snapshotType: 'index',
+      targetCode: 'NIKKEI_225',
+      price: '39000.00',
+      changeValue: '320.00',
+      changeRate: '0.83',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000082',
+      snapshotType: 'index',
+      targetCode: 'TOPIX',
+      price: '2780.50',
+      changeValue: '12.20',
+      changeRate: '0.44',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000083',
+      snapshotType: 'index',
+      targetCode: 'TSE_GROWTH_250',
+      price: '710.20',
+      changeValue: '-4.80',
+      changeRate: '-0.67',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000084',
+      snapshotType: 'index',
+      targetCode: 'SP500',
+      price: '5320.40',
+      changeValue: '18.30',
+      changeRate: '0.35',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000085',
+      snapshotType: 'index',
+      targetCode: 'NASDAQ',
+      price: '16980.10',
+      changeValue: '72.40',
+      changeRate: '0.43',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000086',
+      snapshotType: 'index',
+      targetCode: 'DOW',
+      price: '39240.70',
+      changeValue: '-22.10',
+      changeRate: '-0.06',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000087',
+      snapshotType: 'fx',
+      targetCode: 'USDJPY',
+      price: '149.20',
+      changeValue: '0.45',
+      changeRate: '0.30',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000088',
+      snapshotType: 'fx',
+      targetCode: 'EURJPY',
+      price: '162.80',
+      changeValue: '-0.20',
+      changeRate: '-0.12',
+    },
+  ] as const;
+
+  for (const snapshot of marketOverviewSnapshots) {
+    await prisma.marketSnapshot.upsert({
+      where: { id: snapshot.id },
+      update: {
+        snapshotType: snapshot.snapshotType,
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+      create: {
+        id: snapshot.id,
+        snapshotType: snapshot.snapshotType,
+        targetCode: snapshot.targetCode,
+        snapshotDate: new Date('2026-03-09T00:00:00+09:00'),
+        snapshotTimeframe: 'D',
+        price: new Prisma.Decimal(snapshot.price),
+        changeValue: new Prisma.Decimal(snapshot.changeValue),
+        changeRate: new Prisma.Decimal(snapshot.changeRate),
+        asOf: new Date('2026-03-09T15:00:00+09:00'),
+      },
+    });
+  }
+
   const defaultWatchlist = await prisma.watchlist.upsert({
     where: { id: '00000000-0000-4000-8000-000000000011' },
     update: {

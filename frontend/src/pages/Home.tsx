@@ -546,20 +546,22 @@ export default function Home() {
         <div className="grid gap-4">
           <SectionCard
             title="マーケット概況"
-            description="最近のアラート銘柄、為替、セクター snapshot をまとめて確認します。"
+            description="主要指標、為替、固定ウォッチ対象セクターの snapshot を表示します。"
             className="p-4"
             headingClassName="text-base font-semibold text-slate-900"
           >
               {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).length === 0 &&
               asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.fx).length === 0 &&
               asArray<{ display_name?: string; change_rate?: number }>(data.market_overview?.sectors).length === 0 ? (
-                <EmptyState title="マーケット概況データはまだありません。" />
+                <EmptyState title="マーケット概況データはまだありません。">
+                  固定対象の主要指標・為替・セクター snapshot が保存されると表示されます。
+                </EmptyState>
               ) : (
                 <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                   {asArray<{ display_name?: string; price?: number; change_rate?: number }>(data.market_overview?.indices).map((item, index) => (
                     <MarketTile
                       key={`index-${index}`}
-                      kind="注目銘柄"
+                      kind="主要指標"
                       name={item.display_name ?? '-'}
                       price={item.price}
                       changeRate={item.change_rate}

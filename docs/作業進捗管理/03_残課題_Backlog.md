@@ -23,7 +23,7 @@
 - UI/UX production readiness acceptance smoke では、Phase 1 / 2 / 3 後の主要画面を browser smoke 観点で確認済みである。リリースを止める大きな UI 退行は確認されていない。
 - SideRail compact density improvement では、監視 / 保有一覧を軽い compact list に寄せ、表示見出し、詳細管理リンク、補助説明を削り、折りたたみ / 編集 / 削除を icon button 化する範囲まで完了扱いにする。API / backend / AppLayout collapsed grid 挙動は変更しない。
 - Home compact daily workspace では、日次確認の大型説明 section を削除し、マーケット概況 / AIデイリーサマリー / 最新アラート / 注目イベントを compact 表示へ寄せる範囲まで完了扱いにする。`/api/home` response shape、API、backend は変更しない。
-- Home 実運用 UI 改善では、Home top hero header と比較 / StrategyLab CTA を削除し、AIデイリーサマリー切り替えを summary 専用 API による section-local update にした。マーケット概況は現行の `market_overview.indices` 互換 field を UI 上 `注目銘柄` として表示する。後続候補は本格 market index provider / fixed market index source、summary section のより細かい skeleton 表示、直近切替結果の小さな cache に限定する。
+- Home 実運用 UI 改善では、Home top hero header と比較 / StrategyLab CTA を削除し、AIデイリーサマリー切り替えを summary 専用 API による section-local update にした。マーケット概況は `market_overview.indices` 互換 field を fixed master 由来の `主要指標` として表示し、recent alerts 由来の個別銘柄は `最新アラート` section に限定する。後続候補は本格 market data provider、market overview 表示対象の user customization、fixed master 管理 UI、freshness / stale 表示の本格化、summary section のより細かい skeleton 表示、直近切替結果の小さな cache に限定する。
 - Core screens compact density pass では、SymbolDetail / ApplicationDetail / BacktestDetail / StrategyLab / StrategyVersionDetail / StrategyDetail / BacktestComparisonDetail / StrategyList / BacktestList の PageHeader、SectionCard、Surface、list card の余白を一段詰める範囲まで完了扱いにする。API / backend / provider / job / mutation 挙動は変更しない。
 - DataList / SimpleTable / DataTable の導入可否を、実際に重複が増えた場所から判断する。
 - BacktestDetail 全面 redesign は急がず、高頻度 section の小改善に留める。
