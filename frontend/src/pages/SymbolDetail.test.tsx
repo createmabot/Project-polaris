@@ -799,11 +799,11 @@ describe('SymbolDetail', () => {
         {
           id: 'ref-news-1',
           reference_type: 'news',
-          title: 'Toyota production update',
+          title: '<a href="https://raw.example.test/rss">Toyota &amp; production update</a> <font color="#666">Nikkei</font>',
           source_name: 'news_provider_internal',
           source_url: 'https://example.com/toyota-news',
           published_at: '2026-04-21T06:00:00.000Z',
-          summary_text: 'Production outlook improved.',
+          summary_text: '<p>Production &amp; outlook <b>improved</b></p><script>alert("raw")</script> https://raw.example.test/rss',
         },
         {
           id: 'ref-disclosure-1',
@@ -848,11 +848,15 @@ describe('SymbolDetail', () => {
     expect(html).toContain('適時開示 1件');
     expect(html).toContain('決算関連 1件');
     expect(html).toContain('その他 1件');
-    expect(html).toContain('Toyota production update');
+    expect(html).toContain('Toyota &amp; production update Nikkei');
     expect(html).toContain('href="https://example.com/toyota-news"');
     expect((html.match(/https:\/\/example\.com\/toyota-news/g) ?? []).length).toBe(1);
     expect(html).toContain('外部リンク');
-    expect(html).toContain('Production outlook improved.');
+    expect(html).toContain('Production &amp; outlook improved');
+    expect(html).not.toContain('&lt;a href');
+    expect(html).not.toContain('&lt;font');
+    expect(html).not.toContain('&lt;script');
+    expect(html).not.toContain('raw.example.test/rss');
     expect(html).toContain('Toyota disclosure');
     expect(html).toContain('取得元: TDnet');
     expect(html).toContain('Toyota earnings note');

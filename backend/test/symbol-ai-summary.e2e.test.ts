@@ -57,7 +57,8 @@ type Runtime = {
   nextSummaryId: number;
   nextReferenceId: number;
   homeAiMode: 'ok' | 'throw' | 'fallback';
-  referenceCollectMode: 'ok' | 'duplicate' | 'throw';
+  referenceCollectMode: 'ok' | 'duplicate' | 'html' | 'throw';
+  lastSymbolThesisContext: any | null;
 };
 
 let runtime: Runtime;
@@ -95,6 +96,7 @@ function createRuntime(): Runtime {
     nextReferenceId: 1,
     homeAiMode: 'ok',
     referenceCollectMode: 'ok',
+    lastSymbolThesisContext: null,
   };
 }
 
@@ -254,6 +256,7 @@ vi.mock('../src/market/snapshot', () => ({
 vi.mock('../src/ai/home-ai-service', () => ({
   HomeAiService: class {
     async generateSymbolThesisSummary(_context: any) {
+      runtime.lastSymbolThesisContext = _context;
       if (runtime.homeAiMode === 'throw') {
         throw new Error('provider failed');
       }
@@ -347,16 +350,26 @@ vi.mock('../src/references/collector', () => ({
       }
       const sourceUrl = runtime.referenceCollectMode === 'duplicate'
         ? 'https://tdnet.example.test/ref-1.pdf'
-        : 'https://tdnet.example.test/ref-new.pdf';
+        : runtime.referenceCollectMode === 'html'
+          ? null
+          : 'https://tdnet.example.test/ref-new.pdf';
+      const title = runtime.referenceCollectMode === 'duplicate'
+        ? 'Q4 earnings update'
+        : runtime.referenceCollectMode === 'html'
+          ? '<a href="https://news.example.test/rss/raw">Manual &amp; refresh disclosure</a> <font color="#666">Nikkei</font>'
+          : 'Manual refresh disclosure';
+      const summaryText = runtime.referenceCollectMode === 'html'
+        ? '<p>Collected &amp; sanitized <b>summary</b></p><script>alert("raw")</script> https://news.example.test/rss/raw'
+        : 'Collected by manual refresh';
       return [
         {
           sourceType: runtime.referenceCollectMode === 'duplicate' ? 'earnings' : 'disclosure',
           referenceType: runtime.referenceCollectMode === 'duplicate' ? 'earnings' : 'disclosure',
-          title: runtime.referenceCollectMode === 'duplicate' ? 'Q4 earnings update' : 'Manual refresh disclosure',
+          title,
           sourceName: 'tdnet_disclosure',
           sourceUrl,
           publishedAt: new Date('2026-05-09T15:00:00+09:00'),
-          summaryText: 'Collected by manual refresh',
+          summaryText,
           metadataJson: { match_reason: 'code' },
           relevanceScore: 80,
           relevanceHint: 'symbol_match',
@@ -400,6 +413,38 @@ describe('symbol ai-summary routes', () => {
     expect(runtime.aiJobs[0].status).toBe('succeeded');
     expect(runtime.aiSummaries).toHaveLength(1);
     expect(runtime.aiSummaries[0].summaryScope).toBe('thesis');
+
+    await app.close();
+  });
+
+  it('sanitizes selected references before symbol thesis generation', async () => {
+    runtime.references[0] = {
+      ...runtime.references[0],
+      title: '<a href="https://news.example.test/rss/raw">Toyota &amp; earnings update</a> <font color="#666">Nikkei</font>',
+      summaryText: '<p>Revenue &amp; margin <b>grew</b></p><script>alert("raw")</script> https://news.example.test/rss/raw',
+    };
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/ai-summary/generate',
+      payload: {
+        scope: 'thesis',
+        reference_ids: ['ref-1'],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(runtime.lastSymbolThesisContext?.references?.[0]).toMatchObject({
+      id: 'ref-1',
+      title: 'Toyota & earnings update Nikkei',
+      summaryText: 'Revenue & margin grew',
+    });
+    expect(JSON.stringify(runtime.lastSymbolThesisContext)).not.toContain('<a');
+    expect(JSON.stringify(runtime.lastSymbolThesisContext)).not.toContain('<script');
+    expect(JSON.stringify(runtime.lastSymbolThesisContext)).not.toContain('news.example.test/rss/raw');
+    expect(JSON.stringify(runtime.aiSummaries[0].generationContextJson)).not.toContain('<a');
+    expect(JSON.stringify(runtime.aiSummaries[0].generationContextJson)).not.toContain('news.example.test/rss/raw');
 
     await app.close();
   });
@@ -610,6 +655,33 @@ describe('symbol ai-summary routes', () => {
       targetEntityId: 'sym-1',
       status: 'succeeded',
     });
+
+    await app.close();
+  });
+
+  it('sanitizes references before saving manual refresh results', async () => {
+    runtime.references = [];
+    runtime.referenceCollectMode = 'html';
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/references/refresh',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(runtime.references).toHaveLength(1);
+    expect(runtime.references[0]).toMatchObject({
+      title: 'Manual & refresh disclosure Nikkei',
+      summaryText: 'Collected & sanitized summary',
+      referenceType: 'disclosure',
+      sourceName: 'tdnet_disclosure',
+    });
+    expect(runtime.references[0].dedupeKey).toContain('Manual & refresh disclosure Nikkei');
+    expect(JSON.stringify(runtime.references[0])).not.toContain('<a');
+    expect(JSON.stringify(runtime.references[0])).not.toContain('<script');
+    expect(JSON.stringify(runtime.references[0])).not.toContain('news.example.test/rss/raw');
 
     await app.close();
   });

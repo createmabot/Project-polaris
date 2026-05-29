@@ -10,6 +10,7 @@ import {
   type CollectedReference,
   type CollectedReferencesWithDiagnostics,
 } from '../references/collector';
+import { sanitizeReferenceText, sanitizeReferenceTitle } from '../references/sanitize';
 
 export type LoggerLike = {
   info: (payload: unknown) => void;
@@ -155,12 +156,14 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
       const savedRefIds: string[] = [];
 
       for (const ref of collected) {
+        const sanitizedTitle = sanitizeReferenceTitle(ref.title, ref.referenceType);
+        const sanitizedSummaryText = sanitizeReferenceText(ref.summaryText);
         const dedupeKey = buildDedupeKey({
           symbolId: alertEvent.symbolId,
           sourceName: ref.sourceName,
           sourceUrl: ref.sourceUrl,
           referenceType: ref.referenceType,
-          title: ref.title,
+          title: sanitizedTitle,
           publishedAt: ref.publishedAt,
         });
 
@@ -178,11 +181,11 @@ export function createQueueJobHandlers(partialDeps: Partial<QueueHandlerDeps>) {
               symbolId: alertEvent.symbolId,
               alertEventId: alert_event_id,
               referenceType: ref.referenceType,
-              title: ref.title,
+              title: sanitizedTitle,
               sourceName: ref.sourceName,
               sourceUrl: ref.sourceUrl,
               publishedAt: ref.publishedAt,
-              summaryText: ref.summaryText,
+              summaryText: sanitizedSummaryText,
               metadataJson: metadataJson as any,
               dedupeKey,
               relevanceScore: ref.relevanceScore,

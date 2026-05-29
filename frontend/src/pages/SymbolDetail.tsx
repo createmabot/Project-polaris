@@ -272,6 +272,43 @@ function getSafeExternalUrl(sourceUrl: string | null | undefined): string | null
   return null;
 }
 
+function decodeReferenceEntities(value: string): string {
+  const entityMap: Record<string, string> = {
+    amp: '&',
+    lt: '<',
+    gt: '>',
+    quot: '"',
+    apos: "'",
+    nbsp: ' ',
+  };
+  return value.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (match, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (normalized.startsWith('#x')) {
+      const codePoint = Number.parseInt(normalized.slice(2), 16);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    if (normalized.startsWith('#')) {
+      const codePoint = Number.parseInt(normalized.slice(1), 10);
+      return Number.isFinite(codePoint) ? String.fromCodePoint(codePoint) : match;
+    }
+    return entityMap[normalized] ?? match;
+  });
+}
+
+function getReferenceDisplayText(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const sanitized = decodeReferenceEntities(value)
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/https?:\/\/[^\s<>"']+/gi, ' ')
+    .replace(/[\r\n\t\u00a0]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sanitized.length > 0 ? sanitized : null;
+}
+
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
   if (!payload || typeof payload !== 'object') return [];
@@ -1688,6 +1725,8 @@ export default function SymbolDetail() {
                 {data.related_references.map((reference) => {
                   const sourceLabel = getReferenceSourceLabel(reference.source_name, reference.reference_type);
                   const safeSourceUrl = getSafeExternalUrl(reference.source_url);
+                  const displayTitle = getReferenceDisplayText(reference.title) ?? getReferenceTypeLabel(reference.reference_type);
+                  const displaySummary = getReferenceDisplayText(reference.summary_text);
                   return (
                     <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -1699,14 +1738,14 @@ export default function SymbolDetail() {
                       <div className="mt-2 text-sm font-medium text-slate-900">
                         {safeSourceUrl ? (
                           <a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline">
-                            {reference.title}
+                            {displayTitle}
                             <span className="ml-1 text-xs font-normal text-slate-500">外部リンク</span>
                           </a>
                         ) : (
-                          <strong>{reference.title}</strong>
+                          <strong>{displayTitle}</strong>
                         )}
                       </div>
-                      {reference.summary_text ? <p className="mt-2 text-sm leading-6 text-slate-700">{reference.summary_text}</p> : null}
+                      {displaySummary ? <p className="mt-2 text-sm leading-6 text-slate-700">{displaySummary}</p> : null}
                       {sourceLabel ? <MetaText className="mt-2">取得元: {sourceLabel}</MetaText> : null}
                     </article>
                   );
