@@ -559,6 +559,17 @@ describe('SymbolDetail', () => {
     });
 
     const html = renderToStaticMarkup(<SymbolDetail />);
+    const sectionOrder = [
+      '銘柄概要',
+      '投資カレンダー',
+      '最新AI論点カード',
+      '最新アラート',
+      'ストラテジー / 検証結果',
+      '関連参照情報',
+      'Research Note',
+    ].map((heading) => html.indexOf(heading));
+    expect(sectionOrder.every((index) => index >= 0)).toBe(true);
+    expect(sectionOrder).toEqual([...sectionOrder].sort((a, b) => a - b));
     expect(html).toContain('Toyota thesis');
     expect(html).toContain('Margin improvement');
     expect(html).toContain('FX risk');

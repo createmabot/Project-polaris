@@ -1470,36 +1470,6 @@ export default function SymbolDetail() {
           />
         </DetailSection>
 
-        <DetailSection title={LABELS.latestAlertsTitle}>
-          {data.recent_alerts.length === 0 ? (
-            <EmptyState title={LABELS.noAlerts} />
-          ) : (
-            <div className="grid gap-2">
-              {data.recent_alerts.map((alert) => (
-                <article key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                  <div className="min-w-0">
-                    <strong className="block text-slate-900">
-                      <TextLink href={`/alerts/${alert.id}`}>{alert.alert_name}</TextLink>
-                    </strong>
-                    <div className="mt-2">
-                      <MetaText>
-                        {LABELS.datetime}: {formatDate(alert.triggered_at || alert.received_at)} | {LABELS.status}: <code>{alert.processing_status}</code>
-                      </MetaText>
-                    </div>
-                  </div>
-                  {alert.related_ai_summary && alert.related_ai_summary.key_points.length > 0 ? (
-                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
-                      {alert.related_ai_summary.key_points.map((point, index) => (
-                        <li key={`${alert.related_ai_summary?.id}-${index}`}>{point}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
-        </DetailSection>
-
         <DetailSection title={LABELS.latestAiTitle}>
           {isAiSummaryLoading ? (
             <InfoCard>
@@ -1554,6 +1524,36 @@ export default function SymbolDetail() {
             <p className="text-sm leading-6 text-slate-500">{hasNoReferences ? LABELS.noReferencesWarning : LABELS.limitedReferencesWarning}</p>
           ) : null}
           {generateThesisError ? <div className="text-sm text-rose-700">{generateThesisError}</div> : null}
+        </DetailSection>
+
+        <DetailSection title={LABELS.latestAlertsTitle}>
+          {data.recent_alerts.length === 0 ? (
+            <EmptyState title={LABELS.noAlerts} />
+          ) : (
+            <div className="grid gap-2">
+              {data.recent_alerts.map((alert) => (
+                <article key={alert.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="min-w-0">
+                    <strong className="block text-slate-900">
+                      <TextLink href={`/alerts/${alert.id}`}>{alert.alert_name}</TextLink>
+                    </strong>
+                    <div className="mt-2">
+                      <MetaText>
+                        {LABELS.datetime}: {formatDate(alert.triggered_at || alert.received_at)} | {LABELS.status}: <code>{alert.processing_status}</code>
+                      </MetaText>
+                    </div>
+                  </div>
+                  {alert.related_ai_summary && alert.related_ai_summary.key_points.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
+                      {alert.related_ai_summary.key_points.map((point, index) => (
+                        <li key={`${alert.related_ai_summary?.id}-${index}`}>{point}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          )}
         </DetailSection>
 
         <DetailSection
@@ -1611,42 +1611,6 @@ export default function SymbolDetail() {
         </DetailSection>
 
         <DetailSection
-          title={LABELS.researchNoteTitle}
-          actions={
-            data.latest_active_note ? (
-              <TextLink href={`/notes/${data.latest_active_note.id}`} className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
-                {LABELS.openNote}
-              </TextLink>
-            ) : (
-              <TextLink href={`/symbols/${symbolId}/note/new`} className="rounded bg-emerald-600 px-3 py-1.5 text-white no-underline hover:no-underline">
-                {LABELS.createNote}
-              </TextLink>
-            )
-          }
-        >
-          {data.latest_active_note ? (
-            <InfoCard>
-              <h3 className="text-base font-semibold text-slate-900">{data.latest_active_note.title}</h3>
-              <div className="mb-3 mt-2">
-                <MetaText>
-                  {LABELS.lastUpdated}: {formatDate(data.latest_active_note.updatedAt)} | {LABELS.status}: <code>{data.latest_active_note.status}</code>
-                </MetaText>
-              </div>
-              {data.latest_active_note.thesisText ? (
-                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{data.latest_active_note.thesisText}</p>
-              ) : null}
-              {data.latest_active_note.nextReviewAt ? (
-                <div className="mt-3 text-sm font-semibold text-rose-600">{LABELS.nextReview}: {formatDate(data.latest_active_note.nextReviewAt)}</div>
-              ) : null}
-            </InfoCard>
-          ) : (
-            <EmptyState title={LABELS.noResearchNote}>
-              <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
-            </EmptyState>
-          )}
-        </DetailSection>
-
-        <DetailSection
           title={LABELS.referencesTitle}
           actions={
             <Button
@@ -1697,6 +1661,42 @@ export default function SymbolDetail() {
             )}
           </div>
         </DetailSection>
+        <DetailSection
+          title={LABELS.researchNoteTitle}
+          actions={
+            data.latest_active_note ? (
+              <TextLink href={`/notes/${data.latest_active_note.id}`} className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
+                {LABELS.openNote}
+              </TextLink>
+            ) : (
+              <TextLink href={`/symbols/${symbolId}/note/new`} className="rounded bg-emerald-600 px-3 py-1.5 text-white no-underline hover:no-underline">
+                {LABELS.createNote}
+              </TextLink>
+            )
+          }
+        >
+          {data.latest_active_note ? (
+            <InfoCard>
+              <h3 className="text-base font-semibold text-slate-900">{data.latest_active_note.title}</h3>
+              <div className="mb-3 mt-2">
+                <MetaText>
+                  {LABELS.lastUpdated}: {formatDate(data.latest_active_note.updatedAt)} | {LABELS.status}: <code>{data.latest_active_note.status}</code>
+                </MetaText>
+              </div>
+              {data.latest_active_note.thesisText ? (
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{data.latest_active_note.thesisText}</p>
+              ) : null}
+              {data.latest_active_note.nextReviewAt ? (
+                <div className="mt-3 text-sm font-semibold text-rose-600">{LABELS.nextReview}: {formatDate(data.latest_active_note.nextReviewAt)}</div>
+              ) : null}
+            </InfoCard>
+          ) : (
+            <EmptyState title={LABELS.noResearchNote}>
+              <p className="mt-2 text-sm text-slate-500">{LABELS.emptyStateHint}</p>
+            </EmptyState>
+          )}
+        </DetailSection>
+
       </div>
     </AppLayout>
   );
