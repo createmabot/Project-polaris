@@ -311,9 +311,8 @@ function getReferenceDisplayText(value: string | null | undefined): string | nul
 
 function normalizeReferenceTextForCompare(value: string | null | undefined): string {
   return (value ?? '')
-    .replace(/[\r\n\t\u00a0　]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/[。．.、,，:：;；\s]+$/g, '')
+    .normalize('NFKC')
+    .replace(/[\s\p{P}\p{S}]+/gu, '')
     .trim()
     .toLowerCase();
 }
