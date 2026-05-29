@@ -17,7 +17,6 @@ import {
   SymbolStrategyApplicationMutateData,
 } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
-import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
@@ -32,7 +31,6 @@ import TextLink from '../components/ui/TextLink';
 import InvestmentCalendarGrid, { formatProviderRefreshSummary } from '../components/investment-calendar/InvestmentCalendarGrid';
 
 const LABELS = {
-  backToHome: 'ホームへ戻る',
   compare: '比較画面に進む',
   code: 'コード',
   market: '市場',
@@ -44,7 +42,8 @@ const LABELS = {
   calendarRefreshSuccess: '投資カレンダーを更新しました。追加 {saved} 件 / 更新 {updated} 件。',
   calendarRefreshError: '投資カレンダーを更新できませんでした。時間をおいて再実行してください。',
   noCalendarEvents: 'この銘柄の投資カレンダーはまだありません。手動更新で取得できる場合があります。',
-  snapshotTitle: '現在スナップショット',
+  overviewTitle: '銘柄概要',
+  snapshotUnavailable: '現在のスナップショットはまだありません。',
   latestAlertsTitle: '最新アラート',
   latestAiTitle: '最新AI論点カード',
   strategyResultsTitle: 'ストラテジー / 検証結果',
@@ -55,21 +54,21 @@ const LABELS = {
   savedApplicationsLoading: '保存済み application を読み込み中...',
   savedApplicationsError: '保存済み application を取得できませんでした。',
   noSavedApplications: '保存済み application はまだありません。',
-  savedApplicationsStatusFilter: 'status',
+  savedApplicationsStatusFilter: '状態',
   savedApplicationsStatusActive: 'active',
   savedApplicationsStatusArchived: 'archived',
   savedApplicationsStatusAll: 'all',
-  savedApplicationsFilter: '表示対象',
+  savedApplicationsFilter: 'レポート',
   savedApplicationsFilterAll: 'すべて',
   savedApplicationsFilterWithReports: 'reportあり',
   savedApplicationsFilterWithoutReports: 'reportなし',
   savedApplicationsSourceFilter: 'source',
   savedApplicationsSourceAll: 'すべて',
   savedApplicationsSourceCsv: 'CSV',
-  savedApplicationsRunTypeFilter: 'latest run type',
-  savedApplicationsRunStatusFilter: 'latest run status',
-  savedApplicationsStrategyFilter: 'strategy_id',
-  savedApplicationsVersionFilter: 'strategy_version_id',
+  savedApplicationsRunTypeFilter: 'run',
+  savedApplicationsRunStatusFilter: 'run status',
+  savedApplicationsStrategyFilter: 'strategy',
+  savedApplicationsVersionFilter: 'version',
   savedApplicationsStrategyPlaceholder: 'strategy id',
   savedApplicationsVersionPlaceholder: 'version id',
   savedApplicationsRunAll: 'すべて',
@@ -159,7 +158,7 @@ const LABELS = {
   volume: '出来高',
   source: 'ソース',
   marketStatus: '市場状態',
-  snapshotUnavailable: 'スナップショットを取得できませんでした。',
+
   noAlerts: 'この銘柄のアラートはまだありません。',
   datetime: '日時',
   status: '状態',
@@ -802,73 +801,66 @@ function SavedStrategyApplicationsPanel({
         <ErrorState title={LABELS.savedApplicationsError} className="mt-3" />
       ) : (
         <>
-          <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 shadow-sm">
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200/70 pb-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsStatusFilter}</span>
+          <Surface variant="muted" className="mt-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="mr-1 font-semibold text-slate-700">絞り込み</span>
+              <span className="font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsStatusFilter}</span>
               {statusFilterOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant={applicationStatusFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationStatusFilterChange(option.value)}
-                  className="py-1 text-xs"
+                  className="px-2 py-1 text-xs"
                 >
                   {option.label}
                 </Button>
               ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsFilter}</span>
+              <span className="ml-1 font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsFilter}</span>
               {filterOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant={applicationFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationFilterChange(option.value)}
-                  className="py-1 text-xs"
+                  className="px-2 py-1 text-xs"
                 >
                   {option.label}
                 </Button>
               ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsSourceFilter}</span>
+              <span className="ml-1 font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsSourceFilter}</span>
               {sourceFilterOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant={applicationSourceFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationSourceFilterChange(option.value)}
-                  className="py-1 text-xs"
+                  className="px-2 py-1 text-xs"
                 >
                   {option.label}
                 </Button>
               ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsRunTypeFilter}</span>
+              <span className="ml-1 font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsRunTypeFilter}</span>
               {runTypeFilterOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant={applicationRunTypeFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationRunTypeFilterChange(option.value)}
-                  className="py-1 text-xs"
+                  className="px-2 py-1 text-xs"
                 >
                   {option.label}
                 </Button>
               ))}
-            </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsRunStatusFilter}</span>
+              <span className="ml-1 font-semibold uppercase tracking-wide text-slate-500">{LABELS.savedApplicationsRunStatusFilter}</span>
               {runStatusFilterOptions.map((option) => (
                 <Button
                   key={option.value}
                   variant={applicationRunStatusFilter === option.value ? 'primary' : 'secondary'}
                   onClick={() => onApplicationRunStatusFilterChange(option.value)}
-                  className="py-1 text-xs"
+                  className="px-2 py-1 text-xs"
                 >
                   {option.label}
                 </Button>
               ))}
             </div>
-            <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 {LABELS.savedApplicationsStrategyFilter}
                 <input
@@ -877,7 +869,7 @@ function SavedStrategyApplicationsPanel({
                   onChange={(event) => onApplicationStrategyIdFilterChange(event.target.value)}
                   onBlur={(event) => onApplicationStrategyIdFilterChange(event.target.value.trim())}
                   placeholder={LABELS.savedApplicationsStrategyPlaceholder}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
                 />
               </label>
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -888,24 +880,24 @@ function SavedStrategyApplicationsPanel({
                   onChange={(event) => onApplicationStrategyVersionIdFilterChange(event.target.value)}
                   onBlur={(event) => onApplicationStrategyVersionIdFilterChange(event.target.value.trim())}
                   placeholder={LABELS.savedApplicationsVersionPlaceholder}
-                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-slate-900 shadow-sm"
                 />
               </label>
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-white px-3 py-2 text-xs text-slate-500">
-              <span>
+            <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-500">
+              <span className="rounded-full bg-white px-2 py-0.5">
                 {LABELS.savedApplicationsSummary
                   .replace('{status}', getApplicationStatusLabel(applicationStatusFilter))
                   .replace('{shown}', String(applications.length))
                   .replace('{total}', String(totalApplications))}
               </span>
-              <span>
+              <span className="rounded-full bg-white px-2 py-0.5">
                 {LABELS.savedApplicationsReportSummary
                   .replace('{csv}', String(reportCounts.csv))
                   .replace('{internal}', String(reportCounts.internal))}
               </span>
             </div>
-          </div>
+          </Surface>
           {isDefaultEmptyState ? (
             <EmptyState title={LABELS.noSavedApplications} className="mt-3" />
           ) : applications.length === 0 ? (
@@ -1311,9 +1303,6 @@ export default function SymbolDetail() {
           <div className="w-full rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-xl font-semibold text-slate-900">{LABELS.notFoundTitle}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">{LABELS.notFoundBody}</p>
-            <div className="mt-4">
-              <TextLink href="/">{LABELS.backToHome}</TextLink>
-            </div>
           </div>
         </AppLayout>
       );
@@ -1415,42 +1404,50 @@ export default function SymbolDetail() {
   return (
     <AppLayout showSideRail>
       <div className="w-full space-y-4">
-        <PageHeader
-          title={data.symbol.display_name || data.symbol.symbol}
-          backLink={{ href: '/', label: LABELS.backToHome }}
-          description={
-            <>
-              {LABELS.code}: <code>{data.symbol.symbol_code || data.symbol.symbol}</code> | {LABELS.market}: <code>{data.symbol.market_code || '-'}</code> | {LABELS.processingStatus}:{' '}
-              <code>{data.latest_processing_status}</code>
-            </>
-          }
+        <DetailSection
+          title={LABELS.overviewTitle}
           actions={<TextLink href={`/compare?symbolIds=${encodeURIComponent(data.symbol.symbol_code || data.symbol.symbol)}`}>{LABELS.compare}</TextLink>}
-        />
-
-        <DetailSection title={LABELS.snapshotTitle}>
-          {data.current_snapshot ? (
-            <InfoCard>
-              <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-                <div>
-                  {LABELS.currentPrice}: <strong className="text-base text-slate-900">{formatNumber(data.current_snapshot.last_price, 3)}</strong>
+        >
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.9fr)]">
+            <InfoCard className="bg-white">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold text-slate-950">{data.symbol.display_name || data.symbol.symbol}</h2>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5">{LABELS.code}: <code>{data.symbol.symbol_code || data.symbol.symbol}</code></span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5">{LABELS.market}: <code>{data.symbol.market_code || '-'}</code></span>
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5">{LABELS.processingStatus}: <code>{data.latest_processing_status}</code></span>
+                    {data.symbol.tradingview_symbol ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5">TradingView: <code>{data.symbol.tradingview_symbol}</code></span>
+                    ) : null}
+                  </div>
                 </div>
-                <div>
-                  {LABELS.dayChange} {formatNumber(data.current_snapshot.change, 3)} ({data.current_snapshot.change_percent === null ? '-' : `${formatNumber(data.current_snapshot.change_percent, 2)}%`})
-                </div>
-                <div>{LABELS.volume}: {formatNumber(data.current_snapshot.volume, 0)}</div>
-                <div>
-                  {LABELS.source}: <code>{data.current_snapshot.source_name}</code>
-                </div>
-              </div>
-              <div className="mt-3 border-t border-slate-200 pt-3">
-                <MetaText>
-                  asOf: {formatDate(data.current_snapshot.as_of)} | {LABELS.marketStatus}: <code>{data.current_snapshot.market_status}</code>
-                </MetaText>
               </div>
             </InfoCard>
-          ) : (
-            <EmptyText>{LABELS.snapshotUnavailable}</EmptyText>
-          )}
+            <InfoCard className="bg-white">
+              {data.current_snapshot ? (
+                <>
+                  <div className="grid gap-2 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                    <div>
+                      {LABELS.currentPrice}: <strong className="text-base text-slate-900">{formatNumber(data.current_snapshot.last_price, 3)}</strong>
+                    </div>
+                    <div>
+                      {LABELS.dayChange} {formatNumber(data.current_snapshot.change, 3)} ({data.current_snapshot.change_percent === null ? '-' : `${formatNumber(data.current_snapshot.change_percent, 2)}%`})
+                    </div>
+                    <div>{LABELS.volume}: {formatNumber(data.current_snapshot.volume, 0)}</div>
+                    <div>{LABELS.source}: <code>{data.current_snapshot.source_name}</code></div>
+                  </div>
+                  <div className="mt-2 border-t border-slate-200 pt-2">
+                    <MetaText>
+                      asOf: {formatDate(data.current_snapshot.as_of)} | {LABELS.marketStatus}: <code>{data.current_snapshot.market_status}</code>
+                    </MetaText>
+                  </div>
+                </>
+              ) : (
+                <EmptyText>{LABELS.snapshotUnavailable}</EmptyText>
+              )}
+            </InfoCard>
+          </div>
         </DetailSection>
 
         <DetailSection
