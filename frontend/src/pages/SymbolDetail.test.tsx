@@ -781,9 +781,101 @@ describe('SymbolDetail', () => {
     });
 
     const html = renderToStaticMarkup(<SymbolDetail />);
-    expect(html).toContain('news 0 / disclosure 0 / earnings 0');
+    expect(html).toContain('ニュース 0件');
+    expect(html).toContain('適時開示 0件');
+    expect(html).toContain('決算関連 0件');
+    expect(html).not.toContain('news 0 / disclosure 0 / earnings 0');
     expect(html).toContain('参照情報は0件です。');
     expect(html).toContain('関連参照情報を再取得');
+  });
+
+  it('renders related references with readable labels instead of raw enum tags', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    const symbolDataWithReferences = {
+      ...baseSymbolData,
+      related_references: [
+        {
+          id: 'ref-news-1',
+          reference_type: 'news',
+          title: 'Toyota production update',
+          source_name: 'news_provider_internal',
+          source_url: 'https://example.com/toyota-news',
+          published_at: '2026-04-21T06:00:00.000Z',
+          summary_text: 'Production outlook improved.',
+        },
+        {
+          id: 'ref-disclosure-1',
+          reference_type: 'disclosure',
+          title: 'Toyota disclosure',
+          source_name: 'tdnet',
+          source_url: null,
+          published_at: '2026-04-20T06:00:00.000Z',
+          summary_text: 'Disclosure summary.',
+        },
+        {
+          id: 'ref-earnings-1',
+          reference_type: 'earnings',
+          title: 'Toyota earnings note',
+          source_name: 'earnings',
+          source_url: null,
+          published_at: '2026-04-19T06:00:00.000Z',
+          summary_text: 'Earnings summary.',
+        },
+        {
+          id: 'ref-other-1',
+          reference_type: 'other',
+          title: 'Unsafe source link note',
+          source_name: 'internal_provider_raw',
+          source_url: 'javascript:alert(1)',
+          published_at: '2026-04-18T06:00:00.000Z',
+          summary_text: null,
+        },
+      ],
+    };
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: symbolDataWithReferences };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect(html).toContain('ニュース 1件');
+    expect(html).toContain('適時開示 1件');
+    expect(html).toContain('決算関連 1件');
+    expect(html).toContain('その他 1件');
+    expect(html).toContain('Toyota production update');
+    expect(html).toContain('href="https://example.com/toyota-news"');
+    expect((html.match(/https:\/\/example\.com\/toyota-news/g) ?? []).length).toBe(1);
+    expect(html).toContain('外部リンク');
+    expect(html).toContain('Production outlook improved.');
+    expect(html).toContain('Toyota disclosure');
+    expect(html).toContain('取得元: TDnet');
+    expect(html).toContain('Toyota earnings note');
+    expect(html).toContain('Earnings summary.');
+    expect(html).toContain('Unsafe source link note');
+    expect(html).not.toContain('javascript:alert');
+    expect(html).not.toContain('[news]');
+    expect(html).not.toContain('[disclosure]');
+    expect(html).not.toContain('[earnings]');
+    expect(html).not.toContain('news 1 / disclosure 1 / earnings 1');
+    expect(html).not.toContain('news_provider_internal');
+    expect(html).not.toContain('internal_provider_raw');
+    const sectionOrder = [
+      '銘柄概要',
+      '投資カレンダー',
+      '最新AI論点カード',
+      '最新アラート',
+      'ストラテジー / 検証結果',
+      '関連参照情報',
+      'Research Note',
+    ].map((heading) => html.indexOf(heading));
+    expect(sectionOrder.every((index) => index >= 0)).toBe(true);
+    expect(sectionOrder).toEqual([...sectionOrder].sort((a, b) => a - b));
   });
 
   it('reads selected csv file text for the existing text import payload', async () => {

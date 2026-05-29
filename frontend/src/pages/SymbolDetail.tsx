@@ -227,10 +227,49 @@ function getReferenceBreakdown(references: Array<{ reference_type?: string | nul
       if (reference.reference_type === 'news') acc.news += 1;
       if (reference.reference_type === 'disclosure') acc.disclosure += 1;
       if (reference.reference_type === 'earnings') acc.earnings += 1;
+      if (!['news', 'disclosure', 'earnings'].includes(reference.reference_type ?? '')) acc.other += 1;
       return acc;
     },
-    { news: 0, disclosure: 0, earnings: 0 },
+    { news: 0, disclosure: 0, earnings: 0, other: 0 },
   );
+}
+
+function getReferenceTypeLabel(type: string | null | undefined): string {
+  if (type === 'news') return 'ニュース';
+  if (type === 'disclosure') return '適時開示';
+  if (type === 'earnings') return '決算関連';
+  return 'その他';
+}
+
+function getReferenceTypeBadgeClass(type: string | null | undefined): string {
+  if (type === 'news') return 'bg-sky-100 text-sky-800';
+  if (type === 'disclosure') return 'bg-amber-100 text-amber-800';
+  if (type === 'earnings') return 'bg-emerald-100 text-emerald-800';
+  return 'bg-slate-100 text-slate-700';
+}
+
+function getReferenceSourceLabel(sourceName: string | null | undefined, referenceType: string | null | undefined): string | null {
+  if (!sourceName) return null;
+  const normalized = sourceName.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'tdnet') return 'TDnet';
+  if (normalized === 'edinet') return 'EDINET';
+  if (normalized === 'jquants') return 'J-Quants';
+  if (normalized === 'news') return 'ニュース';
+  if (normalized === 'disclosure') return '適時開示';
+  if (normalized === 'earnings') return '決算関連';
+  return getReferenceTypeLabel(referenceType);
+}
+
+function getSafeExternalUrl(sourceUrl: string | null | undefined): string | null {
+  if (!sourceUrl) return null;
+  try {
+    const url = new URL(sourceUrl);
+    if (url.protocol === 'http:' || url.protocol === 'https:') return sourceUrl;
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 function getThesisPoints(structuredJson: any): string[] {
@@ -272,8 +311,8 @@ function EmptyText({ children }: { children: ReactNode }) {
   return <p className="text-sm leading-6 text-slate-500">{children}</p>;
 }
 
-function MetaText({ children }: { children: ReactNode }) {
-  return <div className="text-xs leading-5 text-slate-500">{children}</div>;
+function MetaText({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`text-xs leading-5 text-slate-500 ${className}`.trim()}>{children}</div>;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -1624,9 +1663,15 @@ export default function SymbolDetail() {
           }
         >
           <div className="space-y-2">
-            <p className="text-sm text-slate-600">
-              {LABELS.breakdown}: news {referenceBreakdown.news} / disclosure {referenceBreakdown.disclosure} / earnings {referenceBreakdown.earnings}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5 text-sm text-slate-600">
+              <span className="font-semibold text-slate-700">{LABELS.breakdown}</span>
+              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-800">ニュース {referenceBreakdown.news}件</span>
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-800">適時開示 {referenceBreakdown.disclosure}件</span>
+              <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-800">決算関連 {referenceBreakdown.earnings}件</span>
+              {referenceBreakdown.other > 0 ? (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700">その他 {referenceBreakdown.other}件</span>
+              ) : null}
+            </div>
             {referenceRefreshMessage ? (
               <InlineNotice tone={referenceRefreshTone}>{referenceRefreshMessage}</InlineNotice>
             ) : null}
@@ -1640,23 +1685,32 @@ export default function SymbolDetail() {
               </InfoCard>
             ) : (
               <div className="grid gap-2">
-                {data.related_references.map((reference) => (
-                  <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                    <MetaText>
-                      [{reference.reference_type}] {formatDate(reference.published_at)}
-                    </MetaText>
-                    <div className="mt-2 text-sm font-medium text-slate-900">
-                      {reference.source_url ? (
-                        <a href={reference.source_url} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline">
-                          {reference.title}
-                        </a>
-                      ) : (
-                        <strong>{reference.title}</strong>
-                      )}
-                    </div>
-                    {reference.summary_text ? <p className="mt-2 text-sm leading-6 text-slate-700">{reference.summary_text}</p> : null}
-                  </article>
-                ))}
+                {data.related_references.map((reference) => {
+                  const sourceLabel = getReferenceSourceLabel(reference.source_name, reference.reference_type);
+                  const safeSourceUrl = getSafeExternalUrl(reference.source_url);
+                  return (
+                    <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getReferenceTypeBadgeClass(reference.reference_type)}`}>
+                          {getReferenceTypeLabel(reference.reference_type)}
+                        </span>
+                        <MetaText>{formatDate(reference.published_at)}</MetaText>
+                      </div>
+                      <div className="mt-2 text-sm font-medium text-slate-900">
+                        {safeSourceUrl ? (
+                          <a href={safeSourceUrl} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline">
+                            {reference.title}
+                            <span className="ml-1 text-xs font-normal text-slate-500">外部リンク</span>
+                          </a>
+                        ) : (
+                          <strong>{reference.title}</strong>
+                        )}
+                      </div>
+                      {reference.summary_text ? <p className="mt-2 text-sm leading-6 text-slate-700">{reference.summary_text}</p> : null}
+                      {sourceLabel ? <MetaText className="mt-2">取得元: {sourceLabel}</MetaText> : null}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </div>
