@@ -15,6 +15,7 @@ import {
   normalizeInsufficientContext,
   withNormalizedInsufficientContext,
 } from '../ai/insufficient-context';
+import { sanitizeReferenceText, sanitizeReferenceTitle } from '../references/sanitize';
 
 type JsonObject = Record<string, unknown>;
 type SymbolSummaryScope = 'thesis' | 'latest';
@@ -359,13 +360,15 @@ async function collectAndSaveReferencesForSymbol(symbol: {
 
   for (const ref of collected) {
     sourceBreakdown[ref.referenceType] = (sourceBreakdown[ref.referenceType] ?? 0) + 1;
+    const sanitizedTitle = sanitizeReferenceTitle(ref.title, ref.referenceType);
+    const sanitizedSummaryText = sanitizeReferenceText(ref.summaryText);
 
     const dedupeKey = buildDedupeKey({
       symbolId: symbol.id,
       sourceName: ref.sourceName,
       sourceUrl: ref.sourceUrl,
       referenceType: ref.referenceType,
-      title: ref.title,
+      title: sanitizedTitle,
       publishedAt: ref.publishedAt,
     });
     const metadataJson = {
@@ -382,11 +385,11 @@ async function collectAndSaveReferencesForSymbol(symbol: {
           symbolId: symbol.id,
           alertEventId: null,
           referenceType: ref.referenceType,
-          title: ref.title,
+          title: sanitizedTitle,
           sourceName: ref.sourceName,
           sourceUrl: ref.sourceUrl,
           publishedAt: ref.publishedAt,
-          summaryText: ref.summaryText,
+          summaryText: sanitizedSummaryText,
           metadataJson: metadataJson as any,
           dedupeKey,
           relevanceScore: ref.relevanceScore,
@@ -444,6 +447,11 @@ async function generateSymbolSummaryWithJob(
         orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       })
     : [];
+  const sanitizedSelectedReferences = selectedReferences.map((reference) => ({
+    ...reference,
+    title: sanitizeReferenceTitle(reference.title, reference.referenceType),
+    summaryText: sanitizeReferenceText(reference.summaryText),
+  }));
 
   const latestActiveNote = await prisma.researchNote.findFirst({
     where: {
@@ -491,7 +499,7 @@ async function generateSymbolSummaryWithJob(
     const inputSnapshot = JSON.stringify({
       symbolId,
       scope: params.scope,
-      references: selectedReferences
+      references: sanitizedSelectedReferences
         .map((reference) => ({
           id: reference.id,
           title: reference.title,
@@ -556,8 +564,8 @@ async function generateSymbolSummaryWithJob(
         marketCode: symbol.marketCode,
         tradingviewSymbol: symbol.tradingviewSymbol,
       },
-      referenceIds: selectedReferences.map((reference) => reference.id),
-      references: selectedReferences.map((reference) => ({
+      referenceIds: sanitizedSelectedReferences.map((reference) => reference.id),
+      references: sanitizedSelectedReferences.map((reference) => ({
         id: reference.id,
         title: reference.title,
         referenceType: reference.referenceType,
@@ -1439,11 +1447,11 @@ export async function symbolRoutes(fastify: FastifyInstance) {
         id: reference.id,
         alert_event_id: reference.alertEventId,
         reference_type: reference.referenceType,
-        title: reference.title,
+        title: sanitizeReferenceTitle(reference.title, reference.referenceType),
         source_name: reference.sourceName,
         source_url: reference.sourceUrl,
         published_at: reference.publishedAt,
-        summary_text: reference.summaryText,
+        summary_text: sanitizeReferenceText(reference.summaryText),
       })),
       latest_active_note: latestActiveNote,
       latest_processing_status: recentAlertsRaw[0]?.processingStatus ?? 'idle',
