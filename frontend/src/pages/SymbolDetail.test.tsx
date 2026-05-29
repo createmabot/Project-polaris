@@ -902,7 +902,7 @@ describe('SymbolDetail', () => {
         {
           id: 'ref-source-only-1',
           reference_type: 'news',
-          title: duplicateTitle,
+          title: `${duplicateTitle} - 日本経済新聞`,
           source_name: 'news',
           source_url: null,
           published_at: '2026-04-20T06:00:00.000Z',
@@ -930,6 +930,7 @@ describe('SymbolDetail', () => {
 
     const html = renderToStaticMarkup(<SymbolDetail />);
     expect((html.match(/トヨタ自動車\[7203\]：一部報道について 2025年6月3日\(適時開示\) ：日経会社情報DIGITAL/g) ?? []).length).toBe(2);
+    expect(html).toContain(`${duplicateTitle} - 日本経済新聞`);
     expect(html).not.toContain(`${duplicateTitle} 日本経済新聞`);
     expect(html).toContain('Toyota disclosure');
     expect(html).toContain('Operating margin improved and management raised guidance.');
