@@ -882,6 +882,63 @@ describe('SymbolDetail', () => {
     expect(sectionOrder).toEqual([...sectionOrder].sort((a, b) => a - b));
   });
 
+  it('hides related reference summaries that duplicate the title', () => {
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    const duplicateTitle = 'トヨタ自動車[7203]：一部報道について 2025年6月3日(適時開示) ：日経会社情報DIGITAL';
+    const symbolDataWithReferences = {
+      ...baseSymbolData,
+      related_references: [
+        {
+          id: 'ref-duplicate-1',
+          reference_type: 'news',
+          title: duplicateTitle,
+          source_name: 'news',
+          source_url: 'https://example.com/duplicate-title',
+          published_at: '2026-04-21T06:00:00.000Z',
+          summary_text: duplicateTitle,
+        },
+        {
+          id: 'ref-source-only-1',
+          reference_type: 'news',
+          title: duplicateTitle,
+          source_name: 'news',
+          source_url: null,
+          published_at: '2026-04-20T06:00:00.000Z',
+          summary_text: `${duplicateTitle} 日本経済新聞`,
+        },
+        {
+          id: 'ref-useful-1',
+          reference_type: 'disclosure',
+          title: 'Toyota disclosure',
+          source_name: 'tdnet',
+          source_url: null,
+          published_at: '2026-04-19T06:00:00.000Z',
+          summary_text: 'Operating margin improved and management raised guidance.',
+        },
+      ],
+    };
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: symbolDataWithReferences };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+    expect((html.match(/トヨタ自動車\[7203\]：一部報道について 2025年6月3日\(適時開示\) ：日経会社情報DIGITAL/g) ?? []).length).toBe(2);
+    expect(html).not.toContain(`${duplicateTitle} 日本経済新聞`);
+    expect(html).toContain('Toyota disclosure');
+    expect(html).toContain('Operating margin improved and management raised guidance.');
+    expect(html).toContain('ニュース 2件');
+    expect(html).toContain('適時開示 1件');
+    expect(html).toContain('href="https://example.com/duplicate-title"');
+    expect(html).not.toContain('[news]');
+  });
+
   it('reads selected csv file text for the existing text import payload', async () => {
     const file = {
       name: 'tradingview-export.csv',

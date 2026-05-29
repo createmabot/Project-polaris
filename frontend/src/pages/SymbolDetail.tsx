@@ -309,6 +309,27 @@ function getReferenceDisplayText(value: string | null | undefined): string | nul
   return sanitized.length > 0 ? sanitized : null;
 }
 
+function normalizeReferenceTextForCompare(value: string | null | undefined): string {
+  return (value ?? '')
+    .replace(/[\r\n\t\u00a0　]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[。．.、,，:：;；\s]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function shouldShowReferenceSummary(title: string | null | undefined, summaryText: string | null | undefined): boolean {
+  const normalizedSummary = normalizeReferenceTextForCompare(summaryText);
+  if (!normalizedSummary) return false;
+
+  const normalizedTitle = normalizeReferenceTextForCompare(title);
+  if (!normalizedTitle) return true;
+  if (normalizedSummary === normalizedTitle) return false;
+  if (normalizedTitle.includes(normalizedSummary)) return false;
+  if (normalizedSummary.includes(normalizedTitle) && normalizedSummary.length <= normalizedTitle.length + 30) return false;
+  return true;
+}
+
 function getThesisPoints(structuredJson: any): string[] {
   const payload = structuredJson?.payload;
   if (!payload || typeof payload !== 'object') return [];
@@ -1726,7 +1747,8 @@ export default function SymbolDetail() {
                   const sourceLabel = getReferenceSourceLabel(reference.source_name, reference.reference_type);
                   const safeSourceUrl = getSafeExternalUrl(reference.source_url);
                   const displayTitle = getReferenceDisplayText(reference.title) ?? getReferenceTypeLabel(reference.reference_type);
-                  const displaySummary = getReferenceDisplayText(reference.summary_text);
+                  const sanitizedSummary = getReferenceDisplayText(reference.summary_text);
+                  const displaySummary = shouldShowReferenceSummary(displayTitle, sanitizedSummary) ? sanitizedSummary : null;
                   return (
                     <article key={reference.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <div className="flex flex-wrap items-center gap-2">

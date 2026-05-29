@@ -328,7 +328,7 @@ references の供給状況確認は次を正本として利用してください
 3. references 0件でも AI論点カード / AI比較総評が生成される場合があるため、本文だけで十分性を判断しない
 4. `insufficient_context` 表示だけでなく、`reference_count` と references 実数を併せて確認する
 5. alert summary 失敗時は `collect_references_for_alert` と `generate_alert_summary` を分けて確認する
-6. SymbolDetail の `関連参照情報を再取得` はユーザー操作起点でだけ実行し、実行中はボタンが disabled になり、成功または失敗の表示が出ることを確認する。reference card は日本語 type badge、公開日、plain text の title / summary を表示し、raw enum bracket、HTML fragment、raw URL 本文を出さないことも確認する
+6. SymbolDetail の `関連参照情報を再取得` はユーザー操作起点でだけ実行し、実行中はボタンが disabled になり、成功または失敗の表示が出ることを確認する。reference card は日本語 type badge、公開日、plain text の title / summary を表示し、title と重複する summary 本文、raw enum bracket、HTML fragment、raw URL 本文を出さないことも確認する
 
 補足:
 
