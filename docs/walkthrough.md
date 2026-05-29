@@ -323,12 +323,12 @@ references の供給状況確認は次を正本として利用してください
 
 最小確認手順:
 
-1. SymbolDetail を開き、`関連参照情報` の内訳 `news / disclosure / earnings` を確認する
+1. SymbolDetail を開き、`関連参照情報` の内訳が `ニュース` / `適時開示` / `決算関連` の日本語 chip で表示されることを確認する
 2. ComparisonDetail を開き、比較全体の参照内訳と各 symbol card の参照内訳を確認する
 3. references 0件でも AI論点カード / AI比較総評が生成される場合があるため、本文だけで十分性を判断しない
 4. `insufficient_context` 表示だけでなく、`reference_count` と references 実数を併せて確認する
 5. alert summary 失敗時は `collect_references_for_alert` と `generate_alert_summary` を分けて確認する
-6. SymbolDetail の `関連参照情報を再取得` はユーザー操作起点でだけ実行し、実行中はボタンが disabled になり、成功または失敗の表示が出ることを確認する
+6. SymbolDetail の `関連参照情報を再取得` はユーザー操作起点でだけ実行し、実行中はボタンが disabled になり、成功または失敗の表示が出ることを確認する。reference card は日本語 type badge、公開日、title、summary を表示し、raw enum bracket や raw URL 本文を出さないことも確認する
 
 補足:
 
