@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
@@ -7,6 +7,14 @@ const mockFetchApi = vi.fn();
 const mockPostApi = vi.fn();
 const mockPatchApi = vi.fn();
 const mockUseLocation = vi.fn();
+const buttonRenderCalls = vi.hoisted(() => [] as Array<{
+  text: string;
+  props: {
+    onClick?: () => void | Promise<void>;
+    disabled?: boolean;
+    'data-testid'?: string;
+  };
+}>);
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -27,7 +35,28 @@ vi.mock('../api/client', async () => {
   };
 });
 
-import StrategyVersionDetail, { findNextPriorityVersionId } from './StrategyVersionDetail';
+vi.mock('../components/ui/Button', async () => {
+  const ReactModule = await vi.importActual<typeof import('react')>('react');
+  const getTextContent = (value: React.ReactNode): string => {
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(getTextContent).join('');
+    return '';
+  };
+  return {
+    default: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => {
+      buttonRenderCalls.push({
+        text: getTextContent(children),
+        props: props as { onClick?: () => void | Promise<void>; disabled?: boolean; 'data-testid'?: string },
+      });
+      return ReactModule.createElement('button', props, children);
+    },
+  };
+});
+
+import StrategyVersionDetail, {
+  buildApplyImprovedVersionFailureMessage,
+  findNextPriorityVersionId,
+} from './StrategyVersionDetail';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
 
 function createPayload(params: {
@@ -160,6 +189,10 @@ function setupSWR(
 }
 
 describe('StrategyVersionDetail', () => {
+  beforeEach(() => {
+    buttonRenderCalls.length = 0;
+  });
+
   it('finds next priority version id with cyclic order', () => {
     const versions = [
       { id: 'v1', is_derived: true, has_diff_from_clone: true, has_forward_validation_note: true },
@@ -318,8 +351,84 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('source version: <code>ver-source-1</code>');
     expect(html).toContain('href="/symbols/sym-1?tab=applications&amp;application_id=app-1"');
     expect(html).toContain('銘柄ページへ戻る');
-    expect(html).not.toContain('改善版を適用');
+    expect(html).toContain('この銘柄に改善版を適用');
+    expect(html).toContain('data-testid="apply-improved-version"');
+  });
+
+  it('applies improved version only after explicit CTA click', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockPostApi.mockResolvedValue({ id: 'new-app-1' });
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      application_id: 'old-app-1',
+      source_version_id: 'ver-source-1',
+      return_to: '/symbols/sym-1?tab=applications&application_id=old-app-1',
+    });
+    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(mockPostApi).not.toHaveBeenCalled();
+    const applyButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'apply-improved-version');
+    expect(applyButton?.text).toBe('この銘柄に改善版を適用');
+
+    await applyButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith('/api/symbols/sym-1/strategy-applications', {
+      strategy_id: 'str-1',
+      strategy_version_id: 'ver-1',
+    });
+    const [endpoint, payload] = mockPostApi.mock.calls[0];
+    expect(endpoint).not.toContain('archive');
+    expect(JSON.stringify(payload)).not.toContain('old-app-1');
+  });
+
+  it('does not render apply CTA without improvement context', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
     expect(html).not.toContain('data-testid="apply-improved-version"');
+    expect(html).not.toContain('この銘柄に改善版を適用');
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('uses sanitized apply failure message instead of raw endpoint details', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockPostApi.mockRejectedValue(new Error('409 conflict at /api/symbols/sym-1/strategy-applications model token C:\\Users\\agent\\stack trace'));
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+    });
+    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    const applyButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'apply-improved-version');
+
+    await expect(applyButton?.props.onClick?.()).resolves.toBeUndefined();
+    const failureMessage = buildApplyImprovedVersionFailureMessage();
+    expect(failureMessage).toContain('適用に失敗しました');
+    expect(failureMessage).not.toContain('/api/');
+    expect(failureMessage).not.toContain('model');
+    expect(failureMessage).not.toContain('token');
+    expect(failureMessage).not.toContain('C:\\Users');
+    expect(failureMessage).not.toContain('stack trace');
   });
 
   it('suppresses unsafe improve application query values and unsafe return link', () => {

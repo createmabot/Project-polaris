@@ -1216,6 +1216,6 @@ SymbolDetail では `銘柄概要` の直下に `投資カレンダー` section 
 - proposal generation はユーザーが明示的に実行するまで起動しないこと、candidate selection は title / natural language spec 反映だけで Pine generation / save / backtest / AI summary を自動起動しないことを確認する。
 - Phase 2 では、symbol context 付き StrategyLab で strategy / version 保存後にだけ `この銘柄に適用` CTA が表示され、既存 application 作成 API を明示操作で呼ぶことを確認する。CTA 表示だけ、proposal generation、candidate selection、save 完了だけでは自動適用しない。
 - Phase 3 では、SymbolDetail の application row から `改善版を作る` を押し、既存 StrategyVersion clone flow で新 version の StrategyVersionDetail へ進むことを確認する。StrategyVersionDetail では対象 symbol / source application / source version の improvement context banner と safe return link が表示されるが、改善版適用 CTA はまだ表示しない。
-- 後続 Phase 4 では、improvement context 付き StrategyVersionDetail で `この銘柄に改善版を適用` を明示操作で実行できることを確認する。旧 application は自動 archive されず、必要ならユーザーが手動 archive する。
+- Phase 4 では、improvement context 付き StrategyVersionDetail で `この銘柄に改善版を適用` を明示操作で実行できることを確認する。旧 application は自動 archive されず、必要ならユーザーが手動 archive する。
 - 全 phase で internal backtest 新規実行 UI、TradingView embedded chart widget、TradingView compile automation、auto Pine / auto save / auto backtest / AI summary 自動連鎖が追加されていないことを確認する。
 - raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace が UI / API / docs / PR に出ていないことを確認する。

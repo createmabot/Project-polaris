@@ -217,7 +217,7 @@ Phase 3: SymbolDetail application row から improvement clone（実装済み）
 - `symbol_id` / `application_id` / `strategy_version_id` / `return` / `mode=improve_application` 相当の context を渡す。
 - StrategyVersionDetail は元 application / 元 version を示し、rule edit / Pine regenerate は既存導線を使う。
 
-Phase 4: 改善版をこの銘柄に適用。
+Phase 4: 改善版をこの銘柄に適用（実装済み）。
 
 - StrategyVersionDetail に `この銘柄に改善版を適用` CTA を出す。
 - 既存 application 作成 API を明示操作で呼ぶ。
