@@ -296,6 +296,83 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('<strong>ノート更新目安:</strong> -');
   });
 
+  it('renders improve application context banner with safe return link', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      return_to: '/symbols/sym-1?tab=applications&application_id=app-1',
+    });
+    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="improve-application-banner"');
+    expect(html).toContain('7203 トヨタ自動車 の適用 strategy を改善中');
+    expect(html).toContain('source application: <code>app-1</code>');
+    expect(html).toContain('source version: <code>ver-source-1</code>');
+    expect(html).toContain('href="/symbols/sym-1?tab=applications&amp;application_id=app-1"');
+    expect(html).toContain('銘柄ページへ戻る');
+    expect(html).not.toContain('改善版を適用');
+    expect(html).not.toContain('data-testid="apply-improved-version"');
+  });
+
+  it('suppresses unsafe improve application query values and unsafe return link', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'https://endpoint.example.local/model?token=secret',
+      application_id: 'app-1',
+      source_version_id: 'C:\\Users\\agent\\stack trace',
+      return_to: 'https://evil.example/symbols/sym-1?token=secret',
+    });
+    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).not.toContain('data-testid="improve-application-banner"');
+    expect(html).not.toContain('endpoint.example.local');
+    expect(html).not.toContain('token=secret');
+    expect(html).not.toContain('C:\\Users');
+    expect(html).not.toContain('stack trace');
+    expect(html).not.toContain('evil.example');
+    expect(html).not.toContain('銘柄ページへ戻る');
+  });
+
+  it('keeps banner but omits unsafe source metadata and return_to values', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      application_id: 'secret-token-from-endpoint',
+      source_version_id: 'model://provider/version',
+      return_to: '//evil.example/symbols/sym-1',
+    });
+    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('data-testid="improve-application-banner"');
+    expect(html).toContain('7203 トヨタ自動車 の適用 strategy を改善中');
+    expect(html).toContain('source application: <code>-</code>');
+    expect(html).toContain('source version: <code>-</code>');
+    expect(html).not.toContain('secret-token-from-endpoint');
+    expect(html).not.toContain('model://provider/version');
+    expect(html).not.toContain('evil.example');
+    expect(html).not.toContain('銘柄ページへ戻る');
+  });
+
   it('renders forward validation note editor controls', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();

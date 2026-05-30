@@ -76,8 +76,88 @@ type CompareSummaryItem = {
   detail: string;
 };
 
+type ImproveApplicationContext = {
+  symbolId: string;
+  symbolCode: string;
+  symbolName: string;
+  applicationId: string | null;
+  sourceVersionId: string | null;
+  returnTo: string | null;
+};
+
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
+}
+
+const unsafeQueryTextPattern =
+  /(https?:\/\/|file:\/\/|www\.|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\\|\/users\/|\/home\/|stack trace|traceback|endpoint|model|secret|token|api[_-]?key)/i;
+
+function isSafeQueryText(value: string, maxLength: number): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength) return false;
+  if (/[\r\n\t]/.test(trimmed)) return false;
+  if (unsafeQueryTextPattern.test(trimmed)) return false;
+  return true;
+}
+
+function sanitizeQueryId(value: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!isSafeQueryText(trimmed, 80)) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function sanitizeSymbolText(value: string | null, maxLength: number): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!isSafeQueryText(trimmed, maxLength)) return null;
+  if (/[<>{}[\]`]/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function sanitizeImproveApplicationReturnTo(value: string | null): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!isSafeQueryText(trimmed, 240)) return null;
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
+  if (trimmed.includes('\\')) return null;
+
+  const [pathPart, queryPart = ''] = trimmed.split('?', 2);
+  if (!/^\/symbols\/[A-Za-z0-9_.:-]+$/.test(pathPart)) return null;
+
+  if (!queryPart) return pathPart;
+
+  const queryParams = new URLSearchParams(queryPart);
+  const normalized = new URLSearchParams();
+  const allowedKeys = new Set(['tab', 'application_id']);
+  for (const [key, rawValue] of queryParams.entries()) {
+    if (!allowedKeys.has(key)) continue;
+    const safeValue = sanitizeQueryId(rawValue);
+    if (safeValue) {
+      normalized.set(key, safeValue);
+    }
+  }
+
+  const normalizedQuery = normalized.toString();
+  return normalizedQuery ? `${pathPart}?${normalizedQuery}` : pathPart;
+}
+
+export function parseImproveApplicationContext(locationPath: string): ImproveApplicationContext | null {
+  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(search);
+  if (params.get('mode') !== 'improve_application') return null;
+
+  const symbolId = sanitizeQueryId(params.get('symbol_id'));
+  const symbolCode = sanitizeSymbolText(params.get('symbol_code'), 24);
+  const symbolName = sanitizeSymbolText(params.get('symbol_name'), 80);
+  if (!symbolId || !symbolCode || !symbolName) return null;
+
+  return {
+    symbolId,
+    symbolCode,
+    symbolName,
+    applicationId: sanitizeQueryId(params.get('application_id')),
+    sourceVersionId: sanitizeQueryId(params.get('source_version_id')),
+    returnTo: sanitizeImproveApplicationReturnTo(params.get('return_to')),
+  };
 }
 
 export function findNextPriorityVersionId(
@@ -385,6 +465,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         returnQuery.order,
       )
     : null;
+  const improveApplicationContext = useMemo(() => parseImproveApplicationContext(location), [location]);
 
   useEffect(() => {
     if (version) {
@@ -685,6 +766,35 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </>
           }
         />
+      {improveApplicationContext && (
+        <section
+          data-testid='improve-application-banner'
+          style={{
+            border: '1px solid #bfdbfe',
+            borderRadius: '8px',
+            background: '#eff6ff',
+            padding: '0.85rem 1rem',
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#1e3a8a' }}>
+                {improveApplicationContext.symbolCode} {improveApplicationContext.symbolName} の適用 strategy を改善中
+              </div>
+              <div style={{ marginTop: '0.3rem', color: '#334155', fontSize: '0.9rem' }}>
+                source application: <code>{improveApplicationContext.applicationId ?? '-'}</code>
+                {' / '}
+                source version: <code>{improveApplicationContext.sourceVersionId ?? '-'}</code>
+              </div>
+            </div>
+            {improveApplicationContext.returnTo && (
+              <TextLink href={improveApplicationContext.returnTo} className='text-sm font-semibold text-blue-800 no-underline hover:underline'>
+                銘柄ページへ戻る
+              </TextLink>
+            )}
+          </div>
+        </section>
+      )}
       <SectionCard
         title='基本情報'
         description='strategy version の ID、対象、状態、更新時刻を確認します。'

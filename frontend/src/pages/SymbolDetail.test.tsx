@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
 const mockUseRoute = vi.fn();
+const mockUseLocation = vi.fn(() => ['/symbols/sym-1', vi.fn()]);
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -12,6 +13,7 @@ vi.mock('swr', () => ({
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
   useRoute: (...args: unknown[]) => mockUseRoute(...args),
+  useLocation: () => mockUseLocation(),
 }));
 
 vi.mock('../api/client', () => ({
@@ -651,6 +653,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('report履歴を見る');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#runs"');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#reports"');
+    expect(html).toContain('改善版を作る');
     expect(html).toContain('<details class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('必要なときだけ展開してCSVファイルまたはCSVテキストを取り込みます。');
