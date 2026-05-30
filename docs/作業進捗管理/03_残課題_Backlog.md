@@ -203,7 +203,7 @@ Phase 1: SymbolDetail -> StrategyLab symbol context handoff（実装済み）。
 - proposal generation はユーザーが `候補を提案` を押すまで起動しない。
 - proposal candidate selection は title / natural language spec への反映だけを行う。
 
-Phase 2: StrategyLab 保存後の explicit apply。
+Phase 2: StrategyLab 保存後の explicit apply（実装済み）。
 
 - Symbol context がある場合だけ、strategy / version 保存後に `この銘柄に適用` CTA を表示する。
 - 既存 symbol strategy application 作成 API を使う。

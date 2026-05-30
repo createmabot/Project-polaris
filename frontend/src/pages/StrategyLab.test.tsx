@@ -50,12 +50,33 @@ vi.mock('../api/client', async () => {
 
 import StrategyLab from './StrategyLab';
 import { ApiError, fetchApi, postApi } from '../api/client';
-import { buildProposalErrorMessage, buildProposalHistoryPath, buildRuleSubmitErrorMessage } from './StrategyLab';
+import {
+  buildProposalErrorMessage,
+  buildProposalHistoryPath,
+  buildRuleSubmitErrorMessage,
+  buildSymbolApplicationErrorMessage,
+} from './StrategyLab';
 import { buildPineGenerationJobFailureMessage } from '../utils/pineGenerationJob';
 
 const DEFAULT_RULE =
   '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。';
 const DEFAULT_HISTORY_PATH = '/api/strategy-lab/proposals?page=1&limit=10&sort=created_at&order=desc';
+const SAVED_VERSION = {
+  id: 'version-symbol-1',
+  strategy_id: 'strategy-symbol-1',
+  natural_language_rule: DEFAULT_RULE,
+  market: 'JP_STOCK',
+  timeframe: 'D',
+  status: 'generated',
+  normalized_rule_json: {},
+  generated_pine: '// pine',
+  forward_validation_note: null,
+  forward_validation_note_updated_at: null,
+  warnings: [],
+  assumptions: [],
+  created_at: '2026-05-17T00:00:00.000Z',
+  updated_at: '2026-05-17T00:00:00.000Z',
+};
 
 async function flushPromises() {
   await Promise.resolve();
@@ -75,6 +96,10 @@ function primeScenarioState(params: {
   timeframe?: string;
   importState?: Record<string, unknown> | null;
   importError?: string | null;
+  symbolApplicationSaving?: boolean;
+  symbolApplicationMessage?: string | null;
+  symbolApplicationError?: string | null;
+  symbolApplicationHref?: string | null;
   proposalData?: Record<string, unknown> | null;
   proposalError?: string | null;
   proposalUserHint?: string;
@@ -98,7 +123,7 @@ function primeScenarioState(params: {
   setters?: Array<ReturnType<typeof vi.fn>>;
 }) {
   mockUseState.mockReset();
-  const setters = params.setters ?? Array.from({ length: 43 }).map(() => vi.fn());
+  const setters = params.setters ?? Array.from({ length: 48 }).map(() => vi.fn());
   const values = [
     '監視銘柄比較ルール',
     DEFAULT_RULE,
@@ -140,6 +165,10 @@ function primeScenarioState(params: {
     params.importError ?? null,
     false,
     null,
+    params.symbolApplicationSaving ?? false,
+    params.symbolApplicationMessage ?? null,
+    params.symbolApplicationError ?? null,
+    params.symbolApplicationHref ?? null,
     0,
   ];
   values.forEach((value, index) => {
@@ -410,6 +439,125 @@ describe('StrategyLab', () => {
     expect(html).toContain('<option value="D" selected="">日足（D）</option>');
     expect(postApi).not.toHaveBeenCalled();
     expect(fetchApi).not.toHaveBeenCalled();
+  });
+
+  it('shows symbol apply CTA only after a saved version exists in symbol context', () => {
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=JP_STOCK&timeframe=D&return=%2Fsymbols%2Fsymbol-1',
+      vi.fn(),
+    ]);
+
+    primeDefaultState();
+    expect(renderToStaticMarkup(<StrategyLab />)).not.toContain('この銘柄に適用');
+
+    renderedButtons.length = 0;
+    primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
+    const html = renderToStaticMarkup(<StrategyLab />);
+
+    expect(html).toContain('生成結果');
+    expect(html).toContain('この銘柄に適用');
+    expect(html).toContain('銘柄ページへ戻る');
+    expect(html).toContain('href="/symbols/symbol-1"');
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/strategy-applications'), expect.anything());
+  });
+
+  it('calls symbol application endpoint only after explicit saved-version CTA click', async () => {
+    primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1',
+      vi.fn(),
+    ]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      symbol: {
+        id: 'symbol-1',
+        symbol: '7203',
+        symbol_code: '7203',
+        display_name: 'Toyota',
+        market_code: 'JP',
+        tradingview_symbol: 'TSE:7203',
+      },
+      application: {
+        id: 'application-symbol-1',
+      },
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    expect(postApi).not.toHaveBeenCalled();
+
+    const applyButton = renderedButtons.find((button) => button.children === 'この銘柄に適用');
+    await applyButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledTimes(1);
+    expect(postApi).toHaveBeenCalledWith('/api/symbols/symbol-1/strategy-applications', {
+      strategy_id: 'strategy-symbol-1',
+      strategy_version_id: 'version-symbol-1',
+    });
+  });
+
+  it('does not show symbol apply CTA outside symbol context', () => {
+    primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+
+    expect(html).toContain('生成結果');
+    expect(html).not.toContain('この銘柄に適用');
+    expect(html).not.toContain('銘柄ページへ戻る');
+  });
+
+  it('keeps symbol application failures section-local and sanitized', async () => {
+    const setters = primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1',
+      vi.fn(),
+    ]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockRejectedValue(new ApiError(
+      'endpoint=/api/symbols/symbol-1/strategy-applications model=secret raw response stack trace',
+      'CONFLICT',
+      { endpoint: '/api/symbols/symbol-1/strategy-applications', model: 'secret' },
+      409,
+    ));
+
+    renderToStaticMarkup(<StrategyLab />);
+    const applyButton = renderedButtons.find((button) => button.children === 'この銘柄に適用');
+    await applyButton?.onClick?.();
+    await flushPromises();
+
+    expect(setters[42]).toHaveBeenCalledWith('この銘柄には同じ strategy version の application が既に存在します。銘柄ページで保存済み application を確認してください。');
+    const sanitized = buildSymbolApplicationErrorMessage(new ApiError(
+      'endpoint=/api/symbols/symbol-1/strategy-applications model=secret raw response stack trace',
+      'CONFLICT',
+      {},
+      409,
+    ));
+    expect(sanitized).not.toContain('/api/symbols');
+    expect(sanitized).not.toContain('secret');
+    expect(sanitized).not.toContain('raw response');
+    expect(sanitized).not.toContain('stack trace');
   });
 
   it('uses query-prefilled market and timeframe when proposal generation is manually requested', async () => {

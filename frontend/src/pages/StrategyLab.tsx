@@ -33,6 +33,7 @@ import {
   StrategyVersionPineData,
   StrategyVersionPineJobData,
   StrategyVersionListData,
+  SymbolStrategyApplicationCreateData,
 } from '../api/types';
 
 const MARKET_OPTIONS = ['JP_STOCK', 'US_STOCK'];
@@ -379,6 +380,22 @@ function buildProposalSelectionErrorMessage(error: unknown): string {
   return '候補の選択履歴を記録できませんでした。';
 }
 
+export function buildSymbolApplicationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409) {
+    return 'この銘柄には同じ strategy version の application が既に存在します。銘柄ページで保存済み application を確認してください。';
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return '対象の銘柄または strategy version が見つかりませんでした。銘柄ページから開き直して再試行してください。';
+  }
+  if (error instanceof ApiError && error.status === 400) {
+    return 'application の保存条件に不備があります。保存済み version を確認して再試行してください。';
+  }
+  if (error instanceof ApiError && error.status >= 500) {
+    return 'サーバー側で application を保存できませんでした。時間をおいて再試行してください。';
+  }
+  return 'application を保存できませんでした。時間をおいて再試行してください。';
+}
+
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
@@ -503,6 +520,12 @@ export default function StrategyLab() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [pineCopyFeedback, setPineCopyFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [symbolApplicationSaving, setSymbolApplicationSaving] = useState(false);
+  const [symbolApplicationMessage, setSymbolApplicationMessage] = useState<string | null>(null);
+  const [symbolApplicationError, setSymbolApplicationError] = useState<string | null>(null);
+  const [symbolApplicationHref, setSymbolApplicationHref] = useState<string | null>(null);
+
+  const symbolReturnPath = symbolContext.returnPath ?? (symbolContext.symbolId ? `/symbols/${symbolContext.symbolId}` : null);
 
   const showPineCopyFeedback = (type: 'success' | 'error', text: string) => {
     setPineCopyFeedback({ type, text });
@@ -780,6 +803,9 @@ export default function StrategyLab() {
     setImportState(null);
     setImportError(null);
     setPineGenerationJob(null);
+    setSymbolApplicationMessage(null);
+    setSymbolApplicationError(null);
+    setSymbolApplicationHref(null);
 
     try {
       const strategy = await postApi<StrategyCreateData>('/api/strategies', {
@@ -826,6 +852,35 @@ export default function StrategyLab() {
     } finally {
       setSubmitting(false);
       setPineGenerationJob(null);
+    }
+  };
+
+  const onApplySavedVersionToSymbol = async () => {
+    if (!symbolContext.symbolId || !result?.id) {
+      return;
+    }
+    const effectiveStrategyId = result.strategy_id || strategyId;
+    if (!effectiveStrategyId) {
+      setSymbolApplicationError('application の保存条件に不備があります。保存済み version を確認して再試行してください。');
+      return;
+    }
+
+    setSymbolApplicationSaving(true);
+    setSymbolApplicationMessage(null);
+    setSymbolApplicationError(null);
+    setSymbolApplicationHref(null);
+    try {
+      await postApi<SymbolStrategyApplicationCreateData>(`/api/symbols/${symbolContext.symbolId}/strategy-applications`, {
+        strategy_id: effectiveStrategyId,
+        strategy_version_id: result.id,
+      });
+      const returnHref = symbolReturnPath ?? `/symbols/${symbolContext.symbolId}`;
+      setSymbolApplicationHref(returnHref);
+      setSymbolApplicationMessage('この銘柄に application を保存しました。銘柄ページで保存済み application を確認できます。');
+    } catch (applyError: unknown) {
+      setSymbolApplicationError(buildSymbolApplicationErrorMessage(applyError));
+    } finally {
+      setSymbolApplicationSaving(false);
     }
   };
 
@@ -898,9 +953,9 @@ export default function StrategyLab() {
             <span>market: {market}</span>
             <span>timeframe: {formatTimeframeLabel(timeframe)}</span>
           </div>
-          {symbolContext.returnPath && (
+          {symbolReturnPath && (
             <TextLink
-              href={symbolContext.returnPath}
+              href={symbolReturnPath}
               className='rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 no-underline shadow-sm hover:bg-sky-50'
             >
               SymbolDetailへ戻る
@@ -1450,6 +1505,41 @@ export default function StrategyLab() {
               この version 詳細を開く
             </TextLink>
           </div>
+
+          {symbolContext.symbolId && (
+            <div className='rounded-lg border border-emerald-200 bg-emerald-50 p-3'>
+              <div className='flex flex-wrap items-center gap-2'>
+                <Button
+                  onClick={() => void onApplySavedVersionToSymbol()}
+                  disabled={symbolApplicationSaving}
+                  variant='primary'
+                >
+                  {symbolApplicationSaving ? '適用中...' : 'この銘柄に適用'}
+                </Button>
+                {symbolReturnPath && (
+                  <TextLink
+                    href={symbolApplicationHref ?? symbolReturnPath}
+                    className='font-semibold text-emerald-800 no-underline hover:underline'
+                  >
+                    銘柄ページへ戻る
+                  </TextLink>
+                )}
+              </div>
+              <p className='mt-2 text-sm text-emerald-900'>
+                保存済み version をこの銘柄の application として登録できます。自動適用はしません。
+              </p>
+              {symbolApplicationMessage && (
+                <p className='mt-2 rounded-md border border-emerald-300 bg-white p-2 text-sm text-emerald-800'>
+                  {symbolApplicationMessage}
+                </p>
+              )}
+              {symbolApplicationError && (
+                <p className='mt-2 rounded-md border border-rose-200 bg-white p-2 text-sm text-rose-700'>
+                  {symbolApplicationError}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <h3 style={{ marginBottom: '0.5rem' }}>警告</h3>
