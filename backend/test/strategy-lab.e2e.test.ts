@@ -1391,9 +1391,12 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('strategy_type_bias が any でない場合、少なくとも先頭候補は bias に沿わせてください');
     expect(body.data.prompt).toContain('suggested_natural_language_spec には market、timeframe、long/short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution を含めてください');
     expect(body.data.prompt).toContain('confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さを示す値です');
+    expect(body.data.prompt).toContain('これらは backtest 前の検証候補です');
+    expect(body.data.prompt).toContain('Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しない');
     expect(body.data.prompt).toContain('research_basis は user_hint に明示された条件を user_input、market/timeframe/risk setting を internal、一般的な戦略類型を provider_knowledge としてください');
     expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
     expect(body.data.prompt).not.toContain('Codex CLI側でWeb検索が利用できる場合');
+    expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');
@@ -1432,6 +1435,9 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください');
     expect(body.data.prompt).toContain('URL、引用、長い本文抜粋をJSONに含めないでください');
     expect(body.data.prompt).toContain('URLを捏造しないでください');
+    expect(body.data.prompt).toContain('Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しない');
+    expect(body.data.prompt).toContain('confidence=high はルールが明確で Pine 化しやすく、不確実性が低い場合に限定してください');
+    expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');

@@ -269,7 +269,7 @@ prompt / response JSON 方針:
 - `risk_preference` は `risk_management`、`invalidation_conditions`、`backtest_cautions`、`confidence`、`uncertainty` に反映する。conservative は確認条件を厚くし、取引頻度と position risk を抑える。aggressive は速い trigger を許容しても、drawdown、slippage、overfitting caution を強める。
 - `strategy_type_bias` が `any` でない場合、少なくとも先頭候補は bias に沿わせる。`any` の場合は `strategy_type` を分散する。
 - `suggested_natural_language_spec` は market、timeframe、long / short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution を含め、曖昧語を可能な範囲で測定可能な条件に変換する。
-- `confidence` は利益期待ではなく、ルール明確性、Pine feasibility、uncertainty の低さを示す値として扱う。backtest 前、Web search なし、最新 market data なしの候補であるため、`high` は限定的に使う。
+- `confidence` は利益期待ではなく、ルール明確性、Pine feasibility、uncertainty の低さを示す値として扱う。backtest 前の検証候補であり、Codex CLI 側で Web 検索を補助確認に使った場合でも北極星側は citation / freshness を保存しないため、`high` は限定的に使う。
 - `research_basis` は user_hint に明示された条件を `user_input`、market / timeframe / risk setting を `internal`、一般的な戦略類型を `provider_knowledge` として扱う。Web search や URL citation は使わない。
 - Ollama chat の `format` には、可能な範囲で `strategy_proposal_candidates` の JSON schema を渡す。schema は required keys、enum、array fields、`suggested_natural_language_spec` の最低長を含み、model が説明文や別形 JSON に寄ることを抑制する。
 - local_llm response は、Ollama chat response の `message.content` または互換 response の message content から取り出す。content が空、過大、parse 不可の場合は provider invalid response とする。

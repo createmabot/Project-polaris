@@ -557,7 +557,7 @@ function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearc
     'risk_preference は risk_management、invalidation_conditions、backtest_cautions、confidence、uncertainty に反映してください。conservative は確認条件を厚くし、取引頻度とposition riskを抑えてください。aggressive は速いtriggerを許容しても、drawdown、slippage、overfitting cautionを強めてください。',
     'strategy_type_bias が any でない場合、少なくとも先頭候補は bias に沿わせてください。any の場合は strategy_type を分散してください。',
     'suggested_natural_language_spec には market、timeframe、long/short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution を含めてください。曖昧語は可能な限り測定可能な条件に変換し、Pine generation に渡しやすい自然言語 rule にしてください。',
-    'confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さを示す値です。backtest 前、Web search なし、最新 market data なしの候補なので confidence=high は限定的に使ってください。',
+    'confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さを示す値です。これらは backtest 前の検証候補です。Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しないため、confidence=high はルールが明確で Pine 化しやすく、不確実性が低い場合に限定してください。',
     'research_basis は user_hint に明示された条件を user_input、market/timeframe/risk setting を internal、一般的な戦略類型を provider_knowledge としてください。Web search や URL citation は使わず、source_type=web も使わないでください。',
     'これは投資助言ではありません。各候補は、実運用前にバックテストとユーザー確認が必要な検証アイデアとして書いてください。',
     '利益保証や断定的な売買推奨は書かないでください。Pine code作成、strategy保存、backtest実行、AI summary起動は行わないでください。',

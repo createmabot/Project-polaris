@@ -201,7 +201,7 @@ manual browser smoke:
 - user_hint alignment: concrete / vague / long user_hint の条件や曖昧さが候補に反映されているかを見る。空欄時は 25日線 / RSI / 出来高など Pine 生成用初期ルールに固定されず、market / timeframe / risk / strategy_type_bias から幅広い候補が出るかを見る。
 - Pine feasibility: 条件が Pine で表現できる指標・閾値・比較に落ちるかを見る。
 - suggested_natural_language_spec: market、timeframe、long / short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution が含まれ、曖昧語が測定可能な条件に寄っているかを見る。
-- confidence calibration: confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さとして読めるかを見る。backtest 前 / Web search なし / 最新 market data なしの候補で high が多すぎる場合は品質課題として扱う。
+- confidence calibration: confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さとして読めるかを見る。backtest 前の検証候補であり、Codex CLI 側で Web 検索を補助確認に使った場合でも北極星側は citation / freshness を保存しない前提で high が多すぎる場合は品質課題として扱う。
 - research_basis usage: user_hint 由来は `user_input`、market / timeframe / risk setting は `internal`、一般的な戦略類型は `provider_knowledge` になっているかを見る。`source_type=web` や URL citation は現行 scope では使わない。
 - risk: stop、position size、drawdown、volatility、time stop などが検討されているかを見る。
 - backtest caution: slippage、手数料、sample period、regime change、overfitting の注意があるかを見る。
