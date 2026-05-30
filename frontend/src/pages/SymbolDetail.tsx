@@ -80,6 +80,8 @@ const LABELS = {
   noFilteredApplications: '条件に一致する application はありません。',
   latestRun: '最新run',
   latestBacktestReport: '最新検証レポート',
+  verificationSummary: '検証サマリー',
+  verificationHistoryNote: '詳細なrun / report履歴はApplicationDetail、個別レポートはBacktestDetailで確認します。',
   reportPair: 'CSV / internal reports',
   csvImportReport: 'CSV import report',
   internalBacktestReport: 'internal backtest report',
@@ -497,8 +499,6 @@ function ApplicationSummaryHeader({
       <div className="flex flex-wrap gap-2">
         <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
         <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
-        <TextLink href={`/symbol-strategy-applications/${application.id}#runs`}>{LABELS.openApplicationRuns}</TextLink>
-        <TextLink href={`/symbol-strategy-applications/${application.id}#reports`}>{LABELS.openApplicationReports}</TextLink>
         <Button
           onClick={() => onApplicationStatusAction(nextStatusAction)}
           disabled={isMutatingApplicationStatus}
@@ -510,36 +510,33 @@ function ApplicationSummaryHeader({
   );
 }
 
-function ApplicationLatestRunCard({
-  application,
+function ApplicationReportSourceItem({
+  label,
+  report,
 }: {
-  application: SymbolStrategyApplicationItem;
+  label: string;
+  report: NonNullable<NonNullable<SymbolStrategyApplicationItem['latest_reports_by_source']>['csv_import']>;
 }) {
   return (
-    <Surface variant="nested">
-      <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestRun}</h5>
-      {application.latest_run ? (
-        <div>
-          <KeyValueList className="mt-2 gap-1 text-xs text-slate-500">
-            <KeyValueRow label="run type"><code>{application.latest_run.run_type}</code></KeyValueRow>
-            <KeyValueRow label="run status"><StatusBadge status={application.latest_run.status} className="px-2 py-0.5" /></KeyValueRow>
-            <KeyValueRow label="updated">{formatDate(application.latest_run.updated_at)}</KeyValueRow>
-            {application.latest_run.backtest_id ? (
-              <KeyValueRow label="backtest_id"><code>{application.latest_run.backtest_id}</code></KeyValueRow>
-            ) : null}
-          </KeyValueList>
-          {application.latest_run.backtest_id ? (
-            <TextLink href={`/backtests/${application.latest_run.backtest_id}`}>{LABELS.openBacktestDetail}</TextLink>
-          ) : null}
+    <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-700">{label}</span>
+          <StatusBadge status={report.status} className="px-2 py-0.5" />
+          <StatusBadge status={report.run_status} className="px-2 py-0.5" />
         </div>
-      ) : (
-        <EmptyText>{LABELS.noLatestRun}</EmptyText>
-      )}
-    </Surface>
+        <span className="text-xs text-slate-500">{formatDate(report.updated_at)}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+        <span>source: <code>{report.execution_source}</code></span>
+        <span>run: <code>{report.run_type}</code></span>
+        <TextLink href={`/backtests/${report.backtest_id}`}>{report.title}</TextLink>
+      </div>
+    </div>
   );
 }
 
-function ApplicationLatestReportCard({ application }: { application: SymbolStrategyApplicationItem }) {
+function ApplicationVerificationSummary({ application }: { application: SymbolStrategyApplicationItem }) {
   const reportPair = application.latest_reports_by_source;
   const reportPairItems = [
     { key: 'csv_import', label: LABELS.csvImportReport, report: reportPair?.csv_import ?? null },
@@ -548,41 +545,61 @@ function ApplicationLatestReportCard({ application }: { application: SymbolStrat
   const hasReportPair = reportPairItems.some((item) => item.report);
 
   return (
-    <Surface variant="nested">
-      <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.latestBacktestReport}</h5>
-      {application.latest_backtest_report ? (
+    <Surface variant="nested" className="mt-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-800">{application.latest_backtest_report.title}</p>
-          <KeyValueList className="mt-2 gap-1 text-xs text-slate-500">
-            <KeyValueRow label="report type">{reportOriginLabel(application.latest_backtest_report.execution_source)}</KeyValueRow>
-            <KeyValueRow label="source"><code>{application.latest_backtest_report.execution_source}</code></KeyValueRow>
-            <KeyValueRow label="status"><StatusBadge status={application.latest_backtest_report.status} className="px-2 py-0.5" /></KeyValueRow>
-            <KeyValueRow label="market / timeframe">
-              {application.latest_backtest_report.market} / {application.latest_backtest_report.timeframe}
-            </KeyValueRow>
-            <KeyValueRow label="updated">{formatDate(application.latest_backtest_report.updated_at)}</KeyValueRow>
-          </KeyValueList>
-          <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.verificationSummary}</h5>
+          <p className="mt-1 text-xs text-slate-500">{LABELS.verificationHistoryNote}</p>
         </div>
-      ) : (
-        <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
-      )}
+        <div className="flex flex-wrap gap-2">
+          <TextLink href={`/symbol-strategy-applications/${application.id}#runs`}>{LABELS.openApplicationRuns}</TextLink>
+          <TextLink href={`/symbol-strategy-applications/${application.id}#reports`}>{LABELS.openApplicationReports}</TextLink>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
+          <h6 className="text-xs font-semibold text-slate-600">{LABELS.latestRun}</h6>
+          {application.latest_run ? (
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+              <span>run type: <code>{application.latest_run.run_type}</code></span>
+              <span>run status: <StatusBadge status={application.latest_run.status} className="px-2 py-0.5" /></span>
+              <span>updated: {formatDate(application.latest_run.updated_at)}</span>
+              {application.latest_run.backtest_id ? (
+                <TextLink href={`/backtests/${application.latest_run.backtest_id}`}>{LABELS.openBacktestDetail}</TextLink>
+              ) : null}
+            </div>
+          ) : (
+            <EmptyText>{LABELS.noLatestRun}</EmptyText>
+          )}
+        </div>
+
+        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
+          <h6 className="text-xs font-semibold text-slate-600">{LABELS.latestBacktestReport}</h6>
+          {application.latest_backtest_report ? (
+            <div className="mt-1 space-y-1 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="font-medium text-slate-800">{application.latest_backtest_report.title}</span>
+                <span>{reportOriginLabel(application.latest_backtest_report.execution_source)}</span>
+                <StatusBadge status={application.latest_backtest_report.status} className="px-2 py-0.5" />
+                <span>{application.latest_backtest_report.market} / {application.latest_backtest_report.timeframe}</span>
+                <span>updated: {formatDate(application.latest_backtest_report.updated_at)}</span>
+              </div>
+              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
+            </div>
+          ) : (
+            <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>
+          )}
+        </div>
+      </div>
+
       {hasReportPair ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
           <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportPair}</h6>
-          <div className="mt-2 grid gap-2">
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
             {reportPairItems.map((item) => (
               item.report ? (
-                <div key={item.key} className="rounded-md border border-slate-200 bg-white p-2">
-                  <KeyValueList className="gap-1 text-xs text-slate-500">
-                    <KeyValueRow label="report type">{item.label}</KeyValueRow>
-                    <KeyValueRow label="source"><code>{item.report.execution_source}</code></KeyValueRow>
-                    <KeyValueRow label="status"><StatusBadge status={item.report.status} className="px-2 py-0.5" /></KeyValueRow>
-                    <KeyValueRow label="run status"><StatusBadge status={item.report.run_status} className="px-2 py-0.5" /></KeyValueRow>
-                    <KeyValueRow label="updated">{formatDate(item.report.updated_at)}</KeyValueRow>
-                  </KeyValueList>
-                  <TextLink href={`/backtests/${item.report.backtest_id}`}>{item.report.title}</TextLink>
-                </div>
+                <ApplicationReportSourceItem key={item.key} label={item.label} report={item.report} />
               ) : null
             ))}
           </div>
@@ -726,13 +743,13 @@ function SavedApplicationRow({
         <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{applicationStatusError}</p>
       ) : null}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <ApplicationLatestRunCard application={application} />
-        <ApplicationLatestReportCard application={application} />
-      </div>
+      <ApplicationVerificationSummary application={application} />
 
-      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-        <h5 className="text-sm font-semibold text-slate-900">{LABELS.csvImportTitle}</h5>
+      <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900 marker:hidden">
+          <span>{LABELS.csvImportTitle}</span>
+          <span className="ml-2 text-xs font-normal text-slate-500">必要なときだけ展開してCSVファイルまたはCSVテキストを取り込みます。</span>
+        </summary>
         <div className="mt-3 grid gap-2">
           <label className="grid gap-1 text-sm text-slate-700">
             <span className="font-medium">{LABELS.csvFile}</span>
@@ -799,7 +816,7 @@ function SavedApplicationRow({
         {csvImportError ? (
           <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{csvImportError}</p>
         ) : null}
-      </div>
+      </details>
 
     </div>
   );
@@ -1668,14 +1685,6 @@ export default function SymbolDetail() {
           <InfoCard>
             <p className="text-sm leading-6 text-slate-700">{LABELS.strategyResultsIntro}</p>
             <p className="mt-2 text-sm leading-6 text-slate-500">{LABELS.strategyResultsPending}</p>
-            <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-3">
-              <MetaText>今後ここに表示する予定の要素</MetaText>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-700">
-                <li>この銘柄に適用済みのストラテジー一覧</li>
-                <li>最新の検証結果と検証レポート詳細への導線</li>
-                <li>TradingView CSV取込、検証レポート、銘柄別比較の入口</li>
-              </ul>
-            </div>
             <SavedStrategyApplicationsPanel
               applications={applicationListData?.applications ?? []}
               totalApplications={applicationListData?.pagination.total ?? applicationListData?.applications.length ?? 0}
