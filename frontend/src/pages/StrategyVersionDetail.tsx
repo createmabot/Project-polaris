@@ -85,6 +85,13 @@ type ImproveApplicationContext = {
   returnTo: string | null;
 };
 
+export const APPLY_IMPROVED_VERSION_SUCCESS_MESSAGE =
+  '改善版をこの銘柄に適用しました。銘柄ページで確認できます。';
+
+export function buildApplyImprovedVersionFailureMessage(): string {
+  return 'この銘柄への改善版の適用に失敗しました。すでに適用済みの場合は銘柄ページで状態を確認してください。';
+}
+
 function buildDefaultVersionsReturnPath(strategyId: string): string {
   return `/strategies/${strategyId}/versions`;
 }
@@ -405,6 +412,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
   const [cloning, setCloning] = useState(false);
   const [cloneError, setCloneError] = useState<string | null>(null);
+  const [applyingImprovedVersion, setApplyingImprovedVersion] = useState(false);
+  const [applyImprovedVersionMessage, setApplyImprovedVersionMessage] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
 
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
@@ -677,6 +689,30 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   };
 
+  const onApplyImprovedVersion = async () => {
+    if (!improveApplicationContext || !version) return;
+
+    setApplyingImprovedVersion(true);
+    setApplyImprovedVersionMessage(null);
+    try {
+      await postApi(`/api/symbols/${improveApplicationContext.symbolId}/strategy-applications`, {
+        strategy_id: version.strategy_id,
+        strategy_version_id: version.id,
+      });
+      setApplyImprovedVersionMessage({
+        type: 'success',
+        text: APPLY_IMPROVED_VERSION_SUCCESS_MESSAGE,
+      });
+    } catch {
+      setApplyImprovedVersionMessage({
+        type: 'error',
+        text: buildApplyImprovedVersionFailureMessage(),
+      });
+    } finally {
+      setApplyingImprovedVersion(false);
+    }
+  };
+
   const onSaveRule = async () => {
     setSavingRule(true);
     setSaveRuleError(null);
@@ -793,6 +829,32 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               </TextLink>
             )}
           </div>
+          <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <Button
+              variant='primary'
+              data-testid='apply-improved-version'
+              onClick={onApplyImprovedVersion}
+              disabled={applyingImprovedVersion}
+            >
+              {applyingImprovedVersion ? '適用中...' : 'この銘柄に改善版を適用'}
+            </Button>
+          </div>
+          {applyImprovedVersionMessage && (
+            <div
+              data-testid='apply-improved-version-message'
+              style={{
+                marginTop: '0.65rem',
+                padding: '0.65rem 0.75rem',
+                borderRadius: '6px',
+                border: applyImprovedVersionMessage.type === 'success' ? '1px solid #86efac' : '1px solid #fca5a5',
+                background: applyImprovedVersionMessage.type === 'success' ? '#f0fdf4' : '#fff1f2',
+                color: applyImprovedVersionMessage.type === 'success' ? '#166534' : '#9f1239',
+                fontSize: '0.9rem',
+              }}
+            >
+              {applyImprovedVersionMessage.text}
+            </div>
+          )}
         </section>
       )}
       <SectionCard
