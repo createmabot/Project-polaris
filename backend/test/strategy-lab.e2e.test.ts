@@ -1386,8 +1386,17 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('JSON objectを1つだけ返してください');
     expect(body.data.prompt).toContain('strategy_proposal_candidates');
     expect(body.data.prompt).toContain('ユーザーに見える値の文章は日本語で書いてください');
+    expect(body.data.prompt).toContain('候補同士は意味のある差分を持たせてください');
+    expect(body.data.prompt).toContain('risk_preference は risk_management、invalidation_conditions、backtest_cautions、confidence、uncertainty に反映してください');
+    expect(body.data.prompt).toContain('strategy_type_bias が any でない場合、少なくとも先頭候補は bias に沿わせてください');
+    expect(body.data.prompt).toContain('suggested_natural_language_spec には market、timeframe、long/short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution を含めてください');
+    expect(body.data.prompt).toContain('confidence は利益期待ではなく、ルール明確性、Pine feasible、uncertainty の低さを示す値です');
+    expect(body.data.prompt).toContain('これらは backtest 前の検証候補です');
+    expect(body.data.prompt).toContain('Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しない');
+    expect(body.data.prompt).toContain('research_basis は user_hint に明示された条件を user_input、market/timeframe/risk setting を internal、一般的な戦略類型を provider_knowledge としてください');
     expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
     expect(body.data.prompt).not.toContain('Codex CLI側でWeb検索が利用できる場合');
+    expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');
@@ -1426,6 +1435,9 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください');
     expect(body.data.prompt).toContain('URL、引用、長い本文抜粋をJSONに含めないでください');
     expect(body.data.prompt).toContain('URLを捏造しないでください');
+    expect(body.data.prompt).toContain('Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しない');
+    expect(body.data.prompt).toContain('confidence=high はルールが明確で Pine 化しやすく、不確実性が低い場合に限定してください');
+    expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');
@@ -2083,6 +2095,12 @@ describe('strategy lab vertical slice', () => {
     expect(requestBody.think).toBe(false);
     expect(requestBody.messages[0].content).toContain('Write all user-facing string values in Japanese');
     expect(requestBody.messages[0].content).toContain('Only schema keys, enum values, and source_type values must remain in English');
+    expect(requestBody.messages[0].content).toContain('Candidate diversity: make candidates meaningfully different');
+    expect(requestBody.messages[0].content).toContain('risk_preference alignment: reflect input.risk_preference in risk_management, invalidation_conditions, backtest_cautions, confidence, and uncertainty');
+    expect(requestBody.messages[0].content).toContain('strategy_type_bias alignment: if input.strategy_type_bias is not any, make at least the first candidate follow that bias');
+    expect(requestBody.messages[0].content).toContain('suggested_natural_language_spec quality: include market, timeframe, long/short assumption, entry trigger, exit trigger, stop loss rule, indicator periods, and backtest caution');
+    expect(requestBody.messages[0].content).toContain('confidence calibration: before backtest, Web search, or latest market data, use confidence=high sparingly');
+    expect(requestBody.messages[0].content).toContain('research_basis usage: explicit user_hint conditions are user_input; market, timeframe, and risk settings are internal; common strategy archetypes are provider_knowledge');
     expect(requestBody.format).toMatchObject({
       type: 'object',
       required: expect.arrayContaining(['schema_name', 'schema_version', 'input', 'candidates', 'disclaimer']),

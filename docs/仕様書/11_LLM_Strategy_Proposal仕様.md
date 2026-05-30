@@ -265,6 +265,12 @@ prompt / response JSON 方針:
 - response は structured JSON 相当を要求し、route 層で既存 `validateStrategyProposalData` 相当の validation を必ず通してから UI に返す。
 - local_llm には JSON object のみ、markdown code fence / 説明文なし、英語 key 固定、ユーザーに表示される string value は日本語、Web search 未実装時は `research_basis.source_type=web` を使わない、という schema 厳守 prompt を使う。
 - `title`、`summary`、market / timeframe assumption、entry / exit / risk、caution、uncertainty、disclaimer、`suggested_natural_language_spec`、`suggested_pine_constraints` は日本語で返す。schema key、enum value、`source_type` は英語の固定値を維持する。
+- prompt は schema 安定性を維持したまま、候補品質を上げるための指示を含める。候補同士は同じ MA / RSI idea の閾値違いだけにせず、`strategy_type`、entry trigger、exit rule、risk control、market regime assumption を分散する。
+- `risk_preference` は `risk_management`、`invalidation_conditions`、`backtest_cautions`、`confidence`、`uncertainty` に反映する。conservative は確認条件を厚くし、取引頻度と position risk を抑える。aggressive は速い trigger を許容しても、drawdown、slippage、overfitting caution を強める。
+- `strategy_type_bias` が `any` でない場合、少なくとも先頭候補は bias に沿わせる。`any` の場合は `strategy_type` を分散する。
+- `suggested_natural_language_spec` は market、timeframe、long / short assumption、entry trigger、exit trigger、stop loss rule、indicator periods、backtest caution を含め、曖昧語を可能な範囲で測定可能な条件に変換する。
+- `confidence` は利益期待ではなく、ルール明確性、Pine feasibility、uncertainty の低さを示す値として扱う。backtest 前の検証候補であり、Codex CLI 側で Web 検索を補助確認に使った場合でも北極星側は citation / freshness を保存しないため、`high` は限定的に使う。
+- `research_basis` は user_hint に明示された条件を `user_input`、market / timeframe / risk setting を `internal`、一般的な戦略類型を `provider_knowledge` として扱う。Web search や URL citation は使わない。
 - Ollama chat の `format` には、可能な範囲で `strategy_proposal_candidates` の JSON schema を渡す。schema は required keys、enum、array fields、`suggested_natural_language_spec` の最低長を含み、model が説明文や別形 JSON に寄ることを抑制する。
 - local_llm response は、Ollama chat response の `message.content` または互換 response の message content から取り出す。content が空、過大、parse 不可の場合は provider invalid response とする。
 - JSON 抽出では、前後説明文や markdown code fence が混ざる軽微な provider 出力を想定し、JSON object / array を抽出して parse する。抽出時は `{}` と `[]` の nesting、string、escape sequence を同時に追跡し、root array 内の candidate object と nested array fields を正しく扱う。ただし raw response は保存・表示・通常 log に出さない。
