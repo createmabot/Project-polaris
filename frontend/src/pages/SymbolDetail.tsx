@@ -1,9 +1,10 @@
 import { type ChangeEvent, type FormEvent, type ReactNode, useState } from 'react';
 import useSWR from 'swr';
-import { useRoute } from 'wouter';
+import { useLocation, useRoute } from 'wouter';
 import { patchApi, postApi, swrFetcher } from '../api/client';
 import {
   StrategyListData,
+  StrategyVersionData,
   StrategyVersionListData,
   SymbolAiSummaryData,
   InvestmentCalendarData,
@@ -142,6 +143,9 @@ const LABELS = {
   versionList: 'version 一覧',
   openStrategyDetail: 'StrategyDetail を開く',
   openStrategyVersionDetail: 'StrategyVersionDetail を開く',
+  createImprovementVersion: '改善版を作る',
+  creatingImprovementVersion: '作成中...',
+  createImprovementVersionError: '改善版の作成に失敗しました。時間をおいて再試行してください。',
   clearSelection: '選択解除',
   saveApplyPending: '適用を保存（準備中）',
   csvImportLater: 'CSV取込（後続）',
@@ -217,6 +221,23 @@ function buildStrategyLabSymbolContextHref(symbolId: string, symbol: SymbolDetai
   params.set('timeframe', 'D');
   params.set('return_to', `/symbols/${symbolId}`);
   return `/strategy-lab?${params.toString()}`;
+}
+
+function buildStrategyVersionImprovementHref(
+  clonedVersionId: string,
+  application: SymbolStrategyApplicationItem,
+  symbol: SymbolDetailData['symbol'],
+): string {
+  const params = new URLSearchParams();
+  const symbolCode = symbol.symbol_code || symbol.symbol;
+  params.set('mode', 'improve_application');
+  params.set('symbol_id', symbol.id);
+  params.set('symbol_code', symbolCode);
+  params.set('symbol_name', symbol.display_name || symbol.symbol);
+  params.set('application_id', application.id);
+  params.set('source_version_id', application.strategy_version.id);
+  params.set('return_to', `/symbols/${symbol.id}`);
+  return `/strategy-versions/${clonedVersionId}?${params.toString()}`;
 }
 
 function formatSymbolCalendarRefreshMessage(result: InvestmentCalendarRefreshData): string {
@@ -491,11 +512,15 @@ function getApplicationIdQuery(strategyId: string, strategyVersionId: string): s
 function ApplicationSummaryHeader({
   application,
   isMutatingApplicationStatus,
+  isCreatingImprovement,
   onApplicationStatusAction,
+  onCreateImprovementVersion,
 }: {
   application: SymbolStrategyApplicationItem;
   isMutatingApplicationStatus: boolean;
+  isCreatingImprovement: boolean;
   onApplicationStatusAction: (nextAction: 'archive' | 'restore') => void;
+  onCreateImprovementVersion: () => void;
 }) {
   const nextStatusAction = application.status === 'archived' ? 'restore' : 'archive';
   const nextStatusLabel = nextStatusAction === 'restore' ? LABELS.restoreApplication : LABELS.archiveApplication;
@@ -519,6 +544,12 @@ function ApplicationSummaryHeader({
       <div className="flex flex-wrap gap-2">
         <TextLink href={`/strategies/${application.strategy.id}`}>{LABELS.openStrategyDetail}</TextLink>
         <TextLink href={`/strategy-versions/${application.strategy_version.id}`}>{LABELS.openStrategyVersionDetail}</TextLink>
+        <Button
+          onClick={onCreateImprovementVersion}
+          disabled={isCreatingImprovement}
+        >
+          {isCreatingImprovement ? LABELS.creatingImprovementVersion : LABELS.createImprovementVersion}
+        </Button>
         <Button
           onClick={() => onApplicationStatusAction(nextStatusAction)}
           disabled={isMutatingApplicationStatus}
@@ -631,11 +662,14 @@ function ApplicationVerificationSummary({ application }: { application: SymbolSt
 
 function SavedApplicationRow({
   application,
+  symbol,
   mutateApplications,
 }: {
   application: SymbolStrategyApplicationItem;
+  symbol: SymbolDetailData['symbol'];
   mutateApplications: () => Promise<SymbolStrategyApplicationListData | undefined>;
 }) {
+  const [, setLocation] = useLocation();
   const [fileName, setFileName] = useState('tradingview.csv');
   const [csvText, setCsvText] = useState('');
   const [selectedCsvFileName, setSelectedCsvFileName] = useState<string | null>(null);
@@ -648,6 +682,8 @@ function SavedApplicationRow({
   const [isMutatingApplicationStatus, setIsMutatingApplicationStatus] = useState(false);
   const [applicationStatusMessage, setApplicationStatusMessage] = useState<string | null>(null);
   const [applicationStatusError, setApplicationStatusError] = useState<string | null>(null);
+  const [isCreatingImprovement, setIsCreatingImprovement] = useState(false);
+  const [improvementError, setImprovementError] = useState<string | null>(null);
 
   const importCsv = async () => {
     const normalizedFileName = fileName.trim();
@@ -749,18 +785,36 @@ function SavedApplicationRow({
     }
   };
 
+  const createImprovementVersion = async () => {
+    setIsCreatingImprovement(true);
+    setImprovementError(null);
+    try {
+      const response = await postApi<StrategyVersionData>(`/api/strategy-versions/${application.strategy_version.id}/clone`, {});
+      setLocation(buildStrategyVersionImprovementHref(response.strategy_version.id, application, symbol));
+    } catch {
+      setImprovementError(LABELS.createImprovementVersionError);
+    } finally {
+      setIsCreatingImprovement(false);
+    }
+  };
+
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-3">
       <ApplicationSummaryHeader
         application={application}
         isMutatingApplicationStatus={isMutatingApplicationStatus}
+        isCreatingImprovement={isCreatingImprovement}
         onApplicationStatusAction={mutateApplicationStatus}
+        onCreateImprovementVersion={() => void createImprovementVersion()}
       />
       {applicationStatusMessage ? (
         <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{applicationStatusMessage}</p>
       ) : null}
       {applicationStatusError ? (
         <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{applicationStatusError}</p>
+      ) : null}
+      {improvementError ? (
+        <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{improvementError}</p>
       ) : null}
 
       <ApplicationVerificationSummary application={application} />
@@ -843,6 +897,7 @@ function SavedApplicationRow({
 }
 
 function SavedStrategyApplicationsPanel({
+  symbol,
   applications,
   totalApplications,
   applicationStatusFilter,
@@ -863,6 +918,7 @@ function SavedStrategyApplicationsPanel({
   error,
   mutateApplications,
 }: {
+  symbol: SymbolDetailData['symbol'];
   applications: SymbolStrategyApplicationItem[];
   totalApplications: number;
   applicationStatusFilter: ApplicationStatusFilter;
@@ -1038,7 +1094,12 @@ function SavedStrategyApplicationsPanel({
           ) : (
             <div className="mt-3 grid gap-2">
               {applications.map((application) => (
-                <SavedApplicationRow key={application.id} application={application} mutateApplications={mutateApplications} />
+                <SavedApplicationRow
+                  key={application.id}
+                  application={application}
+                  symbol={symbol}
+                  mutateApplications={mutateApplications}
+                />
               ))}
             </div>
           )}
@@ -1707,6 +1768,7 @@ export default function SymbolDetail() {
             <p className="text-sm leading-6 text-slate-700">{LABELS.strategyResultsIntro}</p>
             <p className="mt-2 text-sm leading-6 text-slate-500">{LABELS.strategyResultsPending}</p>
             <SavedStrategyApplicationsPanel
+              symbol={data.symbol}
               applications={applicationListData?.applications ?? []}
               totalApplications={applicationListData?.pagination.total ?? applicationListData?.applications.length ?? 0}
               applicationStatusFilter={applicationStatusFilter}
