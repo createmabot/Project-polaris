@@ -79,9 +79,64 @@ const HISTORY_ARCHIVED_OPTIONS = [
   { value: 'all', label: 'all' },
 ];
 
+type StrategyLabSymbolContext = {
+  symbolId: string | null;
+  symbolCode: string | null;
+  symbolName: string | null;
+  market: string | null;
+  timeframe: string | null;
+  returnPath: string | null;
+};
+
+function containsUnsafeContextText(value: string): boolean {
+  return /(raw|prompt|provider response|endpoint|model|token|secret|http:\/\/|https:\/\/|[a-z]:\\|\\\\)/i.test(value);
+}
+
 function formatTimeframeLabel(value: string): string {
   const normalized = value === '1D' ? 'D' : value;
   return TIMEFRAME_OPTIONS.find((option) => option.value === normalized)?.label ?? normalized;
+}
+
+function readQueryValue(params: URLSearchParams, key: string): string | null {
+  const value = params.get(key)?.trim() ?? '';
+  return value.length > 0 && value.length <= 120 && !containsUnsafeContextText(value) ? value : null;
+}
+
+function readSafeReturnPath(params: URLSearchParams): string | null {
+  const value = readQueryValue(params, 'return') ?? readQueryValue(params, 'return_to');
+  if (!value || !value.startsWith('/') || value.startsWith('//') || /[\r\n]/.test(value)) {
+    return null;
+  }
+  return value;
+}
+
+function readSafeMarket(params: URLSearchParams): string | null {
+  const market = readQueryValue(params, 'market')?.toUpperCase() ?? null;
+  return market && MARKET_OPTIONS.includes(market) ? market : null;
+}
+
+function readSafeTimeframe(params: URLSearchParams): string | null {
+  const timeframe = readQueryValue(params, 'timeframe')?.toUpperCase() ?? null;
+  if (!timeframe) {
+    return null;
+  }
+  const normalized = timeframe === '1D' ? 'D' : timeframe;
+  return TIMEFRAME_OPTIONS.some((option) => option.value === normalized) ? normalized : null;
+}
+
+function readStrategyLabSymbolContext(location: string): StrategyLabSymbolContext {
+  const query = location.includes('?') ? location.slice(location.indexOf('?')) : '';
+  const params = new URLSearchParams(query);
+  const symbolCode = readQueryValue(params, 'symbol_code');
+  const symbolName = readQueryValue(params, 'symbol_name') ?? readQueryValue(params, 'display_name');
+  return {
+    symbolId: readQueryValue(params, 'symbol_id'),
+    symbolCode,
+    symbolName,
+    market: readSafeMarket(params),
+    timeframe: readSafeTimeframe(params),
+    returnPath: readSafeReturnPath(params),
+  };
 }
 
 export function buildProposalHistoryPath({
@@ -399,13 +454,17 @@ function ProviderQualityTrendNote({
 }
 
 export default function StrategyLab() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
+  const symbolContext = useMemo(() => readStrategyLabSymbolContext(location), [location]);
+  const symbolContextLabel = symbolContext.symbolCode && symbolContext.symbolName
+    ? `${symbolContext.symbolCode} / ${symbolContext.symbolName}`
+    : symbolContext.symbolCode ?? symbolContext.symbolName;
   const [title, setTitle] = useState('監視銘柄比較ルール');
   const [naturalLanguageRule, setNaturalLanguageRule] = useState(
     '25日移動平均線の上で、RSIが50以上、出来高が20日平均の1.5倍以上で買い。終値が5日線を下回ったら手仕舞い。'
   );
-  const [market, setMarket] = useState('JP_STOCK');
-  const [timeframe, setTimeframe] = useState('D');
+  const [market, setMarket] = useState(symbolContext.market ?? 'JP_STOCK');
+  const [timeframe, setTimeframe] = useState(symbolContext.timeframe ?? 'D');
   const [proposalRiskPreference, setProposalRiskPreference] = useState('balanced');
   const [proposalStrategyType, setProposalStrategyType] = useState('any');
   const [proposalUserHint, setProposalUserHint] = useState('');
@@ -832,6 +891,24 @@ export default function StrategyLab() {
           }
         />
 
+      {symbolContextLabel && (
+        <Surface className='mt-4 flex flex-wrap items-center justify-between gap-3 border-sky-200 bg-sky-50 p-3'>
+          <div className='flex flex-wrap items-center gap-2 text-sm text-slate-700'>
+            <strong className='text-slate-950'>{symbolContextLabel} 向けに作成中</strong>
+            <span>market: {market}</span>
+            <span>timeframe: {formatTimeframeLabel(timeframe)}</span>
+          </div>
+          {symbolContext.returnPath && (
+            <TextLink
+              href={symbolContext.returnPath}
+              className='rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm font-semibold text-sky-700 no-underline shadow-sm hover:bg-sky-50'
+            >
+              SymbolDetailへ戻る
+            </TextLink>
+          )}
+        </Surface>
+      )}
+
       <SectionCard
         title='ストラテジー候補の提案'
         description='AIによる検証候補を取得し、選択した候補を自然言語ルールへ反映します。投資助言ではなく、backtest前提のたたき台です。'
@@ -842,7 +919,17 @@ export default function StrategyLab() {
             候補は検証用のたたき台です。売買推奨ではありません。選択後に内容を確認し、Pine生成とbacktestで検証してください。
           </InlineNotice>
 
-          <div className='grid gap-3 lg:grid-cols-3'>
+          <div className='grid gap-3 lg:grid-cols-4'>
+            <SelectField
+              label='提案用市場'
+              value={market}
+              onChange={(event) => setMarket(event.target.value)}
+            >
+              {MARKET_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </SelectField>
+
             <SelectField
               label='提案用時間足'
               value={timeframe}

@@ -386,6 +386,98 @@ describe('StrategyLab', () => {
     expect(html).toContain('日本語入力中心 / long_only');
   });
 
+  it('prefills symbol context from query params and renders return link without auto-running generation', () => {
+    primeDefaultState();
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=US_STOCK&timeframe=1D&return=%2Fsymbols%2Fsymbol-1',
+      vi.fn(),
+    ]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+
+    expect(html).toContain('7203 / Toyota 向けに作成中');
+    expect(html).toContain('market: US_STOCK');
+    expect(html).toContain('timeframe: 日足（D）');
+    expect(html).toContain('href="/symbols/symbol-1"');
+    expect(html).toContain('SymbolDetailへ戻る');
+    expect(html).toContain('<option value="US_STOCK" selected="">US_STOCK</option>');
+    expect(html).toContain('<option value="D" selected="">日足（D）</option>');
+    expect(postApi).not.toHaveBeenCalled();
+    expect(fetchApi).not.toHaveBeenCalled();
+  });
+
+  it('uses query-prefilled market and timeframe when proposal generation is manually requested', async () => {
+    const historyMutate = vi.fn();
+    const trendMutate = vi.fn();
+    primeDefaultState();
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple',
+      vi.fn(),
+    ]);
+    mockUseSWR.mockImplementation((key: string | null) => {
+      if (key === DEFAULT_HISTORY_PATH) {
+        return { isLoading: false, error: null, data: null, mutate: historyMutate };
+      }
+      if (key === '/api/strategy-lab/proposals/provider-quality-trend?limit=50') {
+        return { isLoading: false, error: null, data: null, mutate: trendMutate };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      proposal_run_id: 'proposal-run-symbol-context',
+      provider: {
+        name: 'stub',
+        mode: 'deterministic',
+        web_search: false,
+        persisted: false,
+      },
+      candidates: [],
+      disclaimer: '検証候補です。',
+    });
+
+    renderToStaticMarkup(<StrategyLab />);
+    expect(postApi).not.toHaveBeenCalled();
+
+    const proposalButton = renderedButtons.find((button) => button.children === 'ストラテジーを提案');
+    await proposalButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
+      market: 'US_STOCK',
+      timeframe: '4H',
+      user_hint: null,
+    }));
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+    expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
+  });
+
+  it('does not render unsafe symbol context query values', () => {
+    primeDefaultState();
+    mockUseLocation.mockReturnValue([
+      '/strategy-lab?symbol_code=endpoint%3Dhttp%3A%2F%2Fsecret.local&display_name=model%3Dsecret-model&market=US_STOCK&timeframe=D&return=%2Fsymbols%2F1%3Fmodel%3Dsecret',
+      vi.fn(),
+    ]);
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+
+    expect(html).not.toContain('secret.local');
+    expect(html).not.toContain('secret-model');
+    expect(html).not.toContain('model=secret');
+    expect(html).not.toContain('SymbolDetailへ戻る');
+  });
+
   it('sends the selected proposal timeframe to strategy proposal generation without auto-running downstream flows', async () => {
     const historyMutate = vi.fn();
     const trendMutate = vi.fn();
