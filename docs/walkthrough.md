@@ -1211,8 +1211,8 @@ SymbolDetail では `銘柄概要` の直下に `投資カレンダー` section 
 ## 追記（2026-05-31）Symbol-centered strategy workflow design
 
 - Phase 0 は docs-only 設計であり、runtime 挙動は変更しない。
-- 後続 Phase 1 では `SymbolDetail` の `ストラテジー / 検証結果` section から `この銘柄でストラテジー提案` を押し、StrategyLab に symbol context が渡ることを確認する。
-- StrategyLab の context mode では、対象銘柄、market、timeframe、return path が banner / prefill として表示されることを確認する。
+- Phase 1 では `SymbolDetail` の `ストラテジー / 検証結果` section から `この銘柄でストラテジー提案` を押し、StrategyLab に symbol context が渡ることを確認する。
+- StrategyLab の context mode では、対象銘柄、market、timeframe、return path が banner / prefill として表示されることを確認する。画面表示だけで proposal generation は起動しない。
 - proposal generation はユーザーが明示的に実行するまで起動しないこと、candidate selection は title / natural language spec 反映だけで Pine generation / save / backtest / AI summary を自動起動しないことを確認する。
 - 後続 Phase 2 では、symbol context 付き StrategyLab で strategy / version 保存後にだけ `この銘柄に適用` CTA が表示され、既存 application 作成 API を明示操作で呼ぶことを確認する。
 - 後続 Phase 3 では、SymbolDetail の application row から `改善版を作る` を押し、既存 StrategyVersion clone flow で新 version の StrategyVersionDetail へ進むことを確認する。

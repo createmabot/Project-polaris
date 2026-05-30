@@ -145,7 +145,7 @@ const LABELS = {
   clearSelection: '選択解除',
   saveApplyPending: '適用を保存（準備中）',
   csvImportLater: 'CSV取込（後続）',
-  openStrategyLab: 'ストラテジー作成を開く',
+  openStrategyLab: 'この銘柄でストラテジー提案',
   openBacktestList: '検証レポート一覧を開く',
   researchNoteTitle: 'Research Note',
   referencesTitle: '関連参照情報',
@@ -197,6 +197,26 @@ function reportOriginLabel(executionSource: string | null | undefined): string {
   if (executionSource === 'internal_backtest') return 'internal backtest report';
   if (executionSource === 'tradingview' || executionSource === 'csv_import') return 'CSV import report';
   return 'report';
+}
+
+function getStrategyLabMarket(symbol: SymbolDetailData['symbol']): string {
+  const marketHint = `${symbol.market_code ?? ''} ${symbol.symbol ?? ''} ${symbol.tradingview_symbol ?? ''}`.toUpperCase();
+  if (marketHint.includes('NASDAQ') || marketHint.includes('NYSE') || marketHint.includes('AMEX') || marketHint.includes('US')) {
+    return 'US_STOCK';
+  }
+  return 'JP_STOCK';
+}
+
+function buildStrategyLabSymbolContextHref(symbolId: string, symbol: SymbolDetailData['symbol']): string {
+  const params = new URLSearchParams();
+  const symbolCode = symbol.symbol_code || symbol.symbol;
+  params.set('symbol_id', symbolId);
+  params.set('symbol_code', symbolCode);
+  params.set('symbol_name', symbol.display_name || symbol.symbol);
+  params.set('market', getStrategyLabMarket(symbol));
+  params.set('timeframe', 'D');
+  params.set('return_to', `/symbols/${symbolId}`);
+  return `/strategy-lab?${params.toString()}`;
 }
 
 function formatSymbolCalendarRefreshMessage(result: InvestmentCalendarRefreshData): string {
@@ -1346,6 +1366,7 @@ function StrategyApplySelectionPanel({
 export default function SymbolDetail() {
   const [, params] = useRoute('/symbols/:symbolId');
   const symbolId = params?.symbolId;
+  const effectiveSymbolId = symbolId ?? '';
   const [isGeneratingThesis, setIsGeneratingThesis] = useState(false);
   const [generateThesisError, setGenerateThesisError] = useState<string | null>(null);
   const [isRefreshingReferences, setIsRefreshingReferences] = useState(false);
@@ -1673,7 +1694,7 @@ export default function SymbolDetail() {
           title={LABELS.strategyResultsTitle}
           actions={
             <>
-              <TextLink href="/strategy-lab" className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
+              <TextLink href={buildStrategyLabSymbolContextHref(effectiveSymbolId || data.symbol.id, data.symbol)} className="rounded bg-sky-700 px-3 py-1.5 text-white no-underline hover:no-underline">
                 {LABELS.openStrategyLab}
               </TextLink>
               <TextLink href="/backtests" className="rounded border border-slate-300 bg-white px-3 py-1.5 text-slate-700 no-underline hover:no-underline">

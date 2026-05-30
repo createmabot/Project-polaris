@@ -196,7 +196,7 @@ Phase 0: docs-only design。
 - SymbolDetail application row -> StrategyVersionDetail では、既存 clone flow へ進む improvement context を渡す。
 - 旧 application の自動 archive、replace endpoint、application lineage 永続化、StrategyVersion created-from-proposal relation は後続判断とする。
 
-Phase 1: SymbolDetail -> StrategyLab symbol context handoff。
+Phase 1: SymbolDetail -> StrategyLab symbol context handoff（実装済み）。
 
 - SymbolDetail の `ストラテジー / 検証結果` section に `この銘柄でストラテジー提案` action を置く。
 - StrategyLab は symbol context banner、market / symbol code / timeframe prefill、`銘柄ページへ戻る` link を表示する。

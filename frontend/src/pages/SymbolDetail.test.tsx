@@ -679,7 +679,8 @@ describe('SymbolDetail', () => {
     expect(html).not.toContain('未保存');
     expect(html).toContain('適用を保存');
     expect(html).toContain('CSV取込（後続）');
-    expect(html).toContain('ストラテジー作成を開く');
+    expect(html).toContain('この銘柄でストラテジー提案');
+    expect(html).toContain('href="/strategy-lab?symbol_id=sym-1&amp;symbol_code=7203&amp;symbol_name=Toyota&amp;market=JP_STOCK&amp;timeframe=D&amp;return_to=%2Fsymbols%2Fsym-1"');
     expect(html).toContain('検証レポート一覧を開く');
     expect(mockUseSWR).not.toHaveBeenCalledWith(
       '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc',
