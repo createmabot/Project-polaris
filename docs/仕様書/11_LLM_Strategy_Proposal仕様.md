@@ -13,10 +13,10 @@ Pine 生成、Strategy / StrategyVersion 保存、validation、CSV import、inte
 
 ### 2-1. 入口
 
-初回実装では、StrategyLab の rule input 付近に「ストラテジーを提案」導線を置く。
+初回実装では、StrategyLab の rule input 付近に「ストラテジーを提案」導線を置いた。次フェーズでは SymbolDetail から StrategyLab へ symbol context を渡す入口を追加できるが、proposal 生成自体は引き続き StrategyLab のユーザー操作で行う。
 
 - StrategyLab は natural language strategy 作成、Pine 生成、保存、検証の作業画面であるため、proposal の入口を置く責務に合う。
-- SymbolDetail / StrategyDetail / BacktestDetail には初回導線を置かない。
+- 初回実装では SymbolDetail / StrategyDetail / BacktestDetail に proposal 入口を置かなかった。SymbolDetail に置く後続入口は StrategyLab への context handoff であり、SymbolDetail 表示だけで provider call を起動するものではない。
 - 提案候補は StrategyLab 内の一時候補として表示し、選択時に natural language spec へ反映する。
 - 既存の Pine generation button はユーザー操作として維持し、proposal 選択だけでは Pine 生成しない。
 
@@ -616,11 +616,36 @@ UI / docs で避ける表現:
 
 ## 8. 画面責務
 
-- StrategyLab: proposal 入口、候補表示、候補選択、natural language spec への反映を担当する。
+- StrategyLab: proposal 入口、候補表示、候補選択、natural language spec への反映を担当する。SymbolDetail から symbol context 付きで起動された場合は、対象銘柄 banner と proposal input prefill を表示する。
 - StrategyVersionDetail: 既存 version / Pine / validation / regenerate の確認画面であり、初回 proposal 入口は持たない。
 - StrategyDetail: strategy の read-only detail と関連 reports を担当し、proposal 生成は持たない。
-- SymbolDetail: symbol 起点 application / report / import / internal backtest を担当し、proposal 生成は持たない。ただし将来、symbol context を StrategyLab に渡す導線は候補にできる。
+- SymbolDetail: symbol 起点 application / report / import を担当し、proposal 生成そのものは持たない。後続 phase では symbol context を StrategyLab に渡す入口と、application row から改善版作成へ進む入口を持てる。
 - BacktestDetail / ApplicationDetail: report / history / comparison の確認画面であり、proposal 生成は持たない。
+
+## 8-1. Symbol context handoff
+
+銘柄起点の strategy workflow では、SymbolDetail から StrategyLab / StrategyVersionDetail へ context を渡す。これは UI / prefill / return path のための handoff であり、proposal run、StrategyVersion、application lineage を DB で永続的に結びつけるものではない。
+
+SymbolDetail -> StrategyLab:
+
+- `symbol_id`、`symbol_code`、display name、market、default timeframe、return path を query などで渡す。
+- StrategyLab は context banner を表示し、proposal input の market / symbol code / timeframe を prefill する。
+- proposal generation は従来どおりユーザー操作起点に限定する。
+- proposal candidate selection は title / natural language spec への反映だけを行い、Pine generation、Strategy / StrategyVersion 保存、backtest、AI summary は起動しない。
+
+StrategyLab -> SymbolDetail:
+
+- symbol context 付きで起動された場合、strategy / version 保存後に限り `この銘柄に適用` CTA を表示できる。
+- 適用は既存 symbol strategy application 作成 API をユーザーが明示的に呼ぶ操作とする。
+- active duplicate conflict は既存 application 作成 error に従う。
+- 保存完了、candidate selection、Pine generation 完了を契機に自動適用しない。
+
+SymbolDetail application row -> StrategyVersionDetail:
+
+- 後続 phase では `改善版を作る` action から既存 strategy version clone flow へ進む。
+- clone 後の StrategyVersionDetail は `mode=improve_application` 相当の context を受け取り、元 symbol / application / version と return path を banner に表示できる。
+- `この銘柄に改善版を適用` は既存 application 作成 API を使う明示 action とする。
+- 旧 application の自動 archive、新旧 application lineage、StrategyVersion created-from-proposal relation は後続判断とする。
 
 ## 9. 初回実装スコープ
 
@@ -1275,7 +1300,7 @@ LLM に要求する安全な strategy coding rule:
 - proposal history retention / hard delete / export。
 - benchmark result DB table / prompt regression automation。
 - proposal history export。
-- symbol context から StrategyLab へ遷移する導線。
+- symbol context から StrategyLab へ遷移する導線は Phase 1 実装候補として扱う。DB lineage ではなく UI / prefill / return path の context handoff に限定する。
 - distributed rate limit / hard cost cap / per-user billing。
 - provider quality trend の event-log based upgrade。
 - prompt versioning と regression tests。
