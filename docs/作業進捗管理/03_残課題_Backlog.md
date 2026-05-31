@@ -228,7 +228,8 @@ BacktestDetail 起点の improvement context（実装済み）。
 
 - `symbol_strategy_application` を持つ BacktestDetail から明示操作で strategy version clone へ進み、StrategyVersionDetail に `source_backtest_id` を渡す。
 - StrategyVersionDetail は元 backtest metrics / 保存済み AI summary を read-only context として表示し、改善メモを `revision_request` に反映できる。
-- `source_pine_script_id` がない clone 直後の version では Pine 修正再生成が使えない場合がある。現時点では UI で disabled 理由を示し、`保存済みルールから Pine を作り直す` は保存済み自然言語ルールから新しい Pine を生成する操作であり、既存 Pine の細部を継承するとは限らないことを明記する。StrategyVersion clone / improvement flow で元 PineScript lineage を引き継ぎ、clone 先でも `source_pine_script_id` を使った修正再生成を可能にする backend / DB 変更は後続判断とする。
+- StrategyVersion clone 時に元 version の latest PineScript があれば、clone 先に sanitized reference copy を作成し、元 PineScript を `source_pine_script_id` として引き継ぐ。これにより improvement clone 直後でも、source Pine がある場合は既存 Pine を元にした修正再生成へ進める。
+- 元 version に PineScript がない場合は、clone 先でも `source_pine_script_id` はなく、UI の disabled 理由に従って自然言語ルールから Pine を作り直す。
 
 全 phase で維持する境界:
 
