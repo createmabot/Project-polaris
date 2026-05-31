@@ -1140,6 +1140,26 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       },
     });
 
+    const sourcePine = await resolveLatestPineScript(sourceVersion.id);
+    if (sourcePine) {
+      await prisma.pineScript.create({
+        data: {
+          strategyRuleVersionId: cloned.id,
+          parentPineScriptId: sourcePine.id,
+          scriptName: sourcePine.scriptName,
+          pineVersion: sourcePine.pineVersion,
+          scriptBody: sourcePine.scriptBody,
+          status: sourcePine.status,
+          generationNoteJson: {
+            source: 'strategy_version_clone',
+            source_version_id: sourceVersion.id,
+            source_pine_script_id: sourcePine.id,
+            cloned_for_improvement: true,
+          },
+        },
+      });
+    }
+
     return reply.status(201).send(
       formatSuccess(request, {
         strategy_version: toStrategyVersionResponse(cloned),
