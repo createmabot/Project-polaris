@@ -106,8 +106,8 @@ pnpm run dev
 
 1. BacktestDetail から clone 後の `StrategyVersionDetail` を開く。
 2. `検証結果からの改善メモ` section に、元 report title、execution source、status、market / timeframe、updated、source backtest id、主要 metrics、保存済み AI summary の title / excerpt / key points、関連 report note が read-only 表示されることを確認する。
-3. `改善メモ` textarea を必要に応じて編集し、`改善メモを修正依頼に反映` を押す。
-4. 反映先は既存 `revision_request` 欄だけであり、この操作だけでは Pine 修正再生成 endpoint、backtest、AI summary、application apply は呼ばれないことを確認する。
+3. `改善メモ` textarea を必要に応じて編集し、strategy logic を変える場合は `改善案を自然言語ルールに反映` を押す。
+4. 反映先は自然言語ルール本文であり、この操作だけでは保存 endpoint、Pine 生成 endpoint、backtest、AI summary、application apply は呼ばれないことを確認する。compile error / validation note / TradingView 上の挙動調整だけを行う場合は、補助導線として `改善メモを Pine 修正依頼に反映` を使う。
 5. `自然言語ルール（編集）` では `ルール本文を保存`、`保存済みルールから Pine を作り直す`、`この version を複製する`、`修正依頼をもとに Pine を再生成` の違いが説明されていることを確認する。
 6. 元 version に PineScript がある clone では、clone 先の `source_pine_script_id` が表示され、`修正依頼をもとに Pine を再生成` が使えることを確認する。元 PineScript がない場合は `修正依頼をもとに Pine を再生成` が disabled になり、既存 Pine を元にした修正再生成はできないことを確認する。`保存済みルールから Pine を作り直す` は保存済み自然言語ルールから新しい Pine を生成する操作であり、既存 Pine の細部を継承するとは限らない説明が表示されることを確認する。
 
@@ -120,12 +120,17 @@ pnpm run dev
    - `status=available|unavailable`
    - `title`
    - `body_markdown`
+   - 問題の切り分け / 改善仮説 / 自然言語ルール改善案 / Pine修正依頼に入れるべきではない注意 / 次に試す検証案
+   - `structured_json.payload.next_actions`
+   - `structured_json.payload.overall_view`
 5. `GET /api/backtests/:backtestId` の `latest_ai_summary_job` を確認する。
    - `status=queued|running|succeeded|failed`
    - `trigger`
    - `created_at` / `completed_at`
 6. `BacktestDetail` は latest job status を read-only 表示するが、polling / live update を行わず、手動再読み込み時点の snapshot として扱うことを確認する。
-7. failed の場合も、自動 retry は行わず、既存の `AI総評を生成` button から manual generation / regeneration に進めることを確認する。
+7. AI総評生成だけでは strategy clone、Pine generation、backtest、application apply が起動しないことを確認する。
+8. CSV全文、取込本文、raw prompt、provider response、endpoint、model、secret、local path、stack trace が表示されていないことを確認する。
+9. failed の場合も、自動 retry は行わず、既存の `AI総評を生成` button から manual generation / regeneration に進めることを確認する。
 
 ## 10. inline comparison
 

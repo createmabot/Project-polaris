@@ -40,6 +40,7 @@ DB / job:
 画面:
 
 - BacktestDetail は生成済み summary を read-only 表示する。
+- Backtest AI summary は改善ループ用の総評として読む。本文には問題の切り分け、改善仮説、自然言語ルール改善案、Pine修正依頼に入れるべきではない注意、次に試す検証案が含まれる。`payload.next_actions` は次の再検証 action、`payload.overall_view` は StrategyVersionDetail の自然言語ルール改善に転用しやすい改善案として扱う。Pine修正再生成の `revision_request` は compile error / validation note / TradingView 上の挙動調整に限定する。
 - `GET /api/backtests/:backtestId` は `ai_review.status=available|unavailable` と、optional read-only field `latest_ai_summary_job` を返す。
 - `latest_ai_summary_job.status` は `queued`、`running`、`succeeded`、`failed` の最新 job snapshot として扱う。
 - BacktestDetail は latest job status を read-only に表示するが、polling / live update は行わない。必要に応じて手動再読み込みで確認する。
@@ -141,7 +142,7 @@ UI 上で見せる範囲:
 - `latest_ai_summary_job` は直近 job の `queued` / `running` / `succeeded` / `failed` を read-only に示す。
 - failed の場合も、既存の手動生成 / 再生成導線に進める。failed job auto retry はしない。
 - stale と判断できる場合も、read-only note として扱い、表示起点で provider 再生成しない。
-- failed job auto retry、polling、live update、表示起点 enqueue、AI summary 自動比較生成は行わない。
+- failed job auto retry、polling、live update、表示起点 enqueue、AI summary 自動比較生成は行わない。AI summary 生成だけで strategy clone、Pine generation、backtest、application apply も起動しない。
 
 ## 9-1. phase 2 latest job status visibility
 

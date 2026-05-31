@@ -143,8 +143,115 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.stream).toBe(false);
     expect(body.think).toBe(false);
     expect(body.options.num_predict).toBe(1200);
+    expect(body.messages[0].content).toContain('strategy refinement');
+    expect(body.messages[0].content).toContain('問題の切り分け');
+    expect(body.messages[0].content).toContain('改善仮説');
+    expect(body.messages[0].content).toContain('自然言語ルール改善案');
+    expect(body.messages[0].content).toContain('Pine修正依頼に入れるべきではない注意');
+    expect(body.messages[0].content).toContain('next_checks');
+    expect(body.messages[0].content).toContain('overall_view');
+    expect(body.messages[0].content).toContain('Do not frame strategy logic changes as revision_request drafts');
+    expect(body.messages[0].content).toContain('Do not give direct buy or sell recommendations');
     expect(result.title).toBe('AI Backtest Review');
-    expect(result.bodyMarkdown).toContain('Summary body');
+    expect(result.bodyMarkdown).toContain('### 問題の切り分け');
+    expect(result.bodyMarkdown).toContain('### 改善仮説');
+    expect(result.bodyMarkdown).toContain('### 次に試す検証案');
+    expect(result.bodyMarkdown).toContain('### 自然言語ルール改善案');
+    expect(result.bodyMarkdown).toContain('### Pine修正依頼に入れるべきではない注意');
+    expect(result.structuredJson.schema_version).toBe('1.0');
+    expect(result.structuredJson.payload.next_actions).toContain('Run another period split');
+    expect(result.structuredJson.payload.overall_view).toBe('Provisional positive');
+    expect(JSON.stringify(result)).not.toContain('raw CSV');
+  });
+
+  it('falls back to improvement-focused deterministic backtest review when local_llm JSON is invalid', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: 'not json',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generateBacktestSummary({
+      ...createBacktestContext(),
+      metrics: {
+        totalTrades: 8,
+        winRate: 38,
+        profitFactor: 0.82,
+        maxDrawdown: -22,
+        netProfit: -125000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-31',
+      },
+      tradeSummary: {
+        parsedImportCount: 1,
+        averageTotalTrades: 8,
+        averageWinRate: 38,
+        averageProfitFactor: 0.82,
+        averageNetProfit: -125000,
+        bestNetProfit: -125000,
+        worstNetProfit: -125000,
+      },
+    });
+
+    expect(result.structuredJson.schema_name).toBe('backtest_review_summary');
+    expect(result.structuredJson.schema_version).toBe('1.0');
+    expect(result.bodyMarkdown).toContain('### 問題の切り分け');
+    expect(result.bodyMarkdown).toContain('### 改善仮説');
+    expect(result.bodyMarkdown).toContain('### 次に試す検証案');
+    expect(result.bodyMarkdown).toContain('### 自然言語ルール改善案');
+    expect(result.bodyMarkdown).toContain('### Pine修正依頼に入れるべきではない注意');
+    expect(result.structuredJson.payload.risks.join(' ')).toContain('統計的信頼性');
+    expect(result.structuredJson.payload.risks.join(' ')).toContain('Profit Factor');
+    expect(result.structuredJson.payload.risks.join(' ')).toContain('最大ドローダウン');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('条件緩和');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('損切り幅');
+    expect(result.structuredJson.payload.overall_view).toContain('entry / exit / risk');
+    expect(JSON.stringify(result)).not.toContain('raw CSV');
+    expect(JSON.stringify(result)).not.toContain('raw import text');
+  });
+
+  it('does not quote unsafe natural language rule text in deterministic backtest review', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: 'not json',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const unsafeRule = 'entry uses https://example.com/api and token=SECRET_VALUE and C:\\Users\\foo\\secret.txt';
+    const result = await provider.generateBacktestSummary({
+      ...createBacktestContext(),
+      strategy: {
+        strategyId: 'st-1',
+        strategyVersionId: 'ver-1',
+        naturalLanguageRule: unsafeRule,
+        generatedPine: null,
+      },
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(result.structuredJson.schema_version).toBe('1.0');
+    expect(serialized).toContain('現行の自然言語ルール');
+    expect(serialized).toContain('entry / exit / risk management');
+    expect(serialized).not.toContain('https://example.com/api');
+    expect(serialized).not.toContain('SECRET_VALUE');
+    expect(serialized).not.toContain('C:\\Users\\foo\\secret.txt');
+    expect(serialized).not.toContain(unsafeRule);
   });
 
   it('fails when content is empty and finish reason is length', async () => {

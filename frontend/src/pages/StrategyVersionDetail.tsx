@@ -209,6 +209,15 @@ function extractAiKeyPoints(structuredJson: Record<string, unknown> | null | und
     .slice(0, 4);
 }
 
+function extractStringList(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => compactSafeText(item, 240))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
 type SourceBacktestMetricRow = {
   label: string;
   value: string;
@@ -258,6 +267,24 @@ function buildSourceBacktestAiSummaryExcerpt(aiReview: BacktestDetailData['ai_re
 
 function buildSourceBacktestAiSummaryMemoText(aiReview: BacktestDetailData['ai_review']): string {
   if (aiReview.status !== 'available') return '';
+  const root = asRecord(aiReview.structured_json);
+  const payload = asRecord(root?.payload);
+  const nextActions = extractStringList(payload?.next_actions, 5);
+  const overallView = compactSafeText(typeof payload?.overall_view === 'string' ? payload.overall_view : null, 800);
+  const risks = extractStringList(payload?.risks, 4);
+  const strengths = extractStringList(payload?.strengths, 3);
+
+  const structuredLines = [
+    nextActions.length > 0 ? `AI summary next actions: ${nextActions.join(' / ')}` : '',
+    overallView ? `AI summary improvement memo: ${overallView}` : '',
+    risks.length > 0 ? `AI summary risks: ${risks.join(' / ')}` : '',
+    strengths.length > 0 ? `AI summary strengths: ${strengths.join(' / ')}` : '',
+  ].filter(Boolean);
+
+  if (structuredLines.length > 0) {
+    return structuredLines.join('\n');
+  }
+
   return compactSafeText(aiReview.body_markdown, 1200);
 }
 
@@ -280,13 +307,26 @@ export function buildSourceBacktestImprovementMemo(sourceBacktest: BacktestDetai
   if (metrics.length > 0) {
     lines.push(`主要指標: ${metrics.map((metric) => `${metric.label}=${metric.value}`).join(', ')}`);
   }
-  if (aiKeyPoints.length > 0) {
-    lines.push(`AI summary key points: ${aiKeyPoints.join(' / ')}`);
-  } else if (aiExcerpt) {
+  if (aiExcerpt) {
     lines.push(`AI summary excerpt: ${aiExcerpt}`);
+  } else if (aiKeyPoints.length > 0) {
+    lines.push(`AI summary key points: ${aiKeyPoints.join(' / ')}`);
   }
   lines.push('上記を踏まえ、過剰最適化を避けつつ entry / exit / risk 条件の改善案を反映してください。');
   return lines.join('\n');
+}
+
+export function mergeImprovementMemoIntoNaturalLanguageRule(currentRule: string, improvementMemo: string): string {
+  const memo = improvementMemo.trim();
+  if (!memo) return currentRule;
+  const current = currentRule.trimEnd();
+  if (!current) {
+    return `検証結果を踏まえた自然言語ルール改善案:\n${memo}`;
+  }
+  if (current.includes(memo)) {
+    return current;
+  }
+  return `${current}\n\n---\n検証結果を踏まえた自然言語ルール改善案:\n${memo}`;
 }
 
 export function findNextPriorityVersionId(
@@ -877,6 +917,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     setRevisionRequest(memo);
   };
 
+  const onReflectSourceBacktestMemoToRule = () => {
+    const memo = sourceBacktestImprovementMemo.trim();
+    if (!memo) return;
+    setEditingNaturalLanguageRule((current) => mergeImprovementMemoIntoNaturalLanguageRule(current, memo));
+  };
+
   const onSaveRule = async () => {
     setSavingRule(true);
     setSaveRuleError(null);
@@ -1035,7 +1081,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       {sourceBacktestData ? (
         <SectionCard
           title='検証結果からの改善メモ'
-          description='元 backtest report を read-only context として確認し、必要な部分だけ修正依頼へ反映します。表示だけでは Pine 再生成や適用は行いません。'
+          description='元 backtest report を read-only context として確認し、strategy logic の改善は自然言語ルール本文に反映します。表示だけでは保存、Pine 再生成、適用は行いません。'
           className='mt-4'
         >
           <KeyValueList className='mb-3 gap-x-4 gap-y-1 sm:grid-cols-2'>
@@ -1101,17 +1147,28 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             value={sourceBacktestImprovementMemo}
             onChange={(event) => setSourceBacktestImprovementMemo(event.target.value)}
             rows={8}
-            helpText='この textarea はローカル編集用です。下のボタンは revision_request 欄へ反映するだけで、Pine 修正再生成 endpoint は呼びません。'
+            helpText='この textarea はローカル編集用です。entry / exit / risk など strategy logic の改善は自然言語ルール本文へ反映し、compile error や Pine 実装上の調整だけを Pine 修正依頼へ反映します。'
           />
-          <div className='mt-3'>
+          <div className='mt-3 flex flex-wrap gap-2'>
+            <Button
+              variant='primary'
+              data-testid='reflect-source-backtest-memo-to-rule'
+              onClick={onReflectSourceBacktestMemoToRule}
+              disabled={!sourceBacktestImprovementMemo.trim()}
+            >
+              改善案を自然言語ルールに反映
+            </Button>
             <Button
               data-testid='reflect-source-backtest-memo'
               onClick={onReflectSourceBacktestMemo}
               disabled={!sourceBacktestImprovementMemo.trim()}
             >
-              改善メモを修正依頼に反映
+              改善メモを Pine 修正依頼に反映
             </Button>
           </div>
+          <InlineNotice tone='info' className='mt-3'>
+            戦略条件そのものを変える改善は、自然言語ルール本文に反映して保存し、その後「保存済みルールから Pine を作り直す」を使います。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
+          </InlineNotice>
         </SectionCard>
       ) : null}
       <SectionCard
@@ -1141,7 +1198,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       >
         {hasSourceBacktestContext ? (
           <InlineNotice tone='info' className='mb-3'>
-            検証結果をもとに改善する場合は、改善メモを revision_request に反映し、source_pine_script_id がある場合は「修正依頼をもとに Pine を再生成」を使ってください。source_pine_script_id がない場合、既存 Pine を元にした修正再生成はできません。必要に応じて自然言語ルールを編集・保存し、「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
+            検証結果をもとに entry / exit / risk 条件を改善する場合は、まず改善案を自然言語ルール本文に反映し、内容を確認して保存してください。source_pine_script_id がある場合でも、Pine 修正再生成は既存ルールの意図を保った実装修正に限定します。必要に応じて「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
           </InlineNotice>
         ) : null}
         <div style={{ marginBottom: '0.75rem', color: '#555', fontSize: '0.9rem' }}>
@@ -1210,7 +1267,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
           <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>3. Pine 修正再生成</div>
           <p style={{ margin: '0 0 0.6rem', color: '#555', fontSize: '0.9rem' }}>
-            `修正依頼をもとに Pine を再生成` は、既存 Pine script と revision_request を使って Pine を修正します。改善メモ反映だけでは endpoint を呼びません。
+            `修正依頼をもとに Pine を再生成` は、既存 Pine script と revision_request を使って Pine 実装を修正します。戦略条件そのものを変える改善は、自然言語ルール本文側に反映してください。改善メモ反映だけでは endpoint を呼びません。
           </p>
           {missingSourcePineScriptNotice ? (
             <InlineNotice tone='warning' className='mb-3'>
