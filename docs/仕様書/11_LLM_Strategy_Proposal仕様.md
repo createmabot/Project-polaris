@@ -1088,6 +1088,59 @@ provider / observation:
 - Codex CLI raw output の保存。
 - proposal から Strategy / StrategyVersion 保存、Pine generation、backtest、AI summary への自動連鎖。
 
+## 16-1. SymbolDetail 起点の銘柄調査付き Codex CLI proposal
+
+SymbolDetail から symbol context 付きで StrategyLab を開いた場合、Codex CLI manual prompt は通常の汎用 proposal ではなく、銘柄調査付き strategy proposal prompt として扱う。これは backend が Web search、deep research、Codex CLI を自動実行する機能ではない。ユーザーが prompt を手動で Codex CLI に渡し、Codex CLI 側で Web 検索を使って調査したうえで JSON を作成する前提である。
+
+flow 分岐:
+
+- 通常 StrategyLab proposal:
+  - `stub` / `local_llm` / Codex CLI manual は従来どおり扱う。
+  - Codex CLI manual の Web検索 guidance は optional checkbox で切り替える。
+- SymbolDetail 起点 proposal:
+  - `local_llm` / `stub` は従来どおり `symbol_code` / `market` / `timeframe` を使う軽い context proposal とする。Web検索や銘柄固有の最新情報確認は要求しない。
+  - Codex CLI manual は銘柄調査付き prompt とし、Web検索を必須前提にする。
+  - symbol context がある場合、Web検索 checkbox ではなく銘柄調査付き guidance を使う設計とする。
+
+銘柄調査付き prompt で要求すること:
+
+- 対象銘柄の基本情報を確認する。
+- 直近の価格傾向、出来高、ボラティリティを確認する。
+- 決算、業績、ニュース、投資カレンダー上の event、セクター環境を確認する。
+- その銘柄で検証する価値のある `strategy_type` を選ぶ。
+- 候補ごとに、なぜその銘柄に合う可能性があるかを `summary`、`research_basis`、`uncertainty`、`backtest_cautions` の中で説明する。
+- 調査で確認できない点、最新性が不明な点、過剰最適化、流動性、slippage、drawdown、event risk は `uncertainty` / `backtest_cautions` に残す。
+- output は `strategy_proposal_candidates` v1.0 の JSON object 1 個だけにする。
+- URL、citation、長い引用、raw article text は JSON に含めない。
+- `source_type=web` は使わない。一般的な戦略類型は `provider_knowledge`、ユーザー入力や画面 context は `user_input` / `internal` として扱う。
+- 投資助言や売買推奨ではなく、Pine 化して backtest するための検証候補として出す。
+
+責務:
+
+- SymbolDetail は入口だけを担当し、表示だけで proposal generation を起動しない。
+- StrategyLab は prompt 作成、JSON import、candidate 表示、candidate selection を担当する。
+- backend は Codex CLI、Web search、deep research を起動しない。
+- import 成功後も candidate selection は title / natural language spec への反映だけに留める。
+- Pine generation、strategy / version save、backtest、AI summary は既存 button による明示操作に限定する。
+
+現時点で保存しないもの:
+
+- raw prompt。
+- raw Codex output。
+- Web search result。
+- URL / citation。
+- `source_type=web`。
+- `web_research_used` flag。
+- citation freshness metadata。
+
+後続判断:
+
+- `source_type=web` の解禁。
+- URL / citation 保存と UI 表示。
+- Web research freshness / source reliability metadata。
+- SymbolDetail 起点 proposal run と application / StrategyVersion の永続 lineage。
+- backend job としての Web search / deep research。
+
 ## 17. Proposal history full management
 
 Proposal history full management は、`StrategyProposalRun` / `StrategyProposalCandidate` に蓄積された proposal run を、履歴が増えても StrategyLab から探せるようにする最小管理導線である。

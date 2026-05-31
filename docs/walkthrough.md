@@ -34,6 +34,15 @@ pnpm run dev
 2. 自然言語ルールを入力し strategy を作成する。
 3. `POST /api/strategies` が成功し、strategy id が発行されることを確認する。
 
+## 1-1. SymbolDetail 起点の銘柄調査付き Codex CLI proposal
+
+1. `http://localhost:5173/symbols/:symbolId` を開き、`ストラテジー / 検証結果` から `この銘柄でストラテジー提案` を開く。
+2. StrategyLab 上部で symbol code、market、timeframe、return path の context banner が表示されることを確認する。
+3. local_llm / stub の通常 proposal は、symbol_code / market / timeframe を使う軽い context proposal として確認する。銘柄固有の最新情報や Web 検索済みの説明を期待しない。
+4. Codex CLI 用 prompt は、symbol context がある場合に銘柄調査付き prompt として扱う。Codex CLI 側で Web検索を使い、対象銘柄の基本情報、価格傾向、出来高、volatility、決算・業績、news、events、sector 環境を確認してから候補を作る前提であることを確認する。
+5. Codex CLI の出力は `strategy_proposal_candidates` v1.0 JSON object 1 個だけにする。URL / citation / 長い引用、`source_type=web`、raw Web result は含めない。
+6. JSON import 後に候補を選択しても、title / natural language spec へ反映するだけで、Pine generation、save、backtest、AI summary、自動 application 作成が起動しないことを確認する。
+
 ## 2. Strategy Version 作成
 
 1. 同画面または version 作成導線で strategy version を作成する。
