@@ -442,6 +442,11 @@ describe('StrategyLab', () => {
     expect(html).toContain('SymbolDetailへ戻る');
     expect(html).toContain('<option value="US_STOCK" selected="">US_STOCK</option>');
     expect(html).toContain('<option value="D" selected="">日足（D）</option>');
+    expect(html).toContain('Codex CLIで銘柄調査付き候補JSONを作成する');
+    expect(html).toContain('Web検索を使った銘柄調査を前提に作成します');
+    expect(html).toContain('strategy_proposal_candidates v1.0');
+    expect(html).toContain('銘柄調査付きCodex promptを作成');
+    expect(html).not.toContain('Codex CLI側でWeb検索を使う前提のpromptにする');
     expect(postApi).not.toHaveBeenCalled();
     expect(fetchApi).not.toHaveBeenCalled();
   });
@@ -764,7 +769,6 @@ describe('StrategyLab', () => {
       timeframe: '4H',
       proposalUserHint: '出来高急増を使った短期戦略',
     });
-    mockUseSearch.mockReturnValue('symbol_id=symbol-apple&symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -787,10 +791,53 @@ describe('StrategyLab', () => {
 
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
       timeframe: '4H',
+      symbol_code: null,
+      user_hint: '出来高急増を使った短期戦略',
+      web_search_prompt: true,
+    }));
+  });
+
+  it('requests a symbol research Codex prompt from symbol context without exposing the optional checkbox', async () => {
+    primeScenarioState({
+      timeframe: '4H',
+      proposalUserHint: '出来高急増を使った短期戦略',
+    });
+    mockUseSearch.mockReturnValue('symbol_id=symbol-apple&symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple');
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: null,
+      mutate: vi.fn(),
+    });
+    vi.mocked(postApi).mockResolvedValue({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+      web_search_prompt: true,
+      prompt: 'Symbol research guidance. Return only one JSON object',
+    });
+
+    const html = renderToStaticMarkup(<StrategyLab />);
+    expect(html).toContain('Codex CLIで銘柄調査付き候補JSONを作成する');
+    expect(html).toContain('AAPL / Apple 向けの context で開かれています');
+    expect(html).toContain('Web検索を使った銘柄調査を前提に作成します');
+    expect(html).toContain('strategy_proposal_candidates v1.0');
+    expect(html).toContain('URL / citation / source_type=web は含めず');
+    expect(html).not.toContain('Codex CLI側でWeb検索を使う前提のpromptにする');
+
+    const promptButton = renderedButtons.find((button) => button.children === '銘柄調査付きCodex promptを作成');
+    await promptButton?.onClick?.();
+    await flushPromises();
+
+    expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
+      timeframe: '4H',
       symbol_code: 'AAPL',
       user_hint: '出来高急増を使った短期戦略',
       web_search_prompt: true,
     }));
+    expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
+    expect(postApi).not.toHaveBeenCalledWith('/api/backtests', expect.anything());
   });
 
   it('imports Codex CLI JSON and displays it as proposal candidates', async () => {

@@ -368,9 +368,9 @@ proposal history / selected proposal lineage backend 実装現在地:
 - 投資助言風 wording だけを理由に proposal 候補を過剰に狭めること。
 - provider raw diagnostics、raw prompt、credential、local path の UI / docs / PR 表示。
 
-SymbolDetail 起点 Codex CLI proposal の後続:
+SymbolDetail 起点 Codex CLI proposal の完了範囲と後続:
 
-- SymbolDetail から起動した Codex CLI manual prompt は、銘柄調査付き prompt として Web検索必須 guidance を使う設計にする。実装は後続 PR とし、backend から Web search / Codex CLI を自動実行しない。
+- SymbolDetail から起動した Codex CLI manual prompt は、銘柄調査付き prompt として Web検索必須 guidance を使う実装まで完了済み。backend から Web search / Codex CLI は自動実行しない。
 - `source_type=web`、URL / citation 保存、Web source badge、freshness metadata はまだ解禁しない。これらは citation / reliability / retention / UI 表示方針を別設計してから判断する。
 - local_llm は従来どおり symbol_code / market / timeframe の軽い context proposal とし、銘柄固有の最新情報を期待しない。
 - 銘柄調査付き prompt の品質評価では、対象銘柄の基本情報、価格傾向、出来高、volatility、決算・業績、news、events、sector 環境を確認したうえで、候補ごとに銘柄適合理由、未確認点、overfitting / slippage / drawdown / event risk を書けているかを見る。

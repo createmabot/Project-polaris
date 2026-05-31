@@ -546,6 +546,7 @@ function toCodexCliImportValidationError(error: AppError, candidates: unknown): 
 function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearchPrompt?: boolean } = {}): string {
   const exampleInput = JSON.stringify(input, null, 2);
   const timeframeProfile = getStrategyProposalTimeframeProfile(input.timeframe);
+  const hasSymbolContext = Boolean(input.symbol_code);
   const promptSections = [
     'JSON objectを1つだけ返してください。markdown fenceやJSON外の説明文は含めないでください。',
     'JSONは schema_name "strategy_proposal_candidates" と schema_version "1.0" を必ず使ってください。',
@@ -590,7 +591,17 @@ function buildCodexCliPrompt(input: StrategyProposalRequest, options: { webSearc
     'research_basis[].source_type は次のいずれかだけです: internal, user_input, provider_knowledge。web は使わないでください。',
   ];
 
-  if (options.webSearchPrompt) {
+  if (hasSymbolContext) {
+    promptSections.push(
+      `この prompt は SymbolDetail 起点の銘柄調査付き strategy proposal です。対象銘柄コードは ${input.symbol_code} です。`,
+      'Codex CLI側でWeb検索を使い、候補作成前に対象銘柄の基本情報、直近の価格傾向、出来高傾向、ボラティリティ、決算・業績、ニュース、投資カレンダー上のイベントや今後の重要日程、セクター環境を確認してください。',
+      'その銘柄で検証する価値のある strategy_type を選び、候補ごとに「なぜこの銘柄で検証する価値があるか」を summary、market_assumption、expected_strengths、uncertainty、backtest_cautions に反映してください。',
+      '調査で確認できなかった点、最新性が弱い点、過剰最適化、流動性、slippage、drawdown、event risk は uncertainty / backtest_cautions に日本語で残してください。',
+      '北極星 backend はWeb検索、deep research、Codex CLIを自動実行しません。出力は投資助言や売買推奨ではなく、Pine化してbacktestするための検証候補として書いてください。',
+      '出力は strategy_proposal_candidates v1.0 JSON object 1個だけです。markdown fence、JSON外説明、URL、citation、長い引用、raw article text、raw Web result を含めないでください。',
+      'research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください。Webで確認した内容は URL ではなく uncertainty / backtest_cautions と検証理由に要約してください。',
+    );
+  } else if (options.webSearchPrompt) {
     promptSections.push(
       'Codex CLI側でWeb検索が利用できる場合は、候補作成前の確認に使ってよいです。ただし、北極星側はWeb検索を自動実行せず、取り込み時にもWeb検索済みかどうかを判定しません。',
       'Web検索結果、URL、引用、長い本文抜粋をJSONに含めないでください。research_basis.source_type は internal / user_input / provider_knowledge のみを使い、source_type=web は使わないでください。',

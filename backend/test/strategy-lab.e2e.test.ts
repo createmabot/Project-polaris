@@ -1366,7 +1366,6 @@ describe('strategy lab vertical slice', () => {
       payload: {
         market: 'JP_STOCK',
         timeframe: 'D',
-        symbol_code: '7203',
         risk_preference: 'balanced',
         strategy_type_bias: 'breakout',
         proposal_count: 5,
@@ -1396,6 +1395,8 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('research_basis は user_hint に明示された条件を user_input、market/timeframe/risk setting を internal、一般的な戦略類型を provider_knowledge としてください');
     expect(body.data.prompt).toContain('短期スイング候補を日本語で出す');
     expect(body.data.prompt).not.toContain('Codex CLI側でWeb検索が利用できる場合');
+    expect(body.data.prompt).not.toContain('SymbolDetail 起点の銘柄調査付き strategy proposal');
+    expect(body.data.prompt).not.toContain('対象銘柄の基本情報');
     expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
@@ -1412,7 +1413,6 @@ describe('strategy lab vertical slice', () => {
       payload: {
         market: 'JP_STOCK',
         timeframe: 'D',
-        symbol_code: 'AAPL',
         risk_preference: 'balanced',
         strategy_type_bias: 'any',
         proposal_count: 5,
@@ -1437,7 +1437,64 @@ describe('strategy lab vertical slice', () => {
     expect(body.data.prompt).toContain('URLを捏造しないでください');
     expect(body.data.prompt).toContain('Web検索で補助確認した場合でも、北極星側は citation / freshness を保存しない');
     expect(body.data.prompt).toContain('confidence=high はルールが明確で Pine 化しやすく、不確実性が低い場合に限定してください');
+    expect(body.data.prompt).not.toContain('SymbolDetail 起点の銘柄調査付き strategy proposal');
+    expect(body.data.prompt).not.toContain('対象銘柄の基本情報');
     expect(body.data.prompt).not.toContain('Web search なし、最新 market data なし');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
+    expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
+    expect(body.data.prompt).not.toContain('secret');
+    expect(body.data.prompt).not.toMatch(/[A-Za-z]:\\/);
+  });
+
+  it.each([false, true])('builds a symbol research Codex CLI prompt when symbol_code is present, web_search_prompt=%s', async (webSearchPrompt) => {
+    const app = await createApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-lab/proposals/codex-cli/request',
+      payload: {
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        symbol_code: '7203',
+        risk_preference: 'balanced',
+        strategy_type_bias: 'any',
+        proposal_count: 5,
+        user_hint: '銘柄起点で候補を作る',
+        web_search_prompt: webSearchPrompt,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.data).toMatchObject({
+      provider_name: 'codex_cli_manual',
+      schema_name: 'strategy_proposal_candidates',
+      schema_version: '1.0',
+      proposal_count: 5,
+      web_search_prompt: webSearchPrompt,
+    });
+    expect(body.data.prompt).toContain('SymbolDetail 起点の銘柄調査付き strategy proposal');
+    expect(body.data.prompt).toContain('対象銘柄コードは 7203');
+    expect(body.data.prompt).toContain('Web検索を使い');
+    expect(body.data.prompt).toContain('対象銘柄の基本情報');
+    expect(body.data.prompt).toContain('直近の価格傾向');
+    expect(body.data.prompt).toContain('出来高傾向');
+    expect(body.data.prompt).toContain('ボラティリティ');
+    expect(body.data.prompt).toContain('決算・業績');
+    expect(body.data.prompt).toContain('ニュース');
+    expect(body.data.prompt).toContain('投資カレンダー上のイベント');
+    expect(body.data.prompt).toContain('セクター環境');
+    expect(body.data.prompt).toContain('その銘柄で検証する価値のある strategy_type');
+    expect(body.data.prompt).toContain('なぜこの銘柄で検証する価値があるか');
+    expect(body.data.prompt).toContain('overfitting');
+    expect(body.data.prompt).toContain('slippage');
+    expect(body.data.prompt).toContain('drawdown');
+    expect(body.data.prompt).toContain('event risk');
+    expect(body.data.prompt).toContain('strategy_proposal_candidates v1.0 JSON object 1個だけ');
+    expect(body.data.prompt).toContain('URL、citation、長い引用、raw article text、raw Web result を含めないでください');
+    expect(body.data.prompt).toContain('source_type=web は使わないでください');
+    expect(body.data.prompt).toContain('Pine化してbacktestするための検証候補');
+    expect(body.data.prompt).not.toContain('Codex CLI側でWeb検索が利用できる場合');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_ENDPOINT');
     expect(body.data.prompt).not.toContain('STRATEGY_PROPOSAL_LOCAL_LLM_MODEL');
     expect(body.data.prompt).not.toContain('secret');
