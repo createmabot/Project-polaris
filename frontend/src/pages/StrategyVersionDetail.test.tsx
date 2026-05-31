@@ -59,6 +59,7 @@ import StrategyVersionDetail, {
   buildSourceBacktestImprovementMemo,
   buildApplyImprovedVersionFailureMessage,
   findNextPriorityVersionId,
+  mergeImprovementMemoIntoNaturalLanguageRule,
   parseImproveApplicationContext,
 } from './StrategyVersionDetail';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
@@ -200,6 +201,15 @@ function createSourceBacktestPayload() {
       title: 'Source validation AI summary',
       body_markdown: 'Profit factor is improved, but drawdown risk remains around entries after sharp gaps.',
       structured_json: {
+        payload: {
+          next_actions: [
+            'entry trigger を出来高条件と分けて再検証する',
+            'exit と stop loss の幅を比較する',
+          ],
+          overall_view: '自然言語ルール改善案: entry / exit / risk 条件を分けてルール本文に反映する。',
+          risks: ['最大DDが拡大する局面を切り分ける'],
+          strengths: ['PFはbaselineを上回る'],
+        },
         key_points: [
           'Profit factor is above the baseline.',
           'Drawdown should be controlled before scaling.',
@@ -353,9 +363,39 @@ describe('StrategyVersionDetail', () => {
     expect(memo).toContain('source validation report');
     expect(memo).toContain('主要指標');
     expect(memo).toContain('Profit Factor=1.63');
-    expect(memo).toContain('Profit factor is above the baseline.');
+    expect(memo).toContain('AI summary next actions');
+    expect(memo).toContain('entry trigger を出来高条件と分けて再検証する');
+    expect(memo).toContain('AI summary improvement memo');
+    expect(memo).toContain('entry / exit / risk 条件を分けてルール本文に反映する');
+    expect(memo).toContain('最大DDが拡大する局面を切り分ける');
     expect(memo).not.toContain('raw prompt token endpoint');
     expect(memo).not.toContain('do not show this prompt');
+  });
+
+  it('falls back to source backtest AI summary body excerpt when structured payload is missing', () => {
+    const payload = createSourceBacktestPayload();
+    payload.ai_review.structured_json = {
+      key_points: [],
+    } as any;
+    payload.ai_review.body_markdown = 'Body excerpt fallback recommends reviewing exit timing without source file details.';
+
+    const memo = buildSourceBacktestImprovementMemo(payload as any);
+
+    expect(memo).toContain('AI summary excerpt');
+    expect(memo).toContain('Body excerpt fallback recommends reviewing exit timing');
+    expect(memo).not.toContain('raw CSV');
+    expect(memo).not.toContain('raw prompt');
+  });
+
+  it('merges source backtest improvement memo into natural language rule without saving or Pine generation', () => {
+    const merged = mergeImprovementMemoIntoNaturalLanguageRule(
+      '既存ルール: SMA 上抜けで entry する。',
+      'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
+    );
+
+    expect(merged).toContain('既存ルール: SMA 上抜けで entry する。');
+    expect(merged).toContain('検証結果を踏まえた自然言語ルール改善案');
+    expect(merged).toContain('entry 条件に出来高 filter を追加');
   });
 
   it('renders shared loading and error states for detail fetch', () => {
@@ -540,6 +580,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('検証結果へ戻る');
     expect(html).toContain('検証結果からの改善メモ');
     expect(html).toContain('元 backtest report を read-only context として確認');
+    expect(html).toContain('strategy logic の改善は自然言語ルール本文に反映');
     expect(html).toContain('source backtest id');
     expect(html).toContain('bt-source-1');
     expect(html).toContain('source validation report');
@@ -557,7 +598,11 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Drawdown should be controlled before scaling.');
     expect(html).toContain('同じ application の関連レポートが 1 件あります。');
     expect(html).toContain('改善メモ');
-    expect(html).toContain('改善メモを修正依頼に反映');
+    expect(html).toContain('改善案を自然言語ルールに反映');
+    expect(html).toContain('改善メモを Pine 修正依頼に反映');
+    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文に反映');
+    expect(html).toContain('Pine 修正依頼は、既存ルールの意図を維持した compile error');
+    expect(html).toContain('data-testid="reflect-source-backtest-memo-to-rule"');
     expect(html).toContain('data-testid="reflect-source-backtest-memo"');
     expect(html).not.toContain('raw-result.csv');
     expect(html).not.toContain('raw_prompt');
@@ -565,8 +610,13 @@ describe('StrategyVersionDetail', () => {
     expect(html).not.toContain('raw prompt token endpoint');
 
     expect(mockPostApi).not.toHaveBeenCalled();
-    const reflectButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
-    await reflectButton?.props.onClick?.();
+    const reflectRuleButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo-to-rule');
+    await reflectRuleButton?.props.onClick?.();
+    expect(mockPatchApi).not.toHaveBeenCalled();
+    expect(mockPostApi).not.toHaveBeenCalled();
+
+    const reflectRevisionButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
+    await reflectRevisionButton?.props.onClick?.();
     expect(mockPostApi).not.toHaveBeenCalled();
   });
 
@@ -598,8 +648,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Pine 修正再生成には source_pine_script_id が必要です。');
     expect(html).toContain('既存 Pine を元にした修正再生成はできません。');
     expect(html).toContain('既存 Pine の細部を継承するとは限りません。');
-    expect(html).toContain('検証結果をもとに改善する場合は、改善メモを revision_request に反映');
-    expect(html).toContain('必要に応じて自然言語ルールを編集・保存');
+    expect(html).toContain('検証結果をもとに entry / exit / risk 条件を改善する場合は、まず改善案を自然言語ルール本文に反映');
+    expect(html).toContain('Pine 修正再生成は既存ルールの意図を保った実装修正に限定');
+    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文側に反映');
     expect(html).toContain('rows="8"');
     expect(html).toContain('rows="6"');
 

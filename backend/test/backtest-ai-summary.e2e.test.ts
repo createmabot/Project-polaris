@@ -274,7 +274,36 @@ vi.mock('../src/ai/home-ai-service', () => ({
         return {
           output: {
             title: 'fallback backtest summary',
-            bodyMarkdown: '## fallback backtest summary\n\n### 結論\nfallback\n\n### 良い点\n- fallback\n\n### 懸念点\n- limited context\n\n### 次に確認すべき点\n- re-check',
+            bodyMarkdown: [
+              '## fallback backtest summary',
+              '',
+              '### 概要',
+              'fallback',
+              '',
+              '### 主要メトリクス',
+              '- 主要メトリクスは不足しています。',
+              '',
+              '### 成績評価',
+              '- fallback',
+              '',
+              '### 問題の切り分け',
+              '- limited context',
+              '',
+              '### 改善仮説',
+              '- entry / exit / risk 条件を切り分ける',
+              '',
+              '### 自然言語ルール改善案',
+              'fallback',
+              '',
+              '### Pine修正依頼に入れるべきではない注意',
+              '- strategy logic の変更は自然言語ルール本文に反映する',
+              '',
+              '### 次に試す検証案',
+              '- re-check',
+              '',
+              '### 注意点',
+              '- 生データは含めない',
+            ].join('\n'),
             structuredJson: {
               schema_name: 'backtest_review_summary',
               schema_version: '1.0',
@@ -284,7 +313,7 @@ vi.mock('../src/ai/home-ai-service', () => ({
                 conclusion: 'fallback',
                 strengths: [],
                 risks: ['limited context'],
-                next_actions: ['re-check'],
+                next_actions: ['entry / exit / risk 条件を見直して再検証する'],
                 key_metrics: {
                   total_trades: null,
                   win_rate: null,
@@ -292,7 +321,7 @@ vi.mock('../src/ai/home-ai-service', () => ({
                   max_drawdown: null,
                   net_profit: null,
                 },
-                overall_view: 'fallback',
+                overall_view: '自然言語ルール本文で entry / exit / risk 条件を見直す。',
               },
             },
             modelName: 'stub-backtest-v1',
@@ -316,7 +345,37 @@ vi.mock('../src/ai/home-ai-service', () => ({
       return {
         output: {
           title: 'backtest summary',
-          bodyMarkdown: '## backtest summary\n\n### 結論\n総評\n\n### 良い点\n- Stable profitability\n\n### 懸念点\n- Regime shift risk\n\n### 次に確認すべき点\n- Run out-of-sample check',
+          bodyMarkdown: [
+            '## backtest summary',
+            '',
+            '### 概要',
+            '総評',
+            '',
+            '### 主要メトリクス',
+            '- total trades: 120',
+            '- profit factor: 1.42',
+            '',
+            '### 成績評価',
+            '- Stable profitability',
+            '',
+            '### 問題の切り分け',
+            '- Regime shift risk',
+            '',
+            '### 改善仮説',
+            '- entry / exit / risk 条件を切り分ける',
+            '',
+            '### 自然言語ルール改善案',
+            'entry / exit / risk 条件を改善候補として検証する。',
+            '',
+            '### Pine修正依頼に入れるべきではない注意',
+            '- strategy logic の変更は自然言語ルール本文に反映する',
+            '',
+            '### 次に試す検証案',
+            '- entry filter と exit 条件を分けて再検証する',
+            '',
+            '### 注意点',
+            '- 投資助言ではなく検証候補です。',
+          ].join('\n'),
           structuredJson: {
             schema_name: 'backtest_review_summary',
             schema_version: '1.0',
@@ -326,7 +385,7 @@ vi.mock('../src/ai/home-ai-service', () => ({
               conclusion: '総評',
               strengths: ['Stable profitability'],
               risks: ['Regime shift risk'],
-              next_actions: ['Run out-of-sample check'],
+              next_actions: ['entry filter と exit 条件を分けて再検証する'],
               key_metrics: {
                 total_trades: 120,
                 win_rate: 58.2,
@@ -334,7 +393,7 @@ vi.mock('../src/ai/home-ai-service', () => ({
                 max_drawdown: -12.5,
                 net_profit: 340000,
               },
-              overall_view: 'Usable baseline with validation needs',
+              overall_view: 'entry / exit / risk 条件を改善候補として検証する。',
             },
           },
           modelName: 'gemma4-ns',
@@ -392,10 +451,23 @@ describe('backtest ai-summary routes', () => {
     expect(runtime.lastBacktestContext?.tradeSummary?.parsedImportCount).toBe(1);
     expect(runtime.lastBacktestContext?.importParsedSummaries?.length).toBeGreaterThan(0);
     expect(runtime.lastBacktestContext?.comparisonDiff).toBeNull();
-    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 結論');
-    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 良い点');
-    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 懸念点');
-    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 次に確認すべき点');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 概要');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 主要メトリクス');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 成績評価');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 問題の切り分け');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 改善仮説');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 自然言語ルール改善案');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### Pine修正依頼に入れるべきではない注意');
+    expect(runtime.aiSummaries[0].bodyMarkdown).toContain('### 次に試す検証案');
+    expect(runtime.aiSummaries[0].structuredJson?.schema_version).toBe('1.0');
+    expect((runtime.aiSummaries[0].structuredJson?.payload as any)?.next_actions).toEqual(
+      expect.arrayContaining(['entry filter と exit 条件を分けて再検証する']),
+    );
+    const serializedSummary = JSON.stringify(runtime.aiSummaries[0]);
+    expect(serializedSummary).not.toContain('raw CSV');
+    expect(serializedSummary).not.toContain('raw import text');
+    expect(serializedSummary).not.toContain('endpoint');
+    expect(serializedSummary).not.toContain('secret');
 
     await app.close();
   });
@@ -467,6 +539,40 @@ describe('backtest ai-summary routes', () => {
       internal_backtest_execution_id: 'exec-1',
       import_count: 0,
     });
+
+    await app.close();
+  });
+
+  it('does not persist unsafe natural language rule text in generated summary payload', async () => {
+    const unsafeRule = 'entry uses https://example.com/api and token=SECRET_VALUE and C:\\Users\\foo\\secret.txt';
+    runtime.homeAiMode = 'fallback';
+    runtime.backtest = {
+      ...runtime.backtest!,
+      strategySnapshotJson: {
+        ...runtime.backtest!.strategySnapshotJson,
+        natural_language_rule: unsafeRule,
+      },
+      strategyRuleVersion: {
+        ...runtime.backtest!.strategyRuleVersion!,
+        naturalLanguageRule: unsafeRule,
+      },
+    };
+
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(runtime.lastBacktestContext?.strategy?.naturalLanguageRule).toBe(unsafeRule);
+    const serializedSummary = JSON.stringify(runtime.aiSummaries[0]);
+    expect(runtime.aiSummaries[0].structuredJson?.schema_version).toBe('1.0');
+    expect(serializedSummary).not.toContain('https://example.com/api');
+    expect(serializedSummary).not.toContain('SECRET_VALUE');
+    expect(serializedSummary).not.toContain('C:\\Users\\foo\\secret.txt');
+    expect(serializedSummary).not.toContain(unsafeRule);
 
     await app.close();
   });

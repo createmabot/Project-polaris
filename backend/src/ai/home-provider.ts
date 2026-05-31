@@ -716,22 +716,60 @@ function renderBacktestBodyMarkdown(
   strengths: string[],
   risks: string[],
   nextActions: string[],
+  keyMetrics: BacktestSummaryOutput['structuredJson']['payload']['key_metrics'],
+  overallView: string,
 ): string {
+  const metricLines = [
+    ['total trades', keyMetrics.total_trades],
+    ['win rate', keyMetrics.win_rate],
+    ['profit factor', keyMetrics.profit_factor],
+    ['max drawdown', keyMetrics.max_drawdown],
+    ['net profit', keyMetrics.net_profit],
+  ]
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([label, value]) => `- ${label}: ${value}`);
+  const safeStrengths = strengths.length > 0 ? strengths : ['評価できる強みを断定するには追加検証が必要です。'];
+  const safeRisks = risks.length > 0 ? risks : ['主要リスクを断定するには材料が不足しています。'];
+  const safeNextActions = nextActions.length > 0 ? nextActions : ['追加CSVまたはinternal backtest resultの取込後に再評価してください。'];
+  const improvementHypotheses = safeRisks.slice(0, 4).map((item) => `- ${item} entry / exit / risk 条件のどこに起因するかを切り分けてください。`);
   return [
     `## ${title}`,
     '',
-    '### 結論',
+    '### 概要',
     conclusion,
     '',
-    '### 良い点',
-    ...strengths.map((item) => `- ${item}`),
+    '### 主要メトリクス',
+    ...(metricLines.length > 0 ? metricLines : ['- 主要メトリクスは不足しています。']),
     '',
-    '### 懸念点',
-    ...risks.map((item) => `- ${item}`),
+    '### 成績評価',
+    ...safeStrengths.map((item) => `- ${item}`),
     '',
-    '### 次に確認すべき点',
-    ...nextActions.map((item) => `- ${item}`),
+    '### 問題の切り分け',
+    ...safeRisks.map((item) => `- ${item}`),
+    '',
+    '### 改善仮説',
+    ...improvementHypotheses,
+    '',
+    '### 次に試す検証案',
+    ...safeNextActions.map((item) => `- ${item}`),
+    '',
+    '### 自然言語ルール改善案',
+    overallView,
+    '',
+    '### Pine修正依頼に入れるべきではない注意',
+    '- entry / exit / risk management など strategy logic 自体の変更は、revision_request ではなく自然言語ルール本文に反映してください。',
+    '- revision_request は compile error、validation note、TradingView 上の挙動調整など、既存 Pine の意図を維持した実装修正に限定してください。',
+    '',
+    '### 注意点',
+    '- この総評は投資助言ではなく、Pine化して再検証するための改善候補です。',
+    '- CSV全文、取込本文、生成依頼本文、provider応答本文などの生データは含めていません。',
   ].join('\n');
+}
+
+function hasBacktestImprovementSections(markdown: string): boolean {
+  return ['### 概要', '### 主要メトリクス', '### 成績評価', '### 問題の切り分け', '### 改善仮説', '### 自然言語ルール改善案', '### Pine修正依頼に入れるべきではない注意', '### 次に試す検証案', '### 注意点'].every((section) =>
+    markdown.includes(section),
+  );
 }
 
 function buildDeterministicBacktestOutput(
@@ -818,6 +856,27 @@ function buildDeterministicBacktestOutput(
       : '',
   ].filter(Boolean);
 
+  const diagnosis = [
+    hasMetrics && (context.metrics?.totalTrades ?? 0) < 30
+      ? `総取引数は${context.metrics?.totalTrades ?? '-'}件で、統計的信頼性はまだ低いです。条件緩和、期間延長、複数銘柄検証を優先してください。`
+      : '',
+    hasMetrics && (context.metrics?.profitFactor ?? 0) <= 1
+      ? 'Profit Factor が1以下で、損益比が弱い可能性があります。exit、stop、profit taking の設計を見直してください。'
+      : '',
+    hasMetrics && (context.metrics?.winRate ?? 100) < 45
+      ? `勝率は${winRateText ?? '-'}で、entry filter、market regime、trigger 条件の切り分けが必要です。`
+      : '',
+    hasMetrics && (context.metrics?.maxDrawdown ?? 0) <= -15
+      ? `最大ドローダウンは${maxDrawdownText ?? '-'}で、stop loss、position management、time exit の見直しが必要です。`
+      : '',
+    hasMetrics && (context.metrics?.netProfit ?? 0) <= 0
+      ? `純利益は${netProfitText ?? '-'}で、entry 条件の強化または exit 条件の緩和 / 強化を比較検証してください。`
+      : '',
+    context.strategy?.naturalLanguageRule
+      ? '現行の自然言語ルールについて、entry / exit / risk management のどこが成績悪化に寄与しているかを分けて検証してください。'
+      : '',
+  ].filter(Boolean);
+
   const risks = [
     hasInternalBacktestContext ? 'internal_backtest report は BacktestImport を持たないため、CSVの取引明細・parsed summaryとは比較軸が異なります。' : '',
     hasInternalBacktestContext && internalRange !== null && internalRange > 30
@@ -838,14 +897,26 @@ function buildDeterministicBacktestOutput(
     hasInternalBacktestContext ? 'artifact pointer と historical internal report snapshot を確認し、report 化済みの前提条件を記録してください。' : '',
     hasInternalBacktestContext ? '必要に応じて同じ strategy version のTradingView CSV import reportと比較してください。' : '',
     `同条件で期間を分割し、PF・DD・勝率の再現性を確認してください。`,
-    context.strategy?.naturalLanguageRule ? '自然言語ルールの exit 条件が現行ボラティリティに合うか見直してください。' : '',
+    context.strategy?.naturalLanguageRule ? '自然言語ルールの entry / exit / risk 条件を1つずつ変更し、どの変更がPF・勝率・DDに効くかを比較してください。' : '',
+    hasMetrics && (context.metrics?.totalTrades ?? 0) < 30 ? '取引回数が少ないため、まず条件緩和、検証期間延長、複数銘柄での再検証を試してください。' : '',
+    hasMetrics && (context.metrics?.profitFactor ?? 0) <= 1 ? '損切り幅、利確条件、保有期間、time exit を変えた version を作り、損益比の改善を確認してください。' : '',
+    hasMetrics && (context.metrics?.winRate ?? 100) < 45 ? 'entry trigger に出来高、トレンド、地合い filter を追加または緩和した version を比較してください。' : '',
+    hasMetrics && (context.metrics?.maxDrawdown ?? 0) <= -15 ? '最大ドローダウン抑制のため、stop loss、position sizing、連敗時停止条件の検証案を作ってください。' : '',
     context.comparisonDiff ? '最新取込と前回取込の差分要因（期間/銘柄条件）を切り分けてください。' : '',
     tradeSummary.parsedImportCount < 2 ? 'もう1件以上CSVを追加して比較可能な状態にしてください。' : '',
   ].filter(Boolean);
 
+  const combinedRisks = [...diagnosis, ...risks];
+  const improvementMemo = [
+    'この検証結果をもとに、自然言語ルール本文で entry / exit / risk 条件を分けて改善してください。',
+    diagnosis.length > 0 ? `優先して切り分ける問題: ${diagnosis.slice(0, 3).join(' / ')}` : '',
+    nextActions.length > 0 ? `次に試す検証案: ${nextActions.slice(0, 3).join(' / ')}` : '',
+    context.strategy?.naturalLanguageRule ? '自然言語ルール本文を修正する場合は、変更点を1つずつ分け、PF・勝率・最大DD・取引回数への影響を比較してください。Pine 修正依頼は compile error や実装上の調整に限定してください。' : '',
+  ].filter(Boolean).join('\n');
+
   return {
     title,
-    bodyMarkdown: renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
+    bodyMarkdown: renderBacktestBodyMarkdown(title, conclusion, strengths, combinedRisks, nextActions, keyMetrics, improvementMemo),
     structuredJson: {
       schema_name: 'backtest_review_summary',
       schema_version: '1.0',
@@ -854,10 +925,10 @@ function buildDeterministicBacktestOutput(
       payload: {
         conclusion,
         strengths: strengths.length > 0 ? strengths : ['定量評価に使える入力が限定的です。'],
-        risks: risks.length > 0 ? risks : ['主要リスクを断定するには材料が不足しています。'],
+        risks: combinedRisks.length > 0 ? combinedRisks : ['主要リスクを断定するには材料が不足しています。'],
         next_actions: nextActions.length > 0 ? nextActions : ['追加CSVまたはinternal backtest resultの取込後に再評価してください。'],
         key_metrics: keyMetrics,
-        overall_view: conclusion,
+        overall_view: improvementMemo,
       },
     },
     modelName: options.modelName,
@@ -1527,9 +1598,15 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
             role: 'system',
             content: [
               'You are a Japanese backtest-review assistant.',
-              'Interpret numeric inputs in natural language and organize the output into conclusion, strengths, risks, and next checks.',
+              'Interpret numeric inputs in natural language and organize the output for strategy refinement, not just performance review.',
+              'Keep JSON schema v1.0 compatible. body_markdown must include these Japanese sections: 概要, 主要メトリクス, 成績評価, 問題の切り分け, 改善仮説, 自然言語ルール改善案, Pine修正依頼に入れるべきではない注意, 次に試す検証案, 注意点.',
+              'When trade count is low, point out weak statistical reliability and suggest condition relaxation, longer periods, or multi-symbol checks.',
+              'When PF, win rate, max drawdown, or net profit are weak, connect them to entry, exit, stop loss, profit taking, position management, time exit, or market-regime filters.',
+              'Put concrete refinement and retest actions in next_checks. Put natural-language-rule improvement notes in overall_view. Do not frame strategy logic changes as revision_request drafts.',
+              'If a strategy natural language rule exists, mention whether entry, exit, or risk management should be reviewed. Do not quote full generated Pine.',
+              'Do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, or stack trace.',
               'Do not overstate quality from a short favorable period when long-term metrics disagree.',
-              'Do not give direct buy or sell recommendations.',
+              'Do not give direct buy or sell recommendations; write as backtest improvement hypotheses.',
               'Return strict JSON only.',
             ].join(' '),
           },
@@ -1565,8 +1642,8 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
                 good_points: ['<string>'],
                 concern_points: ['<string>'],
                 next_checks: ['<string>'],
-                body_markdown: '<string>',
-                overall_view: '<string>',
+                body_markdown: '<markdown with required natural-language-rule improvement sections>',
+                overall_view: '<natural language rule improvement memo>',
               },
             }),
           },
@@ -1645,14 +1722,27 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       : deterministic.structuredJson.payload.next_actions;
     const title =
       typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title;
+    const overallView =
+      typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
+        ? parsed.overall_view
+        : deterministic.structuredJson.payload.overall_view;
+    const parsedMarkdown = typeof parsed?.body_markdown === 'string' ? parsed.body_markdown.trim() : '';
+    const bodyMarkdown = parsedMarkdown && hasBacktestImprovementSections(parsedMarkdown)
+      ? parsedMarkdown
+      : renderBacktestBodyMarkdown(
+          title,
+          conclusion,
+          strengths,
+          risks,
+          nextActions,
+          deterministic.structuredJson.payload.key_metrics,
+          overallView,
+        );
 
     return {
       ...deterministic,
       title,
-      bodyMarkdown:
-        typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
-          ? parsed.body_markdown
-          : renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
+      bodyMarkdown,
       structuredJson: {
         ...deterministic.structuredJson,
         payload: {
@@ -1661,10 +1751,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           strengths,
           risks,
           next_actions: nextActions,
-          overall_view:
-            typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
-              ? parsed.overall_view
-              : conclusion,
+          overall_view: overallView,
         },
       },
     };
@@ -2229,7 +2316,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content:
-              'Generate a concise backtest review summary as strict JSON. Interpret numeric inputs in natural language and avoid metadata enumeration.',
+              'Generate a concise backtest review summary as strict JSON for strategy refinement. Keep schema v1.0 compatible. body_markdown must include Japanese sections: 概要, 主要メトリクス, 成績評価, 問題の切り分け, 改善仮説, 自然言語ルール改善案, Pine修正依頼に入れるべきではない注意, 次に試す検証案, 注意点. Connect weak trade count, PF, win rate, drawdown, and net profit to entry, exit, stop, profit taking, position management, time exit, or market-regime hypotheses. Put concrete retest actions in next_checks and natural-language-rule improvement notes in overall_view. Do not frame strategy logic changes as revision_request drafts. Do not give buy/sell recommendations and do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, stack trace, or full generated Pine.',
           },
           {
             role: 'user',
@@ -2263,8 +2350,8 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
                 good_points: ['<string>'],
                 concern_points: ['<string>'],
                 next_checks: ['<string>'],
-                body_markdown: '<string>',
-                overall_view: '<string>',
+                body_markdown: '<markdown with required natural-language-rule improvement sections>',
+                overall_view: '<natural language rule improvement memo>',
               },
             }),
           },
@@ -2304,14 +2391,27 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
       const nextActions = Array.isArray(parsed?.next_checks)
         ? parsed.next_checks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
         : deterministic.structuredJson.payload.next_actions;
+      const overallView =
+        typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
+          ? parsed.overall_view
+          : deterministic.structuredJson.payload.overall_view;
+      const parsedMarkdown = typeof parsed?.body_markdown === 'string' ? parsed.body_markdown.trim() : '';
+      const bodyMarkdown = parsedMarkdown && hasBacktestImprovementSections(parsedMarkdown)
+        ? parsedMarkdown
+        : renderBacktestBodyMarkdown(
+            title,
+            conclusion,
+            strengths,
+            risks,
+            nextActions,
+            deterministic.structuredJson.payload.key_metrics,
+            overallView,
+          );
 
       return {
         ...deterministic,
         title,
-        bodyMarkdown:
-          typeof parsed?.body_markdown === 'string' && parsed.body_markdown.trim()
-            ? parsed.body_markdown
-            : renderBacktestBodyMarkdown(title, conclusion, strengths, risks, nextActions),
+        bodyMarkdown,
         structuredJson: {
           ...deterministic.structuredJson,
           payload: {
@@ -2320,10 +2420,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
             strengths,
             risks,
             next_actions: nextActions,
-            overall_view:
-              typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
-                ? parsed.overall_view
-                : conclusion,
+            overall_view: overallView,
           },
         },
       };
