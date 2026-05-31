@@ -2216,7 +2216,7 @@ describe('strategy lab vertical slice', () => {
   it('uses the tuned default local_llm timeout when env is unset', () => {
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'default',
-      timeoutMs: 150000,
+      timeoutMs: 180000,
       maxOutputChars: 20000,
     });
   });
@@ -2226,7 +2226,7 @@ describe('strategy lab vertical slice', () => {
 
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'default',
-      timeoutMs: 240000,
+      timeoutMs: 300000,
       maxOutputChars: 20000,
     });
   });
@@ -2237,14 +2237,14 @@ describe('strategy lab vertical slice', () => {
 
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'long_context',
-      timeoutMs: 300000,
+      timeoutMs: 420000,
       maxOutputChars: 20000,
     });
 
     delete process.env.STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS;
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'long_context',
-      timeoutMs: 180000,
+      timeoutMs: 240000,
       maxOutputChars: 20000,
     });
   });
@@ -2254,7 +2254,7 @@ describe('strategy lab vertical slice', () => {
 
     expect(getStrategyProposalLocalLlmGuardConfig()).toMatchObject({
       timeoutProfile: 'default',
-      timeoutMs: 150000,
+      timeoutMs: 180000,
       maxOutputChars: 20000,
     });
   });

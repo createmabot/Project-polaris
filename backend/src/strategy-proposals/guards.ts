@@ -47,8 +47,8 @@ export function getStrategyProposalLocalLlmGuardConfig() {
   );
   const timeoutLimits =
     timeoutProfile === 'long_context'
-      ? { fallback: 180_000, min: 5_000, max: 300_000 }
-      : { fallback: 150_000, min: 5_000, max: 240_000 };
+      ? { fallback: 240_000, min: 5_000, max: 420_000 }
+      : { fallback: 180_000, min: 5_000, max: 300_000 };
 
   return {
     timeoutProfile,
