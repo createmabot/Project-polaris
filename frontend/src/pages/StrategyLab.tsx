@@ -526,6 +526,7 @@ export default function StrategyLab() {
   const [symbolApplicationHref, setSymbolApplicationHref] = useState<string | null>(null);
 
   const symbolReturnPath = symbolContext.returnPath ?? (symbolContext.symbolId ? `/symbols/${symbolContext.symbolId}` : null);
+  const isSymbolResearchCodexPrompt = Boolean(symbolContext.symbolCode);
 
   const showPineCopyFeedback = (type: 'success' | 'error', text: string) => {
     setPineCopyFeedback({ type, text });
@@ -613,7 +614,7 @@ export default function StrategyLab() {
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,
         user_hint: proposalUserHint.trim() || null,
-        web_search_prompt: codexWebSearchPrompt,
+        web_search_prompt: isSymbolResearchCodexPrompt ? true : codexWebSearchPrompt,
       });
       setCodexPromptData(promptData);
       setCodexCopyFeedback(null);
@@ -1037,29 +1038,48 @@ export default function StrategyLab() {
 
           <Surface variant='muted' className='grid gap-2 p-3'>
             <div>
-              <h3 style={{ margin: 0, fontSize: '1rem' }}>Codex CLIで生成した候補JSONを取り込む</h3>
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>
+                {isSymbolResearchCodexPrompt
+                  ? 'Codex CLIで銘柄調査付き候補JSONを作成する'
+                  : 'Codex CLIで生成した候補JSONを取り込む'}
+              </h3>
               <p className='mt-1 text-sm leading-6 text-slate-600'>
-                Codex CLIはこの画面から自動実行されません。promptを手動で渡し、返却されたJSONを貼り付けてください。複数候補は candidates 配列で最大10件まで取り込めます。
+                {isSymbolResearchCodexPrompt
+                  ? `${symbolContextLabel ?? symbolContext.symbolCode} 向けの context で開かれています。Codex CLI prompt は Web検索を使った銘柄調査を前提に作成します。北極星は Web検索や Codex CLI を自動実行しません。`
+                  : 'Codex CLIはこの画面から自動実行されません。promptを手動で渡し、返却されたJSONを貼り付けてください。複数候補は candidates 配列で最大10件まで取り込めます。'}
               </p>
+              {isSymbolResearchCodexPrompt && (
+                <p className='mt-1 text-sm leading-6 text-slate-600'>
+                  取り込む JSON は従来どおり strategy_proposal_candidates v1.0 です。URL / citation / source_type=web は含めず、候補選択は title / natural language spec への反映だけに留めます。
+                </p>
+              )}
             </div>
 
-            <label className='grid gap-1.5 text-sm font-medium text-slate-800'>
-              <span className='flex items-center gap-2'>
-                <input
-                  type='checkbox'
-                  checked={codexWebSearchPrompt}
-                  onChange={(event) => setCodexWebSearchPrompt(event.target.checked)}
-                />
-                Codex CLI側でWeb検索を使う前提のpromptにする
-              </span>
-              <span className='text-sm text-slate-600' style={{ fontWeight: 400 }}>
-                Codex CLIがWeb検索を利用できる環境の場合のみ有効です。北極星はWeb検索を自動実行せず、取り込み時にもWeb検索済みかどうかは判定しません。
-              </span>
-            </label>
+            {isSymbolResearchCodexPrompt ? (
+              <InlineNotice tone='info'>
+                symbol context があるため、Codex CLI prompt は銘柄調査付き Web検索前提で作成します。backend は検索結果や raw prompt を保存しません。
+              </InlineNotice>
+            ) : (
+              <label className='grid gap-1.5 text-sm font-medium text-slate-800'>
+                <span className='flex items-center gap-2'>
+                  <input
+                    type='checkbox'
+                    checked={codexWebSearchPrompt}
+                    onChange={(event) => setCodexWebSearchPrompt(event.target.checked)}
+                  />
+                  Codex CLI側でWeb検索を使う前提のpromptにする
+                </span>
+                <span className='text-sm text-slate-600' style={{ fontWeight: 400 }}>
+                  Codex CLIがWeb検索を利用できる環境の場合のみ有効です。北極星はWeb検索を自動実行せず、取り込み時にもWeb検索済みかどうかは判定しません。
+                </span>
+              </label>
+            )}
 
             <div className='flex flex-wrap gap-3'>
               <Button onClick={onBuildCodexPrompt} disabled={codexPrompting}>
-                {codexPrompting ? 'prompt作成中...' : 'Codex CLI用プロンプトを作成'}
+                {codexPrompting
+                  ? 'prompt作成中...'
+                  : isSymbolResearchCodexPrompt ? '銘柄調査付きCodex promptを作成' : 'Codex CLI用プロンプトを作成'}
               </Button>
               {codexPromptData?.prompt && (
                 <Button onClick={() => void onCopyCodexPrompt()}>
