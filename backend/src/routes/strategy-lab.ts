@@ -1205,14 +1205,15 @@ export const strategyLabRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: ProposalBody }>('/proposals/codex-cli/request', async (request, reply) => {
     const input = parseStrategyProposalRequest(request.body ?? {});
-    const webSearchPrompt = parseOptionalBoolean(request.body?.web_search_prompt, 'web_search_prompt');
+    const requestedWebSearchPrompt = parseOptionalBoolean(request.body?.web_search_prompt, 'web_search_prompt');
+    const effectiveWebSearchPrompt = requestedWebSearchPrompt || Boolean(input.symbol_code);
     return reply.status(200).send(formatSuccess(request, {
       provider_name: CODEX_CLI_MANUAL_PROVIDER.name,
       schema_name: 'strategy_proposal_candidates',
       schema_version: '1.0',
       proposal_count: input.proposal_count,
-      web_search_prompt: webSearchPrompt,
-      prompt: buildCodexCliPrompt(input, { webSearchPrompt }),
+      web_search_prompt: effectiveWebSearchPrompt,
+      prompt: buildCodexCliPrompt(input, { webSearchPrompt: requestedWebSearchPrompt }),
     }));
   });
 

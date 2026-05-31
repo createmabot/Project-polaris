@@ -1471,7 +1471,7 @@ describe('strategy lab vertical slice', () => {
       schema_name: 'strategy_proposal_candidates',
       schema_version: '1.0',
       proposal_count: 5,
-      web_search_prompt: webSearchPrompt,
+      web_search_prompt: true,
     });
     expect(body.data.prompt).toContain('SymbolDetail 起点の銘柄調査付き strategy proposal');
     expect(body.data.prompt).toContain('対象銘柄コードは 7203');
