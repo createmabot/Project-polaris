@@ -330,6 +330,9 @@ type LocalLlmSummaryChatOptions = {
 
 const LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS = 1200;
 const LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS = 1800;
+const LOCAL_LLM_PINE_TIMEOUT_MS_DEFAULT = 180_000;
+const LOCAL_LLM_PINE_TIMEOUT_MS_MIN = 5_000;
+const LOCAL_LLM_PINE_TIMEOUT_MS_MAX = 300_000;
 
 const PINE_REPAIR_SYSTEM_PROMPT = [
   'Repair an existing Pine v6 strategy script using only the listed repair_request.reviewIssues.',
@@ -346,6 +349,23 @@ const PINE_REPAIR_SYSTEM_PROMPT = [
   'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
   'Do not include raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, URLs, citations, web search results, or profit guarantees.',
 ].join(' ');
+
+function readBoundedPositiveInteger(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+  return Math.min(Math.max(parsed, min), max);
+}
+
+function getLocalLlmPineTimeoutMs(): number {
+  return readBoundedPositiveInteger(
+    env.PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS,
+    LOCAL_LLM_PINE_TIMEOUT_MS_DEFAULT,
+    LOCAL_LLM_PINE_TIMEOUT_MS_MIN,
+    LOCAL_LLM_PINE_TIMEOUT_MS_MAX,
+  );
+}
 
 function buildPineGenerationUserPayload(context: PineGenerationContext): Record<string, unknown> {
   const outputSchema = {
@@ -1866,7 +1886,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           num_predict: LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS,
         },
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(getLocalLlmPineTimeoutMs()),
     });
 
     if (!response.ok) {

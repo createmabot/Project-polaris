@@ -83,6 +83,7 @@ Stage 2C internal backtest backend cleanup:
 - `POST /api/strategy-versions/:versionId/pine/generation-jobs` と `POST /api/strategy-versions/:versionId/pine/regeneration-jobs` は Pine generation job を開始し、`job.id` と初期 `status` を返す。既存 sync endpoint は互換維持のため残す。
 - `GET /api/strategy-versions/:versionId/pine/generation-jobs/:jobId` は Pine generation job の status polling endpoint とする。response は `status=queued|running|succeeded|failed`、現在 `stage`、`progress_percent`、完了時の sanitized `result` を返す。失敗時の `error` には、必要に応じて sanitized `invalid_reason_codes` と `pine_reviewer_issues` を含める。
 - Pine generation は `PINE_GENERATION_PROVIDER=local_llm|deterministic|openai_api` で provider を切り替える。既定は `local_llm` の LLM-first path とし、deterministic generator は baseline / emergency fallback / test fixture 用であり、API の主品質経路とは扱わない。`openai_api` は明示 opt-in / cost guard 設計後の後続候補として扱う。
+- local_llm の Pine generation timeout は `PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS` で制御する。既定は 180 秒、上限は 300 秒で、Strategy proposal 用の `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` とは別設定として扱う。
 - generated Pine は generator -> reviewer -> repair pipeline で扱い、保存前に既存 normalization / 最小 validation を通す。
 - deterministic reviewer は明らかな Pine syntax / style / safety issue を構造化 issue として検出する。AI reviewer provider boundary を使う場合も、generated Pine を structured issue として review するだけで、raw reviewer response は response / 保存対象に含めない。
 - 空 output、`//@version` 不足、`strategy(...)|indicator(...)` 不足、Markdown fence / 説明文混入、reviewer issue など retryable な invalid output は bounded repair（最大 2 回）に回す。
