@@ -155,6 +155,16 @@ UI manual check:
 5. 1 件を選択し、title / natural language spec 反映が既存導線を壊さないことを確認する。
 6. Pine generation は自動起動しないことを確認し、必要な場合だけ手動 button で既存導線を確認する。
 
+SymbolDetail 起点の Codex CLI manual check:
+
+1. SymbolDetail の `この銘柄でストラテジー提案` から StrategyLab を開く。
+2. StrategyLab の symbol context banner で symbol code、market、timeframe、return path が読めることを確認する。
+3. `local_llm` / `stub` の proposal は従来どおり軽い context proposal として扱い、Web検索や最新情報確認を期待しない。
+4. Codex CLI 用 prompt 作成では、symbol context がある場合に銘柄調査付き prompt として扱う。Codex CLI 側で Web検索を使い、対象銘柄の基本情報、直近の価格傾向、出来高、ボラティリティ、決算・業績、ニュース、event、セクター環境を確認してから候補を作る前提になっていることを確認する。
+5. 出力 JSON は `strategy_proposal_candidates` v1.0 の 1 object だけとし、URL / citation / 長い引用、`source_type=web`、raw Web result を含めないことを確認する。
+6. 候補ごとに「なぜこの銘柄で検証する価値があるか」、確認できない点、過剰最適化、slippage、drawdown、event risk が `summary` / `uncertainty` / `backtest_cautions` で読めるかを確認する。
+7. JSON import 後の candidate selection は title / natural language spec 反映だけで、Pine generation、strategy save、backtest、AI summary、自動 application 作成を起動しないことを確認する。
+
 ### 5-3. schema valid / invalid の見方
 
 - UI に候補が表示される場合、schema validation を通った response として扱う。
