@@ -28,6 +28,9 @@ import {
   parseStrategyVersionsListQuery,
 } from './StrategyVersionList';
 
+const PINE_GENERATION_POLL_INTERVAL_MS = 1200;
+const PINE_GENERATION_POLL_MAX_ATTEMPTS = 900;
+
 type StrategyVersionDetailProps = {
   params: { versionId: string };
 };
@@ -774,8 +777,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const firstChangedSummaryItem = compareSummaryItems.find((item) => item.changed) ?? null;
 
   const pollPineGenerationJob = async (jobId: string) => {
-    for (let attempt = 0; attempt < 180; attempt += 1) {
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 1200));
+    for (let attempt = 0; attempt < PINE_GENERATION_POLL_MAX_ATTEMPTS; attempt += 1) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, PINE_GENERATION_POLL_INTERVAL_MS));
       const data = await fetchApi<StrategyVersionPineJobData>(
         `/api/strategy-versions/${versionId}/pine/generation-jobs/${jobId}`
       );

@@ -58,6 +58,8 @@ const STRATEGY_TYPE_OPTIONS = [
 ];
 
 const PROPOSAL_HISTORY_LIMIT = 10;
+const PINE_GENERATION_POLL_INTERVAL_MS = 1200;
+const PINE_GENERATION_POLL_MAX_ATTEMPTS = 900;
 const HISTORY_PROVIDER_OPTIONS = [
   { value: 'all', label: 'all providers' },
   { value: 'stub', label: 'stub' },
@@ -784,8 +786,8 @@ export default function StrategyLab() {
     historyArchived !== 'active';
 
   const pollPineGenerationJob = async (versionId: string, jobId: string) => {
-    for (let attempt = 0; attempt < 180; attempt += 1) {
-      await new Promise((resolve) => globalThis.setTimeout(resolve, 1200));
+    for (let attempt = 0; attempt < PINE_GENERATION_POLL_MAX_ATTEMPTS; attempt += 1) {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, PINE_GENERATION_POLL_INTERVAL_MS));
       const data = await fetchApi<StrategyVersionPineJobData>(
         `/api/strategy-versions/${versionId}/pine/generation-jobs/${jobId}`
       );
