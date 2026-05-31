@@ -259,7 +259,15 @@ const symbolApplicationsFixture = {
       },
       latest_backtest_report: null,
       latest_reports_by_source: {
-        csv_import: null,
+        csv_import: {
+          backtest_id: 'backtest_csv_fallback',
+          title: 'CSV fallback report',
+          execution_source: 'tradingview',
+          status: 'ready',
+          run_type: 'csv_import',
+          run_status: 'succeeded',
+          updated_at: '2026-05-05T00:00:00.000Z',
+        },
         internal_backtest: null,
       },
       run_count: 1,
@@ -627,7 +635,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('succeeded');
     expect(html).toContain('failed');
     expect(html).toContain('active application 2 / 2 件を表示中');
-    expect(html).toContain('CSV report: 1 / internal report: 1');
+    expect(html).toContain('CSV report: 2 / internal report: 1');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
       expect.any(Function),
@@ -639,16 +647,23 @@ describe('SymbolDetail', () => {
     expect(html).not.toContain('復元');
     expect(html).toContain('run count:</strong> 1');
     expect(html).toContain('検証サマリー');
-    expect(html).toContain('詳細なrun / report履歴はApplicationDetail、個別レポートはBacktestDetailで確認します。');
-    expect(html).toContain('run status:');
+    expect(html).toContain('最新の検証結果');
+    expect(html).toContain('SymbolDetail では最新の読める検証結果だけを表示します。');
+    expect(html).not.toContain('run type:');
+    expect(html).not.toContain('run status:');
     expect(html).toContain('JP_STOCK / D');
     expect(html).toContain('7203 strategy report');
     expect(html).toContain('CSV import report');
-    expect(html).toContain('source: <code>tradingview</code>');
-    expect(html).toContain('CSV / internal reports');
-    expect(html).toContain('internal backtest report');
-    expect(html).toContain('7203 internal report');
-    expect(html).toContain('href="/backtests/backtest_internal_1"');
+    expect(html).toContain('ready');
+    expect(html).toContain('updated:');
+    expect(html).toContain('href="/backtests/backtest_1"');
+    expect(html).toContain('CSV fallback report');
+    expect(html).toContain('href="/backtests/backtest_csv_fallback"');
+    expect(html).not.toContain('source: <code>tradingview</code>');
+    expect(html).not.toContain('CSV / internal reports');
+    expect(html).toContain('過去の internal report あり（read-only legacy）');
+    expect(html).not.toContain('7203 internal report');
+    expect(html).not.toContain('href="/backtests/backtest_internal_1"');
     expect(html).toContain('run履歴を見る');
     expect(html).toContain('report履歴を見る');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#runs"');
@@ -713,7 +728,8 @@ describe('SymbolDetail', () => {
     expect(html).toContain('復元');
     expect(html).not.toContain('アーカイブ</button>');
     expect(html).toContain('7203 strategy report');
-    expect(html).toContain('CSV / internal reports');
+    expect(html).not.toContain('CSV / internal reports');
+    expect(html).toContain('過去の internal report あり（read-only legacy）');
   });
 
   it('keeps status filter controls visible when default active applications are empty', () => {
