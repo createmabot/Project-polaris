@@ -40,6 +40,7 @@ type Runtime = {
   revisionSeq: number;
   jobSeq: number;
   versionSeq: number;
+  failNextPineScriptCreate: boolean;
   versions: Map<string, StrategyRuleVersionRow>;
   pineScripts: Map<string, PineScriptRow>;
   pineRevisionInputs: Map<string, {
@@ -81,6 +82,7 @@ function createRuntime(): Runtime {
     revisionSeq: 1,
     jobSeq: 1,
     versionSeq: 1,
+    failNextPineScriptCreate: false,
     versions: new Map([
       [
         'ver-1',
@@ -122,6 +124,31 @@ vi.mock('../src/ai/home-ai-service', () => {
 
 vi.mock('../src/db', () => {
   const prisma = {
+    $transaction: async (callback: any) => {
+      const snapshot = {
+        pineSeq: runtime.pineSeq,
+        revisionSeq: runtime.revisionSeq,
+        jobSeq: runtime.jobSeq,
+        versionSeq: runtime.versionSeq,
+        versions: new Map(runtime.versions),
+        pineScripts: new Map(runtime.pineScripts),
+        pineRevisionInputs: new Map(runtime.pineRevisionInputs),
+        pineGenerationJobs: new Map(runtime.pineGenerationJobs),
+      };
+      try {
+        return await callback(prisma);
+      } catch (error) {
+        runtime.pineSeq = snapshot.pineSeq;
+        runtime.revisionSeq = snapshot.revisionSeq;
+        runtime.jobSeq = snapshot.jobSeq;
+        runtime.versionSeq = snapshot.versionSeq;
+        runtime.versions = snapshot.versions;
+        runtime.pineScripts = snapshot.pineScripts;
+        runtime.pineRevisionInputs = snapshot.pineRevisionInputs;
+        runtime.pineGenerationJobs = snapshot.pineGenerationJobs;
+        throw error;
+      }
+    },
     strategyRuleVersion: {
       findUnique: async ({ where, include }: any) => {
         const row = runtime.versions.get(where.id) ?? null;
@@ -168,6 +195,10 @@ vi.mock('../src/db', () => {
     },
     pineScript: {
       create: async ({ data }: any) => {
+        if (runtime.failNextPineScriptCreate) {
+          runtime.failNextPineScriptCreate = false;
+          throw new Error('pine_script_create_failed');
+        }
         const id = `pine-${runtime.pineSeq++}`;
         const now = new Date();
         const row: PineScriptRow = {
@@ -480,6 +511,40 @@ describe('strategy version pine endpoints', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.json().data.status).toBe('unavailable');
     expect(fetched.json().data.source_pine_script_id).toBeNull();
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+
+    await app.close();
+  });
+
+  it('rolls back cloned version when pine lineage copy fails', async () => {
+    runtime.pineScripts.set('pine-source-latest', {
+      id: 'pine-source-latest',
+      strategyRuleVersionId: 'ver-1',
+      parentPineScriptId: null,
+      scriptName: 'latest source',
+      pineVersion: '6',
+      scriptBody: '//@version=6\nstrategy("latest", overlay=true)',
+      generationNoteJson: null,
+      status: 'ready',
+      createdAt: new Date('2026-04-25T10:00:00.000Z'),
+      updatedAt: new Date('2026-04-25T10:10:00.000Z'),
+    });
+    runtime.failNextPineScriptCreate = true;
+    const app = await createApp();
+
+    const cloned = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/clone',
+    });
+    expect(cloned.statusCode).toBe(500);
+    expect(cloned.json().error.code).toBe('INTERNAL_SERVER_ERROR');
+
+    const clonedVersions = Array.from(runtime.versions.values()).filter(
+      (row) => row.clonedFromVersionId === 'ver-1',
+    );
+    expect(clonedVersions).toHaveLength(0);
+    expect(Array.from(runtime.pineScripts.values())).toHaveLength(1);
+    expect(runtime.pineScripts.has('pine-source-latest')).toBe(true);
     expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
 
     await app.close();

@@ -1117,53 +1117,64 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Params: { versionId: string } }>('/:versionId/clone', async (request, reply) => {
     const { versionId } = request.params;
-    const sourceVersion = await prisma.strategyRuleVersion.findUnique({
-      where: { id: versionId },
-    });
 
-    if (!sourceVersion) {
-      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
-    }
+    const { clonedVersion, sourceVersionId } = await prisma.$transaction(async (tx) => {
+      const sourceVersion = await tx.strategyRuleVersion.findUnique({
+        where: { id: versionId },
+      });
 
-    const cloned = await prisma.strategyRuleVersion.create({
-      data: {
-        strategyRuleId: sourceVersion.strategyRuleId,
-        clonedFromVersionId: sourceVersion.id,
-        naturalLanguageRule: sourceVersion.naturalLanguageRule,
-        normalizedRuleJson: (sourceVersion.normalizedRuleJson ?? undefined) as Prisma.InputJsonValue | undefined,
-        generatedPine: sourceVersion.generatedPine,
-        warningsJson: (sourceVersion.warningsJson ?? undefined) as Prisma.InputJsonValue | undefined,
-        assumptionsJson: (sourceVersion.assumptionsJson ?? undefined) as Prisma.InputJsonValue | undefined,
-        market: sourceVersion.market,
-        timeframe: normalizeTimeframeAlias(sourceVersion.timeframe),
-        status: sourceVersion.status,
-      },
-    });
+      if (!sourceVersion) {
+        throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+      }
 
-    const sourcePine = await resolveLatestPineScript(sourceVersion.id);
-    if (sourcePine) {
-      await prisma.pineScript.create({
+      const clonedVersion = await tx.strategyRuleVersion.create({
         data: {
-          strategyRuleVersionId: cloned.id,
-          parentPineScriptId: sourcePine.id,
-          scriptName: sourcePine.scriptName,
-          pineVersion: sourcePine.pineVersion,
-          scriptBody: sourcePine.scriptBody,
-          status: sourcePine.status,
-          generationNoteJson: {
-            source: 'strategy_version_clone',
-            source_version_id: sourceVersion.id,
-            source_pine_script_id: sourcePine.id,
-            cloned_for_improvement: true,
-          },
+          strategyRuleId: sourceVersion.strategyRuleId,
+          clonedFromVersionId: sourceVersion.id,
+          naturalLanguageRule: sourceVersion.naturalLanguageRule,
+          normalizedRuleJson: (sourceVersion.normalizedRuleJson ?? undefined) as Prisma.InputJsonValue | undefined,
+          generatedPine: sourceVersion.generatedPine,
+          warningsJson: (sourceVersion.warningsJson ?? undefined) as Prisma.InputJsonValue | undefined,
+          assumptionsJson: (sourceVersion.assumptionsJson ?? undefined) as Prisma.InputJsonValue | undefined,
+          market: sourceVersion.market,
+          timeframe: normalizeTimeframeAlias(sourceVersion.timeframe),
+          status: sourceVersion.status,
         },
       });
-    }
+
+      const sourcePine = await tx.pineScript.findFirst({
+        where: { strategyRuleVersionId: sourceVersion.id },
+        orderBy: [{ createdAt: 'desc' }, { updatedAt: 'desc' }],
+      });
+      if (sourcePine) {
+        await tx.pineScript.create({
+          data: {
+            strategyRuleVersionId: clonedVersion.id,
+            parentPineScriptId: sourcePine.id,
+            scriptName: sourcePine.scriptName,
+            pineVersion: sourcePine.pineVersion,
+            scriptBody: sourcePine.scriptBody,
+            status: sourcePine.status,
+            generationNoteJson: {
+              source: 'strategy_version_clone',
+              source_version_id: sourceVersion.id,
+              source_pine_script_id: sourcePine.id,
+              cloned_for_improvement: true,
+            },
+          },
+        });
+      }
+
+      return {
+        clonedVersion,
+        sourceVersionId: sourceVersion.id,
+      };
+    });
 
     return reply.status(201).send(
       formatSuccess(request, {
-        strategy_version: toStrategyVersionResponse(cloned),
-        cloned_from_version_id: sourceVersion.id,
+        strategy_version: toStrategyVersionResponse(clonedVersion),
+        cloned_from_version_id: sourceVersionId,
       }),
     );
   });
