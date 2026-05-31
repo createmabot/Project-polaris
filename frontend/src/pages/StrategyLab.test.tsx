@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
 const mockUseLocation = vi.fn();
+const mockUseSearch = vi.fn();
 const mockUseState = vi.fn();
 const renderedButtons: Array<{
   children: React.ReactNode;
@@ -26,6 +27,7 @@ vi.mock('swr', () => ({
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
   useLocation: () => mockUseLocation(),
+  useSearch: () => mockUseSearch(),
 }));
 
 vi.mock('../components/ui/Button', () => ({
@@ -183,7 +185,9 @@ describe('StrategyLab', () => {
     renderedButtons.length = 0;
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
+    mockUseSearch.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-lab', vi.fn()]);
+    mockUseSearch.mockReturnValue('');
     vi.mocked(fetchApi).mockReset();
     vi.mocked(postApi).mockReset();
   });
@@ -418,9 +422,10 @@ describe('StrategyLab', () => {
   it('prefills symbol context from query params and renders return link without auto-running generation', () => {
     primeDefaultState();
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=US_STOCK&timeframe=1D&return=%2Fsymbols%2Fsymbol-1',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=US_STOCK&timeframe=1D&return=%2Fsymbols%2Fsymbol-1');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -449,9 +454,10 @@ describe('StrategyLab', () => {
       mutate: vi.fn(),
     });
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=JP_STOCK&timeframe=D&return=%2Fsymbols%2Fsymbol-1',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_id=symbol-1&symbol_code=7203&symbol_name=Toyota&market=JP_STOCK&timeframe=D&return=%2Fsymbols%2Fsymbol-1');
 
     primeDefaultState();
     expect(renderToStaticMarkup(<StrategyLab />)).not.toContain('この銘柄に適用');
@@ -470,9 +476,10 @@ describe('StrategyLab', () => {
   it('calls symbol application endpoint only after explicit saved-version CTA click', async () => {
     primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -526,9 +533,10 @@ describe('StrategyLab', () => {
   it('keeps symbol application failures section-local and sanitized', async () => {
     const setters = primeScenarioState({ result: SAVED_VERSION, strategyId: 'strategy-symbol-1' });
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_id=symbol-1&symbol_code=7203&return=%2Fsymbols%2Fsymbol-1');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -565,9 +573,10 @@ describe('StrategyLab', () => {
     const trendMutate = vi.fn();
     primeDefaultState();
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple');
     mockUseSWR.mockImplementation((key: string | null) => {
       if (key === DEFAULT_HISTORY_PATH) {
         return { isLoading: false, error: null, data: null, mutate: historyMutate };
@@ -599,6 +608,7 @@ describe('StrategyLab', () => {
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
       market: 'US_STOCK',
       timeframe: '4H',
+      symbol_code: 'AAPL',
       user_hint: null,
     }));
     expect(postApi).not.toHaveBeenCalledWith(expect.stringContaining('/pine/generate'), expect.anything());
@@ -608,9 +618,10 @@ describe('StrategyLab', () => {
   it('does not render unsafe symbol context query values', () => {
     primeDefaultState();
     mockUseLocation.mockReturnValue([
-      '/strategy-lab?symbol_code=endpoint%3Dhttp%3A%2F%2Fsecret.local&display_name=model%3Dsecret-model&market=US_STOCK&timeframe=D&return=%2Fsymbols%2F1%3Fmodel%3Dsecret',
+      '/strategy-lab',
       vi.fn(),
     ]);
+    mockUseSearch.mockReturnValue('symbol_code=endpoint%3Dhttp%3A%2F%2Fsecret.local&display_name=model%3Dsecret-model&market=US_STOCK&timeframe=D&return=%2Fsymbols%2F1%3Fmodel%3Dsecret');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -659,6 +670,7 @@ describe('StrategyLab', () => {
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals', expect.objectContaining({
       market: 'JP_STOCK',
       timeframe: '4H',
+      symbol_code: null,
       risk_preference: 'balanced',
       strategy_type_bias: 'any',
       proposal_count: 5,
@@ -732,6 +744,7 @@ describe('StrategyLab', () => {
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', {
       market: 'JP_STOCK',
       timeframe: '1H',
+      symbol_code: null,
       risk_preference: 'balanced',
       strategy_type_bias: 'any',
       proposal_count: 5,
@@ -751,6 +764,7 @@ describe('StrategyLab', () => {
       timeframe: '4H',
       proposalUserHint: '出来高急増を使った短期戦略',
     });
+    mockUseSearch.mockReturnValue('symbol_id=symbol-apple&symbol_code=AAPL&display_name=Apple&market=US_STOCK&timeframe=4H&return_to=%2Fsymbols%2Fapple');
     mockUseSWR.mockReturnValue({
       isLoading: false,
       error: null,
@@ -773,6 +787,7 @@ describe('StrategyLab', () => {
 
     expect(postApi).toHaveBeenCalledWith('/api/strategy-lab/proposals/codex-cli/request', expect.objectContaining({
       timeframe: '4H',
+      symbol_code: 'AAPL',
       user_hint: '出来高急増を使った短期戦略',
       web_search_prompt: true,
     }));

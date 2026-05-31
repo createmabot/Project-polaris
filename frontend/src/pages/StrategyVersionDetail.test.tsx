@@ -7,6 +7,7 @@ const mockFetchApi = vi.fn();
 const mockPostApi = vi.fn();
 const mockPatchApi = vi.fn();
 const mockUseLocation = vi.fn();
+const mockUseSearch = vi.fn();
 const buttonRenderCalls = vi.hoisted(() => [] as Array<{
   text: string;
   props: {
@@ -23,6 +24,7 @@ vi.mock('swr', () => ({
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
   useLocation: () => mockUseLocation(),
+  useSearch: () => mockUseSearch(),
 }));
 
 vi.mock('../api/client', async () => {
@@ -191,6 +193,8 @@ function setupSWR(
 describe('StrategyVersionDetail', () => {
   beforeEach(() => {
     buttonRenderCalls.length = 0;
+    mockUseSearch.mockReset();
+    mockUseSearch.mockReturnValue('');
   });
 
   it('finds next priority version id with cyclic order', () => {
@@ -252,7 +256,8 @@ describe('StrategyVersionDetail', () => {
     mockPostApi.mockReset();
     mockPatchApi.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2', vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue('return=%2Fstrategies%2Fstr-1%2Fversions%3Fq%3DRSI%26page%3D2');
 
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
@@ -319,7 +324,8 @@ describe('StrategyVersionDetail', () => {
   it('renders fallback message when compare base does not exist', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
-    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1?return=%2Fexternal', vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue('return=%2Fexternal');
     setupSWR(createPayload({ withCompareBase: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -341,7 +347,8 @@ describe('StrategyVersionDetail', () => {
       source_version_id: 'ver-source-1',
       return_to: '/symbols/sym-1?tab=applications&application_id=app-1',
     });
-    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -369,7 +376,8 @@ describe('StrategyVersionDetail', () => {
       source_version_id: 'ver-source-1',
       return_to: '/symbols/sym-1?tab=applications&application_id=old-app-1',
     });
-    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -415,7 +423,8 @@ describe('StrategyVersionDetail', () => {
       symbol_code: '7203',
       symbol_name: 'トヨタ自動車',
     });
-    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -443,7 +452,8 @@ describe('StrategyVersionDetail', () => {
       source_version_id: 'C:\\Users\\agent\\stack trace',
       return_to: 'https://evil.example/symbols/sym-1?token=secret',
     });
-    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -468,7 +478,8 @@ describe('StrategyVersionDetail', () => {
       source_version_id: 'model://provider/version',
       return_to: '//evil.example/symbols/sym-1',
     });
-    mockUseLocation.mockReturnValue([`/strategy-versions/ver-1?${query.toString()}`, vi.fn()]);
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
