@@ -63,7 +63,7 @@ function createPineContext() {
   };
 }
 
-async function loadLocalProvider(fetchImpl: ReturnType<typeof vi.fn>) {
+async function loadLocalProvider(fetchImpl: ReturnType<typeof vi.fn>, envOverrides: Record<string, unknown> = {}) {
   vi.resetModules();
 
   vi.stubGlobal('fetch', fetchImpl);
@@ -73,9 +73,11 @@ async function loadLocalProvider(fetchImpl: ReturnType<typeof vi.fn>) {
       HOME_AI_PROVIDER: 'local_llm',
       LOCAL_LLM_ENDPOINT: 'http://localhost:11434',
       PRIMARY_LOCAL_MODEL: 'gemma4-ns',
+      PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS: 180000,
       FALLBACK_API_ENDPOINT: 'https://api.openai.com/v1',
       FALLBACK_API_MODEL: 'gpt-5-mini',
       FALLBACK_API_KEY: 'test-key',
+      ...envOverrides,
     },
   }));
 
@@ -330,10 +332,12 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
       text: async () => '',
     });
 
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
     const provider = await loadLocalProvider(fetchMock);
     const result = await provider.generatePineScript(createPineContext());
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(timeoutSpy).toHaveBeenCalledWith(180000);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://localhost:11434/api/chat');
     const body = JSON.parse(String(init.body));
@@ -395,6 +399,35 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('do not translate Pine code');
     expect(body.messages[1].content).toContain('<Japanese user-facing string>');
     expect(result.generatedScript).toContain('strategy("X"');
+  });
+
+  it('clamps pine generation local_llm timeout env values', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: JSON.stringify({
+            generated_script: '//@version=6\nstrategy("X", overlay=true)',
+            warnings: [],
+            assumptions: [],
+            normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
+          }),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const provider = await loadLocalProvider(fetchMock, {
+      PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS: 999999,
+    });
+
+    await provider.generatePineScript(createPineContext());
+
+    expect(timeoutSpy).toHaveBeenCalledWith(300000);
   });
 
   it('uses reviewer hardening checklist for pine review', async () => {
