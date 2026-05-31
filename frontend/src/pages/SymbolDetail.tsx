@@ -79,15 +79,13 @@ const LABELS = {
   savedApplicationsSummary: '{status} application {shown} / {total} 件を表示中',
   savedApplicationsReportSummary: 'CSV report: {csv} / internal report: {internal}',
   noFilteredApplications: '条件に一致する application はありません。',
-  latestRun: '最新run',
-  latestBacktestReport: '最新検証レポート',
+  latestBacktestReport: '最新の検証結果',
   verificationSummary: '検証サマリー',
-  verificationHistoryNote: '詳細なrun / report履歴はApplicationDetail、個別レポートはBacktestDetailで確認します。',
-  reportPair: 'CSV / internal reports',
+  verificationHistoryNote: 'SymbolDetail では最新の読める検証結果だけを表示します。詳細なrun / report履歴はApplicationDetail、個別レポートはBacktestDetailで確認します。',
   csvImportReport: 'CSV import report',
   internalBacktestReport: 'internal backtest report',
-  noLatestRun: '最新run はまだありません。',
-  noLatestBacktestReport: '最新検証レポートはまだありません。',
+  internalLegacyReportNote: '過去の internal report あり（read-only legacy）',
+  noLatestBacktestReport: '最新の検証結果はまだありません。',
   runCount: 'run count',
   csvImport: 'CSV取込',
   csvImportTitle: 'TradingView CSVを取り込む',
@@ -100,9 +98,9 @@ const LABELS = {
   csvText: 'CSVテキスト',
   runCsvImport: 'CSV取込を実行',
   csvImporting: 'CSV取込中...',
-  csvImportSuccess: 'CSV取込が完了しました。',
+  csvImportSuccess: 'CSV取込が完了しました。検証レポートを開けます。',
   csvImportRefreshFailed: 'CSV取込が完了しました。一覧の再読み込みに失敗したため、ページを再読み込みしてください。',
-  csvImportParseFailed: '解析失敗',
+  csvImportParseFailed: 'CSV取込は完了しましたが、解析に失敗しました',
   csvImportError: 'CSV取込に失敗しました。',
   openBacktestDetail: '検証レポートを開く',
   openApplicationRuns: 'run履歴を見る',
@@ -561,39 +559,8 @@ function ApplicationSummaryHeader({
   );
 }
 
-function ApplicationReportSourceItem({
-  label,
-  report,
-}: {
-  label: string;
-  report: NonNullable<NonNullable<SymbolStrategyApplicationItem['latest_reports_by_source']>['csv_import']>;
-}) {
-  return (
-    <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-slate-700">{label}</span>
-          <StatusBadge status={report.status} className="px-2 py-0.5" />
-          <StatusBadge status={report.run_status} className="px-2 py-0.5" />
-        </div>
-        <span className="text-xs text-slate-500">{formatDate(report.updated_at)}</span>
-      </div>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-        <span>source: <code>{report.execution_source}</code></span>
-        <span>run: <code>{report.run_type}</code></span>
-        <TextLink href={`/backtests/${report.backtest_id}`}>{report.title}</TextLink>
-      </div>
-    </div>
-  );
-}
-
 function ApplicationVerificationSummary({ application }: { application: SymbolStrategyApplicationItem }) {
-  const reportPair = application.latest_reports_by_source;
-  const reportPairItems = [
-    { key: 'csv_import', label: LABELS.csvImportReport, report: reportPair?.csv_import ?? null },
-    { key: 'internal_backtest', label: LABELS.internalBacktestReport, report: reportPair?.internal_backtest ?? null },
-  ];
-  const hasReportPair = reportPairItems.some((item) => item.report);
+  const hasInternalLegacyReport = Boolean(application.latest_reports_by_source?.internal_backtest);
 
   return (
     <Surface variant="nested" className="mt-3">
@@ -608,23 +575,7 @@ function ApplicationVerificationSummary({ application }: { application: SymbolSt
         </div>
       </div>
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
-        <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
-          <h6 className="text-xs font-semibold text-slate-600">{LABELS.latestRun}</h6>
-          {application.latest_run ? (
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-              <span>run type: <code>{application.latest_run.run_type}</code></span>
-              <span>run status: <StatusBadge status={application.latest_run.status} className="px-2 py-0.5" /></span>
-              <span>updated: {formatDate(application.latest_run.updated_at)}</span>
-              {application.latest_run.backtest_id ? (
-                <TextLink href={`/backtests/${application.latest_run.backtest_id}`}>{LABELS.openBacktestDetail}</TextLink>
-              ) : null}
-            </div>
-          ) : (
-            <EmptyText>{LABELS.noLatestRun}</EmptyText>
-          )}
-        </div>
-
+      <div className="mt-3 grid gap-2">
         <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
           <h6 className="text-xs font-semibold text-slate-600">{LABELS.latestBacktestReport}</h6>
           {application.latest_backtest_report ? (
@@ -644,17 +595,8 @@ function ApplicationVerificationSummary({ application }: { application: SymbolSt
         </div>
       </div>
 
-      {hasReportPair ? (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{LABELS.reportPair}</h6>
-          <div className="mt-2 grid gap-2 md:grid-cols-2">
-            {reportPairItems.map((item) => (
-              item.report ? (
-                <ApplicationReportSourceItem key={item.key} label={item.label} report={item.report} />
-              ) : null
-            ))}
-          </div>
-        </div>
+      {hasInternalLegacyReport ? (
+        <p className="mt-2 text-xs text-slate-500">{LABELS.internalLegacyReportNote}</p>
       ) : null}
     </Surface>
   );
