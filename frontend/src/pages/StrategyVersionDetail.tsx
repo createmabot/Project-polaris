@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import { TextArea } from '../components/ui/FormFields';
+import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
@@ -20,6 +21,7 @@ import {
   StrategyVersionPineData,
   StrategyVersionPineJobData,
   StrategyVersionListData,
+  BacktestDetailData,
 } from '../api/types';
 import {
   buildStrategyVersionDetailUrl,
@@ -82,6 +84,7 @@ type ImproveApplicationContext = {
   symbolName: string;
   applicationId: string | null;
   sourceVersionId: string | null;
+  sourceBacktestId: string | null;
   returnTo: string | null;
 };
 
@@ -128,9 +131,12 @@ function sanitizeImproveApplicationReturnTo(value: string | null): string | null
   if (trimmed.includes('\\')) return null;
 
   const [pathPart, queryPart = ''] = trimmed.split('?', 2);
-  if (!/^\/symbols\/[A-Za-z0-9_.:-]+$/.test(pathPart)) return null;
+  const isSymbolReturn = /^\/symbols\/[A-Za-z0-9_.:-]+$/.test(pathPart);
+  const isBacktestReturn = /^\/backtests\/[A-Za-z0-9_.:-]+$/.test(pathPart);
+  if (!isSymbolReturn && !isBacktestReturn) return null;
 
   if (!queryPart) return pathPart;
+  if (isBacktestReturn) return pathPart;
 
   const queryParams = new URLSearchParams(queryPart);
   const normalized = new URLSearchParams();
@@ -162,8 +168,120 @@ export function parseImproveApplicationContext(search: string): ImproveApplicati
     symbolName,
     applicationId: sanitizeQueryId(params.get('application_id')),
     sourceVersionId: sanitizeQueryId(params.get('source_version_id')),
+    sourceBacktestId: sanitizeQueryId(params.get('source_backtest_id')),
     returnTo: sanitizeImproveApplicationReturnTo(params.get('return_to')),
   };
+}
+
+function formatDateTime(value: string | null | undefined): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString('ja-JP');
+}
+
+function valueText(value: number | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '-';
+  return String(value);
+}
+
+function compactSafeText(value: string | null | undefined, maxLength = 240): string {
+  const normalized = (value ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return '';
+  if (unsafeQueryTextPattern.test(normalized)) return '';
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength)}...` : normalized;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function extractAiKeyPoints(structuredJson: Record<string, unknown> | null | undefined): string[] {
+  const record = asRecord(structuredJson);
+  if (!record) return [];
+  const value = record.key_points ?? record.keyPoints;
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => compactSafeText(item, 160))
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+type SourceBacktestMetricRow = {
+  label: string;
+  value: string;
+};
+
+function buildSourceBacktestMetricRows(sourceBacktest: BacktestDetailData): SourceBacktestMetricRow[] {
+  const parsedSummary = sourceBacktest.latest_import?.parsed_summary;
+  if (parsedSummary) {
+    return [
+      { label: '総取引数', value: valueText(parsedSummary.totalTrades) },
+      { label: '勝率', value: valueText(parsedSummary.winRate) },
+      { label: 'Profit Factor', value: valueText(parsedSummary.profitFactor) },
+      { label: '最大ドローダウン', value: valueText(parsedSummary.maxDrawdown) },
+      { label: '純利益', value: valueText(parsedSummary.netProfit) },
+      { label: '対象期間', value: `${valueText(parsedSummary.periodFrom)} - ${valueText(parsedSummary.periodTo)}` },
+    ].filter((row) => row.value !== '-');
+  }
+
+  const applicationMetrics = sourceBacktest.symbol_strategy_application?.current_report?.metrics;
+  if (applicationMetrics) {
+    return [
+      { label: 'trade_count', value: valueText(applicationMetrics.trade_count) },
+      { label: 'total_return_percent', value: valueText(applicationMetrics.total_return_percent) },
+      { label: 'price_change_percent', value: valueText(applicationMetrics.price_change_percent) },
+      { label: 'max_drawdown_percent', value: valueText(applicationMetrics.max_drawdown_percent) },
+      { label: 'profit_factor', value: valueText(applicationMetrics.profit_factor) },
+      { label: 'win_rate', value: valueText(applicationMetrics.win_rate) },
+      { label: 'period', value: `${valueText(applicationMetrics.period_from)} - ${valueText(applicationMetrics.period_to)}` },
+    ].filter((row) => row.value !== '-');
+  }
+
+  const resultSummary = asRecord(sourceBacktest.used_strategy.snapshot?.result_summary);
+  const resultMetrics = asRecord(resultSummary?.metrics);
+  if (resultMetrics) {
+    return ['bar_count', 'price_change_percent', 'range_percent', 'total_return_percent', 'max_drawdown_percent', 'profit_factor', 'win_rate', 'trade_count']
+      .map((key) => ({ label: key, value: valueText(resultMetrics[key] as number | string | null | undefined) }))
+      .filter((row) => row.value !== '-');
+  }
+
+  return [];
+}
+
+function buildSourceBacktestAiSummaryExcerpt(aiReview: BacktestDetailData['ai_review']): string {
+  if (aiReview.status !== 'available') return '';
+  return compactSafeText(aiReview.body_markdown, 360);
+}
+
+export function buildSourceBacktestImprovementMemo(sourceBacktest: BacktestDetailData): string {
+  const metrics = buildSourceBacktestMetricRows(sourceBacktest).slice(0, 6);
+  const aiExcerpt = buildSourceBacktestAiSummaryExcerpt(sourceBacktest.ai_review);
+  const aiKeyPoints = extractAiKeyPoints(sourceBacktest.ai_review.structured_json);
+  const safeTitle = compactSafeText(sourceBacktest.backtest.title, 160) || 'source backtest';
+  const safeBacktestId = sanitizeQueryId(sourceBacktest.backtest.id) ?? 'unknown';
+  const safeExecutionSource = compactSafeText(sourceBacktest.backtest.execution_source, 80) || '-';
+  const safeStatus = compactSafeText(sourceBacktest.backtest.status, 80) || '-';
+  const safeMarket = compactSafeText(sourceBacktest.backtest.market, 80) || '-';
+  const safeTimeframe = compactSafeText(sourceBacktest.backtest.timeframe, 80) || '-';
+  const lines = [
+    `検証結果 ${safeTitle} (${safeBacktestId}) をもとに改善する。`,
+    `実行ソース: ${safeExecutionSource} / 状態: ${safeStatus}`,
+    `市場・時間足: ${safeMarket} / ${safeTimeframe}`,
+  ];
+
+  if (metrics.length > 0) {
+    lines.push(`主要指標: ${metrics.map((metric) => `${metric.label}=${metric.value}`).join(', ')}`);
+  }
+  if (aiKeyPoints.length > 0) {
+    lines.push(`AI summary key points: ${aiKeyPoints.join(' / ')}`);
+  } else if (aiExcerpt) {
+    lines.push(`AI summary excerpt: ${aiExcerpt}`);
+  }
+  lines.push('上記を踏まえ、過剰最適化を避けつつ entry / exit / risk 条件の改善案を反映してください。');
+  return lines.join('\n');
 }
 
 export function findNextPriorityVersionId(
@@ -418,6 +536,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [sourceBacktestImprovementMemo, setSourceBacktestImprovementMemo] = useState('');
+  const [sourceBacktestMemoSourceId, setSourceBacktestMemoSourceId] = useState<string | null>(null);
 
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
@@ -479,6 +599,29 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       )
     : null;
   const improveApplicationContext = useMemo(() => parseImproveApplicationContext(search), [search]);
+  const sourceBacktestApiPath = improveApplicationContext?.sourceBacktestId
+    ? `/api/backtests/${improveApplicationContext.sourceBacktestId}`
+    : null;
+  const {
+    data: sourceBacktestData,
+    error: sourceBacktestError,
+  } = useSWR<BacktestDetailData>(sourceBacktestApiPath, swrFetcher);
+  const sourceBacktestMemoText = useMemo(
+    () => (sourceBacktestData ? buildSourceBacktestImprovementMemo(sourceBacktestData) : ''),
+    [sourceBacktestData],
+  );
+  const sourceBacktestMetrics = useMemo(
+    () => (sourceBacktestData ? buildSourceBacktestMetricRows(sourceBacktestData) : []),
+    [sourceBacktestData],
+  );
+  const sourceBacktestAiKeyPoints = useMemo(
+    () => extractAiKeyPoints(sourceBacktestData?.ai_review.structured_json),
+    [sourceBacktestData?.ai_review.structured_json],
+  );
+  const sourceBacktestAiExcerpt = useMemo(
+    () => (sourceBacktestData ? buildSourceBacktestAiSummaryExcerpt(sourceBacktestData.ai_review) : ''),
+    [sourceBacktestData],
+  );
 
   useEffect(() => {
     if (version) {
@@ -502,6 +645,15 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setRevisionRequest(latestRevisionInput.revision_request ?? '');
     }
   }, [pineData?.latest_revision_input?.id]);
+
+  useEffect(() => {
+    const sourceBacktestId = sourceBacktestData?.backtest.id ?? null;
+    if (!sourceBacktestId || sourceBacktestMemoSourceId === sourceBacktestId) {
+      return;
+    }
+    setSourceBacktestImprovementMemo(sourceBacktestMemoText);
+    setSourceBacktestMemoSourceId(sourceBacktestId);
+  }, [sourceBacktestData?.backtest.id, sourceBacktestMemoSourceId, sourceBacktestMemoText]);
 
   const ruleDiff = useMemo(() => {
     if (!version || !compareBase) {
@@ -714,6 +866,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   };
 
+  const onReflectSourceBacktestMemo = () => {
+    const memo = sourceBacktestImprovementMemo.trim();
+    if (!memo) return;
+    setRevisionRequest(memo);
+  };
+
   const onSaveRule = async () => {
     setSavingRule(true);
     setSaveRuleError(null);
@@ -822,11 +980,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                 source application: <code>{improveApplicationContext.applicationId ?? '-'}</code>
                 {' / '}
                 source version: <code>{improveApplicationContext.sourceVersionId ?? '-'}</code>
+                {' / '}
+                source backtest: <code>{improveApplicationContext.sourceBacktestId ?? '-'}</code>
               </div>
             </div>
             {improveApplicationContext.returnTo && (
               <TextLink href={improveApplicationContext.returnTo} className='text-sm font-semibold text-blue-800 no-underline hover:underline'>
-                銘柄ページへ戻る
+                {improveApplicationContext.returnTo.startsWith('/backtests/') ? '検証結果へ戻る' : '銘柄ページへ戻る'}
               </TextLink>
             )}
           </div>
@@ -856,8 +1016,95 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               {applyImprovedVersionMessage.text}
             </div>
           )}
+          {sourceBacktestError && improveApplicationContext.sourceBacktestId ? (
+            <InlineNotice tone='warning' className='mt-3'>
+              元の検証結果メモを取得できませんでした。rule version の確認、編集、Pine 操作はこのまま利用できます。
+            </InlineNotice>
+          ) : null}
         </section>
       )}
+      {sourceBacktestData ? (
+        <SectionCard
+          title='検証結果からの改善メモ'
+          description='元 backtest report を read-only context として確認し、必要な部分だけ修正依頼へ反映します。表示だけでは Pine 再生成や適用は行いません。'
+          className='mt-4'
+        >
+          <KeyValueList className='mb-3 gap-x-4 gap-y-1 sm:grid-cols-2'>
+            <KeyValueRow label='source backtest id'><code>{sourceBacktestData.backtest.id}</code></KeyValueRow>
+            <KeyValueRow label='report title'>{compactSafeText(sourceBacktestData.backtest.title, 160) || '-'}</KeyValueRow>
+            <KeyValueRow label='execution source'><code>{compactSafeText(sourceBacktestData.backtest.execution_source, 80) || '-'}</code></KeyValueRow>
+            <KeyValueRow label='status'>
+              <StatusBadge status={compactSafeText(sourceBacktestData.backtest.status, 80) || '-'}>
+                {compactSafeText(sourceBacktestData.backtest.status, 80) || '-'}
+              </StatusBadge>
+            </KeyValueRow>
+            <KeyValueRow label='market / timeframe'>
+              {compactSafeText(sourceBacktestData.backtest.market, 80) || '-'} / {compactSafeText(sourceBacktestData.backtest.timeframe, 80) || '-'}
+            </KeyValueRow>
+            <KeyValueRow label='updated'>{formatDateTime(sourceBacktestData.backtest.updated_at)}</KeyValueRow>
+            <KeyValueRow label='AI summary'><StatusBadge status={sourceBacktestData.ai_review.status} /></KeyValueRow>
+            <KeyValueRow label='AI generated'>{formatDateTime(sourceBacktestData.ai_review.generated_at)}</KeyValueRow>
+          </KeyValueList>
+          <div className='mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700'>
+            <div className='mb-2 font-semibold text-slate-900'>key metrics available</div>
+            {sourceBacktestMetrics.length > 0 ? (
+              <div className='grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]'>
+                {sourceBacktestMetrics.map((metric) => (
+                  <div key={metric.label} className='rounded-md border border-slate-200 bg-white p-2'>
+                    <div className='text-xs text-slate-500'>{metric.label}</div>
+                    <div className='mt-1 font-semibold text-slate-900'>{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className='mb-0 text-slate-600'>表示可能な主要指標はありません。</p>
+            )}
+          </div>
+          <div className='mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700'>
+            <div className='mb-2 font-semibold text-slate-900'>AI summary context</div>
+            {sourceBacktestData.ai_review.status === 'available' ? (
+              <>
+                <KeyValueList className='mb-2 gap-x-4 gap-y-1 sm:grid-cols-2'>
+                  <KeyValueRow label='title'>{compactSafeText(sourceBacktestData.ai_review.title, 160) || '-'}</KeyValueRow>
+                  <KeyValueRow label='generated'>{formatDateTime(sourceBacktestData.ai_review.generated_at)}</KeyValueRow>
+                </KeyValueList>
+                {sourceBacktestAiKeyPoints.length > 0 ? (
+                  <ul className='mb-0 mt-2 pl-5'>
+                    {sourceBacktestAiKeyPoints.map((point, index) => (
+                      <li key={`${point}-${index}`}>{point}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-0 whitespace-pre-wrap'>{sourceBacktestAiExcerpt || '表示可能な本文抜粋はありません。'}</p>
+                )}
+              </>
+            ) : (
+              <p className='mb-0 text-slate-600'>保存済み AI summary は利用できません。</p>
+            )}
+          </div>
+          {sourceBacktestData.symbol_strategy_application?.related_reports?.length ? (
+            <InlineNotice tone='info' className='mb-3'>
+              同じ application の関連レポートが {sourceBacktestData.symbol_strategy_application.related_reports.length} 件あります。詳細比較は元の BacktestDetail で確認します。
+            </InlineNotice>
+          ) : null}
+          <TextArea
+            label='改善メモ'
+            value={sourceBacktestImprovementMemo}
+            onChange={(event) => setSourceBacktestImprovementMemo(event.target.value)}
+            rows={6}
+            helpText='この textarea はローカル編集用です。下のボタンは revision_request 欄へ反映するだけで、Pine 修正再生成 endpoint は呼びません。'
+          />
+          <div className='mt-3'>
+            <Button
+              data-testid='reflect-source-backtest-memo'
+              onClick={onReflectSourceBacktestMemo}
+              disabled={!sourceBacktestImprovementMemo.trim()}
+            >
+              改善メモを修正依頼に反映
+            </Button>
+          </div>
+        </SectionCard>
+      ) : null}
       <SectionCard
         title='基本情報'
         description='strategy version の ID、対象、状態、更新時刻を確認します。'

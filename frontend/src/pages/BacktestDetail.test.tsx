@@ -1,9 +1,19 @@
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+const mockPostApi = vi.fn();
 let mockLocation = '/backtests/bt-1';
+const mockSetLocation = vi.fn();
+const buttonRenderCalls = vi.hoisted(() => [] as Array<{
+  text: string;
+  props: {
+    onClick?: () => void | Promise<void>;
+    disabled?: boolean;
+    'data-testid'?: string;
+  };
+}>);
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -11,10 +21,39 @@ vi.mock('swr', () => ({
 
 vi.mock('wouter', () => ({
   Link: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a>,
-  useLocation: () => [mockLocation, vi.fn()],
+  useLocation: () => [mockLocation, mockSetLocation],
 }));
 
-import BacktestDetail, { parseBacktestsReturnPath } from './BacktestDetail';
+vi.mock('../api/client', async () => {
+  const actual = await vi.importActual('../api/client');
+  return {
+    ...actual,
+    postApi: (...args: unknown[]) => mockPostApi(...args),
+  };
+});
+
+vi.mock('../components/ui/Button', async () => {
+  const ReactModule = await vi.importActual<typeof import('react')>('react');
+  const getTextContent = (value: React.ReactNode): string => {
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(getTextContent).join('');
+    return '';
+  };
+  return {
+    default: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => {
+      buttonRenderCalls.push({
+        text: getTextContent(children),
+        props: props as { onClick?: () => void | Promise<void>; disabled?: boolean; 'data-testid'?: string },
+      });
+      return ReactModule.createElement('button', props, children);
+    },
+  };
+});
+
+import BacktestDetail, {
+  buildBacktestImprovementCloneFailureMessage,
+  parseBacktestsReturnPath,
+} from './BacktestDetail';
 
 describe('parseBacktestsReturnPath', () => {
   it('accepts /backtests with q/page', () => {
@@ -44,6 +83,12 @@ describe('parseBacktestsReturnPath', () => {
 });
 
 describe('BacktestDetail', () => {
+  beforeEach(() => {
+    buttonRenderCalls.length = 0;
+    mockPostApi.mockReset();
+    mockSetLocation.mockReset();
+  });
+
   it('renders shared loading state text while fetching detail data', () => {
     mockLocation = '/backtests/bt-loading';
     mockUseSWR.mockReset();
@@ -158,6 +203,7 @@ describe('BacktestDetail', () => {
     expect(html).toContain('href="/strategies/str-1/versions?sort=updated_at&amp;order=desc&amp;page=1"');
     expect(html).toContain('次アクション（Rule Lab）');
     expect(html).toContain('比較可能な run が不足しています。解析済み import が2件以上あると比較できます。');
+    expect(html).not.toContain('この検証結果をもとに改善版を作る');
   });
 
   it('shows parse error on failed parse', () => {
@@ -718,6 +764,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('StrategyDetail に戻る');
     expect(html).toContain('href="/strategy-versions/ver-1"');
     expect(html).toContain('StrategyVersionDetail に戻る');
+    expect(html).toContain('この検証結果をもとに改善版を作る');
+    expect(html).toContain('data-testid="create-improved-version-from-backtest"');
     expect(html).toContain('同じ application の関連レポート');
     expect(html).toContain('internal related report');
     expect(html).toContain('href="/backtests/bt-internal"');
@@ -742,6 +790,128 @@ describe('BacktestDetail', () => {
     expect(html).toContain('Internal backtest AI summary');
     expect(html).toContain('CSV import summary says external validation risk is low.');
     expect(html).toContain('Internal summary says engine result has a stronger simulated profile.');
+  });
+
+  it('clones source strategy version for improvement only after explicit BacktestDetail click', async () => {
+    mockLocation = '/backtests/bt-application';
+    mockUseSWR.mockReset();
+    mockPostApi.mockResolvedValue({
+      strategy_version: {
+        id: 'ver-cloned',
+        strategy_id: 'str-1',
+        natural_language_rule: 'rule',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'draft',
+        normalized_rule_json: {},
+        generated_pine: null,
+        forward_validation_note: null,
+        forward_validation_note_updated_at: null,
+        warnings: [],
+        assumptions: [],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      compare_base: null,
+    });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-application',
+          strategy_version_id: 'ver-source',
+          title: 'application report',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'imported',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-source',
+          snapshot: null,
+        },
+        latest_import: null,
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [],
+        symbol_strategy_application: {
+          application_id: 'app-1',
+          application_status: 'active',
+          application_source: 'manual',
+          application_memo: null,
+          application_created_at: '2026-01-01T00:00:00.000Z',
+          application_updated_at: '2026-01-02T00:00:00.000Z',
+          run_id: 'run-1',
+          run_type: 'csv_import',
+          run_status: 'succeeded',
+          run_created_at: '2026-01-01T01:00:00.000Z',
+          run_updated_at: '2026-01-02T01:00:00.000Z',
+          symbol: {
+            id: 'sym-1',
+            symbol: 'TYO:7203',
+            symbol_code: '7203',
+            market_code: 'JP',
+            tradingview_symbol: 'TYO:7203',
+            display_name: 'Toyota',
+          },
+          strategy: {
+            id: 'str-1',
+            title: 'Breakout strategy',
+          },
+          strategy_version: {
+            id: 'ver-source',
+            market: 'JP_STOCK',
+            timeframe: 'D',
+          },
+          current_report: null,
+          related_reports: [],
+        },
+      },
+    });
+
+    renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-application' }} />);
+
+    expect(mockPostApi).not.toHaveBeenCalled();
+    const improveButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'create-improved-version-from-backtest');
+    expect(improveButton?.text).toBe('この検証結果をもとに改善版を作る');
+
+    await improveButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith('/api/strategy-versions/ver-source/clone', {});
+    const navigatedTo = mockSetLocation.mock.calls[0]?.[0] as string;
+    expect(navigatedTo).toContain('/strategy-versions/ver-cloned?');
+    expect(navigatedTo).toContain('mode=improve_application');
+    expect(navigatedTo).toContain('symbol_id=sym-1');
+    expect(navigatedTo).toContain('symbol_code=7203');
+    expect(navigatedTo).toContain('symbol_name=Toyota');
+    expect(navigatedTo).toContain('application_id=app-1');
+    expect(navigatedTo).toContain('source_version_id=ver-source');
+    expect(navigatedTo).toContain('source_backtest_id=bt-application');
+    expect(navigatedTo).toContain('return_to=%2Fbacktests%2Fbt-application');
+    expect(navigatedTo).not.toContain('raw');
+    expect(navigatedTo).not.toContain('token');
+  });
+
+  it('uses sanitized BacktestDetail improvement clone failure text', () => {
+    const message = buildBacktestImprovementCloneFailureMessage();
+    expect(message).toContain('改善版の作成に失敗しました');
+    expect(message).not.toContain('/api/');
+    expect(message).not.toContain('model');
+    expect(message).not.toContain('token');
+    expect(message).not.toContain('C:\\Users');
+    expect(message).not.toContain('stack trace');
   });
 
   it('renders internal backtest report without imports', () => {

@@ -2,7 +2,7 @@ import { type ReactNode, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
-import { BacktestComparisonData, BacktestDetailData } from '../api/types';
+import { BacktestComparisonData, BacktestDetailData, StrategyVersionData } from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
@@ -277,6 +277,58 @@ type SymbolStrategyApplicationBacklink = NonNullable<BacktestDetailData['symbol_
 type RelatedApplicationReport = NonNullable<SymbolStrategyApplicationBacklink['related_reports']>[number];
 type ApplicationReportMetrics = NonNullable<SymbolStrategyApplicationBacklink['current_report']>['metrics'];
 
+const unsafeImprovementContextPattern =
+  /(https?:\/\/|file:\/\/|www\.|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\\|\/users\/|\/home\/|stack trace|traceback|endpoint|model|secret|token|api[_-]?key)/i;
+
+function sanitizeImprovementContextId(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed || trimmed.length > 80) return null;
+  if (/[\r\n\t]/.test(trimmed) || unsafeImprovementContextPattern.test(trimmed)) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function sanitizeImprovementContextText(value: string | null | undefined, maxLength: number): string | null {
+  const trimmed = value?.trim() ?? '';
+  if (!trimmed || trimmed.length > maxLength) return null;
+  if (/[\r\n\t]/.test(trimmed) || unsafeImprovementContextPattern.test(trimmed)) return null;
+  if (/[<>{}[\]`]/.test(trimmed)) return null;
+  return trimmed;
+}
+
+export function buildBacktestImprovementCloneFailureMessage(): string {
+  return '改善版の作成に失敗しました。時間をおいて再試行してください。';
+}
+
+export function buildBacktestImprovementContextPath(
+  clonedVersionId: string,
+  backtestId: string,
+  symbolStrategyApplication: SymbolStrategyApplicationBacklink,
+): string {
+  const params = new URLSearchParams();
+  const safeClonedVersionId = sanitizeImprovementContextId(clonedVersionId) ?? 'unknown';
+  const safeBacktestId = sanitizeImprovementContextId(backtestId) ?? 'unknown';
+  const safeSymbolId = sanitizeImprovementContextId(symbolStrategyApplication.symbol.id) ?? 'unknown';
+  const rawSymbolCode = symbolStrategyApplication.symbol.symbol_code ?? symbolStrategyApplication.symbol.symbol;
+  const safeSymbolCode = sanitizeImprovementContextText(rawSymbolCode, 24) ?? 'unknown';
+  const safeSymbolName =
+    sanitizeImprovementContextText(symbolStrategyApplication.symbol.display_name, 80)
+    ?? sanitizeImprovementContextText(rawSymbolCode, 80)
+    ?? safeSymbolCode;
+  const safeApplicationId = sanitizeImprovementContextId(symbolStrategyApplication.application_id) ?? 'unknown';
+  const safeSourceVersionId = sanitizeImprovementContextId(symbolStrategyApplication.strategy_version.id) ?? 'unknown';
+
+  params.set('mode', 'improve_application');
+  params.set('symbol_id', safeSymbolId);
+  params.set('symbol_code', safeSymbolCode);
+  params.set('symbol_name', safeSymbolName);
+  params.set('application_id', safeApplicationId);
+  params.set('source_version_id', safeSourceVersionId);
+  params.set('source_backtest_id', safeBacktestId);
+  params.set('return_to', `/backtests/${safeBacktestId}`);
+  return `/strategy-versions/${safeClonedVersionId}?${params.toString()}`;
+}
+
 function BacklinkInfoCard({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={{ padding: '0.75rem', border: '1px solid #e6e6e6', borderRadius: '6px', background: '#fafafa' }}>
@@ -286,9 +338,25 @@ function BacklinkInfoCard({ title, children }: { title: string; children: ReactN
   );
 }
 
-function BacklinkActions({ symbolStrategyApplication }: { symbolStrategyApplication: SymbolStrategyApplicationBacklink }) {
+function BacklinkActions({
+  symbolStrategyApplication,
+  onCreateImprovedVersion,
+  isCreatingImprovedVersion,
+}: {
+  symbolStrategyApplication: SymbolStrategyApplicationBacklink;
+  onCreateImprovedVersion: () => void | Promise<void>;
+  isCreatingImprovedVersion: boolean;
+}) {
   return (
-    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+    <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.8rem', flexWrap: 'wrap', alignItems: 'center' }}>
+      <Button
+        variant="primary"
+        data-testid="create-improved-version-from-backtest"
+        onClick={onCreateImprovedVersion}
+        disabled={isCreatingImprovedVersion}
+      >
+        {isCreatingImprovedVersion ? '作成中...' : 'この検証結果をもとに改善版を作る'}
+      </Button>
       <Link href={`/symbols/${symbolStrategyApplication.symbol.id}`} style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}>
         SymbolDetail に戻る
       </Link>
@@ -462,8 +530,14 @@ function ApplicationReportMetricsComparison({
 
 function SymbolStrategyApplicationBacklinkSection({
   symbolStrategyApplication,
+  onCreateImprovedVersion,
+  isCreatingImprovedVersion,
+  createImprovedVersionError,
 }: {
   symbolStrategyApplication: SymbolStrategyApplicationBacklink;
+  onCreateImprovedVersion: () => void | Promise<void>;
+  isCreatingImprovedVersion: boolean;
+  createImprovedVersionError: string | null;
 }) {
   return (
     <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
@@ -510,7 +584,16 @@ function SymbolStrategyApplicationBacklinkSection({
           </KeyValueList>
         </BacklinkInfoCard>
       </div>
-      <BacklinkActions symbolStrategyApplication={symbolStrategyApplication} />
+      <BacklinkActions
+        symbolStrategyApplication={symbolStrategyApplication}
+        onCreateImprovedVersion={onCreateImprovedVersion}
+        isCreatingImprovedVersion={isCreatingImprovedVersion}
+      />
+      {createImprovedVersionError ? (
+        <InlineNotice tone="danger" className="mt-3">
+          {createImprovedVersionError}
+        </InlineNotice>
+      ) : null}
       <RelatedApplicationReports relatedReports={symbolStrategyApplication.related_reports ?? []} />
       <ApplicationReportMetricsComparison
         currentReport={symbolStrategyApplication.current_report}
@@ -676,7 +759,7 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
 
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data, error, isLoading, mutate } = useSWR<BacktestDetailData>(`/api/backtests/${backtestId}`, swrFetcher);
   const [selectedComparisonImportId, setSelectedComparisonImportId] = useState<string>('');
   const [isSavingComparison, setIsSavingComparison] = useState(false);
@@ -684,6 +767,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const [savedComparisonId, setSavedComparisonId] = useState<string | null>(null);
   const [isGeneratingAiReview, setIsGeneratingAiReview] = useState(false);
   const [generateAiReviewError, setGenerateAiReviewError] = useState<string | null>(null);
+  const [isCreatingImprovedVersion, setIsCreatingImprovedVersion] = useState(false);
+  const [createImprovedVersionError, setCreateImprovedVersionError] = useState<string | null>(null);
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
   const comparisonIdFromQuery = parseBacktestComparisonId(location);
   const effectiveComparisonId = savedComparisonId ?? comparisonIdFromQuery;
@@ -774,6 +859,24 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     }
   };
 
+  const onCreateImprovedVersion = async () => {
+    if (!symbolStrategyApplication) return;
+    setIsCreatingImprovedVersion(true);
+    setCreateImprovedVersionError(null);
+    try {
+      const response = await postApi<StrategyVersionData>(
+        `/api/strategy-versions/${symbolStrategyApplication.strategy_version.id}/clone`,
+        {},
+      );
+      const clonedVersionId = response.strategy_version.id;
+      setLocation(buildBacktestImprovementContextPath(clonedVersionId, backtestId, symbolStrategyApplication));
+    } catch {
+      setCreateImprovedVersionError(buildBacktestImprovementCloneFailureMessage());
+    } finally {
+      setIsCreatingImprovedVersion(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="mx-auto max-w-5xl space-y-4">
@@ -853,7 +956,12 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       </section>
 
       {symbolStrategyApplication ? (
-        <SymbolStrategyApplicationBacklinkSection symbolStrategyApplication={symbolStrategyApplication} />
+        <SymbolStrategyApplicationBacklinkSection
+          symbolStrategyApplication={symbolStrategyApplication}
+          onCreateImprovedVersion={onCreateImprovedVersion}
+          isCreatingImprovedVersion={isCreatingImprovedVersion}
+          createImprovedVersionError={createImprovedVersionError}
+        />
       ) : null}
 
       {isInternalBacktestReport ? <InternalBacktestReportSection snapshot={snapshot} /> : null}

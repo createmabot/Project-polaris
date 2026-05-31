@@ -99,6 +99,15 @@ pnpm run dev
    - `imports`
    - parse 成功時の `parsed_summary`
 3. AI summary input 説明、自動生成契機、`available` / `unavailable` の見え方、artifact pointer metadata 説明が補足表示として読め、生成・取込・download・diff の挙動が変わっていないことを確認する。
+4. Symbol Strategy Application 由来の report では `この検証結果をもとに改善版を作る` が表示されることを確認する。表示だけでは clone、Pine 生成、save、backtest、AI summary、apply が起動しないことを確認する。
+5. 明示クリックした場合だけ既存 clone API が呼ばれ、clone 後の StrategyVersionDetail URL に `mode=improve_application`、symbol / application / source version、`source_backtest_id`、`return_to=/backtests/:backtestId` が渡ることを確認する。
+
+## 8-1. Backtest 起点の改善メモ
+
+1. BacktestDetail から clone 後の `StrategyVersionDetail` を開く。
+2. `検証結果からの改善メモ` section に、元 report title、execution source、status、market / timeframe、updated、source backtest id、主要 metrics、保存済み AI summary の title / excerpt / key points、関連 report note が read-only 表示されることを確認する。
+3. `改善メモ` textarea を必要に応じて編集し、`改善メモを修正依頼に反映` を押す。
+4. 反映先は既存 `revision_request` 欄だけであり、この操作だけでは Pine 修正再生成 endpoint、backtest、AI summary、application apply は呼ばれないことを確認する。
 
 ## 9. Backtest AI 総評生成
 
