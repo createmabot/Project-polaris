@@ -1,6 +1,6 @@
 import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { ApiError, fetchApi, postApi, swrFetcher } from '../api/client';
 import Button from '../components/ui/Button';
 import AppLayout from '../components/layout/AppLayout';
@@ -125,9 +125,8 @@ function readSafeTimeframe(params: URLSearchParams): string | null {
   return TIMEFRAME_OPTIONS.some((option) => option.value === normalized) ? normalized : null;
 }
 
-function readStrategyLabSymbolContext(location: string): StrategyLabSymbolContext {
-  const query = location.includes('?') ? location.slice(location.indexOf('?')) : '';
-  const params = new URLSearchParams(query);
+function readStrategyLabSymbolContext(search: string): StrategyLabSymbolContext {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   const symbolCode = readQueryValue(params, 'symbol_code');
   const symbolName = readQueryValue(params, 'symbol_name') ?? readQueryValue(params, 'display_name');
   return {
@@ -471,8 +470,9 @@ function ProviderQualityTrendNote({
 }
 
 export default function StrategyLab() {
-  const [location, setLocation] = useLocation();
-  const symbolContext = useMemo(() => readStrategyLabSymbolContext(location), [location]);
+  const [, setLocation] = useLocation();
+  const search = useSearch();
+  const symbolContext = useMemo(() => readStrategyLabSymbolContext(search), [search]);
   const symbolContextLabel = symbolContext.symbolCode && symbolContext.symbolName
     ? `${symbolContext.symbolCode} / ${symbolContext.symbolName}`
     : symbolContext.symbolCode ?? symbolContext.symbolName;
@@ -579,6 +579,7 @@ export default function StrategyLab() {
       const proposals = await postApi<StrategyProposalData>('/api/strategy-lab/proposals', {
         market,
         timeframe,
+        symbol_code: symbolContext.symbolCode ?? null,
         risk_preference: proposalRiskPreference,
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,
@@ -607,6 +608,7 @@ export default function StrategyLab() {
       const promptData = await postApi<StrategyProposalCodexCliRequestData>('/api/strategy-lab/proposals/codex-cli/request', {
         market,
         timeframe,
+        symbol_code: symbolContext.symbolCode ?? null,
         risk_preference: proposalRiskPreference,
         strategy_type_bias: proposalStrategyType,
         proposal_count: 5,

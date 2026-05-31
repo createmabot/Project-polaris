@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { fetchApi, patchApi, postApi, swrFetcher } from '../api/client';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
@@ -147,9 +147,8 @@ function sanitizeImproveApplicationReturnTo(value: string | null): string | null
   return normalizedQuery ? `${pathPart}?${normalizedQuery}` : pathPart;
 }
 
-export function parseImproveApplicationContext(locationPath: string): ImproveApplicationContext | null {
-  const search = locationPath.includes('?') ? locationPath.slice(locationPath.indexOf('?') + 1) : '';
-  const params = new URLSearchParams(search);
+export function parseImproveApplicationContext(search: string): ImproveApplicationContext | null {
+  const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
   if (params.get('mode') !== 'improve_application') return null;
 
   const symbolId = sanitizeQueryId(params.get('symbol_id'));
@@ -391,6 +390,8 @@ function groupPineDiffExcerpt(excerpts: PineDiffExcerpt[]): PineDiffSection[] {
 export default function StrategyVersionDetail({ params }: StrategyVersionDetailProps) {
   const { versionId } = params;
   const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const locationWithSearch = search ? `${location}?${search.startsWith('?') ? search.slice(1) : search}` : location;
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(`/api/strategy-versions/${versionId}`, swrFetcher);
   const { data: pineData, mutate: mutatePine } = useSWR<StrategyVersionPineData>(
     `/api/strategy-versions/${versionId}/pine`,
@@ -454,7 +455,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const displayedPineScriptRaw = pineData?.generated_script ?? version?.generated_pine ?? '';
   const canCopyPine = pineState !== 'failed' && pineState !== 'generating' && displayedPineScriptRaw.trim().length > 0;
   const returnPath = version
-    ? parseStrategyVersionsReturnPath(location, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id)
+    ? parseStrategyVersionsReturnPath(locationWithSearch, version.strategy_id) ?? buildDefaultVersionsReturnPath(version.strategy_id)
     : null;
   const returnQuery = parseStrategyVersionsListQuery(returnPath ?? '/strategies/_/versions');
   const priorityListApiPath = version
@@ -477,7 +478,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         returnQuery.order,
       )
     : null;
-  const improveApplicationContext = useMemo(() => parseImproveApplicationContext(location), [location]);
+  const improveApplicationContext = useMemo(() => parseImproveApplicationContext(search), [search]);
 
   useEffect(() => {
     if (version) {
