@@ -305,6 +305,9 @@ function setupSWR(
 describe('StrategyVersionDetail', () => {
   beforeEach(() => {
     buttonRenderCalls.length = 0;
+    mockFetchApi.mockReset();
+    mockPostApi.mockReset();
+    mockPatchApi.mockReset();
     mockUseSearch.mockReset();
     mockUseSearch.mockReturnValue('');
   });
@@ -565,6 +568,106 @@ describe('StrategyVersionDetail', () => {
     const reflectButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
     await reflectButton?.props.onClick?.();
     expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('renders clarified rule, Pine, clone, and revision action labels with disabled source Pine reason', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      source_backtest_id: 'bt-source-1',
+      return_to: '/backtests/bt-source-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      createSourceBacktestPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('ルール本文を保存');
+    expect(html).toContain('保存済みルールから Pine を作り直す');
+    expect(html).toContain('この version を複製する');
+    expect(html).toContain('修正依頼をもとに Pine を再生成');
+    expect(html).toContain('Pine 修正再生成には source_pine_script_id が必要です。');
+    expect(html).toContain('既存 Pine を元にした修正再生成はできません。');
+    expect(html).toContain('既存 Pine の細部を継承するとは限りません。');
+    expect(html).toContain('検証結果をもとに改善する場合は、改善メモを revision_request に反映');
+    expect(html).toContain('必要に応じて自然言語ルールを編集・保存');
+    expect(html).toContain('rows="8"');
+    expect(html).toContain('rows="6"');
+
+    const revisionButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'pine-regenerate-button');
+    expect(revisionButton?.text).toBe('修正依頼をもとに Pine を再生成');
+    expect(revisionButton?.props.disabled).toBe(true);
+  });
+
+  it('saves only the natural language rule when clicking the clarified save button', async () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    const payload = createPayload({ withCompareBase: true, samePine: false });
+    setupSWR(payload);
+    mockPatchApi.mockResolvedValue(payload);
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    const saveButton = buttonRenderCalls.find((call) => call.text === 'ルール本文を保存');
+    expect(saveButton).toBeTruthy();
+
+    await saveButton?.props.onClick?.();
+
+    expect(mockPatchApi).toHaveBeenCalledTimes(1);
+    expect(mockPatchApi.mock.calls[0]?.[0]).toBe('/api/strategy-versions/ver-1');
+    expect(mockPatchApi.mock.calls[0]?.[1]).toEqual({ natural_language_rule: expect.any(String) });
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('starts Pine generation job only when clicking the clarified rebuild button', async () => {
+    vi.useFakeTimers();
+    try {
+      mockUseSWR.mockReset();
+      mockUseLocation.mockReset();
+      mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+      setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+      mockPostApi.mockResolvedValue({
+        job: {
+          id: 'pine-job-1',
+          status: 'running',
+          current_stage: 'queued',
+          stage_history: [],
+          error: null,
+        },
+      });
+      mockFetchApi.mockResolvedValue({
+        job: {
+          id: 'pine-job-1',
+          status: 'succeeded',
+          current_stage: 'persistence',
+          stage_history: [],
+          error: null,
+        },
+      });
+
+      renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+      expect(mockPostApi).not.toHaveBeenCalled();
+
+      const rebuildButton = buttonRenderCalls.find((call) => call.text === '保存済みルールから Pine を作り直す');
+      const rebuildPromise = rebuildButton?.props.onClick?.();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1200);
+      await rebuildPromise;
+
+      expect(mockPostApi).toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs', {});
+      expect(mockFetchApi).toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs/pine-job-1');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps StrategyVersionDetail usable when source backtest fetch fails', () => {

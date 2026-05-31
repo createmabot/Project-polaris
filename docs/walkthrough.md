@@ -108,6 +108,8 @@ pnpm run dev
 2. `検証結果からの改善メモ` section に、元 report title、execution source、status、market / timeframe、updated、source backtest id、主要 metrics、保存済み AI summary の title / excerpt / key points、関連 report note が read-only 表示されることを確認する。
 3. `改善メモ` textarea を必要に応じて編集し、`改善メモを修正依頼に反映` を押す。
 4. 反映先は既存 `revision_request` 欄だけであり、この操作だけでは Pine 修正再生成 endpoint、backtest、AI summary、application apply は呼ばれないことを確認する。
+5. `自然言語ルール（編集）` では `ルール本文を保存`、`保存済みルールから Pine を作り直す`、`この version を複製する`、`修正依頼をもとに Pine を再生成` の違いが説明されていることを確認する。
+6. `source_pine_script_id` がない場合は `修正依頼をもとに Pine を再生成` が disabled になり、既存 Pine を元にした修正再生成はできないことを確認する。`保存済みルールから Pine を作り直す` は保存済み自然言語ルールから新しい Pine を生成する操作であり、既存 Pine の細部を継承するとは限らない説明が表示されることを確認する。
 
 ## 9. Backtest AI 総評生成
 

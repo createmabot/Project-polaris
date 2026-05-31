@@ -224,6 +224,12 @@ Phase 4: 改善版をこの銘柄に適用（実装済み）。
 - 旧 application は active のまま残し、ユーザーが不要なら手動 archive する。
 - 新旧 application 比較、改善元 badge、旧 application archive 提案、lineage 永続化は後続判断とする。
 
+BacktestDetail 起点の improvement context（実装済み）。
+
+- `symbol_strategy_application` を持つ BacktestDetail から明示操作で strategy version clone へ進み、StrategyVersionDetail に `source_backtest_id` を渡す。
+- StrategyVersionDetail は元 backtest metrics / 保存済み AI summary を read-only context として表示し、改善メモを `revision_request` に反映できる。
+- `source_pine_script_id` がない clone 直後の version では Pine 修正再生成が使えない場合がある。現時点では UI で disabled 理由を示し、`保存済みルールから Pine を作り直す` は保存済み自然言語ルールから新しい Pine を生成する操作であり、既存 Pine の細部を継承するとは限らないことを明記する。StrategyVersion clone / improvement flow で元 PineScript lineage を引き継ぎ、clone 先でも `source_pine_script_id` を使った修正再生成を可能にする backend / DB 変更は後続判断とする。
+
 全 phase で維持する境界:
 
 - proposal selection から Pine / save / backtest / AI summary を自動実行しない。
