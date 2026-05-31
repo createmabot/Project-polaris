@@ -256,9 +256,14 @@ function buildSourceBacktestAiSummaryExcerpt(aiReview: BacktestDetailData['ai_re
   return compactSafeText(aiReview.body_markdown, 360);
 }
 
+function buildSourceBacktestAiSummaryMemoText(aiReview: BacktestDetailData['ai_review']): string {
+  if (aiReview.status !== 'available') return '';
+  return compactSafeText(aiReview.body_markdown, 1200);
+}
+
 export function buildSourceBacktestImprovementMemo(sourceBacktest: BacktestDetailData): string {
   const metrics = buildSourceBacktestMetricRows(sourceBacktest).slice(0, 6);
-  const aiExcerpt = buildSourceBacktestAiSummaryExcerpt(sourceBacktest.ai_review);
+  const aiExcerpt = buildSourceBacktestAiSummaryMemoText(sourceBacktest.ai_review);
   const aiKeyPoints = extractAiKeyPoints(sourceBacktest.ai_review.structured_json);
   const safeTitle = compactSafeText(sourceBacktest.backtest.title, 160) || 'source backtest';
   const safeBacktestId = sanitizeQueryId(sourceBacktest.backtest.id) ?? 'unknown';
@@ -622,6 +627,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     () => (sourceBacktestData ? buildSourceBacktestAiSummaryExcerpt(sourceBacktestData.ai_review) : ''),
     [sourceBacktestData],
   );
+  const hasSourceBacktestContext = Boolean(improveApplicationContext?.sourceBacktestId);
 
   useEffect(() => {
     if (version) {
@@ -756,7 +762,6 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       await mutate();
       await mutatePine();
       setSaveRuleMessage(null);
-      setRevisionRequest('');
     } catch (requestError: any) {
       setRegenerateError(requestError?.message ?? 'Pine の再生成に失敗しました。');
     } finally {
@@ -939,6 +944,10 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     );
   }
   const resolvedReturnPath = returnPath ?? buildDefaultVersionsReturnPath(version.strategy_id);
+  const canRegenerateWithRevision = Boolean(pineData?.pine_script_id);
+  const missingSourcePineScriptNotice = !canRegenerateWithRevision
+    ? 'Pine 修正再生成には source_pine_script_id が必要です。現在の version では source Pine が未取得のため、既存 Pine を元にした修正再生成はできません。「保存済みルールから Pine を作り直す」は、保存済みの自然言語ルールから新しい Pine を生成する操作です。既存 Pine の細部を継承するとは限りません。'
+    : null;
 
   return (
     <AppLayout>
@@ -1091,7 +1100,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             label='改善メモ'
             value={sourceBacktestImprovementMemo}
             onChange={(event) => setSourceBacktestImprovementMemo(event.target.value)}
-            rows={6}
+            rows={8}
             helpText='この textarea はローカル編集用です。下のボタンは revision_request 欄へ反映するだけで、Pine 修正再生成 endpoint は呼びません。'
           />
           <div className='mt-3'>
@@ -1127,52 +1136,68 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
 
       <SectionCard
         title='自然言語ルール（編集）'
-        description='保存、Pine 再生成、修正再生成の導線は既存のまま維持します。'
+        description='ルール本文の保存、保存済みルールからの Pine 作り直し、既存 Pine への修正依頼、version 複製を分けて操作します。'
         className='mt-4'
       >
-        <TextArea
-          label='自然言語ルール'
-          value={editingNaturalLanguageRule}
-          onChange={(event) => setEditingNaturalLanguageRule(event.target.value)}
-          rows={7}
-        />
-
-        <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <StatusBadge
-            data-testid='pine-generation-state'
-            status={pineState === 'failed' ? 'failed' : pineState === 'generating' ? 'running' : pineState === 'warning' ? 'warning' : 'available'}
-          >
-            Pine 状態: {pineStateText}
-          </StatusBadge>
-          <Button
-            variant='primary'
-            onClick={onSaveRule}
-            disabled={savingRule}
-          >
-            {savingRule ? '保存中...' : '保存'}
-          </Button>
-
-          <Button
-            variant='primary'
-            onClick={onGeneratePine}
-            disabled={regenerating}
-          >
-            {regenerating ? '再生成中...' : 'Pine を再生成'}
-          </Button>
-
-          <Button
-            onClick={onCloneAsNewVersion}
-            disabled={cloning}
-          >
-            {cloning ? '作成中...' : '新しい version を作る'}
-          </Button>
+        {hasSourceBacktestContext ? (
+          <InlineNotice tone='info' className='mb-3'>
+            検証結果をもとに改善する場合は、改善メモを revision_request に反映し、source_pine_script_id がある場合は「修正依頼をもとに Pine を再生成」を使ってください。source_pine_script_id がない場合、既存 Pine を元にした修正再生成はできません。必要に応じて自然言語ルールを編集・保存し、「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
+          </InlineNotice>
+        ) : null}
+        <div style={{ marginBottom: '0.75rem', color: '#555', fontSize: '0.9rem' }}>
+          `ルール本文を保存` は自然言語ルール本文だけを保存します。保存だけでは Pine は更新されません。`保存済みルールから Pine を作り直す` は、保存済みの自然言語ルールをもとに Pine を生成し直します。
         </div>
-
-        <div style={{ marginTop: '0.5rem', color: '#666', fontSize: '0.9rem' }}>
-          保存はルール本文のみ更新します。再生成ボタンで更新済みルールから Pine を作り直します。
-        </div>
-        <div style={{ marginTop: '0.35rem', color: '#666', fontSize: '0.9rem' }}>
+        <div style={{ marginBottom: '0.75rem', color: '#555', fontSize: '0.9rem' }}>
           Pine生成対象は JP_STOCK / US_STOCK、日足（D）/ 4時間足（4H）/ 1時間足（1H）です。生成したPineはTradingViewのsymbolとchart timeframe上で検証してください。internal backtestの対応範囲拡張ではありません。
+        </div>
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          <div style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff' }}>
+            <div style={{ fontWeight: 700, marginBottom: '0.5rem' }}>1. ルール本文の編集</div>
+            <TextArea
+              label='自然言語ルール'
+              value={editingNaturalLanguageRule}
+              onChange={(event) => setEditingNaturalLanguageRule(event.target.value)}
+              rows={7}
+              helpText='本文を編集したら、先にルール本文を保存します。Pine は別操作で作り直します。'
+            />
+
+            <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <StatusBadge
+                data-testid='pine-generation-state'
+                status={pineState === 'failed' ? 'failed' : pineState === 'generating' ? 'running' : pineState === 'warning' ? 'warning' : 'available'}
+              >
+                Pine 状態: {pineStateText}
+              </StatusBadge>
+              <Button
+                variant='primary'
+                onClick={onSaveRule}
+                disabled={savingRule}
+              >
+                {savingRule ? '保存中...' : 'ルール本文を保存'}
+              </Button>
+
+              <Button
+                variant='primary'
+                onClick={onGeneratePine}
+                disabled={regenerating}
+              >
+                {regenerating ? '再生成中...' : '保存済みルールから Pine を作り直す'}
+              </Button>
+            </div>
+          </div>
+
+          <div style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff' }}>
+            <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>2. version 操作</div>
+            <p style={{ margin: '0 0 0.6rem', color: '#555', fontSize: '0.9rem' }}>
+              `この version を複製する` は、現在の version を元に別 version を作る操作です。保存や Pine 作り直しとは別の明示操作です。
+            </p>
+            <Button
+              onClick={onCloneAsNewVersion}
+              disabled={cloning}
+            >
+              {cloning ? '作成中...' : 'この version を複製する'}
+            </Button>
+          </div>
         </div>
         {regenerating && (
           <PineGenerationProgress
@@ -1183,7 +1208,15 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           />
         )}
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
-          <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>Pine 修正再生成（TradingView 検証結果を反映）</div>
+          <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>3. Pine 修正再生成</div>
+          <p style={{ margin: '0 0 0.6rem', color: '#555', fontSize: '0.9rem' }}>
+            `修正依頼をもとに Pine を再生成` は、既存 Pine script と revision_request を使って Pine を修正します。改善メモ反映だけでは endpoint を呼びません。
+          </p>
+          {missingSourcePineScriptNotice ? (
+            <InlineNotice tone='warning' className='mb-3'>
+              {missingSourcePineScriptNotice}
+            </InlineNotice>
+          ) : null}
           <div style={{ display: 'grid', gap: '0.55rem' }}>
             <TextArea
               label='compile_error_text（任意）'
@@ -1203,7 +1236,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               label='revision_request（必須）'
               value={revisionRequest}
               onChange={(event) => setRevisionRequest(event.target.value)}
-              rows={3}
+              rows={6}
               placeholder='修正したい内容を入力してください'
             />
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1211,9 +1244,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                 variant='primary'
                 data-testid='pine-regenerate-button'
                 onClick={onRegenerateWithRevision}
-                disabled={regenerating || !pineData?.pine_script_id}
+                disabled={regenerating || !canRegenerateWithRevision}
               >
-                {regenerating ? '再生成中...' : 'Pine 修正再生成'}
+                {regenerating ? '再生成中...' : '修正依頼をもとに Pine を再生成'}
               </Button>
               <span style={{ fontSize: '0.85rem', color: '#555' }}>
                 source_pine_script_id: <code>{pineData?.pine_script_id ?? '-'}</code>
