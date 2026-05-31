@@ -721,6 +721,51 @@ describe('StrategyVersionDetail', () => {
     }
   });
 
+  it('keeps polling Pine generation jobs beyond the previous short UI timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      mockUseSWR.mockReset();
+      mockUseLocation.mockReset();
+      mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+      setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+      mockPostApi.mockResolvedValue({
+        job: {
+          id: 'pine-job-1',
+          status: 'running',
+          current_stage: 'queued',
+          stage_history: [],
+          error: null,
+        },
+      });
+      let pollCount = 0;
+      mockFetchApi.mockImplementation(async () => {
+        pollCount += 1;
+        return {
+          job: {
+            id: 'pine-job-1',
+            status: pollCount > 181 ? 'succeeded' : 'running',
+            current_stage: pollCount > 181 ? 'persistence' : 'generating',
+            stage_history: [],
+            error: null,
+          },
+        };
+      });
+
+      renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+      const rebuildButton = buttonRenderCalls.find((call) => call.text === '保存済みルールから Pine を作り直す');
+      const rebuildPromise = rebuildButton?.props.onClick?.();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(1200 * 182);
+      await rebuildPromise;
+
+      expect(pollCount).toBeGreaterThan(180);
+      expect(mockFetchApi).toHaveBeenLastCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs/pine-job-1');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps StrategyVersionDetail usable when source backtest fetch fails', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
