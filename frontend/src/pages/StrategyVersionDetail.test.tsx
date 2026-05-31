@@ -56,8 +56,10 @@ vi.mock('../components/ui/Button', async () => {
 });
 
 import StrategyVersionDetail, {
+  buildSourceBacktestImprovementMemo,
   buildApplyImprovedVersionFailureMessage,
   findNextPriorityVersionId,
+  parseImproveApplicationContext,
 } from './StrategyVersionDetail';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
 
@@ -156,12 +158,122 @@ function createListPayload() {
   };
 }
 
+function createSourceBacktestPayload() {
+  return {
+    backtest: {
+      id: 'bt-source-1',
+      strategy_version_id: 'ver-source-1',
+      title: 'source validation report',
+      execution_source: 'tradingview',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'imported',
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-02T00:00:00.000Z',
+    },
+    used_strategy: {
+      strategy_id: 'str-1',
+      strategy_version_id: 'ver-source-1',
+      snapshot: null,
+    },
+    latest_import: {
+      id: 'imp-source-1',
+      file_name: 'raw-result.csv',
+      file_size: 100,
+      content_type: 'text/csv',
+      parse_status: 'parsed',
+      parse_error: null,
+      parsed_summary: {
+        totalTrades: 42,
+        winRate: 57.1,
+        profitFactor: 1.63,
+        maxDrawdown: -8.4,
+        netProfit: 120000,
+        periodFrom: '2025-01-01',
+        periodTo: '2025-12-31',
+      },
+      created_at: '2026-05-01T00:00:00.000Z',
+      updated_at: '2026-05-01T00:00:00.000Z',
+    },
+    ai_review: {
+      summary_id: 'sum-source-1',
+      title: 'Source validation AI summary',
+      body_markdown: 'Profit factor is improved, but drawdown risk remains around entries after sharp gaps.',
+      structured_json: {
+        key_points: [
+          'Profit factor is above the baseline.',
+          'Drawdown should be controlled before scaling.',
+          'raw prompt token endpoint should be hidden',
+        ],
+        raw_prompt: 'do not show this prompt',
+      },
+      generated_at: '2026-05-03T00:00:00.000Z',
+      status: 'available',
+      insufficient_context: false,
+    },
+    imports: [],
+    symbol_strategy_application: {
+      application_id: 'app-1',
+      application_status: 'active',
+      application_source: 'manual',
+      application_memo: null,
+      application_created_at: '2026-05-01T00:00:00.000Z',
+      application_updated_at: '2026-05-02T00:00:00.000Z',
+      run_id: 'run-1',
+      run_type: 'csv_import',
+      run_status: 'succeeded',
+      run_created_at: '2026-05-01T01:00:00.000Z',
+      run_updated_at: '2026-05-02T01:00:00.000Z',
+      symbol: {
+        id: 'sym-1',
+        symbol: 'TYO:7203',
+        symbol_code: '7203',
+        market_code: 'JP',
+        tradingview_symbol: 'TYO:7203',
+        display_name: 'Toyota',
+      },
+      strategy: {
+        id: 'str-1',
+        title: 'Breakout strategy',
+      },
+      strategy_version: {
+        id: 'ver-source-1',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+      current_report: null,
+      related_reports: [
+        {
+          backtest_id: 'bt-related',
+          title: 'related report',
+          execution_source: 'internal_backtest',
+          status: 'completed',
+          run_type: 'internal_backtest',
+          run_status: 'succeeded',
+          updated_at: '2026-05-04T00:00:00.000Z',
+          metrics: null,
+        },
+      ],
+    },
+  };
+}
+
 function setupSWR(
   detailPayload: ReturnType<typeof createPayload>,
   listPayload = createListPayload(),
   pinePayload: any = null,
+  sourceBacktestPayload: any = null,
+  sourceBacktestError: Error | null = null,
 ) {
   mockUseSWR.mockImplementation((key: string) => {
+    if (typeof key === 'string' && key.startsWith('/api/backtests/')) {
+      return {
+        isLoading: false,
+        error: sourceBacktestError,
+        mutate: vi.fn(),
+        data: sourceBacktestError ? null : sourceBacktestPayload,
+      };
+    }
     if (typeof key === 'string' && key.endsWith('/pine')) {
       return {
         isLoading: false,
@@ -208,6 +320,39 @@ describe('StrategyVersionDetail', () => {
     expect(findNextPriorityVersionId('v2', versions)).toBe('v1');
     expect(findNextPriorityVersionId('unknown', versions)).toBe('v1');
     expect(findNextPriorityVersionId('v1', [versions[0]])).toBeNull();
+  });
+
+  it('parses optional source_backtest_id and safe backtest return path', () => {
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'Toyota',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      source_backtest_id: 'bt-source-1',
+      return_to: '/backtests/bt-source-1',
+    });
+
+    expect(parseImproveApplicationContext(query.toString())).toEqual({
+      symbolId: 'sym-1',
+      symbolCode: '7203',
+      symbolName: 'Toyota',
+      applicationId: 'app-1',
+      sourceVersionId: 'ver-source-1',
+      sourceBacktestId: 'bt-source-1',
+      returnTo: '/backtests/bt-source-1',
+    });
+  });
+
+  it('builds sanitized source backtest improvement memo without raw prompt details', () => {
+    const memo = buildSourceBacktestImprovementMemo(createSourceBacktestPayload() as any);
+    expect(memo).toContain('source validation report');
+    expect(memo).toContain('主要指標');
+    expect(memo).toContain('Profit Factor=1.63');
+    expect(memo).toContain('Profit factor is above the baseline.');
+    expect(memo).not.toContain('raw prompt token endpoint');
+    expect(memo).not.toContain('do not show this prompt');
   });
 
   it('renders shared loading and error states for detail fetch', () => {
@@ -345,6 +490,7 @@ describe('StrategyVersionDetail', () => {
       symbol_name: 'トヨタ自動車',
       application_id: 'app-1',
       source_version_id: 'ver-source-1',
+      source_backtest_id: 'bt-source-1',
       return_to: '/symbols/sym-1?tab=applications&application_id=app-1',
     });
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
@@ -356,10 +502,99 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('7203 トヨタ自動車 の適用 strategy を改善中');
     expect(html).toContain('source application: <code>app-1</code>');
     expect(html).toContain('source version: <code>ver-source-1</code>');
+    expect(html).toContain('source backtest: <code>bt-source-1</code>');
     expect(html).toContain('href="/symbols/sym-1?tab=applications&amp;application_id=app-1"');
     expect(html).toContain('銘柄ページへ戻る');
     expect(html).toContain('この銘柄に改善版を適用');
     expect(html).toContain('data-testid="apply-improved-version"');
+  });
+
+  it('renders read-only source backtest improvement context and memo handoff controls', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      source_backtest_id: 'bt-source-1',
+      return_to: '/backtests/bt-source-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      createSourceBacktestPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('href="/backtests/bt-source-1"');
+    expect(html).toContain('検証結果へ戻る');
+    expect(html).toContain('検証結果からの改善メモ');
+    expect(html).toContain('元 backtest report を read-only context として確認');
+    expect(html).toContain('source backtest id');
+    expect(html).toContain('bt-source-1');
+    expect(html).toContain('source validation report');
+    expect(html).toContain('execution source');
+    expect(html).toContain('tradingview');
+    expect(html).toContain('JP_STOCK / D');
+    expect(html).toContain('key metrics available');
+    expect(html).toContain('総取引数');
+    expect(html).toContain('42');
+    expect(html).toContain('Profit Factor');
+    expect(html).toContain('1.63');
+    expect(html).toContain('AI summary context');
+    expect(html).toContain('Source validation AI summary');
+    expect(html).toContain('Profit factor is above the baseline.');
+    expect(html).toContain('Drawdown should be controlled before scaling.');
+    expect(html).toContain('同じ application の関連レポートが 1 件あります。');
+    expect(html).toContain('改善メモ');
+    expect(html).toContain('改善メモを修正依頼に反映');
+    expect(html).toContain('data-testid="reflect-source-backtest-memo"');
+    expect(html).not.toContain('raw-result.csv');
+    expect(html).not.toContain('raw_prompt');
+    expect(html).not.toContain('do not show this prompt');
+    expect(html).not.toContain('raw prompt token endpoint');
+
+    expect(mockPostApi).not.toHaveBeenCalled();
+    const reflectButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
+    await reflectButton?.props.onClick?.();
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('keeps StrategyVersionDetail usable when source backtest fetch fails', () => {
+    mockUseSWR.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      source_backtest_id: 'bt-source-1',
+      return_to: '/backtests/bt-source-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      new Error('GET /api/backtests/bt-source-1 token stack trace'),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('rule version 詳細');
+    expect(html).toContain('自然言語ルール（編集）');
+    expect(html).toContain('元の検証結果メモを取得できませんでした。');
+    expect(html).not.toContain('GET /api/backtests');
+    expect(html).not.toContain('token stack trace');
+    expect(html).not.toContain('検証結果からの改善メモ');
   });
 
   it('applies improved version only after explicit CTA click', async () => {
