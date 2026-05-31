@@ -257,6 +257,40 @@ function hasInternalReport(application: SymbolStrategyApplicationItem): boolean 
   return Boolean(application.latest_reports_by_source?.internal_backtest);
 }
 
+function getLatestReadableReport(application: SymbolStrategyApplicationItem): {
+  id: string;
+  title: string;
+  status: string;
+  executionSource: string;
+  market: string;
+  timeframe: string;
+  updatedAt: string;
+} | null {
+  if (application.latest_backtest_report) {
+    return {
+      id: application.latest_backtest_report.id,
+      title: application.latest_backtest_report.title,
+      status: application.latest_backtest_report.status,
+      executionSource: application.latest_backtest_report.execution_source,
+      market: application.latest_backtest_report.market,
+      timeframe: application.latest_backtest_report.timeframe,
+      updatedAt: application.latest_backtest_report.updated_at,
+    };
+  }
+
+  const csvFallback = application.latest_reports_by_source?.csv_import;
+  if (!csvFallback) return null;
+  return {
+    id: csvFallback.backtest_id,
+    title: csvFallback.title,
+    status: csvFallback.status,
+    executionSource: csvFallback.execution_source,
+    market: application.strategy_version.market,
+    timeframe: application.strategy_version.timeframe,
+    updatedAt: csvFallback.updated_at,
+  };
+}
+
 function formatNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) return '-';
   return value.toLocaleString('ja-JP', { maximumFractionDigits: digits });
@@ -560,6 +594,7 @@ function ApplicationSummaryHeader({
 }
 
 function ApplicationVerificationSummary({ application }: { application: SymbolStrategyApplicationItem }) {
+  const readableReport = getLatestReadableReport(application);
   const hasInternalLegacyReport = Boolean(application.latest_reports_by_source?.internal_backtest);
 
   return (
@@ -578,16 +613,16 @@ function ApplicationVerificationSummary({ application }: { application: SymbolSt
       <div className="mt-3 grid gap-2">
         <div className="rounded-md border border-slate-200 bg-white px-2.5 py-2">
           <h6 className="text-xs font-semibold text-slate-600">{LABELS.latestBacktestReport}</h6>
-          {application.latest_backtest_report ? (
+          {readableReport ? (
             <div className="mt-1 space-y-1 text-xs text-slate-500">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="font-medium text-slate-800">{application.latest_backtest_report.title}</span>
-                <span>{reportOriginLabel(application.latest_backtest_report.execution_source)}</span>
-                <StatusBadge status={application.latest_backtest_report.status} className="px-2 py-0.5" />
-                <span>{application.latest_backtest_report.market} / {application.latest_backtest_report.timeframe}</span>
-                <span>updated: {formatDate(application.latest_backtest_report.updated_at)}</span>
+                <span className="font-medium text-slate-800">{readableReport.title}</span>
+                <span>{reportOriginLabel(readableReport.executionSource)}</span>
+                <StatusBadge status={readableReport.status} className="px-2 py-0.5" />
+                <span>{readableReport.market} / {readableReport.timeframe}</span>
+                <span>updated: {formatDate(readableReport.updatedAt)}</span>
               </div>
-              <TextLink href={`/backtests/${application.latest_backtest_report.id}`}>{LABELS.openBacktestDetail}</TextLink>
+              <TextLink href={`/backtests/${readableReport.id}`}>{LABELS.openBacktestDetail}</TextLink>
             </div>
           ) : (
             <EmptyText>{LABELS.noLatestBacktestReport}</EmptyText>

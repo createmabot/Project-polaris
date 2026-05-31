@@ -259,7 +259,15 @@ const symbolApplicationsFixture = {
       },
       latest_backtest_report: null,
       latest_reports_by_source: {
-        csv_import: null,
+        csv_import: {
+          backtest_id: 'backtest_csv_fallback',
+          title: 'CSV fallback report',
+          execution_source: 'tradingview',
+          status: 'ready',
+          run_type: 'csv_import',
+          run_status: 'succeeded',
+          updated_at: '2026-05-05T00:00:00.000Z',
+        },
         internal_backtest: null,
       },
       run_count: 1,
@@ -627,7 +635,7 @@ describe('SymbolDetail', () => {
     expect(html).toContain('succeeded');
     expect(html).toContain('failed');
     expect(html).toContain('active application 2 / 2 件を表示中');
-    expect(html).toContain('CSV report: 1 / internal report: 1');
+    expect(html).toContain('CSV report: 2 / internal report: 1');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
       expect.any(Function),
@@ -649,6 +657,8 @@ describe('SymbolDetail', () => {
     expect(html).toContain('ready');
     expect(html).toContain('updated:');
     expect(html).toContain('href="/backtests/backtest_1"');
+    expect(html).toContain('CSV fallback report');
+    expect(html).toContain('href="/backtests/backtest_csv_fallback"');
     expect(html).not.toContain('source: <code>tradingview</code>');
     expect(html).not.toContain('CSV / internal reports');
     expect(html).toContain('過去の internal report あり（read-only legacy）');
