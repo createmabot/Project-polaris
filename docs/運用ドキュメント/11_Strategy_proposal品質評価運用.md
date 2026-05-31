@@ -389,7 +389,7 @@ Strategy proposal provider guard は、品質評価や benchmark を実行する
 - `stub` が default provider のままになっていること。
 - `local_llm` は `STRATEGY_PROPOSAL_PROVIDER=local_llm` の明示 opt-in でだけ使うこと。
 - proposal_count は最大 10 件に制限され、通常 UI は 5 件を要求すること。
-- `local_llm` の timeout / max output は env で調整できるが、backend 側の guard 上限に丸められること。default timeout profile は通常運用向けに少し余裕を持たせている。重い local model や長文 context model を manual smoke する場合だけ、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE=long_context` を明示して timeout 上限をさらに広げる。
+- `local_llm` の timeout / max output は env で調整できるが、backend 側の guard 上限に丸められること。default timeout profile は通常運用向けに 180 秒程度まで待つ。重い local model や長文 context model を manual smoke する場合だけ、`STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_PROFILE=long_context` を明示して timeout 上限をさらに広げる。
 - timeout profile を変えた後は backend dev process を再起動し、UI では sanitized `provider status` / `reason` / `latency` のみを見る。endpoint / model 実値や raw response は記録しない。
 - `required_field_missing` が続く場合は、保存済み proposal history の sanitized `missing_required_fields` / count / affected candidate count を見る。raw response や candidate 自由文は確認・保存しない。
 - qwen 系などが candidate を `proposal` / `strategy` wrapper 内に返す場合や、`name` / `description` / `type` などの alias を使う場合は、backend が safe normalization で exact schema key に寄せる。core strategy logic の本文を backend が新規生成して補完することはしない。

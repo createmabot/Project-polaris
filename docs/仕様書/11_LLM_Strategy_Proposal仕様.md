@@ -251,7 +251,7 @@ env / config 方針:
 timeout / max output / fallback 方針:
 
 - local_llm 選択時は provider adapter 境界で timeout を必ず設定する。
-- timeout profile は default / long_context の 2 種類とする。default は通常の local model 向けに過度ではない範囲で応答猶予を持たせ、long_context は大きい local model や長文 context model の manual smoke 用に明示 opt-in で使う。
+- timeout profile は default / long_context の 2 種類とする。default は通常の local model 向けに 180 秒程度の応答猶予を持たせ、long_context は大きい local model や長文 context model の manual smoke 用に 240 秒程度の猶予を持つ明示 opt-in として使う。
 - `STRATEGY_PROPOSAL_LOCAL_LLM_TIMEOUT_MS` は profile ごとの下限・上限に丸める。極端な値や実際の設定値は client response、UI、docs、PR本文に出さない。
 - long_context profile は timeout を延ばすだけであり、Web search、deep research、request-time provider selection、auto Pine generation を有効化しない。
 - max output は既存 schema と `proposal_count` 最大 10 に収まる上限を設け、過大 response は parse 前または validation 前に失敗として扱う。
