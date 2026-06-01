@@ -619,11 +619,14 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('同じ application の関連レポートが 1 件あります。');
     expect(html).toContain('改善メモ');
     expect(html).toContain('改善案から新しいルール本文を作る');
+    expect(html).toContain('LLMで新しいルール本文を作る');
     expect(html).toContain('改善メモを Pine 修正依頼に反映');
+    expect(html).toContain('LLM rewrite は、元の自然言語ルールと検証結果をもとに');
     expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存');
     expect(html).toContain('改善メモは履歴として追記せず');
     expect(html).toContain('Pine 修正依頼は、既存ルールの意図を維持した compile error');
     expect(html).toContain('data-testid="reflect-source-backtest-memo-to-rule"');
+    expect(html).toContain('data-testid="llm-rewrite-natural-language-rule"');
     expect(html).toContain('data-testid="reflect-source-backtest-memo"');
     expect(html).not.toContain('raw-result.csv');
     expect(html).not.toContain('raw_prompt');
@@ -639,6 +642,64 @@ describe('StrategyVersionDetail', () => {
     const reflectRevisionButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
     await reflectRevisionButton?.props.onClick?.();
     expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('calls rule rewrite draft endpoint without auto save or Pine generation', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockPatchApi.mockReset();
+    mockFetchApi.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'トヨタ自動車',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      source_backtest_id: 'bt-source-1',
+      return_to: '/backtests/bt-source-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      createSourceBacktestPayload(),
+    );
+    mockPostApi.mockResolvedValue({
+      draft: {
+        natural_language_rule: 'LLMで再構成した単一の自然言語ルール本文',
+        source: 'llm_rewrite',
+        base_version_id: 'ver-1',
+        source_backtest_id: 'bt-source-1',
+        warnings: ['保存は未実行です。'],
+        assumptions: [],
+      },
+    });
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(mockPostApi).not.toHaveBeenCalled();
+
+    const rewriteButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'llm-rewrite-natural-language-rule');
+    expect(rewriteButton?.text).toBe('LLMで新しいルール本文を作る');
+    await rewriteButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith(
+      '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      expect.objectContaining({
+        source_backtest_id: 'bt-source-1',
+        improvement_memo: expect.stringContaining('検証結果 source validation report'),
+        current_rule: expect.any(String),
+        mode: 'improvement_from_backtest',
+      }),
+    );
+    expect(mockPatchApi).not.toHaveBeenCalled();
+    expect(mockFetchApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs/pine-job-1');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/generation-jobs');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/regeneration-jobs');
   });
 
   it('renders clarified rule, Pine, clone, and revision action labels with disabled source Pine reason', () => {

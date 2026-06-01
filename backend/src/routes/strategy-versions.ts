@@ -4,7 +4,7 @@ import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
 import type { PineGenerationProgressStage } from '../ai/home-ai-service';
 import { createHomeAiProvider, createStubHomeAiProvider } from '../ai/home-provider';
-import type { HomeAiProviderType } from '../ai/home-provider';
+import type { HomeAiProviderType, NaturalLanguageRuleRewriteContext } from '../ai/home-provider';
 import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
@@ -80,6 +80,91 @@ function normalizeRuleJson(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function sanitizeRewriteInputText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\t/g, ' ').trim();
+  if (!normalized) return null;
+  const unsafePattern =
+    /(https?:\/\/|file:\/\/|www\.|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\\|\/users\/|\/home\/|endpoint|model|secret|token|api[_-]?key|password|credential|stack trace|traceback|provider response|raw prompt)/i;
+  const lines = normalized
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => !unsafePattern.test(line));
+  const result = lines.join('\n').slice(0, maxLength).trim();
+  return result || null;
+}
+
+function extractAiSummaryStrings(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => sanitizeRewriteInputText(item, 220))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, limit);
+}
+
+function buildRewriteMetrics(backtest: { imports?: Array<{ parsedSummaryJson: unknown }>; strategySnapshotJson: unknown }) {
+  const parsedSummary = isRecord(backtest.imports?.[0]?.parsedSummaryJson)
+    ? backtest.imports?.[0]?.parsedSummaryJson as Record<string, unknown>
+    : null;
+  if (parsedSummary) {
+    return {
+      totalTrades: numberOrNull(parsedSummary.totalTrades ?? parsedSummary.trade_count),
+      winRate: numberOrNull(parsedSummary.winRate ?? parsedSummary.win_rate),
+      profitFactor: numberOrNull(parsedSummary.profitFactor ?? parsedSummary.profit_factor),
+      maxDrawdown: numberOrNull(parsedSummary.maxDrawdown ?? parsedSummary.max_drawdown),
+      netProfit: numberOrNull(parsedSummary.netProfit ?? parsedSummary.net_profit),
+      periodFrom: stringOrNull(parsedSummary.periodFrom ?? parsedSummary.period_from),
+      periodTo: stringOrNull(parsedSummary.periodTo ?? parsedSummary.period_to),
+    };
+  }
+
+  const snapshot = isRecord(backtest.strategySnapshotJson) ? backtest.strategySnapshotJson : null;
+  const resultSummary = isRecord(snapshot?.result_summary) ? snapshot.result_summary : null;
+  const metrics = isRecord(resultSummary?.metrics) ? resultSummary.metrics : null;
+  const period = isRecord(resultSummary?.period) ? resultSummary.period : null;
+  if (!metrics) return null;
+  return {
+    totalTrades: numberOrNull(metrics.trade_count),
+    winRate: numberOrNull(metrics.win_rate),
+    profitFactor: numberOrNull(metrics.profit_factor),
+    maxDrawdown: numberOrNull(metrics.max_drawdown_percent ?? metrics.max_drawdown),
+    netProfit: numberOrNull(metrics.net_profit ?? metrics.total_return_percent ?? metrics.total_return),
+    periodFrom: stringOrNull(period?.from ?? period?.period_from),
+    periodTo: stringOrNull(period?.to ?? period?.period_to),
+  };
+}
+
+function buildRewriteAiSummary(summary: { structuredJson: unknown } | null): NaturalLanguageRuleRewriteContext['aiSummary'] {
+  if (!summary || !isRecord(summary.structuredJson)) return null;
+  const payload = isRecord(summary.structuredJson.payload) ? summary.structuredJson.payload : null;
+  if (!payload) return null;
+  return {
+    nextActions: extractAiSummaryStrings(payload.next_actions, 6),
+    overallView: sanitizeRewriteInputText(payload.overall_view, 800),
+    risks: extractAiSummaryStrings(payload.risks, 5),
+    strengths: extractAiSummaryStrings(payload.strengths, 4),
+    keyMetrics: isRecord(payload.key_metrics) ? payload.key_metrics : null,
+  };
+}
+
 function classifyPineProviderFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   if (/timeout|aborted|AbortError/i.test(message)) {
@@ -112,6 +197,14 @@ function createPineGenerationService(): HomeAiService {
     createHomeAiProvider(resolvePineGenerationProviderType()),
     createStubHomeAiProvider(),
     false,
+  );
+}
+
+function createNaturalLanguageRuleRewriteService(): HomeAiService {
+  return new HomeAiService(
+    createHomeAiProvider(),
+    createStubHomeAiProvider(),
+    env.AI_ENABLE_STUB_FALLBACK,
   );
 }
 
@@ -810,6 +903,102 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       formatSuccess(request, {
         strategy_version: toStrategyVersionResponse(version),
         compare_base: version.clonedFromVersion ? toStrategyVersionCompareBase(version.clonedFromVersion) : null,
+      }),
+    );
+  });
+
+  fastify.post<{
+    Params: { versionId: string };
+    Body: {
+      source_backtest_id?: unknown;
+      improvement_memo?: unknown;
+      current_rule?: unknown;
+      mode?: unknown;
+    };
+  }>('/:versionId/natural-language-rule/rewrite-draft', async (request, reply) => {
+    const { versionId } = request.params;
+    const sourceBacktestId = readOptionalText(request.body?.source_backtest_id, 'source_backtest_id');
+    if (sourceBacktestId && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(sourceBacktestId)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'source_backtest_id is invalid.');
+    }
+    const improvementMemo = sanitizeRewriteInputText(request.body?.improvement_memo, 2400);
+
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+    });
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    let metrics: NaturalLanguageRuleRewriteContext['metrics'] = null;
+    let aiSummary: NaturalLanguageRuleRewriteContext['aiSummary'] = null;
+    if (sourceBacktestId) {
+      const backtest = await prisma.backtest.findUnique({
+        where: { id: sourceBacktestId },
+        include: {
+          imports: {
+            orderBy: { createdAt: 'desc' },
+            take: 3,
+          },
+        },
+      });
+      if (!backtest) {
+        throw new AppError(404, 'NOT_FOUND', 'source backtest was not found.');
+      }
+      metrics = buildRewriteMetrics(backtest);
+      const importIds = backtest.imports.map((item) => item.id);
+      const summary = await prisma.aiSummary.findFirst({
+        where: {
+          summaryScope: 'backtest_review',
+          OR: [
+            {
+              targetEntityType: 'backtest',
+              targetEntityId: backtest.id,
+            },
+            ...(importIds.length > 0
+              ? [
+                  {
+                    targetEntityType: 'backtest_run',
+                    targetEntityId: {
+                      in: importIds,
+                    },
+                  },
+                ]
+              : []),
+          ],
+        },
+        orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
+      });
+      aiSummary = buildRewriteAiSummary(summary);
+    }
+
+    const service = createNaturalLanguageRuleRewriteService();
+    let rewritten;
+    try {
+      rewritten = await service.rewriteNaturalLanguageRuleDraft({
+        strategyVersionId: version.id,
+        sourceBacktestId,
+        baseRule: version.naturalLanguageRule,
+        market: version.market,
+        timeframe: normalizeTimeframeAlias(version.timeframe),
+        improvementMemo,
+        metrics,
+        aiSummary,
+      });
+    } catch {
+      throw new AppError(502, 'AI_PROVIDER_UNAVAILABLE', 'natural language rule rewrite draft could not be generated.');
+    }
+
+    return reply.status(200).send(
+      formatSuccess(request, {
+        draft: {
+          natural_language_rule: rewritten.output.naturalLanguageRule,
+          source: 'llm_rewrite',
+          base_version_id: version.id,
+          source_backtest_id: sourceBacktestId,
+          warnings: rewritten.output.warnings,
+          assumptions: rewritten.output.assumptions,
+        },
       }),
     );
   });

@@ -63,6 +63,7 @@
 - CSV import report は parsed CSV summary を AI context に含める。
 - historical internal backtest report は Backtest snapshot 内の result summary と artifact pointer metadata を AI context に含める。
 - Backtest AI summary は単なる成績レビューではなく、strategy improvement loop に使う総評として扱う。本文は概要、主要メトリクス、成績評価、問題の切り分け、改善仮説、自然言語ルール改善案、Pine修正依頼に入れるべきではない注意、次に試す検証案、注意点を含める。`backtest_review_summary` の `schema_version=1.0` は維持し、改善向けの具体 action は既存 `payload.next_actions`、自然言語ルール改善案として使いやすいメモは `payload.overall_view` に寄せる。`revision_request` は compile error / validation note / TradingView 上の挙動調整に限定する。
+- StrategyVersionDetail の改善 context では、保存済み Backtest AI summary と主要 metrics を LLM rewrite draft の入力 context に使える。ただし raw CSV / raw import text は使わず、rewrite 結果は natural_language_rule textarea の draft としてだけ反映する。表示や rewrite 実行だけで保存、Pine generation、backtest、application apply は起動しない。
 - AI summary 生成では CSV全文、取込本文、raw prompt、provider response、generated Pine 全文を扱わない。AI summary 生成だけで strategy clone、Pine generation、backtest、application apply は起動しない。
 - artifact pointer は snapshot metadata として表示し、存在しない場合は欠損として説明する。Stage 2C cleanup 後は artifact read endpoint / table は存在しない。
 - artifact file read / download / diff / retention job は未実装であり、詳細境界は `docs/仕様書/09_AI_summary_artifact仕様.md` を正本とする。
