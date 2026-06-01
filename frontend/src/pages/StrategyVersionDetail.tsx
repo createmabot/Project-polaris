@@ -320,43 +320,6 @@ export function buildSourceBacktestImprovementMemo(sourceBacktest: BacktestDetai
   return lines.join('\n');
 }
 
-function extractNaturalLanguageRuleDraftInputs(improvementMemo: string): string[] {
-  return improvementMemo
-    .split(/\r?\n/)
-    .map((line) => compactSafeText(line, 220))
-    .filter(Boolean)
-    .map((line) => {
-      const [label, ...rest] = line.split(':');
-      const value = rest.join(':').trim();
-      if (/AI summary next actions|AI summary improvement memo|AI summary overall view/i.test(label) && value) {
-        return value;
-      }
-      return line;
-    })
-    .filter((line) => {
-      if (/^(検証結果|実行ソース|市場・時間足|主要指標|source backtest id)/i.test(line)) return false;
-      if (/trade_count|total_return|price_change|max_drawdown|profit_factor|win_rate/i.test(line)) return false;
-      return true;
-    })
-    .slice(0, 6);
-}
-
-export function buildNaturalLanguageRuleImprovementDraft(currentRule: string, improvementMemo: string): string {
-  const memo = improvementMemo.trim();
-  if (!memo) return currentRule;
-  const current = compactSafeText(currentRule, 900);
-  const draftInputs = extractNaturalLanguageRuleDraftInputs(memo);
-  const lines = [
-    '自然言語ルール本文ドラフト',
-    current ? `ベース戦略: ${current}` : '',
-    '検証結果を踏まえ、以下を満たす単一の最新 strategy rule として定義する。',
-    ...draftInputs.map((line) => `- ${line}`),
-    'entry / exit / risk management は矛盾しない測定可能な条件として書く。',
-    '過剰最適化を避け、次の Pine 生成で検証できる粒度にする。',
-  ].filter(Boolean);
-  return lines.join('\n');
-}
-
 export function findNextPriorityVersionId(
   currentVersionId: string,
   strategyVersions: Array<{
@@ -614,16 +577,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [ruleRewriteLoading, setRuleRewriteLoading] = useState(false);
   const [ruleRewriteError, setRuleRewriteError] = useState<string | null>(null);
   const [ruleRewriteWarnings, setRuleRewriteWarnings] = useState<string[]>([]);
+  const [ruleRewriteMessage, setRuleRewriteMessage] = useState<string | null>(null);
 
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
   const [saveRuleMessage, setSaveRuleMessage] = useState<string | null>(null);
-  const [savingForwardNote, setSavingForwardNote] = useState(false);
-  const [saveForwardNoteError, setSaveForwardNoteError] = useState<string | null>(null);
-  const [saveForwardNoteMessage, setSaveForwardNoteMessage] = useState<string | null>(null);
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
-  const [editingForwardValidationNote, setEditingForwardValidationNote] = useState('');
 
   const version = data?.strategy_version ?? null;
   const compareBase = data?.compare_base ?? null;
@@ -704,9 +664,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   useEffect(() => {
     if (version) {
       setEditingNaturalLanguageRule(version.natural_language_rule);
-      setEditingForwardValidationNote(version.forward_validation_note ?? '');
     }
-  }, [version?.id, version?.natural_language_rule, version?.forward_validation_note]);
+  }, [version?.id, version?.natural_language_rule]);
 
   useEffect(() => {
     const latestRevisionInput = pineData?.latest_revision_input;
@@ -943,24 +902,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   };
 
-  const onReflectSourceBacktestMemo = () => {
-    const memo = effectiveSourceBacktestImprovementMemo;
-    if (!memo) return;
-    setRevisionRequest(memo);
-  };
-
-  const onReflectSourceBacktestMemoToRule = () => {
-    const memo = effectiveSourceBacktestImprovementMemo;
-    if (!memo) return;
-    setEditingNaturalLanguageRule(buildNaturalLanguageRuleImprovementDraft(version?.natural_language_rule ?? '', memo));
-  };
-
   const onRewriteNaturalLanguageRuleDraft = async () => {
     const memo = effectiveSourceBacktestImprovementMemo;
     if (!memo) return;
     setRuleRewriteLoading(true);
     setRuleRewriteError(null);
     setRuleRewriteWarnings([]);
+    setRuleRewriteMessage(null);
     try {
       const response = await postApi<StrategyVersionRuleRewriteDraftData>(
         `/api/strategy-versions/${versionId}/natural-language-rule/rewrite-draft`,
@@ -973,6 +921,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       );
       setEditingNaturalLanguageRule(response.draft.natural_language_rule);
       setRuleRewriteWarnings([...(response.draft.warnings ?? []), ...(response.draft.assumptions ?? [])].slice(0, 6));
+      setRuleRewriteMessage('LLM draft を自然言語ルール本文に反映しました。保存と Pine 生成はまだ実行していません。');
     } catch (requestError: any) {
       setRuleRewriteError(requestError?.message ?? 'LLM rewrite draft の作成に失敗しました。');
     } finally {
@@ -994,24 +943,6 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setSaveRuleError(requestError?.message ?? 'ルール保存に失敗しました。');
     } finally {
       setSavingRule(false);
-    }
-  };
-
-  const onSaveForwardValidationNote = async () => {
-    setSavingForwardNote(true);
-    setSaveForwardNoteError(null);
-    setSaveForwardNoteMessage(null);
-    try {
-      const response = await patchApi<StrategyVersionData>(`/api/strategy-versions/${versionId}`, {
-        forward_validation_note: editingForwardValidationNote,
-      });
-      await mutate(response, false);
-      await mutate(response, false);
-      setSaveForwardNoteMessage('フォワード検証ノートを保存しました。');
-    } catch (requestError: any) {
-      setSaveForwardNoteError(requestError?.message ?? 'フォワード検証ノート保存に失敗しました。');
-    } finally {
-      setSavingForwardNote(false);
     }
   };
 
@@ -1057,7 +988,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       <div className='mx-auto max-w-5xl space-y-4'>
         <PageHeader
           title='rule version 詳細'
-          description='自然言語ルール、Pine、検証ノートを同じ version 文脈で確認します。'
+          description='自然言語ルールと Pine を同じ version 文脈で確認します。'
           actions={
             <>
               <TextLink href='/' className='text-sm text-slate-600 no-underline hover:underline'>ホームへ戻る</TextLink>
@@ -1204,17 +1135,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             value={sourceBacktestImprovementMemo}
             onChange={(event) => setSourceBacktestImprovementMemo(event.target.value)}
             rows={8}
-            helpText='この textarea はローカル編集用です。entry / exit / risk など strategy logic の改善は自然言語ルール本文へ反映し、compile error や Pine 実装上の調整だけを Pine 修正依頼へ反映します。'
+            helpText='元ルール、検証結果、AI総評、改善メモをもとに、次のPine生成に使う単一の自然言語ルール本文 draft を作ります。'
           />
           <div className='mt-3 flex flex-wrap gap-2'>
-            <Button
-              variant='primary'
-              data-testid='reflect-source-backtest-memo-to-rule'
-              onClick={onReflectSourceBacktestMemoToRule}
-              disabled={!effectiveSourceBacktestImprovementMemo}
-            >
-              改善案から新しいルール本文を作る
-            </Button>
             <Button
               variant='primary'
               data-testid='llm-rewrite-natural-language-rule'
@@ -1223,14 +1146,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             >
               {ruleRewriteLoading ? 'LLM draft 作成中...' : 'LLMで新しいルール本文を作る'}
             </Button>
-            <Button
-              data-testid='reflect-source-backtest-memo'
-              onClick={onReflectSourceBacktestMemo}
-              disabled={!effectiveSourceBacktestImprovementMemo}
-            >
-              改善メモを Pine 修正依頼に反映
-            </Button>
           </div>
+          {ruleRewriteMessage ? (
+            <InlineNotice tone='success' className='mt-3'>
+              {ruleRewriteMessage}
+            </InlineNotice>
+          ) : null}
           {ruleRewriteError ? (
             <InlineNotice tone='warning' className='mt-3'>
               {ruleRewriteError}
@@ -1242,38 +1163,18 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </InlineNotice>
           ) : null}
           <InlineNotice tone='info' className='mt-3'>
-            LLM rewrite は、元の自然言語ルールと検証結果をもとに、次の Pine 生成に使う単一のルール本文 draft を作ります。押下だけでは保存・Pine生成・backtest・適用は行いません。戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存し、その後「保存済みルールから Pine を作り直す」を使います。改善メモは履歴として追記せず、button は textarea を新しい draft へ置き換えるだけです。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
+            押下だけでは保存・Pine生成・検証・適用は行いません。draft を確認してからルール本文を保存してください。
           </InlineNotice>
         </SectionCard>
       ) : null}
       <SectionCard
-        title='基本情報'
-        description='strategy version の ID、対象、状態、更新時刻を確認します。'
-      >
-        <KeyValueList>
-          <KeyValueRow label='version_id'><code>{version.id}</code></KeyValueRow>
-          <KeyValueRow label='strategy_id'><code>{version.strategy_id}</code></KeyValueRow>
-          <KeyValueRow label='clone元 version'><code>{version.cloned_from_version_id ?? '-'}</code></KeyValueRow>
-          <KeyValueRow label='市場'>{version.market}</KeyValueRow>
-          <KeyValueRow label='時間足'>{formatTimeframeLabel(version.timeframe)}</KeyValueRow>
-          <KeyValueRow label='status'>
-            <StatusBadge status={version.status}>
-              <code>{version.status}</code>
-            </StatusBadge>
-          </KeyValueRow>
-          <KeyValueRow label='作成'>{new Date(version.created_at).toLocaleString('ja-JP')}</KeyValueRow>
-          <KeyValueRow label='更新'>{new Date(version.updated_at).toLocaleString('ja-JP')}</KeyValueRow>
-        </KeyValueList>
-      </SectionCard>
-
-      <SectionCard
         title='自然言語ルール（編集）'
-        description='ルール本文の保存、保存済みルールからの Pine 作り直し、既存 Pine への修正依頼、version 複製を分けて操作します。'
+        description='改善 draft を確認し、自然言語ルール本文を保存してから Pine を作り直します。'
         className='mt-4'
       >
         {hasSourceBacktestContext ? (
           <InlineNotice tone='info' className='mb-3'>
-            検証結果をもとに entry / exit / risk 条件を改善する場合は、まず自然言語ルール本文を単一の最新ルール本文として書き換え、内容を確認して保存してください。source_pine_script_id がある場合でも、Pine 修正再生成は既存ルールの意図を保った実装修正に限定します。必要に応じて「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
+            LLM rewrite で作った draft は保存されません。内容を確認して `ルール本文を保存` を押し、その後に Pine を作り直します。
           </InlineNotice>
         ) : null}
         <div style={{ marginBottom: '0.75rem', color: '#555', fontSize: '0.9rem' }}>
@@ -1318,18 +1219,6 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </div>
           </div>
 
-          <div style={{ padding: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '8px', background: '#ffffff' }}>
-            <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>2. version 操作</div>
-            <p style={{ margin: '0 0 0.6rem', color: '#555', fontSize: '0.9rem' }}>
-              `この version を複製する` は、現在の version を元に別 version を作る操作です。保存や Pine 作り直しとは別の明示操作です。
-            </p>
-            <Button
-              onClick={onCloneAsNewVersion}
-              disabled={cloning}
-            >
-              {cloning ? '作成中...' : 'この version を複製する'}
-            </Button>
-          </div>
         </div>
         {regenerating && (
           <PineGenerationProgress
@@ -1340,9 +1229,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           />
         )}
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', background: '#fafafa' }}>
-          <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>3. Pine 修正再生成</div>
+          <div style={{ fontWeight: 700, marginBottom: '0.35rem' }}>Pine 実装修正</div>
           <p style={{ margin: '0 0 0.6rem', color: '#555', fontSize: '0.9rem' }}>
-            `修正依頼をもとに Pine を再生成` は、既存 Pine script と revision_request を使って Pine 実装を修正します。戦略条件そのものを変える改善は、自然言語ルール本文側に反映してください。改善メモ反映だけでは endpoint を呼びません。
+            TradingView の compile error や Pine 実装上の微修正に使います。戦略条件そのものを変える場合は、自然言語ルール本文を更新してから Pine を作り直してください。
           </p>
           {missingSourcePineScriptNotice ? (
             <InlineNotice tone='warning' className='mb-3'>
@@ -1442,50 +1331,38 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         </div>
       )}
 
-      <SectionCard
-        title='次の検証ノート'
-        description='forward validation の確認内容を version 単位で記録します。'
-        className='mt-4'
-      >
-        <KeyValueList className='mb-3'>
-          <KeyValueRow label='現在のノート'>
-            {version.forward_validation_note && version.forward_validation_note.trim() ? version.forward_validation_note : '未設定'}
-          </KeyValueRow>
-          <KeyValueRow label='ノート更新目安'>
-            {version.forward_validation_note && version.forward_validation_note.trim()
-              ? (version.forward_validation_note_updated_at
-                  ? new Date(version.forward_validation_note_updated_at).toLocaleString('ja-JP')
-                  : '-')
-              : '-'}
-          </KeyValueRow>
-        </KeyValueList>
-        <TextArea
-          label='検証ノート'
-          value={editingForwardValidationNote}
-          onChange={(event) => setEditingForwardValidationNote(event.target.value)}
-          rows={4}
-          placeholder='次に検証したい条件や見直し方針を記録します'
-        />
-        <div style={{ marginTop: '0.7rem' }}>
+      <details className='mt-4 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700'>
+        <summary className='cursor-pointer font-semibold text-slate-900'>その他の version 操作</summary>
+        <div className='mt-3'>
+          <p className='mb-3 text-slate-600'>
+            現在の version を元に別 version を作る明示操作です。保存や Pine 作り直しとは別です。
+          </p>
           <Button
-            variant='primary'
-            onClick={onSaveForwardValidationNote}
-            disabled={savingForwardNote}
+            onClick={onCloneAsNewVersion}
+            disabled={cloning}
           >
-            {savingForwardNote ? '保存中...' : 'ノートを保存'}
+            {cloning ? '作成中...' : 'この version を複製する'}
           </Button>
         </div>
-        {saveForwardNoteError && (
-          <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
-            {saveForwardNoteError}
-          </div>
-        )}
-        {saveForwardNoteMessage && (
-          <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#eef8ee', border: '1px solid #a9d5a9', color: '#1f6a1f', borderRadius: '4px' }}>
-            {saveForwardNoteMessage}
-          </div>
-        )}
-      </SectionCard>
+      </details>
+
+      <details className='mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700'>
+        <summary className='cursor-pointer font-semibold text-slate-900'>詳細情報</summary>
+        <KeyValueList className='mt-3'>
+          <KeyValueRow label='version_id'><code>{version.id}</code></KeyValueRow>
+          <KeyValueRow label='strategy_id'><code>{version.strategy_id}</code></KeyValueRow>
+          <KeyValueRow label='clone元 version'><code>{version.cloned_from_version_id ?? '-'}</code></KeyValueRow>
+          <KeyValueRow label='市場'>{version.market}</KeyValueRow>
+          <KeyValueRow label='時間足'>{formatTimeframeLabel(version.timeframe)}</KeyValueRow>
+          <KeyValueRow label='status'>
+            <StatusBadge status={version.status}>
+              <code>{version.status}</code>
+            </StatusBadge>
+          </KeyValueRow>
+          <KeyValueRow label='作成'>{new Date(version.created_at).toLocaleString('ja-JP')}</KeyValueRow>
+          <KeyValueRow label='更新'>{new Date(version.updated_at).toLocaleString('ja-JP')}</KeyValueRow>
+        </KeyValueList>
+      </details>
 
       <section style={{ marginTop: '1.2rem' }}>
         <h2 style={{ marginBottom: '0.5rem' }}>比較元との差分（最小）</h2>
