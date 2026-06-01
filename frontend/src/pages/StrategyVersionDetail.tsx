@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { useLocation, useSearch } from 'wouter';
 import { fetchApi, patchApi, postApi, swrFetcher } from '../api/client';
@@ -578,6 +578,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [ruleRewriteError, setRuleRewriteError] = useState<string | null>(null);
   const [ruleRewriteWarnings, setRuleRewriteWarnings] = useState<string[]>([]);
   const [ruleRewriteMessage, setRuleRewriteMessage] = useState<string | null>(null);
+  const ruleEditorSectionRef = useRef<HTMLDivElement | null>(null);
 
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
@@ -919,9 +920,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           mode: 'improvement_from_backtest',
         },
       );
-      setEditingNaturalLanguageRule(response.draft.natural_language_rule);
+      const draftRule = response.draft.natural_language_rule;
+      const unchanged = draftRule.trim() === editingNaturalLanguageRule.trim();
+      setEditingNaturalLanguageRule(draftRule);
       setRuleRewriteWarnings([...(response.draft.warnings ?? []), ...(response.draft.assumptions ?? [])].slice(0, 6));
-      setRuleRewriteMessage('LLM draft を自然言語ルール本文に反映しました。保存と Pine 生成はまだ実行していません。');
+      setRuleRewriteMessage(
+        unchanged
+          ? 'LLM draft は現在の自然言語ルール本文と同じ内容でした。改善メモを具体化して再実行してください。'
+          : 'LLM draft を下の自然言語ルール本文に反映しました。内容を確認してから保存してください。',
+      );
+      globalThis.setTimeout(() => {
+        ruleEditorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        ruleEditorSectionRef.current?.querySelector('textarea')?.focus();
+      }, 0);
     } catch (requestError: any) {
       setRuleRewriteError(requestError?.message ?? 'LLM rewrite draft の作成に失敗しました。');
     } finally {
@@ -1167,11 +1178,12 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </InlineNotice>
         </SectionCard>
       ) : null}
-      <SectionCard
-        title='自然言語ルール（編集）'
-        description='改善 draft を確認し、自然言語ルール本文を保存してから Pine を作り直します。'
-        className='mt-4'
-      >
+      <div ref={ruleEditorSectionRef}>
+        <SectionCard
+          title='自然言語ルール（編集）'
+          description='改善 draft を確認し、自然言語ルール本文を保存してから Pine を作り直します。'
+          className='mt-4'
+        >
         {hasSourceBacktestContext ? (
           <InlineNotice tone='info' className='mb-3'>
             LLM rewrite で作った draft は保存されません。内容を確認して `ルール本文を保存` を押し、その後に Pine を作り直します。
@@ -1288,7 +1300,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </div>
           )}
         </div>
-      </SectionCard>
+        </SectionCard>
+      </div>
 
       {saveRuleError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
