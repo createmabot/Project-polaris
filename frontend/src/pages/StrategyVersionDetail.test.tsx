@@ -400,6 +400,24 @@ describe('StrategyVersionDetail', () => {
     expect(draft).not.toContain('改善案:');
   });
 
+  it('rebuilds replacement natural language rule drafts from saved base rule instead of nesting prior drafts', () => {
+    const savedRule = '既存ルール: SMA 上抜けで entry する。';
+    const firstDraft = buildNaturalLanguageRuleImprovementDraft(
+      savedRule,
+      'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
+    );
+    const secondDraft = buildNaturalLanguageRuleImprovementDraft(
+      savedRule,
+      'entry 条件は RSI 55 以上、exit は SMA 下抜け、risk は 5% stop とする。',
+    );
+
+    expect(secondDraft).toContain('ベース戦略: 既存ルール: SMA 上抜けで entry する。');
+    expect(secondDraft).toContain('entry 条件は RSI 55 以上');
+    expect(secondDraft).not.toContain('ベース戦略: 自然言語ルール本文ドラフト');
+    expect(secondDraft).not.toContain('出来高 filter を追加');
+    expect(firstDraft).toContain('出来高 filter を追加');
+  });
+
   it('renders shared loading and error states for detail fetch', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();

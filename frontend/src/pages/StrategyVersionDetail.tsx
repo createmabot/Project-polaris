@@ -947,7 +947,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const onReflectSourceBacktestMemoToRule = () => {
     const memo = sourceBacktestImprovementMemo.trim();
     if (!memo) return;
-    setEditingNaturalLanguageRule((current) => buildNaturalLanguageRuleImprovementDraft(current, memo));
+    setEditingNaturalLanguageRule(buildNaturalLanguageRuleImprovementDraft(version?.natural_language_rule ?? '', memo));
   };
 
   const onSaveRule = async () => {
