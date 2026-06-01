@@ -58,7 +58,6 @@ vi.mock('../components/ui/Button', async () => {
 import StrategyVersionDetail, {
   buildSourceBacktestImprovementMemo,
   buildApplyImprovedVersionFailureMessage,
-  buildNaturalLanguageRuleImprovementDraft,
   findNextPriorityVersionId,
   parseImproveApplicationContext,
 } from './StrategyVersionDetail';
@@ -387,37 +386,6 @@ describe('StrategyVersionDetail', () => {
     expect(memo).not.toContain('raw prompt');
   });
 
-  it('builds a replacement natural language rule draft without appending improvement history', () => {
-    const draft = buildNaturalLanguageRuleImprovementDraft(
-      '既存ルール: SMA 上抜けで entry する。',
-      'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
-    );
-
-    expect(draft).toContain('自然言語ルール本文ドラフト');
-    expect(draft).toContain('ベース戦略: 既存ルール: SMA 上抜けで entry する。');
-    expect(draft).toContain('entry 条件に出来高 filter を追加');
-    expect(draft).not.toContain('---');
-    expect(draft).not.toContain('改善案:');
-  });
-
-  it('rebuilds replacement natural language rule drafts from saved base rule instead of nesting prior drafts', () => {
-    const savedRule = '既存ルール: SMA 上抜けで entry する。';
-    const firstDraft = buildNaturalLanguageRuleImprovementDraft(
-      savedRule,
-      'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
-    );
-    const secondDraft = buildNaturalLanguageRuleImprovementDraft(
-      savedRule,
-      'entry 条件は RSI 55 以上、exit は SMA 下抜け、risk は 5% stop とする。',
-    );
-
-    expect(secondDraft).toContain('ベース戦略: 既存ルール: SMA 上抜けで entry する。');
-    expect(secondDraft).toContain('entry 条件は RSI 55 以上');
-    expect(secondDraft).not.toContain('ベース戦略: 自然言語ルール本文ドラフト');
-    expect(secondDraft).not.toContain('出来高 filter を追加');
-    expect(firstDraft).toContain('出来高 filter を追加');
-  });
-
   it('renders shared loading and error states for detail fetch', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
@@ -501,9 +469,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('href="/strategies/str-1/versions?q=RSI&amp;page=2"');
     expect(html).toContain('次の最優先確認へ');
     expect(html).toContain('/strategy-versions/ver-next?return=');
-    expect(html).toContain('次の検証ノート');
-    expect(html).toContain('<strong>現在のノート:</strong> 次回は RSI 55 以上で再検証');
-    expect(html).toContain('ノート更新目安:');
+    expect(html).not.toContain('次の検証ノート');
+    expect(html).not.toContain('<strong>現在のノート:</strong> 次回は RSI 55 以上で再検証');
+    expect(html).not.toContain('ノート更新目安:');
     expect(html).not.toContain('内製バックテスト（最小）');
     expect(html).not.toContain('内製バックテストを開始');
     expect(html).not.toContain('/api/internal-backtests/executions');
@@ -539,8 +507,8 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('比較元の version はありません。');
     expect(html).toContain('href="/strategies/str-1/versions"');
-    expect(html).toContain('<strong>現在のノート:</strong> 未設定');
-    expect(html).toContain('<strong>ノート更新目安:</strong> -');
+    expect(html).not.toContain('<strong>現在のノート:</strong> 未設定');
+    expect(html).not.toContain('<strong>ノート更新目安:</strong> -');
   });
 
   it('renders improve application context banner with safe return link', () => {
@@ -618,29 +586,21 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Drawdown should be controlled before scaling.');
     expect(html).toContain('同じ application の関連レポートが 1 件あります。');
     expect(html).toContain('改善メモ');
-    expect(html).toContain('改善案から新しいルール本文を作る');
     expect(html).toContain('LLMで新しいルール本文を作る');
-    expect(html).toContain('改善メモを Pine 修正依頼に反映');
-    expect(html).toContain('LLM rewrite は、元の自然言語ルールと検証結果をもとに');
-    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存');
-    expect(html).toContain('改善メモは履歴として追記せず');
-    expect(html).toContain('Pine 修正依頼は、既存ルールの意図を維持した compile error');
-    expect(html).toContain('data-testid="reflect-source-backtest-memo-to-rule"');
+    expect(html).toContain('元ルール、検証結果、AI総評、改善メモをもとに');
+    expect(html).toContain('押下だけでは保存・Pine生成・検証・適用は行いません');
     expect(html).toContain('data-testid="llm-rewrite-natural-language-rule"');
-    expect(html).toContain('data-testid="reflect-source-backtest-memo"');
+    expect(html).not.toContain('改善案から新しいルール本文を作る');
+    expect(html).not.toContain('改善メモを Pine 修正依頼に反映');
+    expect(html).not.toContain('data-testid="reflect-source-backtest-memo-to-rule"');
+    expect(html).not.toContain('data-testid="reflect-source-backtest-memo"');
     expect(html).not.toContain('raw-result.csv');
     expect(html).not.toContain('raw_prompt');
     expect(html).not.toContain('do not show this prompt');
     expect(html).not.toContain('raw prompt token endpoint');
 
     expect(mockPostApi).not.toHaveBeenCalled();
-    const reflectRuleButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo-to-rule');
-    await reflectRuleButton?.props.onClick?.();
     expect(mockPatchApi).not.toHaveBeenCalled();
-    expect(mockPostApi).not.toHaveBeenCalled();
-
-    const reflectRevisionButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'reflect-source-backtest-memo');
-    await reflectRevisionButton?.props.onClick?.();
     expect(mockPostApi).not.toHaveBeenCalled();
   });
 
@@ -726,15 +686,19 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('ルール本文を保存');
     expect(html).toContain('保存済みルールから Pine を作り直す');
     expect(html).toContain('この version を複製する');
+    expect(html).toContain('<summary class="cursor-pointer font-semibold text-slate-900">その他の version 操作</summary>');
+    expect(html).toContain('<summary class="cursor-pointer font-semibold text-slate-900">詳細情報</summary>');
     expect(html).toContain('修正依頼をもとに Pine を再生成');
     expect(html).toContain('Pine 修正再生成には source_pine_script_id が必要です。');
     expect(html).toContain('既存 Pine を元にした修正再生成はできません。');
     expect(html).toContain('既存 Pine の細部を継承するとは限りません。');
-    expect(html).toContain('検証結果をもとに entry / exit / risk 条件を改善する場合は、まず自然言語ルール本文を単一の最新ルール本文として書き換え');
-    expect(html).toContain('Pine 修正再生成は既存ルールの意図を保った実装修正に限定');
-    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文側に反映');
+    expect(html).toContain('LLM rewrite で作った draft は保存されません。');
+    expect(html).toContain('TradingView の compile error や Pine 実装上の微修正に使います。');
+    expect(html).toContain('戦略条件そのものを変える場合は、自然言語ルール本文を更新してから Pine を作り直してください。');
     expect(html).toContain('rows="8"');
     expect(html).toContain('rows="6"');
+    expect(html).not.toContain('次の検証ノート');
+    expect(html).not.toContain('forward validation の確認内容');
 
     const revisionButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'pine-regenerate-button');
     expect(revisionButton?.text).toBe('修正依頼をもとに Pine を再生成');
@@ -1009,16 +973,16 @@ describe('StrategyVersionDetail', () => {
     expect(html).not.toContain('銘柄ページへ戻る');
   });
 
-  it('renders forward validation note editor controls', () => {
+  it('does not render forward validation note editor controls', () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
     setupSWR(createPayload({ withCompareBase: true, samePine: false }));
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
-    expect(html).toContain('次の検証ノート');
-    expect(html).toContain('placeholder="次に検証したい条件や見直し方針を記録します"');
-    expect(html).toContain('ノートを保存');
+    expect(html).not.toContain('次の検証ノート');
+    expect(html).not.toContain('placeholder="次に検証したい条件や見直し方針を記録します"');
+    expect(html).not.toContain('ノートを保存');
   });
 
   it('renders pine regenerate controls with lineage summary', () => {
