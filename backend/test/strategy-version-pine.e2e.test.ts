@@ -42,6 +42,32 @@ type Runtime = {
   versionSeq: number;
   failNextPineScriptCreate: boolean;
   versions: Map<string, StrategyRuleVersionRow>;
+  backtests: Map<string, {
+    id: string;
+    strategyRuleVersionId: string | null;
+    title: string;
+    executionSource: string;
+    market: string;
+    timeframe: string;
+    status: string;
+    strategySnapshotJson: unknown;
+    createdAt: Date;
+    updatedAt: Date;
+    imports: Array<{
+      id: string;
+      parsedSummaryJson: unknown;
+      createdAt: Date;
+    }>;
+  }>;
+  aiSummaries: Array<{
+    id: string;
+    summaryScope: string;
+    targetEntityType: string;
+    targetEntityId: string;
+    structuredJson: unknown;
+    generatedAt: Date;
+    createdAt: Date;
+  }>;
   pineScripts: Map<string, PineScriptRow>;
   pineRevisionInputs: Map<string, {
     id: string;
@@ -74,6 +100,7 @@ type Runtime = {
 let runtime: Runtime;
 
 const generatePineScriptMock = vi.fn();
+const rewriteRuleDraftMock = vi.fn();
 
 function createRuntime(): Runtime {
   const now = new Date('2026-04-25T10:00:00.000Z');
@@ -105,6 +132,59 @@ function createRuntime(): Runtime {
         },
       ],
     ]),
+    backtests: new Map([
+      [
+        'bt-1',
+        {
+          id: 'bt-1',
+          strategyRuleVersionId: 'ver-1',
+          title: 'source validation',
+          executionSource: 'tradingview_csv',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'succeeded',
+          strategySnapshotJson: null,
+          createdAt: now,
+          updatedAt: now,
+          imports: [
+            {
+              id: 'import-1',
+              parsedSummaryJson: {
+                totalTrades: 18,
+                winRate: 42,
+                profitFactor: 0.92,
+                maxDrawdown: -18,
+                netProfit: -12000,
+                periodFrom: '2025-01-01',
+                periodTo: '2025-12-31',
+              },
+              createdAt: now,
+            },
+          ],
+        },
+      ],
+    ]),
+    aiSummaries: [
+      {
+        id: 'sum-1',
+        summaryScope: 'backtest_review',
+        targetEntityType: 'backtest',
+        targetEntityId: 'bt-1',
+        structuredJson: {
+          schema_name: 'backtest_review_summary',
+          schema_version: '1.0',
+          payload: {
+            next_actions: ['entry filterを強化し、損切り幅を比較する'],
+            overall_view: '自然言語ルール本文でentryとriskを明確化する',
+            risks: ['最大DDが大きい'],
+            strengths: ['検証素材は利用可能'],
+            key_metrics: { trade_count: 18, profit_factor: 0.92 },
+          },
+        },
+        generatedAt: now,
+        createdAt: now,
+      },
+    ],
     pineScripts: new Map(),
     pineRevisionInputs: new Map(),
     pineGenerationJobs: new Map(),
@@ -113,6 +193,9 @@ function createRuntime(): Runtime {
 
 vi.mock('../src/ai/home-ai-service', () => {
   class HomeAiService {
+    async rewriteNaturalLanguageRuleDraft(context: unknown) {
+      return rewriteRuleDraftMock(context);
+    }
     async generatePineScript(context: unknown, options?: { onProgress?: (update: any) => void | Promise<void> }) {
       await options?.onProgress?.({ stage: 'LLMでPine生成', progressPercent: 35 });
       await options?.onProgress?.({ stage: '生成結果レビュー', progressPercent: 65 });
@@ -235,6 +318,32 @@ vi.mock('../src/db', () => {
           (item) => item.generatedPineScriptId === selected.id,
         ) ?? null;
         return { ...selected, generatedFromRevision };
+      },
+    },
+    backtest: {
+      findUnique: async ({ where, include }: any) => {
+        const row = runtime.backtests.get(where.id) ?? null;
+        if (!row) return null;
+        return {
+          ...row,
+          imports: include?.imports ? row.imports : [],
+        };
+      },
+    },
+    aiSummary: {
+      findFirst: async ({ where }: any) => {
+        let rows = [...runtime.aiSummaries];
+        if (where?.summaryScope) rows = rows.filter((row) => row.summaryScope === where.summaryScope);
+        if (Array.isArray(where?.OR)) {
+          rows = rows.filter((row) => where.OR.some((condition: any) => {
+            if (condition.targetEntityType && row.targetEntityType !== condition.targetEntityType) return false;
+            if (condition.targetEntityId?.in) return condition.targetEntityId.in.includes(row.targetEntityId);
+            if (condition.targetEntityId) return row.targetEntityId === condition.targetEntityId;
+            return true;
+          }));
+        }
+        rows.sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime());
+        return rows[0] ?? null;
       },
     },
     pineRevisionInput: {
@@ -412,6 +521,105 @@ describe('strategy version pine endpoints', () => {
   beforeEach(() => {
     runtime = createRuntime();
     generatePineScriptMock.mockReset();
+    rewriteRuleDraftMock.mockReset();
+  });
+
+  it('returns an LLM rewrite draft without saving the strategy version or starting Pine jobs', async () => {
+    rewriteRuleDraftMock.mockResolvedValue({
+      output: {
+        naturalLanguageRule: '改善後ルール本文: entry filterを強化し、stop lossを明確化する。',
+        warnings: ['保存とPine生成は未実行です。'],
+        assumptions: ['raw CSVは使用していません。'],
+        modelName: 'stub-rule-rewrite',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'stub',
+        fallbackToStub: false,
+      },
+    });
+    const originalRule = runtime.versions.get('ver-1')?.naturalLanguageRule;
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      payload: {
+        source_backtest_id: 'bt-1',
+        improvement_memo: 'entry filterとrisk管理を改善する',
+        current_rule: 'textarea draft should not be trusted',
+        mode: 'improvement_from_backtest',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.draft).toMatchObject({
+      natural_language_rule: '改善後ルール本文: entry filterを強化し、stop lossを明確化する。',
+      source: 'llm_rewrite',
+      base_version_id: 'ver-1',
+      source_backtest_id: 'bt-1',
+      warnings: ['保存とPine生成は未実行です。'],
+      assumptions: ['raw CSVは使用していません。'],
+    });
+    expect(rewriteRuleDraftMock).toHaveBeenCalledTimes(1);
+    expect(rewriteRuleDraftMock.mock.calls[0]?.[0]).toMatchObject({
+      strategyVersionId: 'ver-1',
+      sourceBacktestId: 'bt-1',
+      baseRule: originalRule,
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      improvementMemo: 'entry filterとrisk管理を改善する',
+      metrics: {
+        totalTrades: 18,
+        winRate: 42,
+        profitFactor: 0.92,
+        maxDrawdown: -18,
+        netProfit: -12000,
+      },
+      aiSummary: {
+        nextActions: ['entry filterを強化し、損切り幅を比較する'],
+        overallView: '自然言語ルール本文でentryとriskを明確化する',
+      },
+    });
+    expect(runtime.versions.get('ver-1')?.naturalLanguageRule).toBe(originalRule);
+    expect(runtime.pineGenerationJobs.size).toBe(0);
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+    expect(JSON.stringify(res.json().data)).not.toContain('textarea draft should not be trusted');
+    expect(JSON.stringify(res.json().data)).not.toContain('endpoint');
+    expect(JSON.stringify(res.json().data)).not.toContain('token');
+
+    await app.close();
+  });
+
+  it('returns sanitized not found when rewrite source backtest is invalid', async () => {
+    rewriteRuleDraftMock.mockResolvedValue({
+      output: {
+        naturalLanguageRule: 'should not run',
+        warnings: [],
+        assumptions: [],
+        modelName: 'stub',
+        promptVersion: 'v1',
+      },
+      log: {},
+    });
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      payload: {
+        source_backtest_id: 'missing-bt',
+        improvement_memo: '改善する',
+      },
+    });
+
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.message).toBe('source backtest was not found.');
+    expect(rewriteRuleDraftMock).not.toHaveBeenCalled();
+    expect(JSON.stringify(res.json())).not.toContain('stack');
+    expect(JSON.stringify(res.json())).not.toContain('endpoint');
+
+    await app.close();
   });
 
   it('clones latest pine script lineage when cloning a strategy version', async () => {

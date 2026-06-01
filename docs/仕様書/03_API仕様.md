@@ -93,6 +93,7 @@ Stage 2C internal backtest backend cleanup:
 - TradingView compile 自動実行、TradingView への自動貼り付け、compile 結果の自動取得は行わない。
 - Pine generation / regeneration は Strategy / StrategyVersion 保存、backtest、AI summary を自動起動しない。
 - `POST /api/strategy-versions/:versionId/clone` は StrategyVersion を複製する。元 version の latest PineScript が存在する場合、clone 先 version に sanitized reference copy を作成し、元 PineScript を `parent_pine_script_id` / `source_pine_script_id` として参照できるようにする。clone 時に LLM / Pine generation / repair / reviewer は起動せず、元 PineScript の raw prompt / raw provider response / raw reviewer response はコピーしない。元 version に PineScript がない場合は、clone 先にも PineScript record を作らず、自然言語ルールから Pine を作り直す既存導線を維持する。
+- `POST /api/strategy-versions/:versionId/natural-language-rule/rewrite-draft` は、保存済み natural language rule、任意の `source_backtest_id`、sanitized metrics / AI summary context、ユーザー編集済み改善メモをもとに、LLM または deterministic fallback で自然言語ルール本文 draft を返す。response は `draft.natural_language_rule` / `warnings` / `assumptions` のみを扱い、raw prompt、raw provider response、endpoint、model 実値、secret、token、local path、stack trace は含めない。実行だけでは StrategyVersion 保存、Pine generation、backtest、AI summary、application apply を起動しない。`current_rule` が request に含まれても、backend は保存済み version の rule を base として扱う。
 
 ## 7-1. Strategy proposal
 

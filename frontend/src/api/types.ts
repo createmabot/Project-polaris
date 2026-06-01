@@ -514,6 +514,17 @@ export type StrategyVersionPineData = {
   } | null;
 };
 
+export type StrategyVersionRuleRewriteDraftData = {
+  draft: {
+    natural_language_rule: string;
+    source: 'llm_rewrite' | string;
+    base_version_id: string;
+    source_backtest_id: string | null;
+    warnings: string[];
+    assumptions: string[];
+  };
+};
+
 export type StrategyVersionPineGenerateData = {
   strategy_version: StrategyVersionData['strategy_version'];
   pine: {

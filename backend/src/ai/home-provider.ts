@@ -243,6 +243,39 @@ export type BacktestSummaryOutput = {
   promptVersion: string;
 };
 
+export type NaturalLanguageRuleRewriteContext = {
+  strategyVersionId: string;
+  sourceBacktestId: string | null;
+  baseRule: string;
+  market: string;
+  timeframe: string;
+  improvementMemo: string | null;
+  metrics: {
+    totalTrades: number | null;
+    winRate: number | null;
+    profitFactor: number | null;
+    maxDrawdown: number | null;
+    netProfit: number | null;
+    periodFrom: string | null;
+    periodTo: string | null;
+  } | null;
+  aiSummary: {
+    nextActions: string[];
+    overallView: string | null;
+    risks: string[];
+    strengths: string[];
+    keyMetrics: Record<string, unknown> | null;
+  } | null;
+};
+
+export type NaturalLanguageRuleRewriteOutput = {
+  naturalLanguageRule: string;
+  warnings: string[];
+  assumptions: string[];
+  modelName: string;
+  promptVersion: string;
+};
+
 export type PineGenerationContext = {
   naturalLanguageSpec: string;
   normalizedRuleJson: Record<string, unknown> | null;
@@ -308,6 +341,9 @@ export type HomeAiProvider = {
   generateSymbolThesisSummary: (context: SymbolThesisContext) => Promise<SymbolThesisOutput>;
   generateComparisonSummary: (context: ComparisonSummaryContext) => Promise<ComparisonSummaryOutput>;
   generateBacktestSummary: (context: BacktestSummaryContext) => Promise<BacktestSummaryOutput>;
+  rewriteNaturalLanguageRuleDraft: (
+    context: NaturalLanguageRuleRewriteContext,
+  ) => Promise<NaturalLanguageRuleRewriteOutput>;
   generatePineScript: (context: PineGenerationContext) => Promise<PineGenerationOutput>;
   reviewPineScript?: (context: PineReviewContext) => Promise<PineReviewResult>;
 };
@@ -317,6 +353,7 @@ type LocalLlmTaskType =
   | 'symbol_thesis_summary'
   | 'comparison_summary'
   | 'backtest_summary'
+  | 'natural_language_rule_rewrite'
   | 'pine_generation';
 
 type LocalLlmSummaryChatOptions = {
@@ -956,6 +993,94 @@ function buildDeterministicBacktestOutput(
   };
 }
 
+const REWRITE_UNSAFE_TEXT_PATTERN =
+  /(https?:\/\/|file:\/\/|www\.|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\\|\/users\/|\/home\/|endpoint|model|secret|token|api[_-]?key|password|credential|stack trace|traceback|provider response|raw prompt)/i;
+
+function sanitizeRewriteText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\t/g, ' ').trim();
+  if (!normalized) return '';
+  const lines = normalized
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => !REWRITE_UNSAFE_TEXT_PATTERN.test(line));
+  return lines.join('\n').slice(0, maxLength).trim();
+}
+
+function sanitizeRewriteStringList(value: unknown, limit: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => sanitizeRewriteText(item, 220))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function buildDeterministicNaturalLanguageRuleRewriteOutput(
+  context: NaturalLanguageRuleRewriteContext,
+  options: { modelName: string; promptVersion: string },
+): NaturalLanguageRuleRewriteOutput {
+  const baseRule = sanitizeRewriteText(context.baseRule, 1600);
+  const memo = sanitizeRewriteText(context.improvementMemo, 1200);
+  const nextActions = sanitizeRewriteStringList(context.aiSummary?.nextActions, 5);
+  const risks = sanitizeRewriteStringList(context.aiSummary?.risks, 4);
+  const overallView = sanitizeRewriteText(context.aiSummary?.overallView, 700);
+  const metricLines = [
+    context.metrics?.totalTrades !== null && context.metrics?.totalTrades !== undefined
+      ? `取引回数は ${context.metrics.totalTrades} 件として、少なすぎる場合は条件緩和または検証期間延長を検討する。`
+      : '',
+    context.metrics?.profitFactor !== null && context.metrics?.profitFactor !== undefined
+      ? `Profit Factor ${context.metrics.profitFactor} を踏まえ、利確、損切り、保有期間の設計を明確にする。`
+      : '',
+    context.metrics?.winRate !== null && context.metrics?.winRate !== undefined
+      ? `勝率 ${context.metrics.winRate} を踏まえ、entry filter と market regime 条件を測定可能にする。`
+      : '',
+    context.metrics?.maxDrawdown !== null && context.metrics?.maxDrawdown !== undefined
+      ? `最大ドローダウン ${context.metrics.maxDrawdown} を踏まえ、stop loss、position risk、time exit を定義する。`
+      : '',
+    context.metrics?.periodFrom || context.metrics?.periodTo
+      ? `検証期間 ${context.metrics.periodFrom ?? '-'} から ${context.metrics.periodTo ?? '-'} の結果を過剰最適化しない。`
+      : '',
+  ].filter(Boolean);
+  const improvementInputs = [
+    ...metricLines,
+    ...nextActions,
+    overallView,
+    ...risks.map((risk) => `リスク観点: ${risk}`),
+    memo,
+  ].filter(Boolean).slice(0, 10);
+
+  const lines = [
+    `対象市場: ${sanitizeRewriteText(context.market, 40) || '未指定'}`,
+    `時間足: ${sanitizeRewriteText(context.timeframe, 40) || '未指定'}`,
+    '前提: long-only の検証候補として、次の Pine 生成に使える単一の自然言語ルール本文にする。',
+    '',
+    '戦略ルール:',
+    baseRule || '現行ルール本文を基準に、entry / exit / risk management を測定可能な条件として定義する。',
+    '',
+    '改善後の条件:',
+    ...(improvementInputs.length > 0
+      ? improvementInputs.map((line) => `- ${line}`)
+      : ['- 検証結果の主要指標を確認し、entry / exit / risk 条件を1つずつ比較できる形にする。']),
+    '',
+    'Pine化のための明確化:',
+    '- entry trigger、exit trigger、stop loss、time exit、indicator period、threshold を可能な限り具体化する。',
+    '- AI総評や改善履歴の引用ではなく、現在の strategy version を定義する最新ルール本文として扱う。',
+    '- 投資助言ではなく、TradingView で再検証するための条件定義に留める。',
+  ];
+
+  return {
+    naturalLanguageRule: lines.join('\n').trim(),
+    warnings: [
+      'deterministic fallback により、保存済みルールと検証メモから安全な draft を作成しました。',
+      '保存や Pine 生成は自動実行されません。',
+    ],
+    assumptions: ['raw CSV、raw import text、生成依頼本文、provider応答本文は使用していません。'],
+    modelName: options.modelName,
+    promptVersion: options.promptVersion,
+  };
+}
+
 function buildDeterministicPineOutput(
   context: PineGenerationContext,
   options: { modelName: string; promptVersion: string },
@@ -1106,6 +1231,15 @@ class StubHomeAiProvider implements HomeAiProvider {
       modelName: 'stub-backtest-v1',
       promptVersion: 'v1.0.0-backtest-stub',
       titlePrefix: '[Stub] ',
+    });
+  }
+
+  async rewriteNaturalLanguageRuleDraft(
+    context: NaturalLanguageRuleRewriteContext,
+  ): Promise<NaturalLanguageRuleRewriteOutput> {
+    return buildDeterministicNaturalLanguageRuleRewriteOutput(context, {
+      modelName: 'stub-rule-rewrite-v1',
+      promptVersion: 'v1.0.0-rule-rewrite-stub',
     });
   }
 
@@ -1777,6 +1911,64 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     };
   }
 
+  async rewriteNaturalLanguageRuleDraft(
+    context: NaturalLanguageRuleRewriteContext,
+  ): Promise<NaturalLanguageRuleRewriteOutput> {
+    const deterministic = buildDeterministicNaturalLanguageRuleRewriteOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-rule-rewrite-local',
+    });
+
+    const content = await this.callOllamaSummaryChat({
+      taskType: 'natural_language_rule_rewrite',
+      systemPrompt: [
+        'You are a Japanese strategy-rule rewrite assistant.',
+        'Return strict JSON only with natural_language_rule, warnings, and assumptions.',
+        'The natural_language_rule must be a single current strategy definition for the next Pine generation.',
+        'Do not append improvement history, AI summary quotes, or explanatory review notes to the rule.',
+        'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
+        'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',
+        'Do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, stack trace, URLs, citations, or full generated Pine.',
+        'Output Japanese text. Do not include markdown fences.',
+      ].join(' '),
+      userPrompt: JSON.stringify({
+        strategy_version_id: context.strategyVersionId,
+        source_backtest_id: context.sourceBacktestId,
+        market: context.market,
+        timeframe: context.timeframe,
+        saved_natural_language_rule: context.baseRule,
+        source_backtest_metrics: context.metrics,
+        ai_summary_context: context.aiSummary,
+        user_improvement_memo: context.improvementMemo,
+        output_schema: {
+          natural_language_rule: '<single rewritten rule body>',
+          warnings: ['<short Japanese warning>'],
+          assumptions: ['<short Japanese assumption>'],
+        },
+      }),
+      temperature: 0.2,
+      maxOutputTokens: 1200,
+      think: false,
+    });
+
+    try {
+      const parsed = JSON.parse(this.sanitizeJsonContent(content));
+      const naturalLanguageRule = sanitizeRewriteText(parsed?.natural_language_rule, 4000);
+      if (!naturalLanguageRule) {
+        return deterministic;
+      }
+      return {
+        naturalLanguageRule,
+        warnings: sanitizeRewriteStringList(parsed?.warnings, 8),
+        assumptions: sanitizeRewriteStringList(parsed?.assumptions, 8),
+        modelName: this.modelName,
+        promptVersion: 'v1.0.0-rule-rewrite-local',
+      };
+    } catch {
+      return deterministic;
+    }
+  }
+
   async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
     const baseline = buildDeterministicPineOutput(context, {
       modelName: this.modelName,
@@ -2108,6 +2300,88 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
   async generateAlertSummary(context: AlertSummaryContext): Promise<AlertSummaryOutput> {
     const adapter = new FallbackApiAdapter('final_quality_required');
     return adapter.generateAlertSummary(context);
+  }
+
+  async rewriteNaturalLanguageRuleDraft(
+    context: NaturalLanguageRuleRewriteContext,
+  ): Promise<NaturalLanguageRuleRewriteOutput> {
+    if (!this.apiKey) {
+      throw new Error('openai_api provider requires FALLBACK_API_KEY');
+    }
+
+    const deterministic = buildDeterministicNaturalLanguageRuleRewriteOutput(context, {
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-rule-rewrite-openai',
+    });
+
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Rewrite a strategy natural-language rule as strict JSON.',
+              'The output natural_language_rule must be a single current strategy definition for the next Pine generation.',
+              'Do not append improvement history, AI summary quotes, review notes, URLs, citations, or raw artifacts.',
+              'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
+              'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',
+              'Do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, stack trace, or full generated Pine.',
+              'Output Japanese text. Return only JSON with natural_language_rule, warnings, and assumptions.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              strategy_version_id: context.strategyVersionId,
+              source_backtest_id: context.sourceBacktestId,
+              market: context.market,
+              timeframe: context.timeframe,
+              saved_natural_language_rule: context.baseRule,
+              source_backtest_metrics: context.metrics,
+              ai_summary_context: context.aiSummary,
+              user_improvement_memo: context.improvementMemo,
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 1200,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`openai_api rule rewrite failed: HTTP ${response.status} | task_type=natural_language_rule_rewrite`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) {
+      return deterministic;
+    }
+
+    try {
+      const parsed = JSON.parse(content);
+      const naturalLanguageRule = sanitizeRewriteText(parsed?.natural_language_rule, 4000);
+      if (!naturalLanguageRule) {
+        return deterministic;
+      }
+      return {
+        naturalLanguageRule,
+        warnings: sanitizeRewriteStringList(parsed?.warnings, 8),
+        assumptions: sanitizeRewriteStringList(parsed?.assumptions, 8),
+        modelName: this.modelName,
+        promptVersion: 'v1.0.0-rule-rewrite-openai',
+      };
+    } catch {
+      return deterministic;
+    }
   }
 
   async generateDailySummary(context: DailySummaryContext): Promise<DailySummaryOutput> {

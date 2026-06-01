@@ -22,6 +22,7 @@ import {
   StrategyVersionPineJobData,
   StrategyVersionListData,
   BacktestDetailData,
+  StrategyVersionRuleRewriteDraftData,
 } from '../api/types';
 import {
   buildStrategyVersionDetailUrl,
@@ -610,6 +611,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   } | null>(null);
   const [sourceBacktestImprovementMemo, setSourceBacktestImprovementMemo] = useState('');
   const [sourceBacktestMemoSourceId, setSourceBacktestMemoSourceId] = useState<string | null>(null);
+  const [ruleRewriteLoading, setRuleRewriteLoading] = useState(false);
+  const [ruleRewriteError, setRuleRewriteError] = useState<string | null>(null);
+  const [ruleRewriteWarnings, setRuleRewriteWarnings] = useState<string[]>([]);
 
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
@@ -694,6 +698,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     () => (sourceBacktestData ? buildSourceBacktestAiSummaryExcerpt(sourceBacktestData.ai_review) : ''),
     [sourceBacktestData],
   );
+  const effectiveSourceBacktestImprovementMemo = sourceBacktestImprovementMemo.trim() || sourceBacktestMemoText.trim();
   const hasSourceBacktestContext = Boolean(improveApplicationContext?.sourceBacktestId);
 
   useEffect(() => {
@@ -939,15 +944,40 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   };
 
   const onReflectSourceBacktestMemo = () => {
-    const memo = sourceBacktestImprovementMemo.trim();
+    const memo = effectiveSourceBacktestImprovementMemo;
     if (!memo) return;
     setRevisionRequest(memo);
   };
 
   const onReflectSourceBacktestMemoToRule = () => {
-    const memo = sourceBacktestImprovementMemo.trim();
+    const memo = effectiveSourceBacktestImprovementMemo;
     if (!memo) return;
     setEditingNaturalLanguageRule(buildNaturalLanguageRuleImprovementDraft(version?.natural_language_rule ?? '', memo));
+  };
+
+  const onRewriteNaturalLanguageRuleDraft = async () => {
+    const memo = effectiveSourceBacktestImprovementMemo;
+    if (!memo) return;
+    setRuleRewriteLoading(true);
+    setRuleRewriteError(null);
+    setRuleRewriteWarnings([]);
+    try {
+      const response = await postApi<StrategyVersionRuleRewriteDraftData>(
+        `/api/strategy-versions/${versionId}/natural-language-rule/rewrite-draft`,
+        {
+          source_backtest_id: improveApplicationContext?.sourceBacktestId ?? null,
+          improvement_memo: memo,
+          current_rule: editingNaturalLanguageRule,
+          mode: 'improvement_from_backtest',
+        },
+      );
+      setEditingNaturalLanguageRule(response.draft.natural_language_rule);
+      setRuleRewriteWarnings([...(response.draft.warnings ?? []), ...(response.draft.assumptions ?? [])].slice(0, 6));
+    } catch (requestError: any) {
+      setRuleRewriteError(requestError?.message ?? 'LLM rewrite draft の作成に失敗しました。');
+    } finally {
+      setRuleRewriteLoading(false);
+    }
   };
 
   const onSaveRule = async () => {
@@ -1181,20 +1211,38 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               variant='primary'
               data-testid='reflect-source-backtest-memo-to-rule'
               onClick={onReflectSourceBacktestMemoToRule}
-              disabled={!sourceBacktestImprovementMemo.trim()}
+              disabled={!effectiveSourceBacktestImprovementMemo}
             >
               改善案から新しいルール本文を作る
             </Button>
             <Button
+              variant='primary'
+              data-testid='llm-rewrite-natural-language-rule'
+              onClick={onRewriteNaturalLanguageRuleDraft}
+              disabled={!effectiveSourceBacktestImprovementMemo || ruleRewriteLoading}
+            >
+              {ruleRewriteLoading ? 'LLM draft 作成中...' : 'LLMで新しいルール本文を作る'}
+            </Button>
+            <Button
               data-testid='reflect-source-backtest-memo'
               onClick={onReflectSourceBacktestMemo}
-              disabled={!sourceBacktestImprovementMemo.trim()}
+              disabled={!effectiveSourceBacktestImprovementMemo}
             >
               改善メモを Pine 修正依頼に反映
             </Button>
           </div>
+          {ruleRewriteError ? (
+            <InlineNotice tone='warning' className='mt-3'>
+              {ruleRewriteError}
+            </InlineNotice>
+          ) : null}
+          {ruleRewriteWarnings.length > 0 ? (
+            <InlineNotice tone='info' className='mt-3'>
+              {ruleRewriteWarnings.join(' / ')}
+            </InlineNotice>
+          ) : null}
           <InlineNotice tone='info' className='mt-3'>
-            戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存し、その後「保存済みルールから Pine を作り直す」を使います。改善メモは履歴として追記せず、button は textarea を新しい draft へ置き換えるだけです。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
+            LLM rewrite は、元の自然言語ルールと検証結果をもとに、次の Pine 生成に使う単一のルール本文 draft を作ります。押下だけでは保存・Pine生成・backtest・適用は行いません。戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存し、その後「保存済みルールから Pine を作り直す」を使います。改善メモは履歴として追記せず、button は textarea を新しい draft へ置き換えるだけです。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
           </InlineNotice>
         </SectionCard>
       ) : null}

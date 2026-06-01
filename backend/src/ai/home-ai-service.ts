@@ -12,6 +12,8 @@ import {
   DailySummaryContext,
   DailySummaryOutput,
   HomeAiProvider,
+  NaturalLanguageRuleRewriteContext,
+  NaturalLanguageRuleRewriteOutput,
   PineGenerationContext,
   PineGenerationOutput,
   SymbolThesisContext,
@@ -334,6 +336,51 @@ export class HomeAiService {
           retryCount: 0,
           durationMs: Date.now() - startedAt,
           estimatedTokens: Math.ceil((output.bodyMarkdown ?? '').length / 4),
+          estimatedCostUsd: 0,
+          provider: this.provider.providerType,
+          fallbackToStub: true,
+        },
+      };
+    }
+  }
+
+  async rewriteNaturalLanguageRuleDraft(
+    context: NaturalLanguageRuleRewriteContext,
+  ): Promise<{ output: NaturalLanguageRuleRewriteOutput; log: HomeAiExecutionLog }> {
+    const startedAt = Date.now();
+    const attemptedModel = this.resolveAttemptedModel();
+    try {
+      const output = await this.provider.rewriteNaturalLanguageRuleDraft(context);
+      return {
+        output,
+        log: {
+          initialModel: attemptedModel,
+          finalModel: output.modelName,
+          escalated: this.provider.providerType === 'openai_api',
+          escalationReason: null,
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          estimatedTokens: Math.ceil(output.naturalLanguageRule.length / 4),
+          estimatedCostUsd: this.provider.providerType === 'openai_api' ? 0.001 : 0,
+          provider: this.provider.providerType,
+          fallbackToStub: false,
+        },
+      };
+    } catch {
+      if (!this.shouldFallbackToStub()) {
+        throw new Error('natural_language_rule_rewrite_failed');
+      }
+      const output = await this.stubProvider.rewriteNaturalLanguageRuleDraft(context);
+      return {
+        output,
+        log: {
+          initialModel: attemptedModel,
+          finalModel: output.modelName,
+          escalated: false,
+          escalationReason: 'provider_failed_fallback_to_stub',
+          retryCount: 0,
+          durationMs: Date.now() - startedAt,
+          estimatedTokens: Math.ceil(output.naturalLanguageRule.length / 4),
           estimatedCostUsd: 0,
           provider: this.provider.providerType,
           fallbackToStub: true,
