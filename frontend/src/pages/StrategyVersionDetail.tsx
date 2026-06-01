@@ -319,17 +319,41 @@ export function buildSourceBacktestImprovementMemo(sourceBacktest: BacktestDetai
   return lines.join('\n');
 }
 
-export function mergeImprovementMemoIntoNaturalLanguageRule(currentRule: string, improvementMemo: string): string {
+function extractNaturalLanguageRuleDraftInputs(improvementMemo: string): string[] {
+  return improvementMemo
+    .split(/\r?\n/)
+    .map((line) => compactSafeText(line, 220))
+    .filter(Boolean)
+    .map((line) => {
+      const [label, ...rest] = line.split(':');
+      const value = rest.join(':').trim();
+      if (/AI summary next actions|AI summary improvement memo|AI summary overall view/i.test(label) && value) {
+        return value;
+      }
+      return line;
+    })
+    .filter((line) => {
+      if (/^(検証結果|実行ソース|市場・時間足|主要指標|source backtest id)/i.test(line)) return false;
+      if (/trade_count|total_return|price_change|max_drawdown|profit_factor|win_rate/i.test(line)) return false;
+      return true;
+    })
+    .slice(0, 6);
+}
+
+export function buildNaturalLanguageRuleImprovementDraft(currentRule: string, improvementMemo: string): string {
   const memo = improvementMemo.trim();
   if (!memo) return currentRule;
-  const current = currentRule.trimEnd();
-  if (!current) {
-    return `検証結果を踏まえた自然言語ルール改善案:\n${memo}`;
-  }
-  if (current.includes(memo)) {
-    return current;
-  }
-  return `${current}\n\n---\n検証結果を踏まえた自然言語ルール改善案:\n${memo}`;
+  const current = compactSafeText(currentRule, 900);
+  const draftInputs = extractNaturalLanguageRuleDraftInputs(memo);
+  const lines = [
+    '自然言語ルール本文ドラフト',
+    current ? `ベース戦略: ${current}` : '',
+    '検証結果を踏まえ、以下を満たす単一の最新 strategy rule として定義する。',
+    ...draftInputs.map((line) => `- ${line}`),
+    'entry / exit / risk management は矛盾しない測定可能な条件として書く。',
+    '過剰最適化を避け、次の Pine 生成で検証できる粒度にする。',
+  ].filter(Boolean);
+  return lines.join('\n');
 }
 
 export function findNextPriorityVersionId(
@@ -923,7 +947,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const onReflectSourceBacktestMemoToRule = () => {
     const memo = sourceBacktestImprovementMemo.trim();
     if (!memo) return;
-    setEditingNaturalLanguageRule((current) => mergeImprovementMemoIntoNaturalLanguageRule(current, memo));
+    setEditingNaturalLanguageRule(buildNaturalLanguageRuleImprovementDraft(version?.natural_language_rule ?? '', memo));
   };
 
   const onSaveRule = async () => {
@@ -1159,7 +1183,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               onClick={onReflectSourceBacktestMemoToRule}
               disabled={!sourceBacktestImprovementMemo.trim()}
             >
-              改善案を自然言語ルールに反映
+              改善案から新しいルール本文を作る
             </Button>
             <Button
               data-testid='reflect-source-backtest-memo'
@@ -1170,7 +1194,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </Button>
           </div>
           <InlineNotice tone='info' className='mt-3'>
-            戦略条件そのものを変える改善は、自然言語ルール本文に反映して保存し、その後「保存済みルールから Pine を作り直す」を使います。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
+            戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存し、その後「保存済みルールから Pine を作り直す」を使います。改善メモは履歴として追記せず、button は textarea を新しい draft へ置き換えるだけです。Pine 修正依頼は、既存ルールの意図を維持した compile error、validation note、TradingView 上の挙動調整に限定します。
           </InlineNotice>
         </SectionCard>
       ) : null}
@@ -1201,7 +1225,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       >
         {hasSourceBacktestContext ? (
           <InlineNotice tone='info' className='mb-3'>
-            検証結果をもとに entry / exit / risk 条件を改善する場合は、まず改善案を自然言語ルール本文に反映し、内容を確認して保存してください。source_pine_script_id がある場合でも、Pine 修正再生成は既存ルールの意図を保った実装修正に限定します。必要に応じて「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
+            検証結果をもとに entry / exit / risk 条件を改善する場合は、まず自然言語ルール本文を単一の最新ルール本文として書き換え、内容を確認して保存してください。source_pine_script_id がある場合でも、Pine 修正再生成は既存ルールの意図を保った実装修正に限定します。必要に応じて「保存済みルールから Pine を作り直す」で新しい Pine を生成してください。
           </InlineNotice>
         ) : null}
         <div style={{ marginBottom: '0.75rem', color: '#555', fontSize: '0.9rem' }}>

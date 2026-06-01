@@ -58,8 +58,8 @@ vi.mock('../components/ui/Button', async () => {
 import StrategyVersionDetail, {
   buildSourceBacktestImprovementMemo,
   buildApplyImprovedVersionFailureMessage,
+  buildNaturalLanguageRuleImprovementDraft,
   findNextPriorityVersionId,
-  mergeImprovementMemoIntoNaturalLanguageRule,
   parseImproveApplicationContext,
 } from './StrategyVersionDetail';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
@@ -387,15 +387,35 @@ describe('StrategyVersionDetail', () => {
     expect(memo).not.toContain('raw prompt');
   });
 
-  it('merges source backtest improvement memo into natural language rule without saving or Pine generation', () => {
-    const merged = mergeImprovementMemoIntoNaturalLanguageRule(
+  it('builds a replacement natural language rule draft without appending improvement history', () => {
+    const draft = buildNaturalLanguageRuleImprovementDraft(
       '既存ルール: SMA 上抜けで entry する。',
       'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
     );
 
-    expect(merged).toContain('既存ルール: SMA 上抜けで entry する。');
-    expect(merged).toContain('検証結果を踏まえた自然言語ルール改善案');
-    expect(merged).toContain('entry 条件に出来高 filter を追加');
+    expect(draft).toContain('自然言語ルール本文ドラフト');
+    expect(draft).toContain('ベース戦略: 既存ルール: SMA 上抜けで entry する。');
+    expect(draft).toContain('entry 条件に出来高 filter を追加');
+    expect(draft).not.toContain('---');
+    expect(draft).not.toContain('改善案:');
+  });
+
+  it('rebuilds replacement natural language rule drafts from saved base rule instead of nesting prior drafts', () => {
+    const savedRule = '既存ルール: SMA 上抜けで entry する。';
+    const firstDraft = buildNaturalLanguageRuleImprovementDraft(
+      savedRule,
+      'entry 条件に出来高 filter を追加し、exit と stop loss を分けて検証する。',
+    );
+    const secondDraft = buildNaturalLanguageRuleImprovementDraft(
+      savedRule,
+      'entry 条件は RSI 55 以上、exit は SMA 下抜け、risk は 5% stop とする。',
+    );
+
+    expect(secondDraft).toContain('ベース戦略: 既存ルール: SMA 上抜けで entry する。');
+    expect(secondDraft).toContain('entry 条件は RSI 55 以上');
+    expect(secondDraft).not.toContain('ベース戦略: 自然言語ルール本文ドラフト');
+    expect(secondDraft).not.toContain('出来高 filter を追加');
+    expect(firstDraft).toContain('出来高 filter を追加');
   });
 
   it('renders shared loading and error states for detail fetch', () => {
@@ -598,9 +618,10 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Drawdown should be controlled before scaling.');
     expect(html).toContain('同じ application の関連レポートが 1 件あります。');
     expect(html).toContain('改善メモ');
-    expect(html).toContain('改善案を自然言語ルールに反映');
+    expect(html).toContain('改善案から新しいルール本文を作る');
     expect(html).toContain('改善メモを Pine 修正依頼に反映');
-    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文に反映');
+    expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文を単一の最新ルールとして書き換えて保存');
+    expect(html).toContain('改善メモは履歴として追記せず');
     expect(html).toContain('Pine 修正依頼は、既存ルールの意図を維持した compile error');
     expect(html).toContain('data-testid="reflect-source-backtest-memo-to-rule"');
     expect(html).toContain('data-testid="reflect-source-backtest-memo"');
@@ -648,7 +669,7 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('Pine 修正再生成には source_pine_script_id が必要です。');
     expect(html).toContain('既存 Pine を元にした修正再生成はできません。');
     expect(html).toContain('既存 Pine の細部を継承するとは限りません。');
-    expect(html).toContain('検証結果をもとに entry / exit / risk 条件を改善する場合は、まず改善案を自然言語ルール本文に反映');
+    expect(html).toContain('検証結果をもとに entry / exit / risk 条件を改善する場合は、まず自然言語ルール本文を単一の最新ルール本文として書き換え');
     expect(html).toContain('Pine 修正再生成は既存ルールの意図を保った実装修正に限定');
     expect(html).toContain('戦略条件そのものを変える改善は、自然言語ルール本文側に反映');
     expect(html).toContain('rows="8"');

@@ -227,7 +227,7 @@ Phase 4: 改善版をこの銘柄に適用（実装済み）。
 BacktestDetail 起点の improvement context（実装済み）。
 
 - `symbol_strategy_application` を持つ BacktestDetail から明示操作で strategy version clone へ進み、StrategyVersionDetail に `source_backtest_id` を渡す。
-- StrategyVersionDetail は元 backtest metrics / 保存済み AI summary を read-only context として表示し、改善案を自然言語ルール本文へ反映できる。Backtest AI summary は改善ループ向けに、問題の切り分け、改善仮説、自然言語ルール改善案、Pine修正依頼に入れるべきではない注意、次に試す検証案を含む。改善メモ生成では `structured_json.payload.next_actions` / `overall_view` を body excerpt より優先する。`revision_request` は compile error / validation note / TradingView 上の挙動調整に限定する。
+- StrategyVersionDetail は元 backtest metrics / 保存済み AI summary を read-only context として表示し、改善案から単一の最新 natural language rule draft を作れる。Backtest AI summary は改善ループ向けに、問題の切り分け、改善仮説、自然言語ルール改善案、Pine修正依頼に入れるべきではない注意、次に試す検証案を含む。改善メモ生成では `structured_json.payload.next_actions` / `overall_view` を body excerpt より優先する。`natural_language_rule` は改善履歴を追記せず現在の strategy version 定義として扱い、`revision_request` は compile error / validation note / TradingView 上の挙動調整に限定する。
 - StrategyVersion clone 時に元 version の latest PineScript があれば、clone 先に sanitized reference copy を作成し、元 PineScript を `source_pine_script_id` として引き継ぐ。これにより improvement clone 直後でも、source Pine がある場合は既存 Pine を元にした修正再生成へ進める。
 - 元 version に PineScript がない場合は、clone 先でも `source_pine_script_id` はなく、UI の disabled 理由に従って自然言語ルールから Pine を作り直す。
 
