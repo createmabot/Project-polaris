@@ -668,7 +668,8 @@ describe('SymbolDetail', () => {
     expect(html).toContain('report履歴を見る');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#runs"');
     expect(html).toContain('href="/symbol-strategy-applications/application_1#reports"');
-    expect(html).toContain('改善版を作る');
+    expect(html).not.toContain('改善版を作る');
+    expect(html).toContain('StrategyVersionDetail を開く');
     expect(html).toContain('<details class="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">');
     expect(html).toContain('TradingView CSVを取り込む');
     expect(html).toContain('必要なときだけ展開してCSVファイルまたはCSVテキストを取り込みます。');
