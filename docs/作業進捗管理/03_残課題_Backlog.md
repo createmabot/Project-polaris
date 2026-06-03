@@ -210,12 +210,12 @@ Phase 2: StrategyLab 保存後の explicit apply（実装済み）。
 - active duplicate conflict は既存 error 表示に乗せる。
 - 自動適用、Pine generation、CSV import、backtest、AI summary は起動しない。
 
-Phase 3: SymbolDetail application row から improvement clone（実装済み）。
+Phase 3: BacktestDetail application report から improvement clone（実装済み）。
 
-- application row に `改善版を作る` action を追加する。
+- SymbolDetail application row の直接 `改善版を作る` action は廃止し、BacktestDetail で検証レポートと AI総評を確認した後に改善版作成へ進む。
 - 既存 `strategy version clone` flow を明示的に呼び、新 version の StrategyVersionDetail へ遷移する。
-- `symbol_id` / `application_id` / `strategy_version_id` / `return` / `mode=improve_application` 相当の context を渡す。
-- StrategyVersionDetail は元 application / 元 version を示し、rule edit / Pine regenerate は既存導線を使う。
+- `symbol_id` / `application_id` / `strategy_version_id` / `source_backtest_id` / `return` / `mode=improve_application` 相当の context を渡す。
+- StrategyVersionDetail は元 backtest / 元 application / 元 version を示し、rule edit / Pine regenerate は既存導線を使う。
 
 Phase 4: 改善版をこの銘柄に適用（実装済み）。
 

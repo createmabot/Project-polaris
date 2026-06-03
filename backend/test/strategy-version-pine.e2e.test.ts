@@ -199,7 +199,7 @@ vi.mock('../src/ai/home-ai-service', () => {
     async generatePineScript(context: unknown, options?: { onProgress?: (update: any) => void | Promise<void> }) {
       await options?.onProgress?.({ stage: 'LLMでPine生成', progressPercent: 35 });
       await options?.onProgress?.({ stage: '生成結果レビュー', progressPercent: 65 });
-      return generatePineScriptMock(context);
+      return generatePineScriptMock(context, options);
     }
   }
   return { HomeAiService };
@@ -819,6 +819,9 @@ describe('strategy version pine endpoints', () => {
     expect(generated.statusCode).toBe(200);
     expect(generated.json().data.strategy_version.status).toBe('generated');
     expect(generated.json().data.pine.pine_script_id).toBeTruthy();
+    expect(generatePineScriptMock.mock.calls[0][1]).toMatchObject({
+      maxRepairAttempts: 3,
+    });
 
     const fetched = await app.inject({
       method: 'GET',

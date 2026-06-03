@@ -1289,7 +1289,7 @@ describe('HomeAiService', () => {
     expect(reviewMock).toHaveBeenCalledTimes(2);
   });
 
-  it('fails when pine repair reaches retry limit', async () => {
+  it('fails when pine repair reaches the increased retry limit', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();
     const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
@@ -1312,13 +1312,13 @@ describe('HomeAiService', () => {
         targetMarket: 'JP_STOCK',
         targetTimeframe: 'D',
       },
-      { maxRepairAttempts: 1, validateOutput: assessGeneratedPineScript },
+      { maxRepairAttempts: 3, validateOutput: assessGeneratedPineScript },
     );
 
     expect(result.output.status).toBe('failed');
-    expect(result.output.repairAttempts).toBe(1);
+    expect(result.output.repairAttempts).toBe(3);
     expect(result.output.failureReason).toContain('version');
-    expect(result.log.retryCount).toBe(1);
-    expect(provider.generatePineScript).toHaveBeenCalledTimes(2);
+    expect(result.log.retryCount).toBe(3);
+    expect(provider.generatePineScript).toHaveBeenCalledTimes(4);
   });
 });

@@ -582,7 +582,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
             : null,
         },
         {
-          maxRepairAttempts: 2,
+          maxRepairAttempts: 3,
           validateOutput: assessGeneratedPineScript,
           onProgress: async (update) => {
             await params.onStage?.(update.stage);

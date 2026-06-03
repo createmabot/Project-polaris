@@ -400,7 +400,7 @@ export class HomeAiService {
       onProgress?: PineGenerationProgressHandler;
     },
   ): Promise<{ output: PineGenerationOutput; log: HomeAiExecutionLog }> {
-    const maxRepairAttempts = Math.max(0, Math.min(options?.maxRepairAttempts ?? env.MAX_LOCAL_RETRY_COUNT, 2));
+    const maxRepairAttempts = Math.max(0, Math.min(options?.maxRepairAttempts ?? env.MAX_LOCAL_RETRY_COUNT, 3));
     const validateOutput = options?.validateOutput;
     const reviewOutput = options?.reviewOutput;
     const aggregateWarnings: string[] = [];
