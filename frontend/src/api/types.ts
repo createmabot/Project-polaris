@@ -676,6 +676,17 @@ export type StrategyVersionLineageData = {
     has_diff_from_clone: boolean | null;
     backtest_count: number;
     application_count: number;
+    latest_backtest_metrics?: {
+      backtest_id: string;
+      status: string;
+      execution_source: string;
+      updated_at: string;
+      total_trades: number | null;
+      win_rate: number | null;
+      profit_factor: number | null;
+      max_drawdown: number | null;
+      net_profit: number | null;
+    } | null;
     created_at: string;
     updated_at: string;
   }>;

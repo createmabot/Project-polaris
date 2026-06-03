@@ -194,7 +194,9 @@ StrategyVersion Pine generation の market / timeframe:
   - annotation 操作では `natural_language_rule` / `market` / `timeframe` / `generated_pine` / `status` は変更しない。
 - `GET /api/strategies/:strategyId/version-lineage`
   - StrategyVersion の lineage tree 用 read API。
-  - nodes は annotation、status、market、timeframe、warnings 有無、forward validation note 有無、clone 差分有無、backtest count、application count、created / updated を返す。
+  - nodes は annotation、status、market、timeframe、warnings 有無、forward validation note 有無、clone 差分有無、backtest count、application count、latest_backtest_metrics、created / updated を返す。
+  - `latest_backtest_metrics` は latest backtest 1 件から抽出した read-only 表示材料で、`backtest_id`、`status`、`execution_source`、`updated_at`、`total_trades`、`win_rate`、`profit_factor`、`max_drawdown`、`net_profit` を返す。取得できない項目は null とする。
+  - metrics は CSV import の parsed summary を優先し、ない場合は internal report snapshot の result_summary metrics を参照する。raw CSV、raw import text、raw snapshot 全体は返さない。
   - edges は `cloned_from_version_id` をもとに `from_version_id` / `to_version_id` を返す。
   - default / maximum limit は 300 件。超過時は `meta.truncated=true`。
   - raw rule 本文、raw Pine script は返さない。

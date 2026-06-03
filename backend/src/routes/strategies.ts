@@ -68,6 +68,63 @@ function toAnnotationResponse(annotation?: {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = numberOrNull(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function toLatestBacktestMetrics(backtest?: {
+  id: string;
+  status: string;
+  executionSource: string;
+  updatedAt: Date;
+  strategySnapshotJson: unknown;
+  imports?: Array<{ parsedSummaryJson: unknown }>;
+} | null) {
+  if (!backtest) return null;
+
+  const parsedSummary = isRecord(backtest.imports?.[0]?.parsedSummaryJson)
+    ? backtest.imports?.[0]?.parsedSummaryJson as Record<string, unknown>
+    : null;
+  const snapshot = isRecord(backtest.strategySnapshotJson) ? backtest.strategySnapshotJson : null;
+  const resultSummary = isRecord(snapshot?.result_summary) ? snapshot.result_summary : null;
+  const metrics = isRecord(resultSummary?.metrics) ? resultSummary.metrics : null;
+
+  return {
+    backtest_id: backtest.id,
+    status: backtest.status,
+    execution_source: backtest.executionSource,
+    updated_at: backtest.updatedAt,
+    total_trades: firstNumber(parsedSummary?.totalTrades, parsedSummary?.total_trades, metrics?.trade_count, metrics?.total_trades),
+    win_rate: firstNumber(parsedSummary?.winRate, parsedSummary?.win_rate, metrics?.win_rate),
+    profit_factor: firstNumber(parsedSummary?.profitFactor, parsedSummary?.profit_factor, metrics?.profit_factor),
+    max_drawdown: firstNumber(
+      parsedSummary?.maxDrawdown,
+      parsedSummary?.max_drawdown,
+      parsedSummary?.max_drawdown_percent,
+      metrics?.max_drawdown_percent,
+      metrics?.max_drawdown,
+    ),
+    net_profit: firstNumber(parsedSummary?.netProfit, parsedSummary?.net_profit, metrics?.net_profit, metrics?.total_return),
+  };
+}
+
 function toStrategySymbolApplicationResponse(application: any) {
   const latestRun = application.runs?.[0] ?? null;
   const latestBacktestRun = application.runs?.find((run: any) => run.backtest) ?? null;
@@ -547,6 +604,30 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
             symbolStrategyApplications: true,
           },
         },
+        backtests: {
+          orderBy: [
+            { updatedAt: 'desc' },
+            { createdAt: 'desc' },
+          ],
+          take: 1,
+          select: {
+            id: true,
+            status: true,
+            executionSource: true,
+            updatedAt: true,
+            strategySnapshotJson: true,
+            imports: {
+              orderBy: [
+                { updatedAt: 'desc' },
+                { createdAt: 'desc' },
+              ],
+              take: 1,
+              select: {
+                parsedSummaryJson: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -571,6 +652,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
           : null,
         backtest_count: version._count.backtests,
         application_count: version._count.symbolStrategyApplications,
+        latest_backtest_metrics: toLatestBacktestMetrics(version.backtests[0] ?? null),
         created_at: version.createdAt,
         updated_at: version.updatedAt,
       })),
