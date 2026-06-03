@@ -34,6 +34,7 @@ const envSchema = z.object({
   HOME_AI_PROVIDER:      z.enum(['stub', 'local_llm', 'openai_api']).default('local_llm'),
   PINE_GENERATION_PROVIDER: z.enum(['deterministic', 'stub', 'local_llm', 'openai_api']).default('local_llm'),
   PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
+  RULE_REWRITE_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
 
   // ── AI: Fallback API (GPT-5 mini) ── docs/28 §3-2, docs/24 §7
   FALLBACK_API_PROVIDER: z.string().default('openai'),

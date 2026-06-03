@@ -622,6 +622,37 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
+  it('returns sanitized provider failure details when rule rewrite provider fails', async () => {
+    rewriteRuleDraftMock.mockRejectedValue(
+      new Error('local_llm natural_language_rule_rewrite returned invalid output: endpoint=/api/chat | model=SECRET_MODEL | token=SECRET_VALUE'),
+    );
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      payload: {
+        source_backtest_id: 'bt-1',
+        improvement_memo: 'entry filterとrisk管理を改善する',
+      },
+    });
+
+    expect(res.statusCode).toBe(502);
+    const body = res.json();
+    expect(body.error.code).toBe('AI_PROVIDER_UNAVAILABLE');
+    expect(body.error.message).toContain('LLM rewrite');
+    expect(body.error.details).toMatchObject({
+      provider_failure_reason: 'provider_invalid_response',
+      task_type: 'natural_language_rule_rewrite',
+    });
+    expect(JSON.stringify(body)).not.toContain('/api/chat');
+    expect(JSON.stringify(body)).not.toContain('SECRET_MODEL');
+    expect(JSON.stringify(body)).not.toContain('SECRET_VALUE');
+    expect(JSON.stringify(body)).not.toContain('stack');
+
+    await app.close();
+  });
+
   it('clones latest pine script lineage when cloning a strategy version', async () => {
     const createdAt = new Date('2026-04-25T10:00:00.000Z');
     runtime.pineScripts.set('pine-source-old', {

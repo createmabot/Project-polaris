@@ -362,10 +362,14 @@ type LocalLlmSummaryChatOptions = {
   userPrompt: string;
   temperature?: number;
   maxOutputTokens?: number;
+  timeoutMs?: number;
   think?: boolean;
 };
 
 const LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS = 1200;
+const LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_DEFAULT = 90_000;
+const LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_MIN = 10_000;
+const LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_MAX = 300_000;
 const LOCAL_LLM_PINE_MAX_OUTPUT_TOKENS = 1800;
 const LOCAL_LLM_PINE_TIMEOUT_MS_DEFAULT = 180_000;
 const LOCAL_LLM_PINE_TIMEOUT_MS_MIN = 5_000;
@@ -401,6 +405,15 @@ function getLocalLlmPineTimeoutMs(): number {
     LOCAL_LLM_PINE_TIMEOUT_MS_DEFAULT,
     LOCAL_LLM_PINE_TIMEOUT_MS_MIN,
     LOCAL_LLM_PINE_TIMEOUT_MS_MAX,
+  );
+}
+
+function getLocalLlmRuleRewriteTimeoutMs(): number {
+  return readBoundedPositiveInteger(
+    env.RULE_REWRITE_LOCAL_LLM_TIMEOUT_MS,
+    LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_DEFAULT,
+    LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_MIN,
+    LOCAL_LLM_RULE_REWRITE_TIMEOUT_MS_MAX,
   );
 }
 
@@ -1398,6 +1411,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     const endpoint = `${this.endpoint}${endpointPath}`;
     const think = options.think ?? false;
     const maxOutputTokens = options.maxOutputTokens ?? LOCAL_LLM_SUMMARY_MAX_OUTPUT_TOKENS;
+    const timeoutMs = options.timeoutMs ?? 60_000;
 
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -1415,7 +1429,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           num_predict: maxOutputTokens,
         },
       }),
-      signal: AbortSignal.timeout(60_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {
@@ -1948,6 +1962,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       }),
       temperature: 0.2,
       maxOutputTokens: 1200,
+      timeoutMs: getLocalLlmRuleRewriteTimeoutMs(),
       think: false,
     });
 
