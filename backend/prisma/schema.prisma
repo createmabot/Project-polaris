@@ -492,6 +492,21 @@ model StrategyRuleVersion {
   pineRevisionInputs PineRevisionInput[]
   pineGenerationJobs PineGenerationJob[]
   symbolStrategyApplications SymbolStrategyApplication[]
+  annotation StrategyVersionAnnotation?
+}
+
+model StrategyVersionAnnotation {
+  id                    String              @id @default(uuid())
+  strategyRuleVersionId String              @unique @map("strategy_rule_version_id")
+  strategyRuleVersion   StrategyRuleVersion @relation(fields: [strategyRuleVersionId], references: [id], onDelete: Cascade)
+  label                 String?             @db.VarChar(80)
+  note                  String?             @db.VarChar(240)
+  isFavorite            Boolean             @default(false) @map("is_favorite")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  @@index([isFavorite, updatedAt])
+  @@map("strategy_version_annotations")
 }
 
 model StrategyProposalRun {

@@ -52,6 +52,51 @@ function toStrategyVersionResponse(version: StrategyVersionRecord) {
   };
 }
 
+type StrategyVersionAnnotationBody = {
+  label?: unknown;
+  note?: unknown;
+  is_favorite?: unknown;
+};
+
+function toAnnotationResponse(annotation: {
+  label: string | null;
+  note: string | null;
+  isFavorite: boolean;
+}) {
+  return {
+    label: annotation.label,
+    note: annotation.note,
+    is_favorite: annotation.isFavorite,
+  };
+}
+
+function sanitizeAnnotationText(value: unknown, maxLength: number, fieldName: string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a string or null.`);
+  }
+
+  const forbiddenPattern =
+    /(https?:\/\/|www\.|\/api\/|endpoint|model|secret|token|credential|api[_ -]?key|bearer\s+|raw\s+(?:prompt|provider|response|codex|external|html|json)|provider\s+(?:response|output|raw)|stack\s+trace|traceback|[A-Za-z]:\\|\\\\[A-Za-z0-9_.-]+\\|\/(?:Users|home|var|tmp|etc|mnt|opt)\/|^\s*at\s+\S+\s+\(|:\d+:\d+\)?\s*$)/i;
+  const sanitized = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !forbiddenPattern.test(line))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!sanitized) {
+    return null;
+  }
+  if (sanitized.length > maxLength) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be <= ${maxLength} characters after sanitization.`);
+  }
+  return sanitized;
+}
+
 function toStrategyVersionCompareBase(version: {
   id: string;
   status: string;
@@ -927,6 +972,56 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send(
       formatSuccess(request, {
         strategy_version: toStrategyVersionResponse(updated),
+      }),
+    );
+  });
+
+  fastify.patch<{
+    Params: { versionId: string };
+    Body: StrategyVersionAnnotationBody;
+  }>('/:versionId/annotation', async (request, reply) => {
+    const { versionId } = request.params;
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+      select: { id: true },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    const hasLabel = Object.prototype.hasOwnProperty.call(request.body ?? {}, 'label');
+    const hasNote = Object.prototype.hasOwnProperty.call(request.body ?? {}, 'note');
+    const hasFavorite = Object.prototype.hasOwnProperty.call(request.body ?? {}, 'is_favorite');
+    if (!hasLabel && !hasNote && !hasFavorite) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'at least one of label, note, is_favorite is required.');
+    }
+
+    const label = hasLabel ? sanitizeAnnotationText(request.body.label, 80, 'label') : undefined;
+    const note = hasNote ? sanitizeAnnotationText(request.body.note, 240, 'note') : undefined;
+    if (hasFavorite && typeof request.body.is_favorite !== 'boolean') {
+      throw new AppError(400, 'VALIDATION_ERROR', 'is_favorite must be a boolean.');
+    }
+    const isFavorite = hasFavorite ? request.body.is_favorite as boolean : undefined;
+
+    const annotation = await prisma.strategyVersionAnnotation.upsert({
+      where: { strategyRuleVersionId: version.id },
+      create: {
+        strategyRuleVersionId: version.id,
+        label: label ?? null,
+        note: note ?? null,
+        isFavorite: isFavorite ?? false,
+      },
+      update: {
+        ...(hasLabel ? { label } : {}),
+        ...(hasNote ? { note } : {}),
+        ...(hasFavorite ? { isFavorite } : {}),
+      },
+    });
+
+    return reply.status(200).send(
+      formatSuccess(request, {
+        annotation: toAnnotationResponse(annotation),
       }),
     );
   });

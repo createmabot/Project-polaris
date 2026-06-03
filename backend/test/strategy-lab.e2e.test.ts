@@ -140,9 +140,20 @@ type StrategyProposalProviderEventRow = {
   createdAt: Date;
 };
 
+type StrategyVersionAnnotationRow = {
+  id: string;
+  strategyRuleVersionId: string;
+  label: string | null;
+  note: string | null;
+  isFavorite: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type Runtime = {
   strategySeq: number;
   versionSeq: number;
+  annotationSeq: number;
   pineSeq: number;
   revisionSeq: number;
   proposalRunSeq: number;
@@ -150,6 +161,7 @@ type Runtime = {
   proposalProviderEventSeq: number;
   strategies: Map<string, StrategyRuleRow>;
   versions: Map<string, StrategyRuleVersionRow>;
+  annotations: Map<string, StrategyVersionAnnotationRow>;
   pineScripts: Map<string, PineScriptRow>;
   pineRevisionInputs: Map<string, {
     id: string;
@@ -177,6 +189,7 @@ function createRuntime(): Runtime {
   return {
     strategySeq: 1,
     versionSeq: 1,
+    annotationSeq: 1,
     pineSeq: 1,
     revisionSeq: 1,
     proposalRunSeq: 1,
@@ -184,6 +197,7 @@ function createRuntime(): Runtime {
     proposalProviderEventSeq: 1,
     strategies: new Map(),
     versions: new Map(),
+    annotations: new Map(),
     pineScripts: new Map(),
     pineRevisionInputs: new Map(),
     proposalRuns: new Map(),
@@ -194,6 +208,10 @@ function createRuntime(): Runtime {
     proposalProviderEventFindManyCalls: [],
     proposalProviderEventCountCalls: [],
   };
+}
+
+function findAnnotationByVersionId(versionId: string): StrategyVersionAnnotationRow | null {
+  return Array.from(runtime.annotations.values()).find((row) => row.strategyRuleVersionId === versionId) ?? null;
 }
 
 function findProviderEvent(
@@ -223,6 +241,43 @@ function stringMatches(value: unknown, filter: any): boolean {
   const haystack = filter.mode === 'insensitive' ? value.toLowerCase() : value;
   const normalizedNeedle = filter.mode === 'insensitive' ? needle.toLowerCase() : needle;
   return haystack.includes(normalizedNeedle);
+}
+
+function versionMatchesWhere(row: StrategyRuleVersionRow, where: any): boolean {
+  if (!where || Object.keys(where).length === 0) {
+    return true;
+  }
+  if (Array.isArray(where.AND)) {
+    return where.AND.every((condition: any) => versionMatchesWhere(row, condition));
+  }
+  if (Array.isArray(where.OR)) {
+    return where.OR.some((condition: any) => versionMatchesWhere(row, condition));
+  }
+  if (where.strategyRuleId && row.strategyRuleId !== where.strategyRuleId) {
+    return false;
+  }
+  if (where.status && row.status !== where.status) {
+    return false;
+  }
+  if (where.naturalLanguageRule?.contains && !stringMatches(row.naturalLanguageRule, where.naturalLanguageRule)) {
+    return false;
+  }
+  if (where.annotation?.is) {
+    const annotation = findAnnotationByVersionId(row.id);
+    if (!annotation) {
+      return false;
+    }
+    if (where.annotation.is.isFavorite !== undefined && annotation.isFavorite !== where.annotation.is.isFavorite) {
+      return false;
+    }
+    if (where.annotation.is.label?.contains && !stringMatches(annotation.label, where.annotation.is.label)) {
+      return false;
+    }
+    if (where.annotation.is.note?.contains && !stringMatches(annotation.note, where.annotation.is.note)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function proposalRunMatchesWhere(row: StrategyProposalRunRow, where: any): boolean {
@@ -409,24 +464,7 @@ vi.mock('../src/db', () => {
     },
     strategyRuleVersion: {
       count: async ({ where }: any) => {
-        let rows = Array.from(runtime.versions.values());
-        if (where?.strategyRuleId) {
-          rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
-        }
-        if (where?.status) {
-          rows = rows.filter((row) => row.status === where.status);
-        }
-        if (where?.naturalLanguageRule?.contains) {
-          const keyword = String(where.naturalLanguageRule.contains);
-          const insensitive = where.naturalLanguageRule.mode === 'insensitive';
-          rows = rows.filter((row) => {
-            if (insensitive) {
-              return row.naturalLanguageRule.toLowerCase().includes(keyword.toLowerCase());
-            }
-            return row.naturalLanguageRule.includes(keyword);
-          });
-        }
-        return rows.length;
+        return Array.from(runtime.versions.values()).filter((row) => versionMatchesWhere(row, where)).length;
       },
       create: async ({ data }: any) => {
         const id = `ver-${runtime.versionSeq++}`;
@@ -456,32 +494,18 @@ vi.mock('../src/db', () => {
         if (!row) {
           return null;
         }
-        if (include?.clonedFromVersion) {
-          return {
-            ...row,
-            clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
-          };
-        }
-        return row;
+        return {
+          ...row,
+          ...(include?.clonedFromVersion
+            ? {
+                clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
+              }
+            : {}),
+          ...(include?.annotation ? { annotation: findAnnotationByVersionId(row.id) } : {}),
+        };
       },
       findMany: async ({ where, orderBy, include, skip, take }: any) => {
-        let rows = Array.from(runtime.versions.values());
-        if (where?.strategyRuleId) {
-          rows = rows.filter((row) => row.strategyRuleId === where.strategyRuleId);
-        }
-        if (where?.status) {
-          rows = rows.filter((row) => row.status === where.status);
-        }
-        if (where?.naturalLanguageRule?.contains) {
-          const keyword = String(where.naturalLanguageRule.contains);
-          const insensitive = where.naturalLanguageRule.mode === 'insensitive';
-          rows = rows.filter((row) => {
-            if (insensitive) {
-              return row.naturalLanguageRule.toLowerCase().includes(keyword.toLowerCase());
-            }
-            return row.naturalLanguageRule.includes(keyword);
-          });
-        }
+        let rows = Array.from(runtime.versions.values()).filter((row) => versionMatchesWhere(row, where));
         if (orderBy?.createdAt === 'desc') {
           rows.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
         }
@@ -497,10 +521,23 @@ vi.mock('../src/db', () => {
         const offset = Number.isInteger(skip) && skip > 0 ? skip : 0;
         const limit = Number.isInteger(take) && take >= 0 ? take : rows.length;
         rows = rows.slice(offset, offset + limit);
-        if (include?.clonedFromVersion) {
+        if (include?.clonedFromVersion || include?.annotation || include?._count) {
           return rows.map((row) => ({
             ...row,
-            clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
+            ...(include?.clonedFromVersion
+              ? {
+                  clonedFromVersion: row.clonedFromVersionId ? runtime.versions.get(row.clonedFromVersionId) ?? null : null,
+                }
+              : {}),
+            ...(include?.annotation ? { annotation: findAnnotationByVersionId(row.id) } : {}),
+            ...(include?._count
+              ? {
+                  _count: {
+                    backtests: 0,
+                    symbolStrategyApplications: 0,
+                  },
+                }
+              : {}),
           }));
         }
         return rows;
@@ -517,6 +554,33 @@ vi.mock('../src/db', () => {
         };
         runtime.versions.set(where.id, next);
         return next;
+      },
+    },
+    strategyVersionAnnotation: {
+      upsert: async ({ where, create, update }: any) => {
+        const existing = findAnnotationByVersionId(where.strategyRuleVersionId);
+        const now = new Date();
+        if (existing) {
+          const next: StrategyVersionAnnotationRow = {
+            ...existing,
+            ...update,
+            updatedAt: now,
+          };
+          runtime.annotations.set(existing.id, next);
+          return next;
+        }
+        const id = `annotation-${runtime.annotationSeq++}`;
+        const row: StrategyVersionAnnotationRow = {
+          id,
+          strategyRuleVersionId: create.strategyRuleVersionId,
+          label: create.label ?? null,
+          note: create.note ?? null,
+          isFavorite: create.isFavorite ?? false,
+          createdAt: now,
+          updatedAt: now,
+        };
+        runtime.annotations.set(id, row);
+        return row;
       },
     },
     pineScript: {
@@ -3492,6 +3556,192 @@ describe('strategy lab vertical slice', () => {
     expect(detailBody.data.strategy_version.natural_language_rule).toContain('RSI');
     expect(Array.isArray(detailBody.data.strategy_version.warnings)).toBe(true);
     expect(Array.isArray(detailBody.data.strategy_version.assumptions)).toBe(true);
+
+    await app.close();
+  });
+
+  it('upserts annotations and returns them in versions list with favorite filter and q search', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'annotation-test' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createVersion1 = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上回ったら買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const version1Id = createVersion1.json().data.strategy_version.id as string;
+    const updatedAtBeforeAnnotation = runtime.versions.get(version1Id)?.updatedAt;
+
+    const createVersion2 = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: 'RSIが30以下で買い',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const version2Id = createVersion2.json().data.strategy_version.id as string;
+
+    const beforePineCount = runtime.pineScripts.size;
+    const beforeProposalRunCount = runtime.proposalRuns.size;
+
+    const patchAnnotation = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${version1Id}/annotation`,
+      payload: {
+        label: '本命候補',
+        note: [
+          '短期監視',
+          'raw prompt: internal prompt fragment',
+          'provider response: hidden payload',
+          'stack trace: at generate (secret.ts:10:2)',
+          'https://example.test/raw endpoint model secret token credential',
+          'C:\\Users\\example\\trace.js:10:2',
+        ].join('\n'),
+        is_favorite: true,
+      },
+    });
+    expect(patchAnnotation.statusCode).toBe(200);
+    const patchAnnotationJson = JSON.stringify(patchAnnotation.json());
+    expect(patchAnnotation.json().data.annotation).toEqual({
+      label: '本命候補',
+      note: '短期監視',
+      is_favorite: true,
+    });
+    expect(patchAnnotationJson).not.toContain('raw prompt');
+    expect(patchAnnotationJson).not.toContain('provider response');
+    expect(patchAnnotationJson).not.toContain('stack trace');
+    expect(patchAnnotationJson).not.toContain('https://');
+    expect(patchAnnotationJson).not.toContain('C:\\Users');
+    expect(runtime.versions.get(version1Id)?.updatedAt).toBe(updatedAtBeforeAnnotation);
+    expect(runtime.pineScripts.size).toBe(beforePineCount);
+    expect(runtime.proposalRuns.size).toBe(beforeProposalRunCount);
+
+    const updateAnnotation = await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${version1Id}/annotation`,
+      payload: {
+        note: '再検証メモ',
+      },
+    });
+    expect(updateAnnotation.statusCode).toBe(200);
+    expect(updateAnnotation.json().data.annotation).toEqual({
+      label: '本命候補',
+      note: '再検証メモ',
+      is_favorite: true,
+    });
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${version2Id}/annotation`,
+      payload: {
+        label: '比較対象',
+        note: '候補外',
+        is_favorite: false,
+      },
+    });
+
+    const list = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions`,
+    });
+    expect(list.statusCode).toBe(200);
+    const annotatedRow = list.json().data.strategy_versions.find((item: any) => item.id === version1Id);
+    expect(annotatedRow.label).toBe('本命候補');
+    expect(annotatedRow.note).toBe('再検証メモ');
+    expect(annotatedRow.is_favorite).toBe(true);
+    expect(annotatedRow.natural_language_rule).toBeUndefined();
+    expect(annotatedRow.generated_pine).toBeUndefined();
+
+    const favoriteList = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?favorite=true`,
+    });
+    expect(favoriteList.statusCode).toBe(200);
+    expect(favoriteList.json().data.strategy_versions.map((item: any) => item.id)).toEqual([version1Id]);
+    expect(favoriteList.json().data.query.favorite).toBe(true);
+
+    const annotationSearch = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/versions?q=%E6%9C%AC%E5%91%BD`,
+    });
+    expect(annotationSearch.statusCode).toBe(200);
+    expect(annotationSearch.json().data.strategy_versions.map((item: any) => item.id)).toEqual([version1Id]);
+
+    await app.close();
+  });
+
+  it('returns strategy version lineage nodes and edges without raw rule or pine bodies', async () => {
+    const app = await createApp();
+
+    const createStrategy = await app.inject({
+      method: 'POST',
+      url: '/api/strategies',
+      payload: { title: 'lineage-test' },
+    });
+    const strategyId = createStrategy.json().data.strategy.id as string;
+
+    const createSource = await app.inject({
+      method: 'POST',
+      url: `/api/strategies/${strategyId}/versions`,
+      payload: {
+        natural_language_rule: '25日移動平均を上回ったら買い raw-rule-marker',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+      },
+    });
+    const sourceVersionId = createSource.json().data.strategy_version.id as string;
+
+    const cloneResponse = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-versions/${sourceVersionId}/clone`,
+      payload: {},
+    });
+    const clonedVersionId = cloneResponse.json().data.strategy_version.id as string;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/api/strategy-versions/${clonedVersionId}/annotation`,
+      payload: {
+        label: '派生A',
+        note: '差分確認',
+        is_favorite: true,
+      },
+    });
+
+    const lineage = await app.inject({
+      method: 'GET',
+      url: `/api/strategies/${strategyId}/version-lineage`,
+    });
+    expect(lineage.statusCode).toBe(200);
+    const body = lineage.json();
+    expect(body.data.nodes).toHaveLength(2);
+    expect(body.data.edges).toEqual([
+      {
+        from_version_id: sourceVersionId,
+        to_version_id: clonedVersionId,
+        relation: 'clone',
+      },
+    ]);
+    const clonedNode = body.data.nodes.find((node: any) => node.id === clonedVersionId);
+    expect(clonedNode.annotation).toEqual({ label: '派生A', note: '差分確認', is_favorite: true });
+    expect(clonedNode.backtest_count).toBe(0);
+    expect(clonedNode.application_count).toBe(0);
+    expect(JSON.stringify(body.data)).not.toContain('raw-rule-marker');
+    expect(JSON.stringify(body.data)).not.toContain('natural_language_rule');
+    expect(JSON.stringify(body.data)).not.toContain('generated_pine');
+    expect(body.data.meta.truncated).toBe(false);
 
     await app.close();
   });

@@ -183,6 +183,28 @@ StrategyVersion Pine generation の market / timeframe:
 - unsupported market / timeframe は Pine generation note の warning / assumption で明示し、既存 fallback 境界を維持する。
 - internal backtest engine の対応範囲拡張、TradingView compile 自動実行、auto Pine / auto save / auto backtest / AI summary 自動生成はこの API 変更に含めない。
 
+## 7-1. StrategyVersion annotation / lineage
+
+- `PATCH /api/strategy-versions/:versionId/annotation`
+  - request: `{ label?: string|null, note?: string|null, is_favorite?: boolean }`
+  - StrategyVersion 1 件につき 1 annotation を upsert する。
+  - response は sanitized annotation fields のみ返す: `label` / `note` / `is_favorite`。
+  - `label` は最大 80 文字、`note` は最大 240 文字。
+  - 改行、URL、endpoint、model、secret、token、credential、local path、stack trace 風文字列は保存・返却しない。
+  - annotation 操作では `natural_language_rule` / `market` / `timeframe` / `generated_pine` / `status` は変更しない。
+- `GET /api/strategies/:strategyId/version-lineage`
+  - StrategyVersion の lineage tree 用 read API。
+  - nodes は annotation、status、market、timeframe、warnings 有無、forward validation note 有無、clone 差分有無、backtest count、application count、created / updated を返す。
+  - edges は `cloned_from_version_id` をもとに `from_version_id` / `to_version_id` を返す。
+  - default / maximum limit は 300 件。超過時は `meta.truncated=true`。
+  - raw rule 本文、raw Pine script は返さない。
+- `GET /api/strategies/:strategyId/versions`
+  - version row に `label` / `note` / `is_favorite` を追加する。
+  - `favorite=true` filter を追加する。
+  - `q` は `natural_language_rule` と annotation `label` / `note` を検索対象にする。ただし response に raw rule 本文は含めない。
+
+表示・annotation 操作だけで Pine generation、Pine regeneration、backtest、AI summary、application apply、proposal generation は起動しない。
+
 ## 7-2. Symbol references
 
 - `POST /api/symbols/:symbolId/references/refresh`
