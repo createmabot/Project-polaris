@@ -12,6 +12,7 @@ import InlineNotice from '../components/ui/InlineNotice';
 import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import PineGenerationProgress from '../components/ui/PineGenerationProgress';
+import StrategyVersionLineageTree from '../components/strategy/StrategyVersionLineageTree';
 import { buildPineGenerationJobFailureMessage } from '../utils/pineGenerationJob';
 import SectionCard from '../components/ui/SectionCard';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -1178,6 +1179,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </InlineNotice>
         </SectionCard>
       ) : null}
+      <StrategyVersionLineageTree
+        strategyId={version.strategy_id}
+        currentVersionId={version.id}
+        compact
+        title='現在の branch'
+        description='現在の version がどの branch にいるかを確認します。node を押すと該当 version 詳細へ移動します。'
+      />
       <div ref={ruleEditorSectionRef}>
         <SectionCard
           title='自然言語ルール（編集）'

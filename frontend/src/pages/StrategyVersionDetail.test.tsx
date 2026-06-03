@@ -164,6 +164,66 @@ function createListPayload() {
   };
 }
 
+function createLineagePayload() {
+  return {
+    strategy: {
+      id: 'str-1',
+      title: '検証用ルール',
+      status: 'active',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    },
+    nodes: [
+      {
+        id: 'ver-0',
+        strategy_id: 'str-1',
+        cloned_from_version_id: null,
+        annotation: { label: 'base', note: null, is_favorite: false },
+        status: 'draft',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        has_warnings: false,
+        has_forward_validation_note: false,
+        has_diff_from_clone: null,
+        backtest_count: 0,
+        application_count: 0,
+        latest_backtest_metrics: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'ver-1',
+        strategy_id: 'str-1',
+        cloned_from_version_id: 'ver-0',
+        annotation: { label: 'improvement', note: null, is_favorite: true },
+        status: 'generated',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        has_warnings: false,
+        has_forward_validation_note: true,
+        has_diff_from_clone: true,
+        backtest_count: 1,
+        application_count: 1,
+        latest_backtest_metrics: {
+          backtest_id: 'bt-source-1',
+          status: 'imported',
+          execution_source: 'tradingview',
+          updated_at: '2026-05-02T00:00:00.000Z',
+          total_trades: 42,
+          win_rate: 57.1,
+          profit_factor: 1.63,
+          max_drawdown: -8.4,
+          net_profit: 120000,
+        },
+        created_at: '2026-01-02T00:00:00.000Z',
+        updated_at: '2026-01-02T00:00:00.000Z',
+      },
+    ],
+    edges: [{ from_version_id: 'ver-0', to_version_id: 'ver-1', relation: 'clone' }],
+    meta: { limit: 300, total: 2, truncated: false },
+  };
+}
+
 function createSourceBacktestPayload() {
   return {
     backtest: {
@@ -303,6 +363,14 @@ function setupSWR(
         error: null,
         mutate: vi.fn(),
         data: detailPayload,
+      };
+    }
+    if (typeof key === 'string' && key.includes('/version-lineage')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: vi.fn(),
+        data: createLineagePayload(),
       };
     }
     if (typeof key === 'string' && key.startsWith('/api/strategies/')) {
@@ -544,6 +612,12 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('銘柄ページへ戻る');
     expect(html).toContain('この銘柄に改善版を適用');
     expect(html).toContain('data-testid="apply-improved-version"');
+    expect(html).toContain('現在の branch');
+    expect(html).toContain('現在の version がどの branch にいるかを確認します。');
+    expect(html).toContain('現在表示中');
+    expect(html).toContain('improvement');
+    expect(html).toContain('PF 1.63');
+    expect(html).toContain('href="/strategy-versions/ver-1"');
   });
 
   it('renders read-only source backtest improvement context and memo handoff controls', async () => {
@@ -596,6 +670,8 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('元ルール、検証結果、AI総評、改善メモをもとに');
     expect(html).toContain('押下だけでは保存・Pine生成・検証・適用は行いません');
     expect(html).toContain('data-testid="llm-rewrite-natural-language-rule"');
+    expect(html).toContain('現在の branch');
+    expect(html).toContain('現在表示中');
     expect(html).not.toContain('改善案から新しいルール本文を作る');
     expect(html).not.toContain('改善メモを Pine 修正依頼に反映');
     expect(html).not.toContain('data-testid="reflect-source-backtest-memo-to-rule"');

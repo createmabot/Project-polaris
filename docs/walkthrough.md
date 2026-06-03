@@ -53,6 +53,8 @@ pnpm run dev
 9. `q` 検索で自然言語ルール本文だけでなく annotation label / note でも絞り込めることを確認する。ただし一覧 response / UI に raw rule 本文や raw Pine script が表示されないことを確認する。
 10. annotation に URL、endpoint、model、secret、token、credential、local path、stack trace 風文字列を入れても保存・表示されないことを確認する。
 11. 一覧表示、tree 表示、favorite / label / note 操作だけで Pine generation、Pine regeneration、backtest、AI summary、application apply、proposal generation が起動しないことを確認する。
+12. `http://localhost:5173/strategies/:strategyId` を開き、基本情報の下に `version 履歴ツリー` が表示され、node link から StrategyVersionDetail へ移動できることを確認する。
+13. `http://localhost:5173/strategy-versions/:versionId` を開き、自然言語ルール編集より上に compact な `現在の branch` tree が表示され、現在の version node に `現在表示中` が出ることを確認する。
 
 ## 3. 自然言語 -> Pine 生成
 
