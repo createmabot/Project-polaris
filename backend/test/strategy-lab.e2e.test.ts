@@ -150,6 +150,27 @@ type StrategyVersionAnnotationRow = {
   updatedAt: Date;
 };
 
+type BacktestRow = {
+  id: string;
+  strategyRuleVersionId: string;
+  strategySnapshotJson: unknown;
+  title: string;
+  executionSource: string;
+  market: string;
+  timeframe: string;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type BacktestImportRow = {
+  id: string;
+  backtestId: string;
+  parsedSummaryJson: unknown;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 type Runtime = {
   strategySeq: number;
   versionSeq: number;
@@ -162,6 +183,8 @@ type Runtime = {
   strategies: Map<string, StrategyRuleRow>;
   versions: Map<string, StrategyRuleVersionRow>;
   annotations: Map<string, StrategyVersionAnnotationRow>;
+  backtests: Map<string, BacktestRow>;
+  backtestImports: Map<string, BacktestImportRow>;
   pineScripts: Map<string, PineScriptRow>;
   pineRevisionInputs: Map<string, {
     id: string;
@@ -198,6 +221,8 @@ function createRuntime(): Runtime {
     strategies: new Map(),
     versions: new Map(),
     annotations: new Map(),
+    backtests: new Map(),
+    backtestImports: new Map(),
     pineScripts: new Map(),
     pineRevisionInputs: new Map(),
     proposalRuns: new Map(),
@@ -212,6 +237,18 @@ function createRuntime(): Runtime {
 
 function findAnnotationByVersionId(versionId: string): StrategyVersionAnnotationRow | null {
   return Array.from(runtime.annotations.values()).find((row) => row.strategyRuleVersionId === versionId) ?? null;
+}
+
+function findBacktestsByVersionId(versionId: string): Array<BacktestRow & { imports?: BacktestImportRow[] }> {
+  return Array.from(runtime.backtests.values())
+    .filter((row) => row.strategyRuleVersionId === versionId)
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime())
+    .map((row) => ({
+      ...row,
+      imports: Array.from(runtime.backtestImports.values())
+        .filter((item) => item.backtestId === row.id)
+        .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || b.createdAt.getTime() - a.createdAt.getTime()),
+    }));
 }
 
 function findProviderEvent(
@@ -521,7 +558,7 @@ vi.mock('../src/db', () => {
         const offset = Number.isInteger(skip) && skip > 0 ? skip : 0;
         const limit = Number.isInteger(take) && take >= 0 ? take : rows.length;
         rows = rows.slice(offset, offset + limit);
-        if (include?.clonedFromVersion || include?.annotation || include?._count) {
+        if (include?.clonedFromVersion || include?.annotation || include?._count || include?.backtests) {
           return rows.map((row) => ({
             ...row,
             ...(include?.clonedFromVersion
@@ -533,9 +570,14 @@ vi.mock('../src/db', () => {
             ...(include?._count
               ? {
                   _count: {
-                    backtests: 0,
+                    backtests: findBacktestsByVersionId(row.id).length,
                     symbolStrategyApplications: 0,
                   },
+                }
+              : {}),
+            ...(include?.backtests
+              ? {
+                  backtests: findBacktestsByVersionId(row.id).slice(0, include.backtests.take ?? undefined),
                 }
               : {}),
           }));
@@ -3720,6 +3762,69 @@ describe('strategy lab vertical slice', () => {
       },
     });
 
+    const olderBacktest: BacktestRow = {
+      id: 'backtest-old',
+      strategyRuleVersionId: clonedVersionId,
+      strategySnapshotJson: {
+        result_summary: {
+          metrics: {
+            trade_count: 12,
+            win_rate: 40,
+            profit_factor: 0.8,
+            max_drawdown_percent: -18,
+            net_profit: -2500,
+          },
+        },
+        raw_import_text: 'raw import text should not appear',
+      },
+      title: 'older backtest',
+      executionSource: 'internal_backtest',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'succeeded',
+      createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-02T00:00:00.000Z'),
+    };
+    const latestBacktest: BacktestRow = {
+      id: 'backtest-latest',
+      strategyRuleVersionId: clonedVersionId,
+      strategySnapshotJson: {
+        result_summary: {
+          metrics: {
+            trade_count: 1,
+            win_rate: 1,
+            profit_factor: 1,
+            max_drawdown_percent: 1,
+            net_profit: 1,
+          },
+        },
+        raw_csv: 'raw csv marker should not appear',
+      },
+      title: 'latest backtest',
+      executionSource: 'tradingview',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      status: 'imported',
+      createdAt: new Date('2026-01-03T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-04T00:00:00.000Z'),
+    };
+    runtime.backtests.set(olderBacktest.id, olderBacktest);
+    runtime.backtests.set(latestBacktest.id, latestBacktest);
+    runtime.backtestImports.set('import-latest', {
+      id: 'import-latest',
+      backtestId: latestBacktest.id,
+      parsedSummaryJson: {
+        totalTrades: 36,
+        winRate: 48,
+        profitFactor: 1.42,
+        maxDrawdown: -8.5,
+        netProfit: 12000,
+        rawCsvText: 'raw csv text should not appear',
+      },
+      createdAt: new Date('2026-01-04T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-04T00:00:00.000Z'),
+    });
+
     const lineage = await app.inject({
       method: 'GET',
       url: `/api/strategies/${strategyId}/version-lineage`,
@@ -3736,11 +3841,24 @@ describe('strategy lab vertical slice', () => {
     ]);
     const clonedNode = body.data.nodes.find((node: any) => node.id === clonedVersionId);
     expect(clonedNode.annotation).toEqual({ label: '派生A', note: '差分確認', is_favorite: true });
-    expect(clonedNode.backtest_count).toBe(0);
+    expect(clonedNode.backtest_count).toBe(2);
     expect(clonedNode.application_count).toBe(0);
+    expect(clonedNode.latest_backtest_metrics).toEqual({
+      backtest_id: 'backtest-latest',
+      status: 'imported',
+      execution_source: 'tradingview',
+      updated_at: latestBacktest.updatedAt.toISOString(),
+      total_trades: 36,
+      win_rate: 48,
+      profit_factor: 1.42,
+      max_drawdown: -8.5,
+      net_profit: 12000,
+    });
     expect(JSON.stringify(body.data)).not.toContain('raw-rule-marker');
     expect(JSON.stringify(body.data)).not.toContain('natural_language_rule');
     expect(JSON.stringify(body.data)).not.toContain('generated_pine');
+    expect(JSON.stringify(body.data)).not.toContain('raw csv');
+    expect(JSON.stringify(body.data)).not.toContain('raw import text');
     expect(body.data.meta.truncated).toBe(false);
 
     await app.close();

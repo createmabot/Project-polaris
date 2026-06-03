@@ -403,6 +403,17 @@ describe('StrategyVersionList', () => {
                 has_diff_from_clone: true,
                 backtest_count: 0,
                 application_count: 0,
+                latest_backtest_metrics: {
+                  backtest_id: 'bt-1',
+                  status: 'imported',
+                  execution_source: 'tradingview',
+                  updated_at: '2026-01-02T00:00:00.000Z',
+                  total_trades: 36,
+                  win_rate: 48,
+                  profit_factor: 1.42,
+                  max_drawdown: -8.5,
+                  net_profit: 12000,
+                },
                 created_at: '2026-01-02T00:00:00.000Z',
                 updated_at: '2026-01-02T00:00:00.000Z',
               },
@@ -466,6 +477,10 @@ describe('StrategyVersionList', () => {
     expect(html).toContain('100%');
     expect(html).toContain('拡大');
     expect(html).toContain('本命ラベル');
+    expect(html).toContain('PF 1.42');
+    expect(html).toContain('勝率 48%');
+    expect(html).toContain('DD -8.5%');
+    expect(html).toContain('取引 36');
     expect(html).toContain('/strategy-versions/ver-child?return=%2Fstrategies%2Fstr-tree%2Fversions%3Ffavorite%3Dtrue');
     expect(mockUseSWR).toHaveBeenCalledWith('/api/strategies/str-tree/versions?page=1&limit=20&favorite=true&sort=created_at&order=desc', expect.any(Function));
   });
@@ -477,7 +492,31 @@ describe('StrategyVersionList', () => {
     expect(resolveNextLineageZoom(0.6, 'out')).toBe(0.6);
     expect(resolveNextLineageZoom(1.4, 'reset')).toBe(1);
 
-    const layout = buildLineageLayout({
+    const baseNode = (
+      id: string,
+      clonedFromVersionId: string | null,
+      createdAt: string,
+    ) => ({
+      id,
+      strategy_id: 'str-layout',
+      cloned_from_version_id: clonedFromVersionId,
+      annotation: { label: null, note: null, is_favorite: false },
+      status: 'draft',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      has_warnings: false,
+      has_forward_validation_note: false,
+      has_diff_from_clone: clonedFromVersionId ? false : null,
+      backtest_count: 0,
+      application_count: 0,
+      latest_backtest_metrics: null,
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+    const buildLayout = (
+      nodes: Array<ReturnType<typeof baseNode>>,
+      edges: Array<{ from_version_id: string; to_version_id: string; relation: 'clone' }>,
+    ) => buildLineageLayout({
       strategy: {
         id: 'str-layout',
         title: 'layout',
@@ -485,46 +524,70 @@ describe('StrategyVersionList', () => {
         created_at: '',
         updated_at: '',
       },
-      nodes: [
-        {
-          id: 'root',
-          strategy_id: 'str-layout',
-          cloned_from_version_id: null,
-          annotation: { label: null, note: null, is_favorite: false },
-          status: 'draft',
-          market: 'JP_STOCK',
-          timeframe: 'D',
-          has_warnings: false,
-          has_forward_validation_note: false,
-          has_diff_from_clone: null,
-          backtest_count: 0,
-          application_count: 0,
-          created_at: '2026-01-01T00:00:00.000Z',
-          updated_at: '2026-01-01T00:00:00.000Z',
-        },
-        {
-          id: 'child',
-          strategy_id: 'str-layout',
-          cloned_from_version_id: 'root',
-          annotation: { label: null, note: null, is_favorite: false },
-          status: 'draft',
-          market: 'JP_STOCK',
-          timeframe: 'D',
-          has_warnings: false,
-          has_forward_validation_note: false,
-          has_diff_from_clone: false,
-          backtest_count: 0,
-          application_count: 0,
-          created_at: '2026-01-02T00:00:00.000Z',
-          updated_at: '2026-01-02T00:00:00.000Z',
-        },
-      ],
-      edges: [{ from_version_id: 'root', to_version_id: 'child', relation: 'clone' }],
+      nodes,
+      edges,
       meta: { limit: 300, total: 2, truncated: false },
     });
 
-    expect(layout.nodes.find((node) => node.id === 'child')!.x).toBeGreaterThan(layout.nodes.find((node) => node.id === 'root')!.x);
-    expect(layout.edges).toHaveLength(1);
+    const chain = buildLayout(
+      [
+        baseNode('root', null, '2026-01-01T00:00:00.000Z'),
+        baseNode('child', 'root', '2026-01-02T00:00:00.000Z'),
+        baseNode('grandchild', 'child', '2026-01-03T00:00:00.000Z'),
+      ],
+      [
+        { from_version_id: 'root', to_version_id: 'child', relation: 'clone' },
+        { from_version_id: 'child', to_version_id: 'grandchild', relation: 'clone' },
+      ],
+    );
+    const chainRoot = chain.nodes.find((node) => node.id === 'root')!;
+    const chainChild = chain.nodes.find((node) => node.id === 'child')!;
+    const chainGrandchild = chain.nodes.find((node) => node.id === 'grandchild')!;
+    expect(chainChild.x).toBeGreaterThan(chainRoot.x);
+    expect(chainGrandchild.x).toBeGreaterThan(chainChild.x);
+    expect(chainChild.y).toBe(chainRoot.y);
+    expect(chainGrandchild.y).toBe(chainRoot.y);
+    expect(chain.edges).toHaveLength(2);
+
+    const branch = buildLayout(
+      [
+        baseNode('root', null, '2026-01-01T00:00:00.000Z'),
+        baseNode('child-a', 'root', '2026-01-02T00:00:00.000Z'),
+        baseNode('child-b', 'root', '2026-01-03T00:00:00.000Z'),
+      ],
+      [
+        { from_version_id: 'root', to_version_id: 'child-a', relation: 'clone' },
+        { from_version_id: 'root', to_version_id: 'child-b', relation: 'clone' },
+      ],
+    );
+    const branchRoot = branch.nodes.find((node) => node.id === 'root')!;
+    const childA = branch.nodes.find((node) => node.id === 'child-a')!;
+    const childB = branch.nodes.find((node) => node.id === 'child-b')!;
+    expect(branchRoot.y).toBe((childA.y + childB.y) / 2);
+    expect(childB.y).toBeGreaterThan(childA.y);
+
+    const missingParent = buildLayout(
+      [
+        baseNode('orphan', 'missing-parent', '2026-01-01T00:00:00.000Z'),
+        baseNode('orphan-child', 'orphan', '2026-01-02T00:00:00.000Z'),
+      ],
+      [{ from_version_id: 'orphan', to_version_id: 'orphan-child', relation: 'clone' }],
+    );
+    const orphan = missingParent.nodes.find((node) => node.id === 'orphan')!;
+    const orphanChild = missingParent.nodes.find((node) => node.id === 'orphan-child')!;
+    expect(orphan.x).toBeLessThan(orphanChild.x);
+    expect(orphan.y).toBe(orphanChild.y);
+
+    const multipleRoots = buildLayout(
+      [
+        baseNode('root-a', null, '2026-01-01T00:00:00.000Z'),
+        baseNode('root-a-child', 'root-a', '2026-01-02T00:00:00.000Z'),
+        baseNode('root-b', null, '2026-01-03T00:00:00.000Z'),
+      ],
+      [{ from_version_id: 'root-a', to_version_id: 'root-a-child', relation: 'clone' }],
+    );
+    expect(multipleRoots.nodes.find((node) => node.id === 'root-b')!.y)
+      .toBeGreaterThan(multipleRoots.nodes.find((node) => node.id === 'root-a')!.y);
   });
 
   it('calls annotation PATCH helper and applies annotation cache updates', async () => {

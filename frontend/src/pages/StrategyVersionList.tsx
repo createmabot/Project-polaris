@@ -11,6 +11,13 @@ type StrategyVersionListProps = {
 const PAGE_SIZE = 20;
 const PRIORITY_VERSION_HASH_PREFIX = '#priority-version-';
 const NOTE_FRESHNESS_BADGE_LABEL = '最新ノート';
+const LINEAGE_NODE_WIDTH = 184;
+const LINEAGE_NODE_HEIGHT = 96;
+const LINEAGE_MARGIN_X = 32;
+const LINEAGE_MARGIN_Y = 36;
+const LINEAGE_HORIZONTAL_GAP = 240;
+const LINEAGE_VERTICAL_GAP = 118;
+const LINEAGE_ROOT_GAP = 56;
 
 function formatNoteFreshness(noteUpdatedAt: string | null): string {
   if (!noteUpdatedAt) {
@@ -181,32 +188,102 @@ export function resolveNextLineageZoom(current: number, action: 'in' | 'out' | '
 export function buildLineageLayout(lineage: StrategyVersionLineageData | undefined): LineageLayout {
   const nodes = lineage?.nodes ?? [];
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const depthById = new Map<string, number>();
-  const resolveDepth = (node: StrategyVersionLineageData['nodes'][number], seen = new Set<string>()): number => {
-    const cached = depthById.get(node.id);
-    if (cached !== undefined) return cached;
-    if (!node.cloned_from_version_id || seen.has(node.id)) {
-      depthById.set(node.id, 0);
-      return 0;
+  const childrenByParentId = new Map<string, StrategyVersionLineageData['nodes']>();
+  const sortedNodes = [...nodes].sort((a, b) => {
+    const diff = (toSafeTimestamp(a.created_at) ?? 0) - (toSafeTimestamp(b.created_at) ?? 0);
+    return diff || a.id.localeCompare(b.id);
+  });
+
+  const wouldCreateCycle = (node: StrategyVersionLineageData['nodes'][number]): boolean => {
+    const seen = new Set<string>([node.id]);
+    let parentId = node.cloned_from_version_id;
+    while (parentId) {
+      if (seen.has(parentId)) return true;
+      seen.add(parentId);
+      const parent = byId.get(parentId);
+      if (!parent) return false;
+      parentId = parent.cloned_from_version_id;
     }
-    const parent = byId.get(node.cloned_from_version_id);
-    if (!parent) {
-      depthById.set(node.id, 0);
-      return 0;
-    }
-    const depth = resolveDepth(parent, new Set([...seen, node.id])) + 1;
-    depthById.set(node.id, depth);
-    return depth;
+    return false;
   };
 
-  const positioned = [...nodes]
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    .map((node, index) => ({
+  for (const node of sortedNodes) {
+    const parentId = node.cloned_from_version_id;
+    if (!parentId || !byId.has(parentId) || wouldCreateCycle(node)) {
+      continue;
+    }
+    const children = childrenByParentId.get(parentId) ?? [];
+    children.push(node);
+    childrenByParentId.set(parentId, children);
+  }
+
+  const roots = sortedNodes.filter(
+    (node) => !node.cloned_from_version_id || !byId.has(node.cloned_from_version_id) || wouldCreateCycle(node),
+  );
+  const positionedById = new Map<string, LineageLayoutNode>();
+  let cursorY = LINEAGE_MARGIN_Y;
+  let maxDepth = 0;
+  let maxY = 0;
+
+  const layoutSubtree = (
+    node: StrategyVersionLineageData['nodes'][number],
+    depth: number,
+    stack = new Set<string>(),
+  ): number => {
+    if (stack.has(node.id)) {
+      const y = cursorY;
+      cursorY += LINEAGE_VERTICAL_GAP;
+      positionedById.set(node.id, {
+        ...node,
+        x: LINEAGE_MARGIN_X + depth * LINEAGE_HORIZONTAL_GAP,
+        y,
+      });
+      maxDepth = Math.max(maxDepth, depth);
+      maxY = Math.max(maxY, y);
+      return y;
+    }
+
+    const children = (childrenByParentId.get(node.id) ?? []).filter((child) => !stack.has(child.id));
+    const nextStack = new Set([...stack, node.id]);
+    let y: number;
+    if (children.length === 0) {
+      y = cursorY;
+      cursorY += LINEAGE_VERTICAL_GAP;
+    } else {
+      const childYs = children.map((child) => layoutSubtree(child, depth + 1, nextStack));
+      y = (Math.min(...childYs) + Math.max(...childYs)) / 2;
+    }
+
+    positionedById.set(node.id, {
       ...node,
-      x: 32 + resolveDepth(node) * 220,
-      y: 36 + index * 108,
-    }));
-  const positionedById = new Map(positioned.map((node) => [node.id, node]));
+      x: LINEAGE_MARGIN_X + depth * LINEAGE_HORIZONTAL_GAP,
+      y,
+    });
+    maxDepth = Math.max(maxDepth, depth);
+    maxY = Math.max(maxY, y);
+    return y;
+  };
+
+  for (const root of roots) {
+    const beforeY = cursorY;
+    layoutSubtree(root, 0);
+    if (cursorY === beforeY) {
+      cursorY += LINEAGE_VERTICAL_GAP;
+    }
+    cursorY += LINEAGE_ROOT_GAP;
+  }
+
+  // Orphaned/cyclic fragments that were not reachable from roots still get a safe fallback position.
+  for (const node of sortedNodes) {
+    if (!positionedById.has(node.id)) {
+      layoutSubtree(node, 0);
+      cursorY += LINEAGE_ROOT_GAP;
+    }
+  }
+
+  const positioned = sortedNodes
+    .map((node) => positionedById.get(node.id))
+    .filter((node): node is LineageLayoutNode => Boolean(node));
   const edges = (lineage?.edges ?? [])
     .map((edge) => {
       const from = positionedById.get(edge.from_version_id);
@@ -214,21 +291,19 @@ export function buildLineageLayout(lineage: StrategyVersionLineageData | undefin
       if (!from || !to) return null;
       return {
         ...edge,
-        x1: from.x + 168,
-        y1: from.y + 34,
+        x1: from.x + LINEAGE_NODE_WIDTH,
+        y1: from.y + LINEAGE_NODE_HEIGHT / 2,
         x2: to.x,
-        y2: to.y + 34,
+        y2: to.y + LINEAGE_NODE_HEIGHT / 2,
       };
     })
     .filter((edge): edge is LineageLayout['edges'][number] => edge !== null);
 
-  const maxX = positioned.reduce((max, node) => Math.max(max, node.x), 0);
-  const maxY = positioned.reduce((max, node) => Math.max(max, node.y), 0);
   return {
     nodes: positioned,
     edges,
-    width: Math.max(720, maxX + 220),
-    height: Math.max(260, maxY + 110),
+    width: Math.max(720, LINEAGE_MARGIN_X + (maxDepth + 1) * LINEAGE_HORIZONTAL_GAP),
+    height: Math.max(260, maxY + LINEAGE_NODE_HEIGHT + LINEAGE_MARGIN_Y),
   };
 }
 
@@ -274,6 +349,25 @@ export function applyAnnotationToLineageData(
 
 export function patchStrategyVersionAnnotation(versionId: string, body: VersionAnnotationPatch) {
   return patchApi<StrategyVersionAnnotationData>(`/api/strategy-versions/${versionId}/annotation`, body);
+}
+
+function formatMetricNumber(value: number, digits = 2): string {
+  return Number(value.toFixed(digits)).toString();
+}
+
+function formatMetricPercent(value: number): string {
+  const normalized = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${formatMetricNumber(normalized, 1)}%`;
+}
+
+function lineageMetricBadges(metrics: StrategyVersionLineageData['nodes'][number]['latest_backtest_metrics']) {
+  if (!metrics) return [];
+  const badges: string[] = [];
+  if (typeof metrics.profit_factor === 'number') badges.push(`PF ${formatMetricNumber(metrics.profit_factor, 2)}`);
+  if (typeof metrics.win_rate === 'number') badges.push(`勝率 ${formatMetricPercent(metrics.win_rate)}`);
+  if (typeof metrics.max_drawdown === 'number') badges.push(`DD ${formatMetricPercent(metrics.max_drawdown)}`);
+  if (typeof metrics.total_trades === 'number') badges.push(`取引 ${formatMetricNumber(metrics.total_trades, 0)}`);
+  return badges.slice(0, 4);
 }
 
 export default function StrategyVersionList({ params }: StrategyVersionListProps) {
@@ -754,46 +848,69 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                     />
                   ))}
                 </svg>
-                {lineageLayout.nodes.map((node) => (
-                  <Link
-                    key={node.id}
-                    href={buildStrategyVersionDetailUrl(strategyId, node.id, normalizedPage, q, status, sort, order, favorite)}
-                    style={{
-                      position: 'absolute',
-                      left: `${node.x * lineageZoom}px`,
-                      top: `${node.y * lineageZoom}px`,
-                      width: `${168 * lineageZoom}px`,
-                      minHeight: `${70 * lineageZoom}px`,
-                      boxSizing: 'border-box',
-                      padding: `${0.55 * lineageZoom}rem`,
-                      border: node.annotation.is_favorite ? '2px solid #e1a600' : '1px solid #cbd5e1',
-                      borderRadius: `${10 * lineageZoom}px`,
-                      background: '#fff',
-                      color: '#172033',
-                      textDecoration: 'none',
-                      boxShadow: '0 8px 18px rgba(31, 49, 82, 0.08)',
-                      fontSize: `${0.78 * lineageZoom}rem`,
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.35rem', fontWeight: 700 }}>
-                      <span>v:{node.id.slice(0, 8)}</span>
-                      <span aria-label={node.annotation.is_favorite ? 'favorite' : 'not favorite'}>
-                        {node.annotation.is_favorite ? '★' : '☆'}
-                      </span>
-                    </div>
-                    {node.annotation.label && (
-                      <div style={{ marginTop: '0.2rem', color: '#0f3f75', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {node.annotation.label}
+                {lineageLayout.nodes.map((node) => {
+                  const metricBadges = lineageMetricBadges(node.latest_backtest_metrics);
+                  return (
+                    <Link
+                      key={node.id}
+                      href={buildStrategyVersionDetailUrl(strategyId, node.id, normalizedPage, q, status, sort, order, favorite)}
+                      style={{
+                        position: 'absolute',
+                        left: `${node.x * lineageZoom}px`,
+                        top: `${node.y * lineageZoom}px`,
+                        width: `${LINEAGE_NODE_WIDTH * lineageZoom}px`,
+                        minHeight: `${LINEAGE_NODE_HEIGHT * lineageZoom}px`,
+                        boxSizing: 'border-box',
+                        padding: `${0.55 * lineageZoom}rem`,
+                        border: node.annotation.is_favorite ? '2px solid #e1a600' : '1px solid #cbd5e1',
+                        borderRadius: `${10 * lineageZoom}px`,
+                        background: '#fff',
+                        color: '#172033',
+                        textDecoration: 'none',
+                        boxShadow: '0 8px 18px rgba(31, 49, 82, 0.08)',
+                        fontSize: `${0.78 * lineageZoom}rem`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.35rem', fontWeight: 700 }}>
+                        <span>v:{node.id.slice(0, 8)}</span>
+                        <span aria-label={node.annotation.is_favorite ? 'favorite' : 'not favorite'}>
+                          {node.annotation.is_favorite ? '★' : '☆'}
+                        </span>
                       </div>
-                    )}
-                    <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                      <span>{statusLabel(node.status)}</span>
-                      <span>{node.timeframe}</span>
-                      {node.has_forward_validation_note && <span>検証ノート</span>}
-                      {node.has_diff_from_clone && <span>差分</span>}
-                    </div>
-                  </Link>
-                ))}
+                      {node.annotation.label && (
+                        <div style={{ marginTop: '0.2rem', color: '#0f3f75', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {node.annotation.label}
+                        </div>
+                      )}
+                      <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                        <span>{statusLabel(node.status)}</span>
+                        <span>{node.timeframe}</span>
+                        {node.has_forward_validation_note && <span>検証ノート</span>}
+                        {node.has_diff_from_clone && <span>差分</span>}
+                      </div>
+                      {metricBadges.length > 0 && (
+                        <div style={{ marginTop: '0.28rem', display: 'flex', gap: '0.2rem', flexWrap: 'wrap' }} aria-label='latest backtest metrics'>
+                          {metricBadges.map((badge) => (
+                            <span
+                              key={badge}
+                              style={{
+                                padding: '0.08rem 0.28rem',
+                                border: '1px solid #d7e3f2',
+                                borderRadius: '999px',
+                                background: '#f5f9ff',
+                                color: '#29415f',
+                                fontSize: `${0.68 * lineageZoom}rem`,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              {badge}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           </>

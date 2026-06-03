@@ -45,13 +45,14 @@ pnpm run dev
 1. `http://localhost:5173/strategies/:strategyId/versions` を開く。
 2. 一覧上部に `履歴ツリー` section が表示されることを確認する。
 3. tree は横・縦スクロールでき、`縮小` / `100%` / `拡大` で zoom できることを確認する。
-4. clone された version がある場合、起点が左、派生が右、分岐が縦方向に表示され、edge が SVG line でつながることを確認する。
-5. tree node click で `StrategyVersionDetail` へ遷移することを確認する。
-6. version card で favorite toggle、label / note 編集、保存ができることを確認する。保存後、card と tree node の label / favorite 表示が更新されることを確認する。
-7. `お気に入りのみ` filter が URL query と API query の `favorite=true` に反映されることを確認する。
-8. `q` 検索で自然言語ルール本文だけでなく annotation label / note でも絞り込めることを確認する。ただし一覧 response / UI に raw rule 本文や raw Pine script が表示されないことを確認する。
-9. annotation に URL、endpoint、model、secret、token、credential、local path、stack trace 風文字列を入れても保存・表示されないことを確認する。
-10. 一覧表示、tree 表示、favorite / label / note 操作だけで Pine generation、Pine regeneration、backtest、AI summary、application apply、proposal generation が起動しないことを確認する。
+4. clone された version がある場合、起点が左、派生が右、一直線の chain はほぼ横一列、分岐がある場合は親 node が子 branch の中央に配置され、edge が SVG line でつながることを確認する。
+5. latest backtest がある tree node では PF、勝率、DD、取引件数などの compact metrics badge が表示されることを確認する。metrics がない node でも表示が崩れないことを確認する。
+6. tree node click で `StrategyVersionDetail` へ遷移することを確認する。
+7. version card で favorite toggle、label / note 編集、保存ができることを確認する。保存後、card と tree node の label / favorite 表示が更新されることを確認する。
+8. `お気に入りのみ` filter が URL query と API query の `favorite=true` に反映されることを確認する。
+9. `q` 検索で自然言語ルール本文だけでなく annotation label / note でも絞り込めることを確認する。ただし一覧 response / UI に raw rule 本文や raw Pine script が表示されないことを確認する。
+10. annotation に URL、endpoint、model、secret、token、credential、local path、stack trace 風文字列を入れても保存・表示されないことを確認する。
+11. 一覧表示、tree 表示、favorite / label / note 操作だけで Pine generation、Pine regeneration、backtest、AI summary、application apply、proposal generation が起動しないことを確認する。
 
 ## 3. 自然言語 -> Pine 生成
 
