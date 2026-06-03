@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 const mockUseSWR = vi.fn();
+const mockGlobalMutate = vi.fn();
 const mockSetLocation = vi.fn();
 const mockUseLocation = vi.fn();
 const mockPatchApi = vi.fn();
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
+  useSWRConfig: () => ({ mutate: mockGlobalMutate }),
 }));
 
 vi.mock('wouter', () => ({
@@ -24,13 +26,12 @@ vi.mock('../api/client', () => ({
 import StrategyVersionList, {
   applyAnnotationToLineageData,
   applyAnnotationToListData,
-  buildLineageLayout,
   buildStrategyVersionsListUrl,
   parseStrategyVersionsListQuery,
   patchStrategyVersionAnnotation,
-  resolveNextLineageZoom,
   resolvePriorityVersionIdFromHash,
 } from './StrategyVersionList';
+import { buildLineageLayout, resolveNextLineageZoom } from '../utils/strategyVersionLineage';
 
 describe('StrategyVersionList', () => {
   it('renders version rows with api pagination data', () => {

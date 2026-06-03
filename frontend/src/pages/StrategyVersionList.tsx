@@ -1,8 +1,10 @@
 import { FormEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { Link, useLocation } from 'wouter';
 import { patchApi, swrFetcher } from '../api/client';
 import { StrategyVersionAnnotationData, StrategyVersionLineageData, StrategyVersionListData } from '../api/types';
+import StrategyVersionLineageTree from '../components/strategy/StrategyVersionLineageTree';
+import { buildStrategyVersionLineageApiPath } from '../utils/strategyVersionLineage';
 
 type StrategyVersionListProps = {
   params: { strategyId: string };
@@ -11,13 +13,6 @@ type StrategyVersionListProps = {
 const PAGE_SIZE = 20;
 const PRIORITY_VERSION_HASH_PREFIX = '#priority-version-';
 const NOTE_FRESHNESS_BADGE_LABEL = '最新ノート';
-const LINEAGE_NODE_WIDTH = 184;
-const LINEAGE_NODE_HEIGHT = 96;
-const LINEAGE_MARGIN_X = 32;
-const LINEAGE_MARGIN_Y = 36;
-const LINEAGE_HORIZONTAL_GAP = 240;
-const LINEAGE_VERTICAL_GAP = 118;
-const LINEAGE_ROOT_GAP = 56;
 
 function formatNoteFreshness(noteUpdatedAt: string | null): string {
   if (!noteUpdatedAt) {
@@ -43,23 +38,6 @@ type VersionAnnotationPatch = {
   label?: string | null;
   note?: string | null;
   is_favorite?: boolean;
-};
-
-type LineageLayoutNode = StrategyVersionLineageData['nodes'][number] & {
-  x: number;
-  y: number;
-};
-
-type LineageLayout = {
-  nodes: LineageLayoutNode[];
-  edges: Array<StrategyVersionLineageData['edges'][number] & {
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-  }>;
-  width: number;
-  height: number;
 };
 
 export function resolvePriorityVersionIdFromHash(
@@ -179,134 +157,6 @@ export function buildStrategyVersionDetailUrl(
   return `/strategy-versions/${versionId}?return=${encodeURIComponent(returnPath)}`;
 }
 
-export function resolveNextLineageZoom(current: number, action: 'in' | 'out' | 'reset'): number {
-  if (action === 'reset') return 1;
-  const next = action === 'in' ? current + 0.2 : current - 0.2;
-  return Math.min(1.8, Math.max(0.6, Number(next.toFixed(2))));
-}
-
-export function buildLineageLayout(lineage: StrategyVersionLineageData | undefined): LineageLayout {
-  const nodes = lineage?.nodes ?? [];
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const childrenByParentId = new Map<string, StrategyVersionLineageData['nodes']>();
-  const sortedNodes = [...nodes].sort((a, b) => {
-    const diff = (toSafeTimestamp(a.created_at) ?? 0) - (toSafeTimestamp(b.created_at) ?? 0);
-    return diff || a.id.localeCompare(b.id);
-  });
-
-  const wouldCreateCycle = (node: StrategyVersionLineageData['nodes'][number]): boolean => {
-    const seen = new Set<string>([node.id]);
-    let parentId = node.cloned_from_version_id;
-    while (parentId) {
-      if (seen.has(parentId)) return true;
-      seen.add(parentId);
-      const parent = byId.get(parentId);
-      if (!parent) return false;
-      parentId = parent.cloned_from_version_id;
-    }
-    return false;
-  };
-
-  for (const node of sortedNodes) {
-    const parentId = node.cloned_from_version_id;
-    if (!parentId || !byId.has(parentId) || wouldCreateCycle(node)) {
-      continue;
-    }
-    const children = childrenByParentId.get(parentId) ?? [];
-    children.push(node);
-    childrenByParentId.set(parentId, children);
-  }
-
-  const roots = sortedNodes.filter(
-    (node) => !node.cloned_from_version_id || !byId.has(node.cloned_from_version_id) || wouldCreateCycle(node),
-  );
-  const positionedById = new Map<string, LineageLayoutNode>();
-  let cursorY = LINEAGE_MARGIN_Y;
-  let maxDepth = 0;
-  let maxY = 0;
-
-  const layoutSubtree = (
-    node: StrategyVersionLineageData['nodes'][number],
-    depth: number,
-    stack = new Set<string>(),
-  ): number => {
-    if (stack.has(node.id)) {
-      const y = cursorY;
-      cursorY += LINEAGE_VERTICAL_GAP;
-      positionedById.set(node.id, {
-        ...node,
-        x: LINEAGE_MARGIN_X + depth * LINEAGE_HORIZONTAL_GAP,
-        y,
-      });
-      maxDepth = Math.max(maxDepth, depth);
-      maxY = Math.max(maxY, y);
-      return y;
-    }
-
-    const children = (childrenByParentId.get(node.id) ?? []).filter((child) => !stack.has(child.id));
-    const nextStack = new Set([...stack, node.id]);
-    let y: number;
-    if (children.length === 0) {
-      y = cursorY;
-      cursorY += LINEAGE_VERTICAL_GAP;
-    } else {
-      const childYs = children.map((child) => layoutSubtree(child, depth + 1, nextStack));
-      y = (Math.min(...childYs) + Math.max(...childYs)) / 2;
-    }
-
-    positionedById.set(node.id, {
-      ...node,
-      x: LINEAGE_MARGIN_X + depth * LINEAGE_HORIZONTAL_GAP,
-      y,
-    });
-    maxDepth = Math.max(maxDepth, depth);
-    maxY = Math.max(maxY, y);
-    return y;
-  };
-
-  for (const root of roots) {
-    const beforeY = cursorY;
-    layoutSubtree(root, 0);
-    if (cursorY === beforeY) {
-      cursorY += LINEAGE_VERTICAL_GAP;
-    }
-    cursorY += LINEAGE_ROOT_GAP;
-  }
-
-  // Orphaned/cyclic fragments that were not reachable from roots still get a safe fallback position.
-  for (const node of sortedNodes) {
-    if (!positionedById.has(node.id)) {
-      layoutSubtree(node, 0);
-      cursorY += LINEAGE_ROOT_GAP;
-    }
-  }
-
-  const positioned = sortedNodes
-    .map((node) => positionedById.get(node.id))
-    .filter((node): node is LineageLayoutNode => Boolean(node));
-  const edges = (lineage?.edges ?? [])
-    .map((edge) => {
-      const from = positionedById.get(edge.from_version_id);
-      const to = positionedById.get(edge.to_version_id);
-      if (!from || !to) return null;
-      return {
-        ...edge,
-        x1: from.x + LINEAGE_NODE_WIDTH,
-        y1: from.y + LINEAGE_NODE_HEIGHT / 2,
-        x2: to.x,
-        y2: to.y + LINEAGE_NODE_HEIGHT / 2,
-      };
-    })
-    .filter((edge): edge is LineageLayout['edges'][number] => edge !== null);
-
-  return {
-    nodes: positioned,
-    edges,
-    width: Math.max(720, LINEAGE_MARGIN_X + (maxDepth + 1) * LINEAGE_HORIZONTAL_GAP),
-    height: Math.max(260, maxY + LINEAGE_NODE_HEIGHT + LINEAGE_MARGIN_Y),
-  };
-}
-
 export function applyAnnotationToListData(
   data: StrategyVersionListData | undefined,
   versionId: string,
@@ -351,25 +201,6 @@ export function patchStrategyVersionAnnotation(versionId: string, body: VersionA
   return patchApi<StrategyVersionAnnotationData>(`/api/strategy-versions/${versionId}/annotation`, body);
 }
 
-function formatMetricNumber(value: number, digits = 2): string {
-  return Number(value.toFixed(digits)).toString();
-}
-
-function formatMetricPercent(value: number): string {
-  const normalized = Math.abs(value) <= 1 ? value * 100 : value;
-  return `${formatMetricNumber(normalized, 1)}%`;
-}
-
-function lineageMetricBadges(metrics: StrategyVersionLineageData['nodes'][number]['latest_backtest_metrics']) {
-  if (!metrics) return [];
-  const badges: string[] = [];
-  if (typeof metrics.profit_factor === 'number') badges.push(`PF ${formatMetricNumber(metrics.profit_factor, 2)}`);
-  if (typeof metrics.win_rate === 'number') badges.push(`勝率 ${formatMetricPercent(metrics.win_rate)}`);
-  if (typeof metrics.max_drawdown === 'number') badges.push(`DD ${formatMetricPercent(metrics.max_drawdown)}`);
-  if (typeof metrics.total_trades === 'number') badges.push(`取引 ${formatMetricNumber(metrics.total_trades, 0)}`);
-  return badges.slice(0, 4);
-}
-
 export default function StrategyVersionList({ params }: StrategyVersionListProps) {
   const { strategyId } = params;
   const [location, setLocation] = useLocation();
@@ -381,10 +212,10 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const [favoriteInput, setFavoriteInput] = useState(favorite);
   const [highlightedPriorityVersionId, setHighlightedPriorityVersionId] = useState<string | null>(null);
   const [priorityCursorVersionId, setPriorityCursorVersionId] = useState<string | null>(null);
-  const [lineageZoom, setLineageZoom] = useState(1);
   const [annotationDrafts, setAnnotationDrafts] = useState<Record<string, { label: string; note: string }>>({});
   const [savingAnnotationId, setSavingAnnotationId] = useState<string | null>(null);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const { mutate: mutateGlobal } = useSWRConfig();
 
   useEffect(() => {
     setSearchInput(q);
@@ -413,13 +244,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   }, [strategyId, page, q, status, sort, order, favorite]);
 
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
-  const lineageApiPath = `/api/strategies/${strategyId}/version-lineage?limit=300`;
-  const {
-    data: lineageData,
-    error: lineageError,
-    mutate: mutateLineage,
-  } = useSWR<StrategyVersionLineageData>(lineageApiPath, swrFetcher);
-  const lineageLayout = useMemo(() => buildLineageLayout(lineageData), [lineageData]);
+  const lineageApiPath = buildStrategyVersionLineageApiPath(strategyId);
 
   useEffect(() => {
     if (!data) return;
@@ -530,9 +355,13 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     annotation: StrategyVersionAnnotationData['annotation'],
   ) => {
     void mutate((current) => applyAnnotationToListData(current, versionId, annotation), { revalidate: false });
-    void mutateLineage((current) => applyAnnotationToLineageData(current, versionId, annotation), { revalidate: false });
+    void mutateGlobal(
+      lineageApiPath,
+      (current: StrategyVersionLineageData | undefined) => applyAnnotationToLineageData(current, versionId, annotation),
+      { revalidate: false },
+    );
     void mutate();
-    void mutateLineage();
+    void mutateGlobal(lineageApiPath);
   };
 
   const onToggleFavorite = async (
@@ -768,154 +597,12 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         </div>
       )}
 
-      <section style={{ marginTop: '1.2rem', padding: '1rem', border: '1px solid #dfe5ef', borderRadius: '10px', background: '#fbfdff' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.1rem' }}>履歴ツリー</h2>
-            <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>
-              起点を左、派生を右へ配置します。表示だけで Pine生成・backtest・適用は起動しません。
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button
-              type='button'
-              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'out'))}
-              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
-            >
-              縮小
-            </button>
-            <button
-              type='button'
-              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'reset'))}
-              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
-            >
-              100%
-            </button>
-            <button
-              type='button'
-              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'in'))}
-              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
-            >
-              拡大
-            </button>
-            <span style={{ color: '#666', fontSize: '0.85rem' }}>zoom {Math.round(lineageZoom * 100)}%</span>
-          </div>
-        </div>
-        {lineageError ? (
-          <div style={{ marginTop: '0.8rem', color: '#8a1212' }}>履歴ツリーを読み込めませんでした。</div>
-        ) : lineageLayout.nodes.length === 0 ? (
-          <div style={{ marginTop: '0.8rem', color: '#666' }}>履歴ツリーに表示できる version はありません。</div>
-        ) : (
-          <>
-            {lineageData?.meta.truncated && (
-              <div style={{ marginTop: '0.6rem', color: '#755200', fontSize: '0.85rem' }}>
-                version が多いため先頭 {lineageData.meta.limit} 件のみ表示しています。
-              </div>
-            )}
-            <div
-              style={{
-                marginTop: '0.8rem',
-                height: '340px',
-                overflow: 'auto',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                background: 'linear-gradient(135deg, #ffffff 0%, #f6f9ff 100%)',
-              }}
-            >
-              <div
-                style={{
-                  position: 'relative',
-                  width: `${lineageLayout.width * lineageZoom}px`,
-                  height: `${lineageLayout.height * lineageZoom}px`,
-                  transformOrigin: 'top left',
-                }}
-              >
-                <svg
-                  width={lineageLayout.width * lineageZoom}
-                  height={lineageLayout.height * lineageZoom}
-                  style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-                  aria-hidden='true'
-                >
-                  {lineageLayout.edges.map((edge) => (
-                    <line
-                      key={`${edge.from_version_id}-${edge.to_version_id}`}
-                      x1={edge.x1 * lineageZoom}
-                      y1={edge.y1 * lineageZoom}
-                      x2={edge.x2 * lineageZoom}
-                      y2={edge.y2 * lineageZoom}
-                      stroke='#90a4c2'
-                      strokeWidth={2}
-                    />
-                  ))}
-                </svg>
-                {lineageLayout.nodes.map((node) => {
-                  const metricBadges = lineageMetricBadges(node.latest_backtest_metrics);
-                  return (
-                    <Link
-                      key={node.id}
-                      href={buildStrategyVersionDetailUrl(strategyId, node.id, normalizedPage, q, status, sort, order, favorite)}
-                      style={{
-                        position: 'absolute',
-                        left: `${node.x * lineageZoom}px`,
-                        top: `${node.y * lineageZoom}px`,
-                        width: `${LINEAGE_NODE_WIDTH * lineageZoom}px`,
-                        minHeight: `${LINEAGE_NODE_HEIGHT * lineageZoom}px`,
-                        boxSizing: 'border-box',
-                        padding: `${0.55 * lineageZoom}rem`,
-                        border: node.annotation.is_favorite ? '2px solid #e1a600' : '1px solid #cbd5e1',
-                        borderRadius: `${10 * lineageZoom}px`,
-                        background: '#fff',
-                        color: '#172033',
-                        textDecoration: 'none',
-                        boxShadow: '0 8px 18px rgba(31, 49, 82, 0.08)',
-                        fontSize: `${0.78 * lineageZoom}rem`,
-                      }}
-                    >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.35rem', fontWeight: 700 }}>
-                        <span>v:{node.id.slice(0, 8)}</span>
-                        <span aria-label={node.annotation.is_favorite ? 'favorite' : 'not favorite'}>
-                          {node.annotation.is_favorite ? '★' : '☆'}
-                        </span>
-                      </div>
-                      {node.annotation.label && (
-                        <div style={{ marginTop: '0.2rem', color: '#0f3f75', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {node.annotation.label}
-                        </div>
-                      )}
-                      <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                        <span>{statusLabel(node.status)}</span>
-                        <span>{node.timeframe}</span>
-                        {node.has_forward_validation_note && <span>検証ノート</span>}
-                        {node.has_diff_from_clone && <span>差分</span>}
-                      </div>
-                      {metricBadges.length > 0 && (
-                        <div style={{ marginTop: '0.28rem', display: 'flex', gap: '0.2rem', flexWrap: 'wrap' }} aria-label='latest backtest metrics'>
-                          {metricBadges.map((badge) => (
-                            <span
-                              key={badge}
-                              style={{
-                                padding: '0.08rem 0.28rem',
-                                border: '1px solid #d7e3f2',
-                                borderRadius: '999px',
-                                background: '#f5f9ff',
-                                color: '#29415f',
-                                fontSize: `${0.68 * lineageZoom}rem`,
-                                lineHeight: 1.35,
-                              }}
-                            >
-                              {badge}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-      </section>
+      <StrategyVersionLineageTree
+        strategyId={strategyId}
+        detailUrlBuilder={(versionId) =>
+          buildStrategyVersionDetailUrl(strategyId, versionId, normalizedPage, q, status, sort, order, favorite)
+        }
+      />
 
       {data.strategy_versions.length === 0 ? (
         <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', color: '#666' }}>

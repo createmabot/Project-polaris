@@ -17,6 +17,7 @@ import { KeyValueList, KeyValueRow } from '../components/ui/KeyValueList';
 import LoadingState from '../components/ui/LoadingState';
 import StatusBadge from '../components/ui/StatusBadge';
 import TextLink from '../components/ui/TextLink';
+import StrategyVersionLineageTree from '../components/strategy/StrategyVersionLineageTree';
 
 const PANEL_CLASS = 'rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm shadow-slate-200/70';
 const MUTED_TEXT_CLASS = 'text-sm leading-7 text-slate-600';
@@ -161,7 +162,7 @@ function StrategyDetail(): JSX.Element {
               このストラテジー定義の version、関連検証レポート、適用済み銘柄をここに集約します。
             </p>
             <p className={MUTED_TEXT_CLASS}>
-              現在は既存 version と銘柄起点 application の read-only 表示までです。favorite / hard delete は後続タスクで接続します。archive / restore は status 操作として利用できます。
+              既存 version、履歴ツリー、銘柄起点 application をこの画面で確認します。favorite は version 履歴の整理に利用できます。hard delete は実装しません。
             </p>
           </div>
 
@@ -190,6 +191,12 @@ function StrategyDetail(): JSX.Element {
             BacktestDetail は個別検証レポート詳細として継続し、この画面には吸収しません。
           </div>
         </section>
+
+        <StrategyVersionLineageTree
+          strategyId={strategyId}
+          title="version 履歴ツリー"
+          description="起点 version から派生 version への流れを確認します。表示だけでは生成・検証・適用は起動しません。"
+        />
 
         <section className={PANEL_CLASS}>
           <h2 className="text-lg font-semibold text-slate-900">version 一覧</h2>
@@ -358,7 +365,7 @@ function StrategyDetail(): JSX.Element {
         <section className={PANEL_CLASS}>
           <h2 className="text-lg font-semibold text-slate-900">後続接続予定</h2>
           <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-7 text-slate-600">
-            <li>favorite / hard delete は準備中です。</li>
+            <li>hard delete は行わず、archive / restore を status 操作として利用します。</li>
             <li>application archive / restore は status 操作として利用できます。</li>
             <li>internal execution result detail は後続タスクで接続します。</li>
           </ul>
