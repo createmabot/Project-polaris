@@ -18,7 +18,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&page=2&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
-    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc', favorite: false });
   });
 
   it('falls back to null when return path is invalid', () => {
@@ -45,7 +45,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-1/versions?q=RSI&status=generated&page=3&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-1/versions');
-    expect(restored).toEqual({ page: 3, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 3, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc', favorite: false });
   });
 
   it('keeps list state after forward validation note editing flow on detail page', () => {
@@ -61,7 +61,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-9/versions?q=MA&status=draft&page=2&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-9/versions');
-    expect(restored).toEqual({ page: 2, q: 'MA', status: 'draft', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 2, q: 'MA', status: 'draft', sort: 'updated_at', order: 'asc', favorite: false });
   });
 
   it('keeps list query state for note-flagged target row after explicit return navigation', () => {
@@ -74,7 +74,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-11/versions?q=RSI&status=generated&page=4&sort=updated_at');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-11/versions');
-    expect(restored).toEqual({ page: 4, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'desc' });
+    expect(restored).toEqual({ page: 4, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'desc', favorite: false });
   });
 
   it('keeps list query state for priority target row (needs-review diff + forward note)', () => {
@@ -86,7 +86,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-12/versions?q=MA&status=generated&page=5&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-12/versions');
-    expect(restored).toEqual({ page: 5, q: 'MA', status: 'generated', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 5, q: 'MA', status: 'generated', sort: 'updated_at', order: 'asc', favorite: false });
   });
 
   it('keeps list query state when moving between priority targets from detail context', () => {
@@ -98,7 +98,7 @@ describe('strategy versions list -> detail -> list return flow (E2E-like)', () =
     expect(resolvedReturn).toBe('/strategies/str-13/versions?q=RSI&status=generated&page=2&sort=updated_at&order=asc');
 
     const restored = parseStrategyVersionsListQuery(resolvedReturn ?? '/strategies/str-13/versions');
-    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc' });
+    expect(restored).toEqual({ page: 2, q: 'RSI', status: 'generated', sort: 'updated_at', order: 'asc', favorite: false });
   });
 });
 

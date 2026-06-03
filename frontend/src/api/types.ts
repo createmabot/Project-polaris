@@ -609,6 +609,7 @@ export type StrategyVersionListData = {
     status?: string;
     sort?: string;
     order?: 'asc' | 'desc' | string;
+    favorite?: boolean;
   };
   pagination: {
     page: number;
@@ -617,6 +618,7 @@ export type StrategyVersionListData = {
     status?: string;
     sort?: string;
     order?: 'asc' | 'desc' | string;
+    favorite?: boolean;
     total: number;
     has_next: boolean;
     has_prev: boolean;
@@ -632,10 +634,61 @@ export type StrategyVersionListData = {
     market: string;
     timeframe: string;
     status: string;
+    label: string | null;
+    note: string | null;
+    is_favorite: boolean;
     has_warnings: boolean;
     created_at: string;
     updated_at: string;
   }>;
+};
+
+export type StrategyVersionAnnotationData = {
+  annotation: {
+    label: string | null;
+    note: string | null;
+    is_favorite: boolean;
+  };
+};
+
+export type StrategyVersionLineageData = {
+  strategy: {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  nodes: Array<{
+    id: string;
+    strategy_id: string;
+    cloned_from_version_id: string | null;
+    annotation: {
+      label: string | null;
+      note: string | null;
+      is_favorite: boolean;
+    };
+    status: string;
+    market: string;
+    timeframe: string;
+    has_warnings: boolean;
+    has_forward_validation_note: boolean;
+    has_diff_from_clone: boolean | null;
+    backtest_count: number;
+    application_count: number;
+    created_at: string;
+    updated_at: string;
+  }>;
+  edges: Array<{
+    from_version_id: string;
+    to_version_id: string;
+    relation: 'clone' | string;
+  }>;
+  meta: {
+    limit: number;
+    total: number;
+    truncated: boolean;
+  };
 };
 
 export type StrategyProposalData = {

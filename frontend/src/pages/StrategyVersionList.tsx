@@ -1,8 +1,8 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, MouseEvent, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
-import { swrFetcher } from '../api/client';
-import { StrategyVersionListData } from '../api/types';
+import { patchApi, swrFetcher } from '../api/client';
+import { StrategyVersionAnnotationData, StrategyVersionLineageData, StrategyVersionListData } from '../api/types';
 
 type StrategyVersionListProps = {
   params: { strategyId: string };
@@ -29,6 +29,30 @@ export type StrategyVersionsListQueryState = {
   status: string;
   sort: 'created_at' | 'updated_at';
   order: 'asc' | 'desc';
+  favorite: boolean;
+};
+
+type VersionAnnotationPatch = {
+  label?: string | null;
+  note?: string | null;
+  is_favorite?: boolean;
+};
+
+type LineageLayoutNode = StrategyVersionLineageData['nodes'][number] & {
+  x: number;
+  y: number;
+};
+
+type LineageLayout = {
+  nodes: LineageLayoutNode[];
+  edges: Array<StrategyVersionLineageData['edges'][number] & {
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+  }>;
+  width: number;
+  height: number;
 };
 
 export function resolvePriorityVersionIdFromHash(
@@ -95,7 +119,8 @@ export function parseStrategyVersionsListQuery(locationPath: string): StrategyVe
   const status = (params.get('status') ?? '').trim();
   const sort = normalizeStrategyVersionsSort(params.get('sort'));
   const order = normalizeStrategyVersionsOrder(params.get('order'));
-  return { page, q, status, sort, order };
+  const favorite = params.get('favorite') === 'true';
+  return { page, q, status, sort, order, favorite };
 }
 
 export function buildStrategyVersionsListUrl(
@@ -105,6 +130,7 @@ export function buildStrategyVersionsListUrl(
   status = '',
   sort: 'created_at' | 'updated_at' = 'created_at',
   order: 'asc' | 'desc' = 'desc',
+  favorite = false,
 ): string {
   const normalizedPage = Number.isInteger(page) && page > 0 ? page : 1;
   const normalizedQ = q.trim();
@@ -122,6 +148,9 @@ export function buildStrategyVersionsListUrl(
   if (order !== 'desc') {
     params.set('order', order);
   }
+  if (favorite) {
+    params.set('favorite', 'true');
+  }
   if (normalizedPage > 1) {
     params.set('page', String(normalizedPage));
   }
@@ -137,28 +166,139 @@ export function buildStrategyVersionDetailUrl(
   status = '',
   sort: 'created_at' | 'updated_at' = 'created_at',
   order: 'asc' | 'desc' = 'desc',
+  favorite = false,
 ): string {
-  const returnPath = buildStrategyVersionsListUrl(strategyId, page, q, status, sort, order);
+  const returnPath = buildStrategyVersionsListUrl(strategyId, page, q, status, sort, order, favorite);
   return `/strategy-versions/${versionId}?return=${encodeURIComponent(returnPath)}`;
+}
+
+export function resolveNextLineageZoom(current: number, action: 'in' | 'out' | 'reset'): number {
+  if (action === 'reset') return 1;
+  const next = action === 'in' ? current + 0.2 : current - 0.2;
+  return Math.min(1.8, Math.max(0.6, Number(next.toFixed(2))));
+}
+
+export function buildLineageLayout(lineage: StrategyVersionLineageData | undefined): LineageLayout {
+  const nodes = lineage?.nodes ?? [];
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const depthById = new Map<string, number>();
+  const resolveDepth = (node: StrategyVersionLineageData['nodes'][number], seen = new Set<string>()): number => {
+    const cached = depthById.get(node.id);
+    if (cached !== undefined) return cached;
+    if (!node.cloned_from_version_id || seen.has(node.id)) {
+      depthById.set(node.id, 0);
+      return 0;
+    }
+    const parent = byId.get(node.cloned_from_version_id);
+    if (!parent) {
+      depthById.set(node.id, 0);
+      return 0;
+    }
+    const depth = resolveDepth(parent, new Set([...seen, node.id])) + 1;
+    depthById.set(node.id, depth);
+    return depth;
+  };
+
+  const positioned = [...nodes]
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    .map((node, index) => ({
+      ...node,
+      x: 32 + resolveDepth(node) * 220,
+      y: 36 + index * 108,
+    }));
+  const positionedById = new Map(positioned.map((node) => [node.id, node]));
+  const edges = (lineage?.edges ?? [])
+    .map((edge) => {
+      const from = positionedById.get(edge.from_version_id);
+      const to = positionedById.get(edge.to_version_id);
+      if (!from || !to) return null;
+      return {
+        ...edge,
+        x1: from.x + 168,
+        y1: from.y + 34,
+        x2: to.x,
+        y2: to.y + 34,
+      };
+    })
+    .filter((edge): edge is LineageLayout['edges'][number] => edge !== null);
+
+  const maxX = positioned.reduce((max, node) => Math.max(max, node.x), 0);
+  const maxY = positioned.reduce((max, node) => Math.max(max, node.y), 0);
+  return {
+    nodes: positioned,
+    edges,
+    width: Math.max(720, maxX + 220),
+    height: Math.max(260, maxY + 110),
+  };
+}
+
+export function applyAnnotationToListData(
+  data: StrategyVersionListData | undefined,
+  versionId: string,
+  annotation: StrategyVersionAnnotationData['annotation'],
+): StrategyVersionListData | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    strategy_versions: data.strategy_versions.map((version) =>
+      version.id === versionId
+        ? {
+            ...version,
+            label: annotation.label,
+            note: annotation.note,
+            is_favorite: annotation.is_favorite,
+          }
+        : version,
+    ),
+  };
+}
+
+export function applyAnnotationToLineageData(
+  data: StrategyVersionLineageData | undefined,
+  versionId: string,
+  annotation: StrategyVersionAnnotationData['annotation'],
+): StrategyVersionLineageData | undefined {
+  if (!data) return data;
+  return {
+    ...data,
+    nodes: data.nodes.map((node) =>
+      node.id === versionId
+        ? {
+            ...node,
+            annotation,
+          }
+        : node,
+    ),
+  };
+}
+
+export function patchStrategyVersionAnnotation(versionId: string, body: VersionAnnotationPatch) {
+  return patchApi<StrategyVersionAnnotationData>(`/api/strategy-versions/${versionId}/annotation`, body);
 }
 
 export default function StrategyVersionList({ params }: StrategyVersionListProps) {
   const { strategyId } = params;
   const [location, setLocation] = useLocation();
-  const { page, q, status, sort, order } = parseStrategyVersionsListQuery(location);
+  const { page, q, status, sort, order, favorite } = parseStrategyVersionsListQuery(location);
   const [searchInput, setSearchInput] = useState(q);
   const [statusInput, setStatusInput] = useState(status);
   const [sortInput, setSortInput] = useState<'created_at' | 'updated_at'>(sort);
   const [orderInput, setOrderInput] = useState<'asc' | 'desc'>(order);
+  const [favoriteInput, setFavoriteInput] = useState(favorite);
   const [highlightedPriorityVersionId, setHighlightedPriorityVersionId] = useState<string | null>(null);
   const [priorityCursorVersionId, setPriorityCursorVersionId] = useState<string | null>(null);
+  const [lineageZoom, setLineageZoom] = useState(1);
+  const [annotationDrafts, setAnnotationDrafts] = useState<Record<string, { label: string; note: string }>>({});
+  const [savingAnnotationId, setSavingAnnotationId] = useState<string | null>(null);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
 
   useEffect(() => {
     setSearchInput(q);
     setStatusInput(status);
     setSortInput(sort);
     setOrderInput(order);
-  }, [q, status, sort, order, strategyId]);
+    setFavoriteInput(favorite);
+  }, [q, status, sort, order, favorite, strategyId]);
 
   const listApiPath = useMemo(() => {
     const params = new URLSearchParams();
@@ -170,12 +310,38 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (status) {
       params.set('status', status);
     }
+    if (favorite) {
+      params.set('favorite', 'true');
+    }
     params.set('sort', sort);
     params.set('order', order);
     return `/api/strategies/${strategyId}/versions?${params.toString()}`;
-  }, [strategyId, page, q, status, sort, order]);
+  }, [strategyId, page, q, status, sort, order, favorite]);
 
-  const { data, error, isLoading } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
+  const { data, error, isLoading, mutate } = useSWR<StrategyVersionListData>(listApiPath, swrFetcher);
+  const lineageApiPath = `/api/strategies/${strategyId}/version-lineage?limit=300`;
+  const {
+    data: lineageData,
+    error: lineageError,
+    mutate: mutateLineage,
+  } = useSWR<StrategyVersionLineageData>(lineageApiPath, swrFetcher);
+  const lineageLayout = useMemo(() => buildLineageLayout(lineageData), [lineageData]);
+
+  useEffect(() => {
+    if (!data) return;
+    setAnnotationDrafts((current) => {
+      const next = { ...current };
+      for (const version of data.strategy_versions) {
+        if (!next[version.id]) {
+          next[version.id] = {
+            label: version.label ?? '',
+            note: version.note ?? '',
+          };
+        }
+      }
+      return next;
+    });
+  }, [data]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -230,7 +396,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
   const isNeedsReviewWithNote = (version: StrategyVersionListData['strategy_versions'][number]) =>
     isNeedsReviewDiff(version) && version.has_forward_validation_note;
 
-  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note' | 'priority' | 'note-fresh' | 'read-now') => {
+  const badgeStyle = (kind: 'derived' | 'diff' | 'no-diff' | 'no-base' | 'status' | 'note' | 'priority' | 'note-fresh' | 'read-now' | 'favorite') => {
     const style = {
       display: 'inline-block',
       padding: '0.2rem 0.5rem',
@@ -246,13 +412,14 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     if (kind === 'note') return { ...style, background: '#fff7dd', color: '#755200' };
     if (kind === 'note-fresh') return { ...style, background: '#e8f6ff', color: '#0e577c' };
     if (kind === 'read-now') return { ...style, background: '#ffe9fb', color: '#7b1e68' };
+    if (kind === 'favorite') return { ...style, background: '#fff1bd', color: '#7a4d00' };
     if (kind === 'priority') return { ...style, background: '#ffdede', color: '#8a1212' };
     return { ...style, background: '#f0f1f5', color: '#333' };
   };
 
   const onSearch = (event: FormEvent) => {
     event.preventDefault();
-    setLocation(buildStrategyVersionsListUrl(strategyId, 1, searchInput, statusInput, sortInput, orderInput));
+    setLocation(buildStrategyVersionsListUrl(strategyId, 1, searchInput, statusInput, sortInput, orderInput, favoriteInput));
   };
 
   const onClear = () => {
@@ -260,7 +427,57 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
     setStatusInput('');
     setSortInput('created_at');
     setOrderInput('desc');
+    setFavoriteInput(false);
     setLocation(buildStrategyVersionsListUrl(strategyId, 1, '', '', 'created_at', 'desc'));
+  };
+
+  const updateAnnotationCaches = (
+    versionId: string,
+    annotation: StrategyVersionAnnotationData['annotation'],
+  ) => {
+    void mutate((current) => applyAnnotationToListData(current, versionId, annotation), { revalidate: false });
+    void mutateLineage((current) => applyAnnotationToLineageData(current, versionId, annotation), { revalidate: false });
+    void mutate();
+    void mutateLineage();
+  };
+
+  const onToggleFavorite = async (
+    event: MouseEvent<HTMLButtonElement>,
+    version: StrategyVersionListData['strategy_versions'][number],
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setAnnotationError(null);
+    setSavingAnnotationId(version.id);
+    try {
+      const result = await patchStrategyVersionAnnotation(version.id, { is_favorite: !version.is_favorite });
+      updateAnnotationCaches(version.id, result.annotation);
+    } catch (error) {
+      setAnnotationError(error instanceof Error ? error.message : 'favorite 更新に失敗しました。');
+    } finally {
+      setSavingAnnotationId(null);
+    }
+  };
+
+  const onSaveAnnotation = async (
+    event: FormEvent,
+    version: StrategyVersionListData['strategy_versions'][number],
+  ) => {
+    event.preventDefault();
+    const draft = annotationDrafts[version.id] ?? { label: '', note: '' };
+    setAnnotationError(null);
+    setSavingAnnotationId(version.id);
+    try {
+      const result = await patchStrategyVersionAnnotation(version.id, {
+        label: draft.label.trim() || null,
+        note: draft.note.trim() || null,
+      });
+      updateAnnotationCaches(version.id, result.annotation);
+    } catch (error) {
+      setAnnotationError(error instanceof Error ? error.message : 'annotation 保存に失敗しました。');
+    } finally {
+      setSavingAnnotationId(null);
+    }
   };
 
   const needsReviewCount = data.strategy_versions.filter(isNeedsReviewDiff).length;
@@ -422,9 +639,17 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           <option value='desc'>降順</option>
           <option value='asc'>昇順</option>
         </select>
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.9rem', color: '#333' }}>
+          <input
+            type='checkbox'
+            checked={favoriteInput}
+            onChange={(event) => setFavoriteInput(event.target.checked)}
+          />
+          お気に入りのみ
+        </label>
       </form>
 
-      {(q || status || sort !== 'created_at' || order !== 'desc') && (
+      {(q || status || sort !== 'created_at' || order !== 'desc' || favorite) && (
         <div style={{ marginTop: '0.45rem', color: '#666', fontSize: '0.9rem', display: 'flex', gap: '0.7rem', flexWrap: 'wrap' }}>
           {q && (
             <span>
@@ -439,8 +664,141 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           <span>
             並び: <code>{sort}</code> / <code>{order}</code>
           </span>
+          {favorite && <span>favorite: <code>true</code></span>}
         </div>
       )}
+
+      {annotationError && (
+        <div style={{ marginTop: '0.8rem', padding: '0.7rem 0.8rem', border: '1px solid #f0b4b4', borderRadius: '6px', background: '#fff5f5', color: '#8a1212' }}>
+          {annotationError}
+        </div>
+      )}
+
+      <section style={{ marginTop: '1.2rem', padding: '1rem', border: '1px solid #dfe5ef', borderRadius: '10px', background: '#fbfdff' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.1rem' }}>履歴ツリー</h2>
+            <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.9rem' }}>
+              起点を左、派生を右へ配置します。表示だけで Pine生成・backtest・適用は起動しません。
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <button
+              type='button'
+              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'out'))}
+              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
+            >
+              縮小
+            </button>
+            <button
+              type='button'
+              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'reset'))}
+              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
+            >
+              100%
+            </button>
+            <button
+              type='button'
+              onClick={() => setLineageZoom((current) => resolveNextLineageZoom(current, 'in'))}
+              style={{ padding: '0.35rem 0.6rem', border: '1px solid #c8d3e3', borderRadius: '999px', background: '#fff', cursor: 'pointer' }}
+            >
+              拡大
+            </button>
+            <span style={{ color: '#666', fontSize: '0.85rem' }}>zoom {Math.round(lineageZoom * 100)}%</span>
+          </div>
+        </div>
+        {lineageError ? (
+          <div style={{ marginTop: '0.8rem', color: '#8a1212' }}>履歴ツリーを読み込めませんでした。</div>
+        ) : lineageLayout.nodes.length === 0 ? (
+          <div style={{ marginTop: '0.8rem', color: '#666' }}>履歴ツリーに表示できる version はありません。</div>
+        ) : (
+          <>
+            {lineageData?.meta.truncated && (
+              <div style={{ marginTop: '0.6rem', color: '#755200', fontSize: '0.85rem' }}>
+                version が多いため先頭 {lineageData.meta.limit} 件のみ表示しています。
+              </div>
+            )}
+            <div
+              style={{
+                marginTop: '0.8rem',
+                height: '340px',
+                overflow: 'auto',
+                border: '1px solid #e2e8f0',
+                borderRadius: '8px',
+                background: 'linear-gradient(135deg, #ffffff 0%, #f6f9ff 100%)',
+              }}
+            >
+              <div
+                style={{
+                  position: 'relative',
+                  width: `${lineageLayout.width * lineageZoom}px`,
+                  height: `${lineageLayout.height * lineageZoom}px`,
+                  transformOrigin: 'top left',
+                }}
+              >
+                <svg
+                  width={lineageLayout.width * lineageZoom}
+                  height={lineageLayout.height * lineageZoom}
+                  style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                  aria-hidden='true'
+                >
+                  {lineageLayout.edges.map((edge) => (
+                    <line
+                      key={`${edge.from_version_id}-${edge.to_version_id}`}
+                      x1={edge.x1 * lineageZoom}
+                      y1={edge.y1 * lineageZoom}
+                      x2={edge.x2 * lineageZoom}
+                      y2={edge.y2 * lineageZoom}
+                      stroke='#90a4c2'
+                      strokeWidth={2}
+                    />
+                  ))}
+                </svg>
+                {lineageLayout.nodes.map((node) => (
+                  <Link
+                    key={node.id}
+                    href={buildStrategyVersionDetailUrl(strategyId, node.id, normalizedPage, q, status, sort, order, favorite)}
+                    style={{
+                      position: 'absolute',
+                      left: `${node.x * lineageZoom}px`,
+                      top: `${node.y * lineageZoom}px`,
+                      width: `${168 * lineageZoom}px`,
+                      minHeight: `${70 * lineageZoom}px`,
+                      boxSizing: 'border-box',
+                      padding: `${0.55 * lineageZoom}rem`,
+                      border: node.annotation.is_favorite ? '2px solid #e1a600' : '1px solid #cbd5e1',
+                      borderRadius: `${10 * lineageZoom}px`,
+                      background: '#fff',
+                      color: '#172033',
+                      textDecoration: 'none',
+                      boxShadow: '0 8px 18px rgba(31, 49, 82, 0.08)',
+                      fontSize: `${0.78 * lineageZoom}rem`,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.35rem', fontWeight: 700 }}>
+                      <span>v:{node.id.slice(0, 8)}</span>
+                      <span aria-label={node.annotation.is_favorite ? 'favorite' : 'not favorite'}>
+                        {node.annotation.is_favorite ? '★' : '☆'}
+                      </span>
+                    </div>
+                    {node.annotation.label && (
+                      <div style={{ marginTop: '0.2rem', color: '#0f3f75', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {node.annotation.label}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                      <span>{statusLabel(node.status)}</span>
+                      <span>{node.timeframe}</span>
+                      {node.has_forward_validation_note && <span>検証ノート</span>}
+                      {node.has_diff_from_clone && <span>差分</span>}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </section>
 
       {data.strategy_versions.length === 0 ? (
         <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', color: '#666' }}>
@@ -583,8 +941,15 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                 {version.has_diff_from_clone === false && <span style={badgeStyle('no-diff')}>差分なし</span>}
                 {version.has_forward_validation_note && <span style={badgeStyle('note')}>検証ノートあり</span>}
                 {isLatestForwardNote && <span style={badgeStyle('note-fresh')}>{NOTE_FRESHNESS_BADGE_LABEL}</span>}
+                {version.is_favorite && <span style={badgeStyle('favorite')}>★ favorite</span>}
                 <span style={badgeStyle('status')}>status: {statusLabel(version.status)}</span>
               </div>
+              {(version.label || version.note) && (
+                <div style={{ padding: '0.55rem 0.65rem', border: '1px solid #f0e2ad', borderRadius: '6px', background: '#fffdf2', color: '#4d3a00', display: 'grid', gap: '0.2rem' }}>
+                  {version.label && <div><strong>label:</strong> {version.label}</div>}
+                  {version.note && <div><strong>note:</strong> {version.note}</div>}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', fontSize: '0.95rem' }}>
                 <span><strong>市場:</strong> {version.market}</span>
                 <span><strong>時間足:</strong> {version.timeframe}</span>
@@ -593,9 +958,78 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
                   <span><strong>ノート更新目安:</strong> {formatNoteFreshness(version.forward_validation_note_updated_at)}</span>
                 )}
               </div>
+              <form
+                onSubmit={(event) => onSaveAnnotation(event, version)}
+                style={{ display: 'grid', gap: '0.45rem', padding: '0.65rem', border: '1px solid #ececec', borderRadius: '6px', background: '#fcfcfc' }}
+              >
+                <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <button
+                    type='button'
+                    onClick={(event) => void onToggleFavorite(event, version)}
+                    disabled={savingAnnotationId === version.id}
+                    aria-label={version.is_favorite ? 'favorite を解除' : 'favorite にする'}
+                    style={{
+                      padding: '0.35rem 0.6rem',
+                      border: '1px solid #d8bf62',
+                      borderRadius: '999px',
+                      background: version.is_favorite ? '#fff1bd' : '#fff',
+                      color: '#5c4300',
+                      cursor: savingAnnotationId === version.id ? 'default' : 'pointer',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {version.is_favorite ? '★ favorite' : '☆ favorite'}
+                  </button>
+                  <span style={{ color: '#666', fontSize: '0.85rem' }}>手動メモ。URL・secret・path 風の文字列は保存しません。</span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap' }}>
+                  <input
+                    type='text'
+                    value={annotationDrafts[version.id]?.label ?? ''}
+                    onChange={(event) => setAnnotationDrafts((current) => ({
+                      ...current,
+                      [version.id]: {
+                        label: event.target.value,
+                        note: current[version.id]?.note ?? version.note ?? '',
+                      },
+                    }))}
+                    maxLength={80}
+                    placeholder='label（80字まで）'
+                    style={{ flex: '1 1 160px', padding: '0.45rem 0.55rem', border: '1px solid #ccc', borderRadius: '4px' }}
+                  />
+                  <input
+                    type='text'
+                    value={annotationDrafts[version.id]?.note ?? ''}
+                    onChange={(event) => setAnnotationDrafts((current) => ({
+                      ...current,
+                      [version.id]: {
+                        label: current[version.id]?.label ?? version.label ?? '',
+                        note: event.target.value,
+                      },
+                    }))}
+                    maxLength={240}
+                    placeholder='note（240字まで）'
+                    style={{ flex: '2 1 260px', padding: '0.45rem 0.55rem', border: '1px solid #ccc', borderRadius: '4px' }}
+                  />
+                  <button
+                    type='submit'
+                    disabled={savingAnnotationId === version.id}
+                    style={{
+                      padding: '0.45rem 0.75rem',
+                      border: 'none',
+                      borderRadius: '4px',
+                      background: '#0a5bb5',
+                      color: '#fff',
+                      cursor: savingAnnotationId === version.id ? 'default' : 'pointer',
+                    }}
+                  >
+                    label/note 保存
+                  </button>
+                </div>
+              </form>
               <div>
                 <Link
-                  href={buildStrategyVersionDetailUrl(strategyId, version.id, normalizedPage, q, status, sort, order)}
+                  href={buildStrategyVersionDetailUrl(strategyId, version.id, normalizedPage, q, status, sort, order, favorite)}
                   style={{ color: '#0a5bb5', textDecoration: 'none', fontWeight: 600 }}
                 >
                   version 詳細を開く
@@ -611,7 +1045,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
         <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           <button
             type='button'
-            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1), q, status, sort, order))}
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, Math.max(1, normalizedPage - 1), q, status, sort, order, favorite))}
             disabled={!data.pagination.has_prev}
             style={{
               padding: '0.45rem 0.85rem',
@@ -626,7 +1060,7 @@ export default function StrategyVersionList({ params }: StrategyVersionListProps
           </button>
           <button
             type='button'
-            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1, q, status, sort, order))}
+            onClick={() => setLocation(buildStrategyVersionsListUrl(strategyId, normalizedPage + 1, q, status, sort, order, favorite))}
             disabled={!data.pagination.has_next}
             style={{
               padding: '0.45rem 0.85rem',

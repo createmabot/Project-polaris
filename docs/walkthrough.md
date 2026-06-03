@@ -40,6 +40,19 @@ pnpm run dev
 2. `POST /api/strategies/:strategyId/versions` が成功することを確認する。
 3. `market` と `timeframe` が version に保存されていることを確認する。Pine generation の初回対象は `JP_STOCK` / `US_STOCK` と canonical `D` / `4H` / `1H` で、default は `JP_STOCK` / `D` のまま維持する。`1D` が入力された場合は `D` として正規化される。
 
+## 2-1. StrategyVersion 一覧 / 履歴ツリー / annotation
+
+1. `http://localhost:5173/strategies/:strategyId/versions` を開く。
+2. 一覧上部に `履歴ツリー` section が表示されることを確認する。
+3. tree は横・縦スクロールでき、`縮小` / `100%` / `拡大` で zoom できることを確認する。
+4. clone された version がある場合、起点が左、派生が右、分岐が縦方向に表示され、edge が SVG line でつながることを確認する。
+5. tree node click で `StrategyVersionDetail` へ遷移することを確認する。
+6. version card で favorite toggle、label / note 編集、保存ができることを確認する。保存後、card と tree node の label / favorite 表示が更新されることを確認する。
+7. `お気に入りのみ` filter が URL query と API query の `favorite=true` に反映されることを確認する。
+8. `q` 検索で自然言語ルール本文だけでなく annotation label / note でも絞り込めることを確認する。ただし一覧 response / UI に raw rule 本文や raw Pine script が表示されないことを確認する。
+9. annotation に URL、endpoint、model、secret、token、credential、local path、stack trace 風文字列を入れても保存・表示されないことを確認する。
+10. 一覧表示、tree 表示、favorite / label / note 操作だけで Pine generation、Pine regeneration、backtest、AI summary、application apply、proposal generation が起動しないことを確認する。
+
 ## 3. 自然言語 -> Pine 生成
 
 1. `StrategyVersionDetail` で `Pine を生成` を実行する。

@@ -1,4 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { detectMojibake } from '../utils/encoding';
@@ -52,6 +53,18 @@ function toStrategyResponse(strategy: {
     status: strategy.status,
     created_at: strategy.createdAt,
     updated_at: strategy.updatedAt,
+  };
+}
+
+function toAnnotationResponse(annotation?: {
+  label: string | null;
+  note: string | null;
+  isFavorite: boolean;
+} | null) {
+  return {
+    label: annotation?.label ?? null,
+    note: annotation?.note ?? null,
+    is_favorite: annotation?.isFavorite ?? false,
   };
 }
 
@@ -360,7 +373,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.get<{
     Params: { strategyId: string };
-    Querystring: { q?: string; page?: string; limit?: string; status?: string; sort?: string; order?: string };
+    Querystring: { q?: string; page?: string; limit?: string; status?: string; sort?: string; order?: string; favorite?: string };
   }>('/:strategyId/versions', async (request, reply) => {
     const { strategyId } = request.params;
     const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
@@ -372,6 +385,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
     const status = typeof request.query.status === 'string' ? request.query.status.trim() : '';
     const sort = typeof request.query.sort === 'string' ? request.query.sort.trim() : 'created_at';
     const order = typeof request.query.order === 'string' ? request.query.order.trim().toLowerCase() : 'desc';
+    const favorite = request.query.favorite === 'true';
     const parsedPage = Number(request.query.page ?? 1);
     const parsedLimit = Number(request.query.limit ?? 20);
     const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : NaN;
@@ -386,17 +400,42 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, 'VALIDATION_ERROR', 'order must be one of: asc, desc.');
     }
 
-    const where = {
+    const where: Prisma.StrategyRuleVersionWhereInput = {
       strategyRuleId: strategy.id,
       ...(q
         ? {
-            naturalLanguageRule: {
-              contains: q,
-              mode: 'insensitive' as const,
-            },
+            OR: [
+              {
+                naturalLanguageRule: {
+                  contains: q,
+                  mode: 'insensitive' as const,
+                },
+              },
+              {
+                annotation: {
+                  is: {
+                    label: {
+                      contains: q,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+              },
+              {
+                annotation: {
+                  is: {
+                    note: {
+                      contains: q,
+                      mode: 'insensitive' as const,
+                    },
+                  },
+                },
+              },
+            ],
           }
         : {}),
       ...(status ? { status } : {}),
+      ...(favorite ? { annotation: { is: { isFavorite: true } } } : {}),
     };
 
     const orderBy =
@@ -412,6 +451,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
       skip,
       take: limit,
       include: {
+        annotation: true,
         clonedFromVersion: {
           select: {
             id: true,
@@ -431,6 +471,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         status,
         sort,
         order,
+        favorite,
       },
       pagination: {
         page,
@@ -439,6 +480,7 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         status,
         sort,
         order,
+        favorite,
         total,
         has_next: skip + versions.length < total,
         has_prev: page > 1,
@@ -459,10 +501,91 @@ export const strategyRoutes: FastifyPluginAsync = async (fastify) => {
         market: version.market,
         timeframe: normalizeTimeframeAlias(version.timeframe),
         status: version.status,
+        label: version.annotation?.label ?? null,
+        note: version.annotation?.note ?? null,
+        is_favorite: version.annotation?.isFavorite ?? false,
         has_warnings: Array.isArray(version.warningsJson) && version.warningsJson.length > 0,
         created_at: version.createdAt,
         updated_at: version.updatedAt,
       })),
+    }));
+  });
+
+  fastify.get<{
+    Params: { strategyId: string };
+    Querystring: { limit?: string };
+  }>('/:strategyId/version-lineage', async (request, reply) => {
+    const { strategyId } = request.params;
+    const strategy = await prisma.strategyRule.findUnique({ where: { id: strategyId } });
+    if (!strategy) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy was not found.');
+    }
+
+    const parsedLimit = Number(request.query.limit ?? 300);
+    const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 && parsedLimit <= 300 ? parsedLimit : NaN;
+    if (!Number.isFinite(limit)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'limit must be a positive integer <= 300.');
+    }
+
+    const total = await prisma.strategyRuleVersion.count({ where: { strategyRuleId: strategy.id } });
+    const versions = await prisma.strategyRuleVersion.findMany({
+      where: { strategyRuleId: strategy.id },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      include: {
+        annotation: true,
+        clonedFromVersion: {
+          select: {
+            id: true,
+            naturalLanguageRule: true,
+            generatedPine: true,
+          },
+        },
+        _count: {
+          select: {
+            backtests: true,
+            symbolStrategyApplications: true,
+          },
+        },
+      },
+    });
+
+    const nodeIds = new Set(versions.map((version) => version.id));
+    return reply.status(200).send(formatSuccess(request, {
+      strategy: toStrategyResponse(strategy),
+      nodes: versions.map((version) => ({
+        id: version.id,
+        strategy_id: version.strategyRuleId,
+        cloned_from_version_id: version.clonedFromVersionId,
+        annotation: toAnnotationResponse(version.annotation),
+        status: version.status,
+        market: version.market,
+        timeframe: normalizeTimeframeAlias(version.timeframe),
+        has_warnings: Array.isArray(version.warningsJson) && version.warningsJson.length > 0,
+        has_forward_validation_note:
+          typeof version.forwardValidationNote === 'string' &&
+          version.forwardValidationNote.trim().length > 0,
+        has_diff_from_clone: version.clonedFromVersion
+          ? version.naturalLanguageRule !== version.clonedFromVersion.naturalLanguageRule ||
+            (version.generatedPine ?? '') !== (version.clonedFromVersion.generatedPine ?? '')
+          : null,
+        backtest_count: version._count.backtests,
+        application_count: version._count.symbolStrategyApplications,
+        created_at: version.createdAt,
+        updated_at: version.updatedAt,
+      })),
+      edges: versions
+        .filter((version) => version.clonedFromVersionId && nodeIds.has(version.clonedFromVersionId))
+        .map((version) => ({
+          from_version_id: version.clonedFromVersionId,
+          to_version_id: version.id,
+          relation: 'clone',
+        })),
+      meta: {
+        limit,
+        total,
+        truncated: total > limit,
+      },
     }));
   });
 
