@@ -165,8 +165,15 @@ function buildRewriteAiSummary(summary: { structuredJson: unknown } | null): Nat
   };
 }
 
-function classifyPineProviderFailure(error: unknown): string {
+function classifyAiProviderFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : null;
+  if (cause) {
+    const causeReason = classifyAiProviderFailure(cause);
+    if (causeReason !== 'provider_error') {
+      return causeReason;
+    }
+  }
   if (/timeout|aborted|AbortError/i.test(message)) {
     return 'provider_timeout';
   }
@@ -183,6 +190,28 @@ function classifyPineProviderFailure(error: unknown): string {
     return 'provider_invalid_response';
   }
   return 'provider_error';
+}
+
+function buildRuleRewriteProviderFailure(error: unknown): { reason: string; message: string } {
+  const reason = classifyAiProviderFailure(error);
+  const messageByReason: Record<string, string> = {
+    provider_timeout:
+      'LLM rewrite が timeout しました。少し待ってから再実行してください。長い改善メモの場合は短く整理してください。',
+    provider_invalid_response:
+      'LLM rewrite の応答をルール本文として読み取れませんでした。改善メモを短く具体化して再実行してください。',
+    provider_rate_limited:
+      'LLM provider が一時的に rate limit されています。少し待ってから再実行してください。',
+    provider_unavailable:
+      'LLM provider が一時的に利用できません。Ollama の起動状態を確認してから再実行してください。',
+    provider_rejected:
+      'LLM provider が rewrite request を受け付けませんでした。改善メモを短く整理して再実行してください。',
+    provider_error:
+      'LLM rewrite draft の作成に失敗しました。少し待ってから再実行してください。',
+  };
+  return {
+    reason,
+    message: messageByReason[reason] ?? messageByReason.provider_error,
+  };
 }
 
 function resolvePineGenerationProviderType(): HomeAiProviderType {
@@ -563,7 +592,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       output = generated.output;
       log = generated.log;
     } catch (providerError) {
-      const providerFailureReason = classifyPineProviderFailure(providerError);
+      const providerFailureReason = classifyAiProviderFailure(providerError);
       output = {
         normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson) ?? {},
         generatedScript: null,
@@ -985,8 +1014,12 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         metrics,
         aiSummary,
       });
-    } catch {
-      throw new AppError(502, 'AI_PROVIDER_UNAVAILABLE', 'natural language rule rewrite draft could not be generated.');
+    } catch (error) {
+      const failure = buildRuleRewriteProviderFailure(error);
+      throw new AppError(502, 'AI_PROVIDER_UNAVAILABLE', failure.message, {
+        provider_failure_reason: failure.reason,
+        task_type: 'natural_language_rule_rewrite',
+      });
     }
 
     return reply.status(200).send(

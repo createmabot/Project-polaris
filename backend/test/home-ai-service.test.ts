@@ -172,6 +172,16 @@ function createProvider(kind: 'ok' | 'fail'): HomeAiProvider {
         promptVersion: 'v1',
       };
     }),
+    rewriteNaturalLanguageRuleDraft: vi.fn(async () => {
+      if (kind === 'fail') throw new Error('provider failed');
+      return {
+        naturalLanguageRule: 'entry filterを強化し、stop lossを明確化する。',
+        warnings: [],
+        assumptions: [],
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      };
+    }),
     generatePineScript: vi.fn(async () => {
       if (kind === 'fail') throw new Error('provider failed');
       return {
@@ -295,6 +305,13 @@ function createStubProvider(): HomeAiProvider {
           overall_view: 'stub',
         },
       },
+      modelName: 'stub-model',
+      promptVersion: 'v1',
+    })),
+    rewriteNaturalLanguageRuleDraft: vi.fn(async () => ({
+      naturalLanguageRule: 'stub rule rewrite',
+      warnings: ['stub'],
+      assumptions: [],
       modelName: 'stub-model',
       promptVersion: 'v1',
     })),
@@ -439,6 +456,36 @@ describe('HomeAiService', () => {
     ).rejects.toThrow('ai_provider_failed(local_llm): provider failed');
     expect(provider.generatePineScript).toHaveBeenCalledTimes(1);
     expect(stubProvider.generatePineScript).toHaveBeenCalledTimes(0);
+  });
+
+  it('preserves the provider failure as cause for rule rewrite failures', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const providerFailure = new Error('local_llm natural_language_rule_rewrite returned invalid output: empty content');
+    (provider.rewriteNaturalLanguageRuleDraft as ReturnType<typeof vi.fn>).mockRejectedValue(providerFailure);
+
+    const service = new HomeAiService(provider, stubProvider);
+    let thrown: unknown = null;
+    try {
+      await service.rewriteNaturalLanguageRuleDraft({
+        strategyVersionId: 'ver-1',
+        sourceBacktestId: 'bt-1',
+        baseRule: 'buy above MA25',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        improvementMemo: 'entry filterを改善する',
+        metrics: null,
+        aiSummary: null,
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).message).toBe('natural_language_rule_rewrite_failed');
+    expect((thrown as Error & { cause?: unknown }).cause).toBe(providerFailure);
+    expect(provider.rewriteNaturalLanguageRuleDraft).toHaveBeenCalledTimes(1);
+    expect(stubProvider.rewriteNaturalLanguageRuleDraft).toHaveBeenCalledTimes(0);
   });
 
   it('can fallback to stub when explicitly enabled', async () => {
