@@ -112,6 +112,22 @@ function sanitizeRewriteInputText(value: unknown, maxLength: number): string | n
   return result || null;
 }
 
+function normalizeRuleForRewriteCompare(value: unknown): string {
+  const sanitized = sanitizeRewriteInputText(value, 8000);
+  if (!sanitized) return '';
+  return sanitized
+    .replace(/[ \t\u3000]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
+    .replace(/[。．.、，,\s]+$/g, '')
+    .trim();
+}
+
+function isUnchangedRewriteDraft(draft: unknown, baseRule: unknown): boolean {
+  const normalizedDraft = normalizeRuleForRewriteCompare(draft);
+  const normalizedBase = normalizeRuleForRewriteCompare(baseRule);
+  return Boolean(normalizedDraft && normalizedBase && normalizedDraft === normalizedBase);
+}
+
 function extractAiSummaryStrings(value: unknown, limit: number): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -1020,6 +1036,17 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         provider_failure_reason: failure.reason,
         task_type: 'natural_language_rule_rewrite',
       });
+    }
+    if (isUnchangedRewriteDraft(rewritten.output.naturalLanguageRule, version.naturalLanguageRule)) {
+      throw new AppError(
+        422,
+        'VALIDATION_ERROR',
+        'LLM rewrite draft was unchanged. Make the improvement memo more specific and retry.',
+        {
+          reason: 'unchanged_natural_language_rule',
+          task_type: 'natural_language_rule_rewrite',
+        },
+      );
     }
 
     return reply.status(200).send(

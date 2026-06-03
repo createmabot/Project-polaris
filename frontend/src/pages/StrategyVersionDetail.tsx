@@ -922,13 +922,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       );
       const draftRule = response.draft.natural_language_rule;
       const unchanged = draftRule.trim() === editingNaturalLanguageRule.trim();
+      if (unchanged) {
+        setRuleRewriteError('LLM draft は現在の自然言語ルール本文と同じ内容でした。改善メモを具体化して再実行してください。');
+        return;
+      }
       setEditingNaturalLanguageRule(draftRule);
       setRuleRewriteWarnings([...(response.draft.warnings ?? []), ...(response.draft.assumptions ?? [])].slice(0, 6));
-      setRuleRewriteMessage(
-        unchanged
-          ? 'LLM draft は現在の自然言語ルール本文と同じ内容でした。改善メモを具体化して再実行してください。'
-          : 'LLM draft を下の自然言語ルール本文に反映しました。内容を確認してから保存してください。',
-      );
+      setRuleRewriteMessage('LLM draft を下の自然言語ルール本文に反映しました。内容を確認してから保存してください。');
       globalThis.setTimeout(() => {
         ruleEditorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         ruleEditorSectionRef.current?.querySelector('textarea')?.focus();

@@ -1939,6 +1939,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         'You are a Japanese strategy-rule rewrite assistant.',
         'Return strict JSON only with natural_language_rule, warnings, and assumptions.',
         'The natural_language_rule must be a single current strategy definition for the next Pine generation.',
+        'The natural_language_rule must materially differ from saved_natural_language_rule by incorporating the improvement memo or backtest findings; do not return the saved rule unchanged.',
         'Do not append improvement history, AI summary quotes, or explanatory review notes to the rule.',
         'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
         'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',
@@ -2343,6 +2344,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
             content: [
               'Rewrite a strategy natural-language rule as strict JSON.',
               'The output natural_language_rule must be a single current strategy definition for the next Pine generation.',
+              'It must materially differ from saved_natural_language_rule by incorporating the improvement memo or backtest findings; do not return the saved rule unchanged.',
               'Do not append improvement history, AI summary quotes, review notes, URLs, citations, or raw artifacts.',
               'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
               'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',

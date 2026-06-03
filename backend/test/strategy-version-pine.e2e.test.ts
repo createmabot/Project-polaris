@@ -591,6 +591,52 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
+  it('rejects unchanged LLM rewrite drafts without saving or starting Pine jobs', async () => {
+    const originalRule = runtime.versions.get('ver-1')?.naturalLanguageRule ?? '';
+    rewriteRuleDraftMock.mockResolvedValue({
+      output: {
+        naturalLanguageRule: `${originalRule}\n`,
+        warnings: ['provider returned unchanged text'],
+        assumptions: [],
+        modelName: 'stub-rule-rewrite',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'stub',
+        fallbackToStub: false,
+      },
+    });
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      payload: {
+        source_backtest_id: 'bt-1',
+        improvement_memo: 'entry filterとrisk管理を改善する',
+      },
+    });
+
+    expect(res.statusCode).toBe(422);
+    const body = res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.message).toBe(
+      'LLM rewrite draft was unchanged. Make the improvement memo more specific and retry.',
+    );
+    expect(body.error.details).toMatchObject({
+      reason: 'unchanged_natural_language_rule',
+      task_type: 'natural_language_rule_rewrite',
+    });
+    expect(runtime.versions.get('ver-1')?.naturalLanguageRule).toBe(originalRule);
+    expect(runtime.pineGenerationJobs.size).toBe(0);
+    expect(generatePineScriptMock).toHaveBeenCalledTimes(0);
+    expect(JSON.stringify(body)).not.toContain('provider returned unchanged text');
+    expect(JSON.stringify(body)).not.toContain('stack');
+    expect(JSON.stringify(body)).not.toContain('endpoint');
+
+    await app.close();
+  });
+
   it('returns sanitized not found when rewrite source backtest is invalid', async () => {
     rewriteRuleDraftMock.mockResolvedValue({
       output: {
