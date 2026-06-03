@@ -167,6 +167,13 @@ function buildRewriteAiSummary(summary: { structuredJson: unknown } | null): Nat
 
 function classifyAiProviderFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
+  const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : null;
+  if (cause) {
+    const causeReason = classifyAiProviderFailure(cause);
+    if (causeReason !== 'provider_error') {
+      return causeReason;
+    }
+  }
   if (/timeout|aborted|AbortError/i.test(message)) {
     return 'provider_timeout';
   }

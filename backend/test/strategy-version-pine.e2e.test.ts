@@ -623,9 +623,12 @@ describe('strategy version pine endpoints', () => {
   });
 
   it('returns sanitized provider failure details when rule rewrite provider fails', async () => {
-    rewriteRuleDraftMock.mockRejectedValue(
-      new Error('local_llm natural_language_rule_rewrite returned invalid output: endpoint=/api/chat | model=SECRET_MODEL | token=SECRET_VALUE'),
+    const providerError = new Error(
+      'local_llm natural_language_rule_rewrite returned invalid output: endpoint=/api/chat | model=SECRET_MODEL | token=SECRET_VALUE',
     );
+    const wrappedError = new Error('natural_language_rule_rewrite_failed') as Error & { cause?: unknown };
+    wrappedError.cause = providerError;
+    rewriteRuleDraftMock.mockRejectedValue(wrappedError);
     const app = await createApp();
 
     const res = await app.inject({

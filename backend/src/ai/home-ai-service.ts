@@ -366,9 +366,11 @@ export class HomeAiService {
           fallbackToStub: false,
         },
       };
-    } catch {
+    } catch (error) {
       if (!this.shouldFallbackToStub()) {
-        throw new Error('natural_language_rule_rewrite_failed');
+        const rewriteError = new Error('natural_language_rule_rewrite_failed');
+        (rewriteError as Error & { cause?: unknown }).cause = error;
+        throw rewriteError;
       }
       const output = await this.stubProvider.rewriteNaturalLanguageRuleDraft(context);
       return {
