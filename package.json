@@ -4,7 +4,9 @@
   "private": true,
   "description": "Stock price analysis tool 'Project-polaris'",
   "scripts": {
-    "dev": "pnpm --parallel --filter \"*\" dev",
+    "dev": "node scripts/preflight-local-llm.mjs && pnpm --parallel --filter \"*\" dev",
+    "dev:skip-llm-check": "pnpm --parallel --filter \"*\" dev",
+    "check:local-llm": "node scripts/preflight-local-llm.mjs",
     "build": "pnpm --recursive build",
     "test": "pnpm --recursive test",
     "test:e2e:browser": "pnpm --filter frontend test:e2e:browser",
