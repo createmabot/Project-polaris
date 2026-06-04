@@ -846,11 +846,11 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     }
   };
 
-  const onGenerateAiReview = async () => {
+  const onGenerateAiReview = async (forceRegenerate = false) => {
     setIsGeneratingAiReview(true);
     setGenerateAiReviewError(null);
     try {
-      await postApi(`/api/backtests/${backtestId}/summary/generate`, {});
+      await postApi(`/api/backtests/${backtestId}/summary/generate`, forceRegenerate ? { force: true } : {});
       await mutate();
     } catch (error: any) {
       setGenerateAiReviewError(error?.message ?? 'AI総評の生成に失敗しました。');
@@ -1193,6 +1193,21 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         </div>
         {data.ai_review.status === 'available' ? (
           <>
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+              <Button
+                data-testid="regenerate-ai-review"
+                onClick={() => onGenerateAiReview(true)}
+                disabled={isGeneratingAiReview}
+              >
+                {isGeneratingAiReview ? '再生成中...' : 'AI総評を再生成'}
+              </Button>
+              <span>
+                保存済み AI 総評を新しい manual job で作り直します。表示だけでは再生成しません。
+              </span>
+            </div>
+            {generateAiReviewError && (
+              <InlineNotice tone="danger" className="mb-3">{generateAiReviewError}</InlineNotice>
+            )}
             {data.ai_review.title && (
               <div className="mb-2 font-semibold text-slate-900">{data.ai_review.title}</div>
             )}
@@ -1214,7 +1229,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
               failed の場合も、既存の「AI総評を生成」から手動生成 / 再生成に進めます。failed job auto retry、表示起点 enqueue、polling は行いません。
             </p>
             <Button
-              onClick={onGenerateAiReview}
+              onClick={() => onGenerateAiReview(false)}
               disabled={isGeneratingAiReview}
             >
               {isGeneratingAiReview ? '生成中...' : 'AI総評を生成'}

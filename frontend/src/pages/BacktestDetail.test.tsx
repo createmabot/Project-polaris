@@ -194,6 +194,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('job 状態は手動再読み込み時点の read-only 表示です。');
     expect(html).toContain('latest AI summary job');
     expect(html).toContain('最新 AI summary job はまだありません。');
+    expect(html).toContain('AI総評を再生成');
+    expect(html).toContain('data-testid="regenerate-ai-review"');
     expect(html).toContain('### 結論');
     expect(html).toContain('### 良い点');
     expect(html).toContain('### 懸念点');
@@ -204,6 +206,59 @@ describe('BacktestDetail', () => {
     expect(html).toContain('次アクション（Rule Lab）');
     expect(html).toContain('比較可能な run が不足しています。解析済み import が2件以上あると比較できます。');
     expect(html).not.toContain('この検証結果をもとに改善版を作る');
+  });
+
+  it('regenerates an available AI review only after explicit click', async () => {
+    mockLocation = '/backtests/bt-regen';
+    mockUseSWR.mockReset();
+    mockPostApi.mockResolvedValue({});
+    const mutate = vi.fn();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      mutate,
+      data: {
+        backtest: {
+          id: 'bt-regen',
+          strategy_version_id: 'ver-1',
+          title: 'トヨタ MA',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'imported',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: null,
+        },
+        latest_import: null,
+        ai_review: {
+          summary_id: 'sum-existing',
+          title: '既存AI総評',
+          body_markdown: '既存の総評本文',
+          structured_json: null,
+          generated_at: '2026-01-01T00:00:00.000Z',
+          status: 'available',
+          insufficient_context: false,
+        },
+        imports: [],
+      },
+    });
+
+    renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-regen' }} />);
+
+    expect(mockPostApi).not.toHaveBeenCalled();
+    const regenerateButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'regenerate-ai-review');
+    expect(regenerateButton?.text).toBe('AI総評を再生成');
+
+    await regenerateButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith('/api/backtests/bt-regen/summary/generate', { force: true });
+    expect(mutate).toHaveBeenCalledTimes(1);
   });
 
   it('shows parse error on failed parse', () => {

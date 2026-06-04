@@ -45,7 +45,7 @@
 - 同一 application の related reports と current / related metrics 横並び比較補助を表示する。
 - metrics 欠損時は、取得元に該当 metric がないことを短く説明する。
 - 同一 application 内の current report と related report の既存 AI summary を read-only に並べる comparison helper を担当する。
-- summary missing / failed / stale は provider 再生成や polling ではなく、read-only status / note と既存 manual generate 導線で扱う。
+- summary missing / failed / stale は polling ではなく、read-only status / note と既存 manual generate 導線で扱う。保存済み summary がある場合も、ユーザーが明示的に `AI総評を再生成` を押したときだけ `force=true` の manual regeneration を行う。
 - `BacktestDetail` 表示を契機に自動 AI 比較生成、summary 再生成、comparison entity 作成、artifact diff を行わない。
 - `symbol_strategy_application` を持つ report では、明示 action `この検証結果をもとに改善版を作る` から既存 strategy version clone flow へ進める。clone 後の StrategyVersionDetail は `source_backtest_id` を read-only context として取得し、表示可能な metrics / AI summary excerpt から改善メモを作る。BacktestDetail 表示だけでは clone、Pine generation、save、backtest、AI summary generation、apply を起動しない。
 
