@@ -521,6 +521,41 @@ describe('backtest ai-summary routes', () => {
     await app.close();
   });
 
+  it('keeps duplicate guard by default and allows explicit manual regeneration', async () => {
+    const app = await createApp();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: {},
+    });
+    expect(first.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(1);
+
+    const duplicate = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: {},
+    });
+    expect(duplicate.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(1);
+    expect(runtime.aiJobs).toHaveLength(2);
+    expect(runtime.aiJobs[1].responsePayload).toMatchObject({ skipped: 'duplicate' });
+
+    const regenerated = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/summary/generate',
+      payload: { force: true },
+    });
+    expect(regenerated.statusCode).toBe(200);
+    expect(runtime.aiSummaries).toHaveLength(2);
+    expect(runtime.aiJobs).toHaveLength(3);
+    expect(JSON.stringify(regenerated.json().data)).not.toContain('endpoint');
+    expect(JSON.stringify(regenerated.json().data)).not.toContain('secret');
+
+    await app.close();
+  });
+
   it('passes internal_backtest result context without requiring BacktestImport', async () => {
     runtime.backtest = {
       ...runtime.backtest!,

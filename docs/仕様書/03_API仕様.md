@@ -44,6 +44,8 @@
   - TradingView CSV を parse し、`BacktestImport` を作成し、Backtest status を更新する。
 - `POST /api/backtests/:backtestId/summary/generate`
   - Backtest AI summary generation を enqueue する既存 manual endpoint。
+  - request body は optional `{ force: true }` を受ける。`force=true` の場合は同一 input snapshot の保存済み summary があっても manual regeneration として新しい summary job / summary を作る。
+  - `force` 未指定または `false` の場合は、同一 input snapshot の succeeded summary があれば既存 summary を返し、重複 provider call を避ける。
 - `GET /api/backtests/:backtestId`
   - BacktestDetail の正本 API。
   - `backtest` / `used_strategy` / `latest_import` / `imports` / `ai_review` / `symbol_strategy_application` を返す。

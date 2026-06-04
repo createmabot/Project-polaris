@@ -19,6 +19,10 @@ type CreateImportBody = {
   csv_text?: string;
 };
 
+type GenerateBacktestSummaryBody = {
+  force?: unknown;
+};
+
 type BacktestStrategySnapshot = {
   strategy_id: string;
   strategy_version_id: string;
@@ -832,16 +836,20 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
     }));
   });
 
-  fastify.post<{ Params: { backtestId: string } }>('/:backtestId/summary/generate', async (request, reply) => {
-    const { backtestId } = request.params;
-    const result = await generateBacktestSummaryWithJob(backtestId);
-    return reply.status(200).send(formatSuccess(request, {
-      backtest_id: backtestId,
-      job_id: result.jobId,
-      status: 'queued',
-      summary: result.summary,
-    }));
-  });
+  fastify.post<{ Params: { backtestId: string }; Body: GenerateBacktestSummaryBody }>(
+    '/:backtestId/summary/generate',
+    async (request, reply) => {
+      const { backtestId } = request.params;
+      const forceRegenerate = request.body?.force === true;
+      const result = await generateBacktestSummaryWithJob(backtestId, { forceRegenerate });
+      return reply.status(200).send(formatSuccess(request, {
+        backtest_id: backtestId,
+        job_id: result.jobId,
+        status: 'queued',
+        summary: result.summary,
+      }));
+    },
+  );
 
   fastify.get<{ Params: { backtestId: string } }>('/:backtestId', async (request, reply) => {
     const { backtestId } = request.params;
