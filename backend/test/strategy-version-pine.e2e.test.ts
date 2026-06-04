@@ -702,6 +702,36 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
+  it('classifies rule rewrite local LLM connection failures as provider unavailable', async () => {
+    const providerError = new TypeError('fetch failed');
+    const wrappedError = new Error('natural_language_rule_rewrite_failed') as Error & { cause?: unknown };
+    wrappedError.cause = providerError;
+    rewriteRuleDraftMock.mockRejectedValue(wrappedError);
+    const app = await createApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
+      payload: {
+        source_backtest_id: 'bt-1',
+        improvement_memo: 'entry filterとrisk管理を改善する',
+      },
+    });
+
+    expect(res.statusCode).toBe(502);
+    const body = res.json();
+    expect(body.error.code).toBe('AI_PROVIDER_UNAVAILABLE');
+    expect(body.error.message).toContain('LLM provider が一時的に利用できません');
+    expect(body.error.details).toMatchObject({
+      provider_failure_reason: 'provider_unavailable',
+      task_type: 'natural_language_rule_rewrite',
+    });
+    expect(JSON.stringify(body)).not.toContain('fetch failed');
+    expect(JSON.stringify(body)).not.toContain('stack');
+
+    await app.close();
+  });
+
   it('clones latest pine script lineage when cloning a strategy version', async () => {
     const createdAt = new Date('2026-04-25T10:00:00.000Z');
     runtime.pineScripts.set('pine-source-old', {

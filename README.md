@@ -88,6 +88,11 @@ pnpm run up
 pnpm run down
 ```
 
+`pnpm run dev` は、`HOME_AI_PROVIDER` / `PINE_GENERATION_PROVIDER` / `STRATEGY_PROPOSAL_PROVIDER` のいずれかが
+`local_llm` の場合、起動前に local LLM の疎通を確認する。local LLM server は自動起動しないため、未起動の場合は
+起動してから再実行する。意図的に疎通確認を省く場合のみ `SKIP_LOCAL_LLM_PREFLIGHT=true pnpm run dev` または
+`pnpm run dev:skip-llm-check` を使う。
+
 ## Home AI要約フロー（最小）
 - `GET /api/home` は `summary_type=latest|morning|evening` と `date=YYYY-MM-DD` を受け取り、`daily_summary` を切替返却する。
 - `daily_summary` は `status=available|unavailable` と `insufficient_context` を含む。

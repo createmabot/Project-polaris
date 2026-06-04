@@ -238,6 +238,9 @@ function classifyAiProviderFailure(error: unknown): string {
   if (/timeout|aborted|AbortError/i.test(message)) {
     return 'provider_timeout';
   }
+  if (/fetch failed|ECONNREFUSED|ECONNRESET|ENOTFOUND|EHOSTUNREACH|network|connection refused/i.test(message)) {
+    return 'provider_unavailable';
+  }
   if (/HTTP\s+429/i.test(message)) {
     return 'provider_rate_limited';
   }
