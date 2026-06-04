@@ -128,6 +128,24 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
             next_checks: ['Run another period split'],
             body_markdown: '## AI Backtest Review\n\nSummary body',
             overall_view: 'Provisional positive',
+            rule_refinement_candidates: [
+              {
+                title: 'Entry filter refinement',
+                target_area: 'entry',
+                rationale: 'Win rate needs review',
+                change_summary: 'Add a measurable trend filter to the entry rule',
+                entry_change: 'Only enter when close is above the 25-period moving average',
+                exit_change: null,
+                risk_change: 'Compare a fixed stop loss',
+                validation_plan: 'Compare the refined rule with the baseline over the same period',
+                expected_metric_effect: {
+                  profit_factor: 'may improve',
+                  win_rate: 'may improve',
+                  max_drawdown: 'may decrease',
+                  trade_count: 'may decrease',
+                },
+              },
+            ],
           }),
           thinking: 'internal',
         },
@@ -151,6 +169,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('自然言語ルール改善案');
     expect(body.messages[0].content).toContain('Pine修正依頼に入れるべきではない注意');
     expect(body.messages[0].content).toContain('next_checks');
+    expect(body.messages[0].content).toContain('rule_refinement_candidates');
     expect(body.messages[0].content).toContain('overall_view');
     expect(body.messages[0].content).toContain('Do not frame strategy logic changes as revision_request drafts');
     expect(body.messages[0].content).toContain('Do not give direct buy or sell recommendations');
@@ -158,6 +177,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.bodyMarkdown).toContain('### 問題の切り分け');
     expect(result.bodyMarkdown).toContain('### 改善仮説');
     expect(result.bodyMarkdown).toContain('### 次に試す検証案');
+    expect(result.structuredJson.payload.rule_refinement_candidates?.[0]?.entry_change).toContain('25-period');
     expect(result.bodyMarkdown).toContain('### 自然言語ルール改善案');
     expect(result.bodyMarkdown).toContain('### Pine修正依頼に入れるべきではない注意');
     expect(result.structuredJson.schema_version).toBe('1.0');

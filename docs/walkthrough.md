@@ -122,7 +122,7 @@ pnpm run dev
 
 1. BacktestDetail から clone 後の `StrategyVersionDetail` を開く。
 2. `検証結果からの改善メモ` section に、元 report title、execution source、status、market / timeframe、updated、source backtest id、主要 metrics、保存済み AI summary の title / excerpt / key points、関連 report note が read-only 表示されることを確認する。
-3. `改善メモ` textarea を必要に応じて編集し、strategy logic を変える場合は `LLMで新しいルール本文を作る` を押す。
+3. `改善メモ` textarea を必要に応じて編集し、strategy logic を変える場合は `LLMで新しいルール本文を作る` を押す。Backtest AI 総評に `rule_refinement_candidates` がある場合は、entry / exit / risk の具体候補が改善メモに優先反映されることを確認する。
 4. 反映先は自然言語ルール本文であり、改善履歴の追記ではなく単一の最新ルール本文 draft に置き換える。LLM rewrite は明示クリック時だけ実行され、押下だけでは保存 endpoint、Pine 生成 endpoint、Pine 修正再生成 endpoint、backtest、AI summary、application apply は呼ばれないことを確認する。`改善案から新しいルール本文を作る` と `改善メモを Pine 修正依頼に反映` は表示されない。
 5. `自然言語ルール（編集）` では `ルール本文を保存`、`保存済みルールから Pine を作り直す`、`修正依頼をもとに Pine を再生成` の違いが説明され、`この version を複製する` と基本情報は折りたたみの低優先表示になっていることを確認する。
 6. 元 version に PineScript がある clone では、clone 先の `source_pine_script_id` が表示され、`修正依頼をもとに Pine を再生成` が使えることを確認する。元 PineScript がない場合は `修正依頼をもとに Pine を再生成` が disabled になり、既存 Pine を元にした修正再生成はできないことを確認する。`保存済みルールから Pine を作り直す` は保存済み自然言語ルールから新しい Pine を生成する操作であり、既存 Pine の細部を継承するとは限らない説明が表示されることを確認する。
@@ -137,6 +137,7 @@ pnpm run dev
    - `title`
    - `body_markdown`
    - 問題の切り分け / 改善仮説 / 自然言語ルール改善案 / Pine修正依頼に入れるべきではない注意 / 次に試す検証案
+   - structured JSON に optional `rule_refinement_candidates` がある場合、自然言語ルール改善向けの候補として使われる
    - `structured_json.payload.next_actions`
    - `structured_json.payload.overall_view`
 5. `GET /api/backtests/:backtestId` の `latest_ai_summary_job` を確認する。

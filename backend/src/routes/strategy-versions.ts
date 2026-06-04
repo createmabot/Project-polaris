@@ -4,7 +4,11 @@ import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
 import type { PineGenerationProgressStage } from '../ai/home-ai-service';
 import { createHomeAiProvider, createStubHomeAiProvider } from '../ai/home-provider';
-import type { HomeAiProviderType, NaturalLanguageRuleRewriteContext } from '../ai/home-provider';
+import type {
+  HomeAiProviderType,
+  NaturalLanguageRuleRewriteContext,
+  RuleRefinementCandidate,
+} from '../ai/home-provider';
 import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
@@ -181,6 +185,39 @@ function extractAiSummaryStrings(value: unknown, limit: number): string[] {
     .slice(0, limit);
 }
 
+function extractRuleRefinementCandidates(value: unknown, limit: number): RuleRefinementCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): RuleRefinementCandidate | null => {
+      if (!isRecord(item)) return null;
+      const title = sanitizeRewriteInputText(item.title, 120);
+      const rationale = sanitizeRewriteInputText(item.rationale, 260);
+      const changeSummary = sanitizeRewriteInputText(item.change_summary, 320);
+      const targetArea = sanitizeRewriteInputText(item.target_area, 40) ?? 'filter';
+      const validationPlan = sanitizeRewriteInputText(item.validation_plan, 260);
+      if (!title || !rationale || !changeSummary || !validationPlan) return null;
+      const expected = isRecord(item.expected_metric_effect) ? item.expected_metric_effect : null;
+      return {
+        title,
+        target_area: targetArea,
+        rationale,
+        change_summary: changeSummary,
+        entry_change: sanitizeRewriteInputText(item.entry_change, 260),
+        exit_change: sanitizeRewriteInputText(item.exit_change, 260),
+        risk_change: sanitizeRewriteInputText(item.risk_change, 260),
+        validation_plan: validationPlan,
+        expected_metric_effect: {
+          profit_factor: sanitizeRewriteInputText(expected?.profit_factor, 180),
+          win_rate: sanitizeRewriteInputText(expected?.win_rate, 180),
+          max_drawdown: sanitizeRewriteInputText(expected?.max_drawdown, 180),
+          trade_count: sanitizeRewriteInputText(expected?.trade_count, 180),
+        },
+      };
+    })
+    .filter((item): item is RuleRefinementCandidate => item !== null)
+    .slice(0, limit);
+}
+
 function buildRewriteMetrics(backtest: { imports?: Array<{ parsedSummaryJson: unknown }>; strategySnapshotJson: unknown }) {
   const parsedSummary = isRecord(backtest.imports?.[0]?.parsedSummaryJson)
     ? backtest.imports?.[0]?.parsedSummaryJson as Record<string, unknown>
@@ -223,6 +260,7 @@ function buildRewriteAiSummary(summary: { structuredJson: unknown } | null): Nat
     risks: extractAiSummaryStrings(payload.risks, 5),
     strengths: extractAiSummaryStrings(payload.strengths, 4),
     keyMetrics: isRecord(payload.key_metrics) ? payload.key_metrics : null,
+    ruleRefinementCandidates: extractRuleRefinementCandidates(payload.rule_refinement_candidates, 4),
   };
 }
 

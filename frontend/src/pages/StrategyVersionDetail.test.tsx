@@ -274,6 +274,18 @@ function createSourceBacktestPayload() {
           overall_view: '自然言語ルール改善案: entry / exit / risk 条件を分けてルール本文に反映する。',
           risks: ['最大DDが拡大する局面を切り分ける'],
           strengths: ['PFはbaselineを上回る'],
+          rule_refinement_candidates: [
+            {
+              title: 'entry filter強化',
+              target_area: 'entry',
+              rationale: '勝率の低さを切り分ける',
+              change_summary: '出来高filterとtrend filterをentry条件に追加する',
+              entry_change: '出来高が20日平均を上回り、終値が25日移動平均を上回る場合のみentryする',
+              exit_change: null,
+              risk_change: '最大DD抑制のため5% stop lossを比較する',
+              validation_plan: '現行ルールとentry filter追加版を同じ期間で比較する',
+            },
+          ],
         },
         key_points: [
           'Profit factor is above the baseline.',
@@ -436,6 +448,9 @@ describe('StrategyVersionDetail', () => {
     expect(memo).toContain('source validation report');
     expect(memo).toContain('主要指標');
     expect(memo).toContain('Profit Factor=1.63');
+    expect(memo).toContain('AI summary rule refinement candidates');
+    expect(memo).toContain('entry filter強化');
+    expect(memo).toContain('出来高filterとtrend filter');
     expect(memo).toContain('AI summary next actions');
     expect(memo).toContain('entry trigger を出来高条件と分けて再検証する');
     expect(memo).toContain('AI summary improvement memo');

@@ -237,10 +237,28 @@ export type BacktestSummaryOutput = {
         net_profit: number | null;
       };
       overall_view: string;
+      rule_refinement_candidates?: RuleRefinementCandidate[];
     };
   };
   modelName: string;
   promptVersion: string;
+};
+
+export type RuleRefinementCandidate = {
+  title: string;
+  target_area: 'entry' | 'exit' | 'risk' | 'filter' | 'time_exit' | 'validation_scope' | string;
+  rationale: string;
+  change_summary: string;
+  entry_change: string | null;
+  exit_change: string | null;
+  risk_change: string | null;
+  validation_plan: string;
+  expected_metric_effect: {
+    profit_factor: string | null;
+    win_rate: string | null;
+    max_drawdown: string | null;
+    trade_count: string | null;
+  };
 };
 
 export type NaturalLanguageRuleRewriteContext = {
@@ -265,6 +283,7 @@ export type NaturalLanguageRuleRewriteContext = {
     risks: string[];
     strengths: string[];
     keyMetrics: Record<string, unknown> | null;
+    ruleRefinementCandidates: RuleRefinementCandidate[];
   } | null;
 };
 
@@ -664,6 +683,216 @@ function toSigned(value: number | null | undefined, digits = 2, unit = ''): stri
   return `${sign}${value.toFixed(digits)}${unit}`;
 }
 
+function formatNumberValue(value: number | null | undefined, digits = 2, unit = ''): string | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  return `${value.toFixed(digits)}${unit}`;
+}
+
+function sanitizeSummaryText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\t/g, ' ').trim();
+  if (!normalized) return '';
+  const unsafePattern =
+    /(https?:\/\/|file:\/\/|www\.|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\\|\/users\/|\/home\/|endpoint|model|secret|token|api[_-]?key|password|credential|stack trace|traceback|provider response|raw prompt|raw csv|raw import|raw pine)/i;
+  const lines = normalized
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter((line) => !unsafePattern.test(line));
+  return lines.join('\n').slice(0, maxLength).trim();
+}
+
+function sanitizeSummaryStringList(value: unknown, limit: number, maxLength = 220): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => sanitizeSummaryText(item, maxLength))
+    .filter(Boolean)
+    .slice(0, limit);
+}
+
+function sanitizeRuleRefinementCandidates(value: unknown, limit = 4): RuleRefinementCandidate[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item): RuleRefinementCandidate | null => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const title = sanitizeSummaryText(row.title, 80);
+      const targetArea = sanitizeSummaryText(row.target_area, 40) || 'filter';
+      const rationale = sanitizeSummaryText(row.rationale, 180);
+      const changeSummary = sanitizeSummaryText(row.change_summary, 180);
+      const entryChange = sanitizeSummaryText(row.entry_change, 180) || null;
+      const exitChange = sanitizeSummaryText(row.exit_change, 180) || null;
+      const riskChange = sanitizeSummaryText(row.risk_change, 180) || null;
+      const validationPlan = sanitizeSummaryText(row.validation_plan, 180);
+      const effect = row.expected_metric_effect && typeof row.expected_metric_effect === 'object'
+        ? row.expected_metric_effect as Record<string, unknown>
+        : {};
+      if (!title || !rationale || !changeSummary || (!entryChange && !exitChange && !riskChange)) {
+        return null;
+      }
+      return {
+        title,
+        target_area: targetArea,
+        rationale,
+        change_summary: changeSummary,
+        entry_change: entryChange,
+        exit_change: exitChange,
+        risk_change: riskChange,
+        validation_plan: validationPlan || '同一条件でPF、勝率、最大DD、取引回数を比較する。',
+        expected_metric_effect: {
+          profit_factor: sanitizeSummaryText(effect.profit_factor, 100) || null,
+          win_rate: sanitizeSummaryText(effect.win_rate, 100) || null,
+          max_drawdown: sanitizeSummaryText(effect.max_drawdown, 100) || null,
+          trade_count: sanitizeSummaryText(effect.trade_count, 100) || null,
+        },
+      };
+    })
+    .filter((item): item is RuleRefinementCandidate => item !== null)
+    .slice(0, limit);
+}
+
+function buildRuleRefinementCandidates(
+  context: BacktestSummaryContext,
+  formatted: { winRate: string | null; profitFactor: string | null; maxDrawdown: string | null; netProfit: string | null },
+): RuleRefinementCandidate[] {
+  const metrics = context.metrics;
+  const candidates: RuleRefinementCandidate[] = [];
+  const pushCandidate = (candidate: RuleRefinementCandidate) => {
+    if (candidates.some((item) => item.target_area === candidate.target_area || item.title === candidate.title)) return;
+    candidates.push(candidate);
+  };
+
+  if (metrics && (metrics.winRate ?? 100) < 45) {
+    pushCandidate({
+      title: 'entry filter を強化する',
+      target_area: 'entry',
+      rationale: `勝率${formatted.winRate ?? '-'}で、entry trigger のノイズが大きい可能性があります。`,
+      change_summary: 'entry に trend / volume / market regime の確認条件を1つ追加し、低品質なシグナルを減らす。',
+      entry_change:
+        '終値が主要移動平均を上回り、かつ出来高が直近平均以上、または上位足トレンドが上向きのときだけ entry する条件にする。',
+      exit_change: null,
+      risk_change: null,
+      validation_plan: 'entry filter 追加前後で勝率、PF、取引回数を比較し、取引回数が過度に減らないか確認する。',
+      expected_metric_effect: {
+        profit_factor: '低品質 entry を減らして改善する可能性がある。',
+        win_rate: 'entry 精度の改善を狙う。',
+        max_drawdown: null,
+        trade_count: 'filter 追加により減少する可能性がある。',
+      },
+    });
+  }
+
+  if (metrics && (metrics.profitFactor ?? 2) <= 1) {
+    pushCandidate({
+      title: 'exit / time exit を見直す',
+      target_area: 'exit',
+      rationale: `Profit Factor${formatted.profitFactor ?? '-'}で、損益比または損失継続の制御が弱い可能性があります。`,
+      change_summary: 'profit taking、stop、time exit を明文化し、損失が伸びる局面と利益を伸ばす局面を分ける。',
+      entry_change: null,
+      exit_change:
+        '一定本数経過して含み益が伸びない場合は time exit し、反対シグナルまたは移動平均割れで exit する条件にする。',
+      risk_change: 'stop loss と take profit の基準を entry price または ATR に対して明確化する。',
+      validation_plan: 'time exit あり / なし、stop 幅、利確条件を分けてPFと平均損益を比較する。',
+      expected_metric_effect: {
+        profit_factor: '損益比の改善を狙う。',
+        win_rate: null,
+        max_drawdown: '損失継続の抑制に寄与する可能性がある。',
+        trade_count: null,
+      },
+    });
+  }
+
+  if (metrics && (metrics.maxDrawdown ?? 0) <= -15) {
+    pushCandidate({
+      title: 'risk management を明確化する',
+      target_area: 'risk',
+      rationale: `最大ドローダウン${formatted.maxDrawdown ?? '-'}で、下振れ局面の制御が不足している可能性があります。`,
+      change_summary: 'stop loss、position risk、連敗時停止または time exit を自然言語ルール本文に入れる。',
+      entry_change: null,
+      exit_change: '含み損が一定幅を超えた場合、または保有期間が上限を超えた場合に exit する。',
+      risk_change: '1 trade の損失上限を固定率または ATR 倍率で定義し、連敗時は新規 entry を停止する条件を検証する。',
+      validation_plan: '最大DD、PF、取引回数を比較し、risk 制約が過剰に取引機会を削らないか確認する。',
+      expected_metric_effect: {
+        profit_factor: null,
+        win_rate: null,
+        max_drawdown: '下振れ抑制を狙う。',
+        trade_count: 'risk 制約により減少する可能性がある。',
+      },
+    });
+  }
+
+  if (metrics && (metrics.totalTrades ?? 999) < 30) {
+    pushCandidate({
+      title: 'validation scope を広げる',
+      target_area: 'validation_scope',
+      rationale: `取引回数${metrics.totalTrades ?? '-'}件で、単一条件の成績判断には統計的信頼性が不足しています。`,
+      change_summary: 'strategy logic の変更とは分けて、検証期間、銘柄数、相場局面を広げて再検証する。',
+      entry_change: null,
+      exit_change: null,
+      risk_change: '条件を安易に緩める前に、期間延長と複数銘柄検証で同じ弱点が再現するか確認する。',
+      validation_plan: '期間延長、複数銘柄、bull / bear / range の局面別にPF、勝率、最大DD、取引回数を比較する。',
+      expected_metric_effect: {
+        profit_factor: '過剰最適化かどうかの判定精度を上げる。',
+        win_rate: '局面別の安定性を確認する。',
+        max_drawdown: '悪化局面の再現性を確認する。',
+        trade_count: '検証サンプル増加を狙う。',
+      },
+    });
+  }
+
+  if (metrics && (metrics.netProfit ?? 1) <= 0 && candidates.length < 3) {
+    pushCandidate({
+      title: 'market regime filter を追加する',
+      target_area: 'filter',
+      rationale: `純利益${formatted.netProfit ?? '-'}で、戦略が苦手な地合いに巻き込まれている可能性があります。`,
+      change_summary: '上位足トレンドまたはボラティリティ regime を確認し、苦手局面で entry を抑制する。',
+      entry_change: '上位足の移動平均方向、ADX、またはボラティリティ水準を entry 前の regime filter として追加する。',
+      exit_change: null,
+      risk_change: null,
+      validation_plan: 'regime filter 有無で純利益、PF、最大DD、取引回数を比較する。',
+      expected_metric_effect: {
+        profit_factor: '苦手局面の回避で改善する可能性がある。',
+        win_rate: '地合いによる負け trade の減少を狙う。',
+        max_drawdown: 'トレンド崩れ局面のDD抑制を狙う。',
+        trade_count: 'filter 追加により減少する可能性がある。',
+      },
+    });
+  }
+
+  if (candidates.length === 0) {
+    pushCandidate({
+      title: 'entry / exit / risk を1要素ずつ比較する',
+      target_area: 'filter',
+      rationale: '主要指標だけでは単一の原因を断定できないため、変更箇所を分けて検証する必要があります。',
+      change_summary: 'entry filter、exit trigger、stop / time exit のうち1つだけを変えた version を作る。',
+      entry_change: 'entry trigger に trend または出来高確認を1つ追加する案を検証する。',
+      exit_change: 'exit trigger と time exit の有無を分けて検証する。',
+      risk_change: 'stop loss の基準を固定率または ATR 倍率で明確にする。',
+      validation_plan: '1変更1versionでPF、勝率、最大DD、取引回数を比較する。',
+      expected_metric_effect: {
+        profit_factor: '変更箇所ごとの影響を切り分ける。',
+        win_rate: 'entry 精度の影響を確認する。',
+        max_drawdown: 'risk 条件の影響を確認する。',
+        trade_count: 'filter による減少幅を確認する。',
+      },
+    });
+  }
+
+  return candidates.slice(0, 4);
+}
+
+function renderRuleRefinementCandidateLines(candidates: RuleRefinementCandidate[]): string[] {
+  return candidates.flatMap((candidate, index) => [
+    `- 候補${index + 1}: ${candidate.title}（${candidate.target_area}）`,
+    `  - 理由: ${candidate.rationale}`,
+    `  - 変更概要: ${candidate.change_summary}`,
+    ...(candidate.entry_change ? [`  - entry: ${candidate.entry_change}`] : []),
+    ...(candidate.exit_change ? [`  - exit: ${candidate.exit_change}`] : []),
+    ...(candidate.risk_change ? [`  - risk: ${candidate.risk_change}`] : []),
+    `  - 検証: ${candidate.validation_plan}`,
+  ]);
+}
+
 function extractTextParts(value: unknown): string[] {
   if (typeof value === 'string') {
     const trimmed = value.trim();
@@ -788,6 +1017,7 @@ function renderBacktestBodyMarkdown(
   nextActions: string[],
   keyMetrics: BacktestSummaryOutput['structuredJson']['payload']['key_metrics'],
   overallView: string,
+  ruleRefinementCandidates: RuleRefinementCandidate[] = [],
 ): string {
   const metricLines = [
     ['total trades', keyMetrics.total_trades],
@@ -801,7 +1031,15 @@ function renderBacktestBodyMarkdown(
   const safeStrengths = strengths.length > 0 ? strengths : ['評価できる強みを断定するには追加検証が必要です。'];
   const safeRisks = risks.length > 0 ? risks : ['主要リスクを断定するには材料が不足しています。'];
   const safeNextActions = nextActions.length > 0 ? nextActions : ['追加CSVまたはinternal backtest resultの取込後に再評価してください。'];
-  const improvementHypotheses = safeRisks.slice(0, 4).map((item) => `- ${item} entry / exit / risk 条件のどこに起因するかを切り分けてください。`);
+  const improvementHypotheses =
+    ruleRefinementCandidates.length > 0
+      ? ruleRefinementCandidates
+          .slice(0, 4)
+          .map((item) => `- ${item.title}: ${item.rationale} ${item.change_summary}`)
+      : safeRisks.slice(0, 4).map((item) => `- ${item} entry / exit / risk 条件のどこに起因するかを切り分けてください。`);
+  const refinementLines = ruleRefinementCandidates.length > 0
+    ? renderRuleRefinementCandidateLines(ruleRefinementCandidates)
+    : [overallView];
   return [
     `## ${title}`,
     '',
@@ -824,7 +1062,7 @@ function renderBacktestBodyMarkdown(
     ...safeNextActions.map((item) => `- ${item}`),
     '',
     '### 自然言語ルール改善案',
-    overallView,
+    ...refinementLines,
     '',
     '### Pine修正依頼に入れるべきではない注意',
     '- entry / exit / risk management など strategy logic 自体の変更は、revision_request ではなく自然言語ルール本文に反映してください。',
@@ -866,9 +1104,9 @@ function buildDeterministicBacktestOutput(
     net_profit: context.metrics?.netProfit ?? null,
   };
   const netProfitText = toSigned(context.metrics?.netProfit, 0);
-  const profitFactorText = toSigned(context.metrics?.profitFactor, 2);
-  const winRateText = toSigned(context.metrics?.winRate, 2, 'pt');
-  const maxDrawdownText = toSigned(context.metrics?.maxDrawdown, 2, '%');
+  const profitFactorText = formatNumberValue(context.metrics?.profitFactor, 2);
+  const winRateText = formatNumberValue(context.metrics?.winRate, 2, '%');
+  const maxDrawdownText = formatNumberValue(context.metrics?.maxDrawdown, 2);
   const internalSummaryKind = internalContext?.summaryKind ?? getRecordString(internalContext?.resultSummary, ['kind', 'summary_kind']);
   const internalPeriodFrom = getRecordString(internalContext?.period, ['from', 'start', 'period_from']);
   const internalPeriodTo = getRecordString(internalContext?.period, ['to', 'end', 'period_to']);
@@ -915,9 +1153,15 @@ function buildDeterministicBacktestOutput(
     hasInternalBacktestContext && internalPriceChange !== null
       ? `期間内の価格変化率は ${toSigned(internalPriceChange, 2, '%') ?? '-'} です。`
       : '',
-    hasMetrics && netProfitText ? `純利益は${netProfitText}で、定量的な優位を確認できます。` : '',
-    hasMetrics && profitFactorText ? `Profit Factorは${profitFactorText}で、損益比の把握が可能です。` : '',
-    hasMetrics && winRateText ? `勝率は${winRateText}で、再現性の初期判断材料があります。` : '',
+    hasMetrics && (context.metrics?.netProfit ?? 0) > 0 && netProfitText
+      ? `純利益は${netProfitText}で、定量的な優位を確認できます。`
+      : '',
+    hasMetrics && (context.metrics?.profitFactor ?? 0) > 1 && profitFactorText
+      ? `Profit Factorは${profitFactorText}で、損益比は1を上回っています。`
+      : '',
+    hasMetrics && (context.metrics?.winRate ?? 0) >= 45 && winRateText
+      ? `勝率は${winRateText}で、再現性の初期判断材料があります。`
+      : '',
     context.comparisonDiff?.netProfitDiff !== null && context.comparisonDiff?.netProfitDiff !== undefined
       ? `最新取込は前回比で純利益${toSigned(context.comparisonDiff.netProfitDiff, 0) ?? '-'}です。`
       : '',
@@ -928,7 +1172,7 @@ function buildDeterministicBacktestOutput(
 
   const diagnosis = [
     hasMetrics && (context.metrics?.totalTrades ?? 0) < 30
-      ? `総取引数は${context.metrics?.totalTrades ?? '-'}件で、統計的信頼性はまだ低いです。条件緩和、期間延長、複数銘柄検証を優先してください。`
+      ? `総取引数は${context.metrics?.totalTrades ?? '-'}件で、統計的信頼性はまだ低いです。strategy logic 変更候補と、期間延長・複数銘柄検証のような validation scope 拡張を分けてください。`
       : '',
     hasMetrics && (context.metrics?.profitFactor ?? 0) <= 1
       ? 'Profit Factor が1以下で、損益比が弱い可能性があります。exit、stop、profit taking の設計を見直してください。'
@@ -976,9 +1220,21 @@ function buildDeterministicBacktestOutput(
     tradeSummary.parsedImportCount < 2 ? 'もう1件以上CSVを追加して比較可能な状態にしてください。' : '',
   ].filter(Boolean);
 
-  const combinedRisks = [...diagnosis, ...risks];
+  const combinedRisks = Array.from(new Set([...diagnosis, ...risks]));
+  const ruleRefinementCandidates = buildRuleRefinementCandidates(context, {
+    winRate: winRateText,
+    profitFactor: profitFactorText,
+    maxDrawdown: maxDrawdownText,
+    netProfit: netProfitText,
+  });
   const improvementMemo = [
     'この検証結果をもとに、自然言語ルール本文で entry / exit / risk 条件を分けて改善してください。',
+    ruleRefinementCandidates.length > 0
+      ? `優先候補: ${ruleRefinementCandidates
+          .slice(0, 3)
+          .map((item) => `${item.title}（${item.change_summary}）`)
+          .join(' / ')}`
+      : '',
     diagnosis.length > 0 ? `優先して切り分ける問題: ${diagnosis.slice(0, 3).join(' / ')}` : '',
     nextActions.length > 0 ? `次に試す検証案: ${nextActions.slice(0, 3).join(' / ')}` : '',
     context.strategy?.naturalLanguageRule ? '自然言語ルール本文を修正する場合は、変更点を1つずつ分け、PF・勝率・最大DD・取引回数への影響を比較してください。Pine 修正依頼は compile error や実装上の調整に限定してください。' : '',
@@ -986,7 +1242,16 @@ function buildDeterministicBacktestOutput(
 
   return {
     title,
-    bodyMarkdown: renderBacktestBodyMarkdown(title, conclusion, strengths, combinedRisks, nextActions, keyMetrics, improvementMemo),
+    bodyMarkdown: renderBacktestBodyMarkdown(
+      title,
+      conclusion,
+      strengths,
+      combinedRisks,
+      nextActions,
+      keyMetrics,
+      improvementMemo,
+      ruleRefinementCandidates,
+    ),
     structuredJson: {
       schema_name: 'backtest_review_summary',
       schema_version: '1.0',
@@ -999,6 +1264,7 @@ function buildDeterministicBacktestOutput(
         next_actions: nextActions.length > 0 ? nextActions : ['追加CSVまたはinternal backtest resultの取込後に再評価してください。'],
         key_metrics: keyMetrics,
         overall_view: improvementMemo,
+        rule_refinement_candidates: ruleRefinementCandidates,
       },
     },
     modelName: options.modelName,
@@ -1029,15 +1295,31 @@ function sanitizeRewriteStringList(value: unknown, limit: number): string[] {
     .slice(0, limit);
 }
 
+function buildRuleRewriteCandidateLines(candidates: RuleRefinementCandidate[]): string[] {
+  return candidates.slice(0, 3).flatMap((candidate, index) => {
+    const lines = [
+      `${index + 1}. ${candidate.title}: ${candidate.change_summary}`,
+      candidate.entry_change ? `entry: ${candidate.entry_change}` : '',
+      candidate.exit_change ? `exit: ${candidate.exit_change}` : '',
+      candidate.risk_change ? `risk: ${candidate.risk_change}` : '',
+      `validation: ${candidate.validation_plan}`,
+    ].filter(Boolean);
+    return lines;
+  });
+}
+
 function buildDeterministicNaturalLanguageRuleRewriteOutput(
   context: NaturalLanguageRuleRewriteContext,
   options: { modelName: string; promptVersion: string },
 ): NaturalLanguageRuleRewriteOutput {
-  const baseRule = sanitizeRewriteText(context.baseRule, 1600);
   const memo = sanitizeRewriteText(context.improvementMemo, 1200);
   const nextActions = sanitizeRewriteStringList(context.aiSummary?.nextActions, 5);
   const risks = sanitizeRewriteStringList(context.aiSummary?.risks, 4);
   const overallView = sanitizeRewriteText(context.aiSummary?.overallView, 700);
+  const candidates = Array.isArray(context.aiSummary?.ruleRefinementCandidates)
+    ? context.aiSummary.ruleRefinementCandidates
+    : [];
+  const candidateLines = buildRuleRewriteCandidateLines(candidates);
   const metricLines = [
     context.metrics?.totalTrades !== null && context.metrics?.totalTrades !== undefined
       ? `取引回数は ${context.metrics.totalTrades} 件として、少なすぎる場合は条件緩和または検証期間延長を検討する。`
@@ -1056,6 +1338,7 @@ function buildDeterministicNaturalLanguageRuleRewriteOutput(
       : '',
   ].filter(Boolean);
   const improvementInputs = [
+    ...candidateLines,
     ...metricLines,
     ...nextActions,
     overallView,
@@ -1066,19 +1349,19 @@ function buildDeterministicNaturalLanguageRuleRewriteOutput(
   const lines = [
     `対象市場: ${sanitizeRewriteText(context.market, 40) || '未指定'}`,
     `時間足: ${sanitizeRewriteText(context.timeframe, 40) || '未指定'}`,
-    '前提: long-only の検証候補として、次の Pine 生成に使える単一の自然言語ルール本文にする。',
+    '前提: long-only の検証候補として、次の Pine 生成に使える単一の最新自然言語ルール本文にする。',
     '',
-    '戦略ルール:',
-    baseRule || '現行ルール本文を基準に、entry / exit / risk management を測定可能な条件として定義する。',
+    '戦略定義:',
+    '現行の自然言語ルールをベースに、検証結果で弱かった entry / exit / risk management を見直した最新版として定義する。',
     '',
-    '改善後の条件:',
+    'entry / exit / risk 条件:',
     ...(improvementInputs.length > 0
       ? improvementInputs.map((line) => `- ${line}`)
-      : ['- 検証結果の主要指標を確認し、entry / exit / risk 条件を1つずつ比較できる形にする。']),
+      : ['- entry trigger、exit trigger、stop loss、time exit を1つずつ比較できる形にする。']),
     '',
     'Pine化のための明確化:',
     '- entry trigger、exit trigger、stop loss、time exit、indicator period、threshold を可能な限り具体化する。',
-    '- AI総評や改善履歴の引用ではなく、現在の strategy version を定義する最新ルール本文として扱う。',
+    '- AI総評や改善履歴を追記せず、現在の strategy version を定義する単一の最新ルール本文として扱う。',
     '- 投資助言ではなく、TradingView で再検証するための条件定義に留める。',
   ];
 
@@ -1771,6 +2054,9 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               'When trade count is low, point out weak statistical reliability and suggest condition relaxation, longer periods, or multi-symbol checks.',
               'When PF, win rate, max drawdown, or net profit are weak, connect them to entry, exit, stop loss, profit taking, position management, time exit, or market-regime filters.',
               'Put concrete refinement and retest actions in next_checks. Put natural-language-rule improvement notes in overall_view. Do not frame strategy logic changes as revision_request drafts.',
+              'Return rule_refinement_candidates separately from next_checks. next_checks are validation work; rule_refinement_candidates are changes to consider for the natural language rule.',
+              'Each rule_refinement_candidate must include title, target_area, rationale, change_summary, entry_change, exit_change, risk_change, validation_plan, and expected_metric_effect. At least one of entry_change, exit_change, or risk_change must be concrete and measurable. Do not use abstract text such as just review, compare, or consider.',
+              'Prefer Pine-feasible conditions such as indicator periods, thresholds, stop loss, time exit, volume filter, trend filter, or market-regime filter.',
               'If a strategy natural language rule exists, mention whether entry, exit, or risk management should be reviewed. Do not quote full generated Pine.',
               'Do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, or stack trace.',
               'Do not overstate quality from a short favorable period when long-term metrics disagree.',
@@ -1810,6 +2096,24 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
                 good_points: ['<string>'],
                 concern_points: ['<string>'],
                 next_checks: ['<string>'],
+                rule_refinement_candidates: [
+                  {
+                    title: '<string>',
+                    target_area: '<entry|exit|risk|filter|time_exit|validation_scope>',
+                    rationale: '<string>',
+                    change_summary: '<string>',
+                    entry_change: '<string|null>',
+                    exit_change: '<string|null>',
+                    risk_change: '<string|null>',
+                    validation_plan: '<string>',
+                    expected_metric_effect: {
+                      profit_factor: '<string|null>',
+                      win_rate: '<string|null>',
+                      max_drawdown: '<string|null>',
+                      trade_count: '<string|null>',
+                    },
+                  },
+                ],
                 body_markdown: '<markdown with required natural-language-rule improvement sections>',
                 overall_view: '<natural language rule improvement memo>',
               },
@@ -1875,36 +2179,33 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
       return deterministic;
     }
 
-    const conclusion =
-      typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()
-        ? parsed.conclusion
-        : deterministic.structuredJson.payload.conclusion;
-    const strengths = Array.isArray(parsed?.good_points)
-      ? parsed.good_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-      : deterministic.structuredJson.payload.strengths;
-    const risks = Array.isArray(parsed?.concern_points)
-      ? parsed.concern_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-      : deterministic.structuredJson.payload.risks;
-    const nextActions = Array.isArray(parsed?.next_checks)
-      ? parsed.next_checks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-      : deterministic.structuredJson.payload.next_actions;
-    const title =
-      typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title;
-    const overallView =
-      typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
-        ? parsed.overall_view
-        : deterministic.structuredJson.payload.overall_view;
-    const parsedMarkdown = typeof parsed?.body_markdown === 'string' ? parsed.body_markdown.trim() : '';
+    const conclusion = sanitizeSummaryText(parsed?.conclusion, 500) || deterministic.structuredJson.payload.conclusion;
+    const strengths = sanitizeSummaryStringList(parsed?.good_points, 5);
+    const effectiveStrengths = strengths.length > 0 ? strengths : deterministic.structuredJson.payload.strengths;
+    const risks = sanitizeSummaryStringList(parsed?.concern_points, 5);
+    const effectiveRisks = risks.length > 0 ? risks : deterministic.structuredJson.payload.risks;
+    const nextActions = sanitizeSummaryStringList(parsed?.next_checks, 5);
+    const effectiveNextActions =
+      nextActions.length > 0 ? nextActions : deterministic.structuredJson.payload.next_actions;
+    const title = sanitizeSummaryText(parsed?.title, 160) || deterministic.title;
+    const overallView = sanitizeSummaryText(parsed?.overall_view, 900) || deterministic.structuredJson.payload.overall_view;
+    const ruleRefinementCandidates = sanitizeRuleRefinementCandidates(parsed?.rule_refinement_candidates, 4);
+    const effectiveRuleRefinementCandidates =
+      ruleRefinementCandidates.length > 0
+        ? ruleRefinementCandidates
+        : deterministic.structuredJson.payload.rule_refinement_candidates ?? [];
+    const parsedMarkdown = sanitizeSummaryText(parsed?.body_markdown, 6000);
     const bodyMarkdown = parsedMarkdown && hasBacktestImprovementSections(parsedMarkdown)
       ? parsedMarkdown
       : renderBacktestBodyMarkdown(
           title,
           conclusion,
-          strengths,
-          risks,
-          nextActions,
+          effectiveStrengths,
+          effectiveRisks,
+          effectiveNextActions,
           deterministic.structuredJson.payload.key_metrics,
           overallView,
+          effectiveRuleRefinementCandidates,
         );
 
     return {
@@ -1916,10 +2217,11 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         payload: {
           ...deterministic.structuredJson.payload,
           conclusion,
-          strengths,
-          risks,
-          next_actions: nextActions,
+          strengths: effectiveStrengths,
+          risks: effectiveRisks,
+          next_actions: effectiveNextActions,
           overall_view: overallView,
+          rule_refinement_candidates: effectiveRuleRefinementCandidates,
         },
       },
     };
@@ -1940,6 +2242,8 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         'Return strict JSON only with natural_language_rule, warnings, and assumptions.',
         'The natural_language_rule must be a single current strategy definition for the next Pine generation.',
         'The natural_language_rule must materially differ from saved_natural_language_rule by incorporating the improvement memo or backtest findings; do not return the saved rule unchanged.',
+        'If ai_summary_context.ruleRefinementCandidates exists, select one or combine compatible candidates and rewrite the rule around concrete entry, exit, or risk changes.',
+        'Do not keep the saved rule and append the candidate list; produce one clean latest rule body.',
         'Do not append improvement history, AI summary quotes, or explanatory review notes to the rule.',
         'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
         'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',
@@ -2345,6 +2649,8 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               'Rewrite a strategy natural-language rule as strict JSON.',
               'The output natural_language_rule must be a single current strategy definition for the next Pine generation.',
               'It must materially differ from saved_natural_language_rule by incorporating the improvement memo or backtest findings; do not return the saved rule unchanged.',
+              'If ai_summary_context.ruleRefinementCandidates exists, select one or combine compatible candidates and rewrite the rule around concrete entry, exit, or risk changes.',
+              'Do not keep the saved rule and append the candidate list; produce one clean latest rule body.',
               'Do not append improvement history, AI summary quotes, review notes, URLs, citations, or raw artifacts.',
               'Make entry, exit, risk management, indicator periods, thresholds, stop loss, and time exit measurable where possible.',
               'Respect market and timeframe context, avoid overfitting, and do not give investment advice.',
@@ -2627,7 +2933,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content:
-              'Generate a concise backtest review summary as strict JSON for strategy refinement. Keep schema v1.0 compatible. body_markdown must include Japanese sections: 概要, 主要メトリクス, 成績評価, 問題の切り分け, 改善仮説, 自然言語ルール改善案, Pine修正依頼に入れるべきではない注意, 次に試す検証案, 注意点. Connect weak trade count, PF, win rate, drawdown, and net profit to entry, exit, stop, profit taking, position management, time exit, or market-regime hypotheses. Put concrete retest actions in next_checks and natural-language-rule improvement notes in overall_view. Do not frame strategy logic changes as revision_request drafts. Do not give buy/sell recommendations and do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, stack trace, or full generated Pine.',
+              'Generate a concise backtest review summary as strict JSON for strategy refinement. Keep schema v1.0 compatible. body_markdown must include Japanese sections: 概要, 主要メトリクス, 成績評価, 問題の切り分け, 改善仮説, 自然言語ルール改善案, Pine修正依頼に入れるべきではない注意, 次に試す検証案, 注意点. Connect weak trade count, PF, win rate, drawdown, and net profit to entry, exit, stop, profit taking, position management, time exit, or market-regime filters. Put validation work in next_checks and concrete natural-language-rule changes in rule_refinement_candidates. Each candidate must include target_area, rationale, change_summary, validation_plan, expected_metric_effect, and at least one concrete entry_change, exit_change, or risk_change. Avoid abstract text such as just review or compare. Do not frame strategy logic changes as revision_request drafts. Do not give buy/sell recommendations and do not include raw CSV, raw import text, raw prompt, provider response, endpoint, model value, secret, token, local path, stack trace, URLs, citations, or full generated Pine.',
           },
           {
             role: 'user',
@@ -2661,6 +2967,24 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
                 good_points: ['<string>'],
                 concern_points: ['<string>'],
                 next_checks: ['<string>'],
+                rule_refinement_candidates: [
+                  {
+                    title: '<string>',
+                    target_area: '<entry|exit|risk|filter|time_exit|validation_scope>',
+                    rationale: '<string>',
+                    change_summary: '<string>',
+                    entry_change: '<string|null>',
+                    exit_change: '<string|null>',
+                    risk_change: '<string|null>',
+                    validation_plan: '<string>',
+                    expected_metric_effect: {
+                      profit_factor: '<string|null>',
+                      win_rate: '<string|null>',
+                      max_drawdown: '<string|null>',
+                      trade_count: '<string|null>',
+                    },
+                  },
+                ],
                 body_markdown: '<markdown with required natural-language-rule improvement sections>',
                 overall_view: '<natural language rule improvement memo>',
               },
@@ -2687,36 +3011,34 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
 
     try {
       const parsed = JSON.parse(content);
-      const title =
-        typeof parsed?.title === 'string' && parsed.title.trim() ? parsed.title : deterministic.title;
-      const conclusion =
-        typeof parsed?.conclusion === 'string' && parsed.conclusion.trim()
-          ? parsed.conclusion
-          : deterministic.structuredJson.payload.conclusion;
-      const strengths = Array.isArray(parsed?.good_points)
-        ? parsed.good_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-        : deterministic.structuredJson.payload.strengths;
-      const risks = Array.isArray(parsed?.concern_points)
-        ? parsed.concern_points.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-        : deterministic.structuredJson.payload.risks;
-      const nextActions = Array.isArray(parsed?.next_checks)
-        ? parsed.next_checks.filter((item: unknown) => typeof item === 'string').slice(0, 5)
-        : deterministic.structuredJson.payload.next_actions;
+      const title = sanitizeSummaryText(parsed?.title, 160) || deterministic.title;
+      const conclusion = sanitizeSummaryText(parsed?.conclusion, 500) || deterministic.structuredJson.payload.conclusion;
+      const strengths = sanitizeSummaryStringList(parsed?.good_points, 5);
+      const effectiveStrengths = strengths.length > 0 ? strengths : deterministic.structuredJson.payload.strengths;
+      const risks = sanitizeSummaryStringList(parsed?.concern_points, 5);
+      const effectiveRisks = risks.length > 0 ? risks : deterministic.structuredJson.payload.risks;
+      const nextActions = sanitizeSummaryStringList(parsed?.next_checks, 5);
+      const effectiveNextActions =
+        nextActions.length > 0 ? nextActions : deterministic.structuredJson.payload.next_actions;
       const overallView =
-        typeof parsed?.overall_view === 'string' && parsed.overall_view.trim()
-          ? parsed.overall_view
-          : deterministic.structuredJson.payload.overall_view;
-      const parsedMarkdown = typeof parsed?.body_markdown === 'string' ? parsed.body_markdown.trim() : '';
+        sanitizeSummaryText(parsed?.overall_view, 900) || deterministic.structuredJson.payload.overall_view;
+      const ruleRefinementCandidates = sanitizeRuleRefinementCandidates(parsed?.rule_refinement_candidates, 4);
+      const effectiveRuleRefinementCandidates =
+        ruleRefinementCandidates.length > 0
+          ? ruleRefinementCandidates
+          : deterministic.structuredJson.payload.rule_refinement_candidates ?? [];
+      const parsedMarkdown = sanitizeSummaryText(parsed?.body_markdown, 6000);
       const bodyMarkdown = parsedMarkdown && hasBacktestImprovementSections(parsedMarkdown)
         ? parsedMarkdown
         : renderBacktestBodyMarkdown(
             title,
             conclusion,
-            strengths,
-            risks,
-            nextActions,
+            effectiveStrengths,
+            effectiveRisks,
+            effectiveNextActions,
             deterministic.structuredJson.payload.key_metrics,
             overallView,
+            effectiveRuleRefinementCandidates,
           );
 
       return {
@@ -2728,10 +3050,11 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
           payload: {
             ...deterministic.structuredJson.payload,
             conclusion,
-            strengths,
-            risks,
-            next_actions: nextActions,
+            strengths: effectiveStrengths,
+            risks: effectiveRisks,
+            next_actions: effectiveNextActions,
             overall_view: overallView,
+            rule_refinement_candidates: effectiveRuleRefinementCandidates,
           },
         },
       };

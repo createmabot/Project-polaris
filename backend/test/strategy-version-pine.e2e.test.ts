@@ -179,6 +179,24 @@ function createRuntime(): Runtime {
             risks: ['最大DDが大きい'],
             strengths: ['検証素材は利用可能'],
             key_metrics: { trade_count: 18, profit_factor: 0.92 },
+            rule_refinement_candidates: [
+              {
+                title: 'entry filter強化',
+                target_area: 'entry',
+                rationale: '勝率とPFが弱いため、entry条件を明確化する',
+                change_summary: '出来高filterとtrend filterをentry条件に追加する',
+                entry_change: '出来高が20日平均を上回り、終値が25日移動平均を上回る場合のみentryする',
+                exit_change: null,
+                risk_change: '最大DD抑制のため5% stop lossを比較する',
+                validation_plan: '現行ルールとentry filter追加版を同じ期間で比較する',
+                expected_metric_effect: {
+                  profit_factor: '改善候補',
+                  win_rate: '改善候補',
+                  max_drawdown: '低下候補',
+                  trade_count: '減少候補',
+                },
+              },
+            ],
           },
         },
         generatedAt: now,
@@ -579,6 +597,13 @@ describe('strategy version pine endpoints', () => {
       aiSummary: {
         nextActions: ['entry filterを強化し、損切り幅を比較する'],
         overallView: '自然言語ルール本文でentryとriskを明確化する',
+        ruleRefinementCandidates: [
+          expect.objectContaining({
+            title: 'entry filter強化',
+            entry_change: expect.stringContaining('出来高'),
+            risk_change: expect.stringContaining('stop loss'),
+          }),
+        ],
       },
     });
     expect(runtime.versions.get('ver-1')?.naturalLanguageRule).toBe(originalRule);

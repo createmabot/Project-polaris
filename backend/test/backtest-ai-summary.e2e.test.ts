@@ -322,6 +322,24 @@ vi.mock('../src/ai/home-ai-service', () => ({
                   net_profit: null,
                 },
                 overall_view: '自然言語ルール本文で entry / exit / risk 条件を見直す。',
+                rule_refinement_candidates: [
+                  {
+                    title: 'entry filter見直し',
+                    target_area: 'entry',
+                    rationale: 'context不足時もentry条件の検証観点を残す',
+                    change_summary: 'entry / exit / risk 条件を分けて比較する',
+                    entry_change: 'entry triggerを測定可能な条件にする',
+                    exit_change: 'exit triggerを明確化する',
+                    risk_change: 'stop loss候補を比較する',
+                    validation_plan: '条件を1つずつ変えた比較検証を行う',
+                    expected_metric_effect: {
+                      profit_factor: null,
+                      win_rate: null,
+                      max_drawdown: null,
+                      trade_count: null,
+                    },
+                  },
+                ],
               },
             },
             modelName: 'stub-backtest-v1',
@@ -394,6 +412,24 @@ vi.mock('../src/ai/home-ai-service', () => ({
                 net_profit: 340000,
               },
               overall_view: 'entry / exit / risk 条件を改善候補として検証する。',
+              rule_refinement_candidates: [
+                {
+                  title: 'entry filter強化',
+                  target_area: 'entry',
+                  rationale: '勝率とPFの改善余地を切り分ける',
+                  change_summary: 'entry filter と stop loss 条件を明確化する',
+                  entry_change: 'entry時に出来高filterを追加する',
+                  exit_change: 'exit条件を移動平均割れとtime exitで比較する',
+                  risk_change: '最大DD抑制のためstop lossを比較する',
+                  validation_plan: '現行ルールとentry filter追加版を同一期間で比較する',
+                  expected_metric_effect: {
+                    profit_factor: '改善候補',
+                    win_rate: '改善候補',
+                    max_drawdown: '低下候補',
+                    trade_count: '減少候補',
+                  },
+                },
+              ],
             },
           },
           modelName: 'gemma4-ns',
@@ -463,6 +499,19 @@ describe('backtest ai-summary routes', () => {
     expect((runtime.aiSummaries[0].structuredJson?.payload as any)?.next_actions).toEqual(
       expect.arrayContaining(['entry filter と exit 条件を分けて再検証する']),
     );
+    const candidates = (runtime.aiSummaries[0].structuredJson?.payload as any)?.rule_refinement_candidates;
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: expect.any(String),
+          change_summary: expect.stringMatching(/entry|exit|risk|stop|filter/i),
+          validation_plan: expect.any(String),
+        }),
+      ]),
+    );
+    expect(
+      candidates.some((candidate: any) => candidate.entry_change || candidate.exit_change || candidate.risk_change),
+    ).toBe(true);
     const serializedSummary = JSON.stringify(runtime.aiSummaries[0]);
     expect(serializedSummary).not.toContain('raw CSV');
     expect(serializedSummary).not.toContain('raw import text');
