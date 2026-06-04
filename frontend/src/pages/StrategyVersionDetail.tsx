@@ -274,12 +274,37 @@ function buildSourceBacktestAiSummaryMemoText(aiReview: BacktestDetailData['ai_r
   if (aiReview.status !== 'available') return '';
   const root = asRecord(aiReview.structured_json);
   const payload = asRecord(root?.payload);
+  const ruleRefinementCandidates = Array.isArray(payload?.rule_refinement_candidates)
+    ? payload.rule_refinement_candidates
+        .map((item) => {
+          const record = asRecord(item);
+          if (!record) return '';
+          const title = compactSafeText(typeof record.title === 'string' ? record.title : null, 120);
+          const change = compactSafeText(typeof record.change_summary === 'string' ? record.change_summary : null, 260);
+          const entry = compactSafeText(typeof record.entry_change === 'string' ? record.entry_change : null, 220);
+          const exit = compactSafeText(typeof record.exit_change === 'string' ? record.exit_change : null, 220);
+          const risk = compactSafeText(typeof record.risk_change === 'string' ? record.risk_change : null, 220);
+          const validation = compactSafeText(typeof record.validation_plan === 'string' ? record.validation_plan : null, 220);
+          const parts = [
+            title ? `候補: ${title}` : '',
+            change ? `変更: ${change}` : '',
+            entry ? `entry: ${entry}` : '',
+            exit ? `exit: ${exit}` : '',
+            risk ? `risk: ${risk}` : '',
+            validation ? `検証: ${validation}` : '',
+          ].filter(Boolean);
+          return parts.join(' / ');
+        })
+        .filter(Boolean)
+        .slice(0, 3)
+    : [];
   const nextActions = extractStringList(payload?.next_actions, 5);
   const overallView = compactSafeText(typeof payload?.overall_view === 'string' ? payload.overall_view : null, 800);
   const risks = extractStringList(payload?.risks, 4);
   const strengths = extractStringList(payload?.strengths, 3);
 
   const structuredLines = [
+    ruleRefinementCandidates.length > 0 ? `AI summary rule refinement candidates: ${ruleRefinementCandidates.join(' / ')}` : '',
     nextActions.length > 0 ? `AI summary next actions: ${nextActions.join(' / ')}` : '',
     overallView ? `AI summary improvement memo: ${overallView}` : '',
     risks.length > 0 ? `AI summary risks: ${risks.join(' / ')}` : '',
