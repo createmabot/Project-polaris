@@ -233,9 +233,13 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.structuredJson.payload.risks.join(' ')).toContain('統計的信頼性');
     expect(result.structuredJson.payload.risks.join(' ')).toContain('Profit Factor');
     expect(result.structuredJson.payload.risks.join(' ')).toContain('最大ドローダウン');
-    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('条件緩和');
-    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('損切り幅');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('候補1');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('validation scope');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('検証期間延長');
+    expect(result.structuredJson.payload.next_actions.join(' ')).toContain('stop loss');
+    expect(result.structuredJson.payload.next_actions.join(' ')).not.toContain('条件緩和、検証期間延長、複数銘柄');
     expect(result.structuredJson.payload.overall_view).toContain('entry / exit / risk');
+    expect(result.structuredJson.payload.rule_refinement_candidates?.[0]?.entry_change).not.toContain('、または');
     expect(JSON.stringify(result)).not.toContain('raw CSV');
     expect(JSON.stringify(result)).not.toContain('raw import text');
   });
