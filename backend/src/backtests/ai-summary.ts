@@ -371,6 +371,7 @@ export async function generateBacktestSummaryWithJob(
   options: {
     trigger?: BacktestSummaryJobTrigger;
     sourceImportId?: string | null;
+    forceRegenerate?: boolean;
   } = {},
 ): Promise<{ jobId: string; summary: BacktestAiReviewView }> {
   const trigger = options.trigger ?? 'manual';
@@ -414,7 +415,7 @@ export async function generateBacktestSummaryWithJob(
   });
 
   try {
-    const existing = await findExistingBacktestSummary(input);
+    const existing = options.forceRegenerate ? null : await findExistingBacktestSummary(input);
     if (existing) {
       await prisma.aiJob.update({
         where: { id: job.id },

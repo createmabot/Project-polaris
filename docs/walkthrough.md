@@ -130,8 +130,8 @@ pnpm run dev
 ## 9. Backtest AI 総評生成
 
 1. CSV import 成功直後の自動生成結果がある場合は、`GET /api/backtests/:backtestId` の `ai_review` で確認する。
-2. 未生成または再生成したい場合は、`BacktestDetail` から AI 総評生成を実行する。
-3. `POST /api/backtests/:backtestId/summary/generate` が成功し、`ai_jobs` が `queued -> running -> succeeded|failed` で遷移することを確認する。
+2. 未生成の場合は `AI総評を生成`、保存済み summary を作り直したい場合は `AI総評を再生成` を `BacktestDetail` から明示クリックする。
+3. 再生成では `POST /api/backtests/:backtestId/summary/generate` に `force=true` が渡り、同一 input snapshot の保存済み summary があっても新しい manual job / summary が作成されることを確認する。`force` なしの通常生成では duplicate guard が維持される。
 4. `GET /api/backtests/:backtestId` の `ai_review` を確認する。
    - `status=available|unavailable`
    - `title`
