@@ -1189,6 +1189,19 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
                 <KeyValueRow label='change'>{refinementCandidateData.refinement_candidate.change_summary}</KeyValueRow>
                 <KeyValueRow label='validation'>{refinementCandidateData.refinement_candidate.validation_plan}</KeyValueRow>
               </KeyValueList>
+              {refinementCandidateData.refinement_candidate.session_id ? (
+                <div className='mt-3 rounded-md border border-amber-200 bg-white p-3'>
+                  <TextLink
+                    href={`/strategy-optimization-sessions/${encodeURIComponent(refinementCandidateData.refinement_candidate.session_id)}`}
+                    className='font-semibold text-amber-900'
+                  >
+                    Optimization Session を開く
+                  </TextLink>
+                  <p className='mb-0 mt-1 text-slate-600'>
+                    この候補を含む改善探索 session で、base version と候補 version の検証結果を比較できます。
+                  </p>
+                </div>
+              ) : null}
               <p className='mb-0 mt-2 text-slate-600'>
                 LLM rewrite ではこの候補を優先して、単一の自然言語ルール本文 draft を作ります。
               </p>
