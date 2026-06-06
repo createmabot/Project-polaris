@@ -238,10 +238,121 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(result.structuredJson.payload.next_actions.join(' ')).toContain('検証期間延長');
     expect(result.structuredJson.payload.next_actions.join(' ')).toContain('stop loss');
     expect(result.structuredJson.payload.next_actions.join(' ')).not.toContain('条件緩和、検証期間延長、複数銘柄');
+    expect(JSON.stringify(result)).not.toContain('取込間の最悪純利益');
+    expect(JSON.stringify(result)).not.toContain('期間依存の振れ幅があります');
+    expect(JSON.stringify(result)).toContain('複数CSV比較がないため、期間依存の評価は保留');
     expect(result.structuredJson.payload.overall_view).toContain('entry / exit / risk');
     expect(result.structuredJson.payload.rule_refinement_candidates?.[0]?.entry_change).not.toContain('、または');
     expect(JSON.stringify(result)).not.toContain('raw CSV');
     expect(JSON.stringify(result)).not.toContain('raw import text');
+  });
+
+  it('keeps cross-import net profit comparison only when multiple parsed imports exist', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: 'not json',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generateBacktestSummary({
+      ...createBacktestContext(),
+      tradeSummary: {
+        parsedImportCount: 2,
+        averageTotalTrades: 12,
+        averageWinRate: 42,
+        averageProfitFactor: 0.92,
+        averageNetProfit: -50000,
+        bestNetProfit: 100000,
+        worstNetProfit: -200000,
+      },
+      importParsedSummaries: [
+        {
+          importId: 'imp-1',
+          fileName: 'a.csv',
+          createdAt: '2026-04-01T00:00:00.000Z',
+          totalTrades: 10,
+          winRate: 45,
+          profitFactor: 1.1,
+          maxDrawdown: -10,
+          netProfit: 100000,
+          periodFrom: '2026-01-01',
+          periodTo: '2026-03-31',
+        },
+        {
+          importId: 'imp-2',
+          fileName: 'b.csv',
+          createdAt: '2026-04-02T00:00:00.000Z',
+          totalTrades: 14,
+          winRate: 39,
+          profitFactor: 0.74,
+          maxDrawdown: -18,
+          netProfit: -200000,
+          periodFrom: '2026-04-01',
+          periodTo: '2026-06-30',
+        },
+      ],
+    });
+
+    const serialized = JSON.stringify(result);
+    expect(serialized).toContain('取込間の最悪純利益');
+    expect(serialized).toContain('期間依存の振れ幅があります');
+    expect(serialized).not.toContain('複数CSV比較がないため、期間依存の評価は保留');
+  });
+
+  it('connects MACD strategy refinement candidates to the source indicator', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: 'not json',
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generateBacktestSummary({
+      ...createBacktestContext(),
+      title: 'MACDヒストグラム・モメンタム戦略 / CSV import',
+      metrics: {
+        totalTrades: 45,
+        winRate: 38,
+        profitFactor: 1.08,
+        maxDrawdown: -12,
+        netProfit: 80000,
+        periodFrom: '2026-01-01',
+        periodTo: '2026-03-31',
+      },
+      strategy: {
+        strategyId: 'st-macd',
+        strategyVersionId: 'ver-macd',
+        naturalLanguageRule: 'MACD histogram momentum long entry when histogram increases',
+        generatedPine: 'strategy("should not be quoted")',
+      },
+    });
+
+    const candidates = result.structuredJson.payload.rule_refinement_candidates ?? [];
+    const entryCandidate = candidates.find((candidate) => candidate.target_area === 'entry');
+    expect(entryCandidate?.rationale).toContain('MACDヒストグラム');
+    expect(entryCandidate?.change_summary).toContain('MACDヒストグラム');
+    expect(entryCandidate?.entry_change).toContain('MACDヒストグラム');
+    expect(entryCandidate?.entry_change).toContain('25日SMA');
+    expect(entryCandidate?.entry_change).toContain('20日平均');
+    expect(entryCandidate?.entry_change).not.toContain('、または');
+    expect(JSON.stringify(result)).not.toContain('strategy("should not be quoted")');
+    expect(JSON.stringify(result)).not.toContain('raw prompt');
+    expect(JSON.stringify(result)).not.toContain('endpoint');
   });
 
   it('does not quote unsafe natural language rule text in deterministic backtest review', async () => {

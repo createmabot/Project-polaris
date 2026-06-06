@@ -714,6 +714,9 @@ function inferBacktestMetricKey(text: string): string {
   const normalized = text.toLowerCase();
   const candidateMatch = text.match(/候補\d+/);
   if (candidateMatch) return candidateMatch[0];
+  if (/複数csv|csv比較|取込間|期間依存/.test(normalized)) {
+    return 'csv_comparison';
+  }
   if (/総取引数|取引回数|trade count|total trades|統計的信頼性|validation scope|期間延長|複数銘柄/.test(text) || normalized.includes('trade_count')) {
     return 'trade_count';
   }
@@ -806,11 +809,55 @@ function clarifyRuleChangeText(value: string | null): string | null {
     .trim();
 }
 
+type StrategyIndicatorHint = {
+  key: 'macd' | 'rsi' | 'moving_average';
+  label: string;
+  rationaleContext: string;
+  changeContext: string;
+  entryCondition: string;
+};
+
+function detectStrategyIndicatorHint(context: BacktestSummaryContext): StrategyIndicatorHint | null {
+  const source = `${context.title ?? ''} ${context.strategy?.naturalLanguageRule ?? ''}`.toLowerCase();
+  if (/macd|ｍａｃｄ|ヒストグラム|histogram/.test(source)) {
+    return {
+      key: 'macd',
+      label: 'MACDヒストグラム',
+      rationaleContext: '元戦略のMACDヒストグラム条件は維持しつつ、低品質なentryを減らす追加filterが必要です。',
+      changeContext: 'MACDヒストグラムの増加条件を維持したうえで、trend / volume filter を追加する。',
+      entryCondition:
+        '元条件: MACDヒストグラムがプラス圏である。追加確認: MACDヒストグラムが前日比で増加している。追加filter: 終値が25日SMAを上回る。追加filter: 出来高が20日平均以上である。',
+    };
+  }
+  if (/rsi|ＲＳＩ/.test(source)) {
+    return {
+      key: 'rsi',
+      label: 'RSI',
+      rationaleContext: '元戦略のRSI反転条件は維持しつつ、ノイズの大きいentryを減らす追加filterが必要です。',
+      changeContext: 'RSI の反転条件を維持したうえで、trend / volume filter を追加する。',
+      entryCondition:
+        '元条件: RSI の反転条件を維持する。追加filter: 終値が主要移動平均を上回る。追加filter: 出来高が直近平均以上である。',
+    };
+  }
+  if (/sma|移動平均|moving average|crossover|クロス|ゴールデンクロス|デッドクロス/.test(source)) {
+    return {
+      key: 'moving_average',
+      label: '移動平均',
+      rationaleContext: '元戦略の移動平均条件は維持しつつ、トレンド継続を確認する追加filterが必要です。',
+      changeContext: '移動平均 crossover 条件を維持したうえで、volume / trend continuation filter を追加する。',
+      entryCondition:
+        '元条件: 移動平均 crossover 条件を維持する。追加filter: 出来高が直近平均以上である。追加filter: 終値が短期移動平均を上回って推移している。',
+    };
+  }
+  return null;
+}
+
 function buildRuleRefinementCandidates(
   context: BacktestSummaryContext,
   formatted: { winRate: string | null; profitFactor: string | null; maxDrawdown: string | null; netProfit: string | null },
 ): RuleRefinementCandidate[] {
   const metrics = context.metrics;
+  const indicatorHint = detectStrategyIndicatorHint(context);
   const candidates: RuleRefinementCandidate[] = [];
   const pushCandidate = (candidate: RuleRefinementCandidate) => {
     if (candidates.some((item) => item.target_area === candidate.target_area || item.title === candidate.title)) return;
@@ -821,10 +868,16 @@ function buildRuleRefinementCandidates(
     pushCandidate({
       title: 'entry filter を強化する',
       target_area: 'entry',
-      rationale: `勝率${formatted.winRate ?? '-'}で、entry trigger のノイズが大きい可能性があります。`,
-      change_summary: 'entry に trend / volume / market regime の確認条件を1つ追加し、低品質なシグナルを減らす。',
+      rationale: indicatorHint
+        ? `勝率${formatted.winRate ?? '-'}で、entry trigger のノイズが大きい可能性があります。${indicatorHint.rationaleContext}`
+        : `勝率${formatted.winRate ?? '-'}で、entry trigger のノイズが大きい可能性があります。`,
+      change_summary: indicatorHint
+        ? indicatorHint.changeContext
+        : 'entry に trend / volume / market regime の確認条件を1つ追加し、低品質なシグナルを減らす。',
       entry_change:
-        'entry 条件を次のように明確化する。必須条件: 終値が主要移動平均を上回る。追加filter: 出来高が直近平均以上である。代替version: 上位足トレンドが上向きの場合だけを別versionで検証する。',
+        indicatorHint
+          ? `entry 条件を次のように明確化する。${indicatorHint.entryCondition} 代替version: 上位足トレンドが上向きの場合だけを別versionで検証する。`
+          : 'entry 条件を次のように明確化する。必須条件: 終値が主要移動平均を上回る。追加filter: 出来高が直近平均以上である。代替version: 上位足トレンドが上向きの場合だけを別versionで検証する。',
       exit_change: null,
       risk_change: null,
       validation_plan: 'entry filter 追加前後で勝率、PF、取引回数を比較し、取引回数が過度に減らないか確認する。',
@@ -902,8 +955,12 @@ function buildRuleRefinementCandidates(
       title: 'market regime filter を追加する',
       target_area: 'filter',
       rationale: `純利益${formatted.netProfit ?? '-'}で、戦略が苦手な地合いに巻き込まれている可能性があります。`,
-      change_summary: '上位足トレンドまたはボラティリティ regime を確認し、苦手局面で entry を抑制する。',
-      entry_change: '上位足の移動平均方向、ADX、またはボラティリティ水準を entry 前の regime filter として追加する。',
+      change_summary: indicatorHint
+        ? `${indicatorHint.label} 条件を維持したうえで、上位足トレンドまたはボラティリティ regime を確認し、苦手局面で entry を抑制する。`
+        : '上位足トレンドとボラティリティ regime を確認し、苦手局面で entry を抑制する。',
+      entry_change: indicatorHint
+        ? `元条件: ${indicatorHint.label} の主要entry条件を維持する。追加filter: 上位足の移動平均方向が上向きである。追加filter: ADX が事前定義した閾値以上である。代替version: ボラティリティ水準filterをADXの代わりに使う。`
+        : 'entry 前の regime filter を追加する。条件1: 上位足の移動平均方向が上向きである。条件2: ADX が事前定義した閾値以上である。代替version: ボラティリティ水準filterをADXの代わりに使う。',
       exit_change: null,
       risk_change: null,
       validation_plan: 'regime filter 有無で純利益、PF、最大DD、取引回数を比較する。',
@@ -1197,6 +1254,10 @@ function buildDeterministicBacktestOutput(
       return values.length > 0 ? Math.min(...values) : null;
     })(),
   };
+  const hasMultipleParsedImports =
+    (tradeSummary.parsedImportCount ?? 0) > 1 || context.importParsedSummaries.length > 1;
+  const hasAnyParsedImport =
+    (tradeSummary.parsedImportCount ?? 0) > 0 || context.importParsedSummaries.length > 0;
 
   const conclusion = insufficientContext
     ? '入力素材が不足しているため、総評は暫定です。最低1件の解析済みCSVまたはinternal backtest resultを追加して再評価してください。'
@@ -1267,8 +1328,11 @@ function buildDeterministicBacktestOutput(
     hasInternalBacktestContext && internalRange !== null && internalRange > 30
       ? `期間内レンジは ${toSigned(internalRange, 2, '%') ?? '-'} で、ボラティリティ依存を確認してください。`
       : '',
-    tradeSummary.worstNetProfit !== null
+    hasMultipleParsedImports && tradeSummary.worstNetProfit !== null
       ? `取込間の最悪純利益は${toSigned(tradeSummary.worstNetProfit, 0) ?? '-'}で、期間依存の振れ幅があります。`
+      : '',
+    hasAnyParsedImport && !hasMultipleParsedImports
+      ? '複数CSV比較がないため、期間依存の評価は保留です。'
       : '',
     insufficientContext ? '解析済み素材が不足しており、結論の信頼度は低いです。' : '',
   ].filter(Boolean), 4);
