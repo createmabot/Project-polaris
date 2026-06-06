@@ -2,7 +2,13 @@ import { type ReactNode, useState } from 'react';
 import useSWR from 'swr';
 import { Link, useLocation } from 'wouter';
 import { postApi, swrFetcher } from '../api/client';
-import { BacktestComparisonData, BacktestDetailData, StrategyVersionData } from '../api/types';
+import {
+  BacktestComparisonData,
+  BacktestDetailData,
+  StrategyOptimizationSessionData,
+  StrategyRefinementCandidateCreateVersionData,
+  StrategyVersionData,
+} from '../api/types';
 import AppLayout from '../components/layout/AppLayout';
 import PageHeader from '../components/layout/PageHeader';
 import Button from '../components/ui/Button';
@@ -79,6 +85,69 @@ function aiReviewAutoEnqueueDescription(isInternalBacktestReport: boolean): stri
     return 'internal backtest report は、新規 report conversion 完了直後に AI summary 自動生成の対象です。既存 report を返す再実行では起動しません。';
   }
   return 'CSV import report は、parse_status=parsed になった直後に AI summary 自動生成の対象です。parse failed import は対象外です。';
+}
+
+type AiRuleRefinementCandidate = {
+  title: string;
+  target_area: string;
+  rationale: string;
+  change_summary: string;
+  entry_change: string | null;
+  exit_change: string | null;
+  risk_change: string | null;
+  validation_plan: string;
+  expected_metric_effect?: {
+    profit_factor?: string | null;
+    win_rate?: string | null;
+    max_drawdown?: string | null;
+    trade_count?: string | null;
+  };
+};
+
+function safeCandidateText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  const unsafe =
+    /(https?:\/\/|file:\/\/|localhost|127\.0\.0\.1|::1|\/api\/|[a-z]:\\|\/users\/|\/home\/|endpoint|model|secret|token|api[_-]?key|password|credential|stack trace|traceback|raw prompt|raw csv|raw import|raw pine|provider response)/i;
+  return unsafe.test(normalized) ? null : normalized;
+}
+
+function extractRuleRefinementCandidates(structuredJson: Record<string, unknown> | null | undefined): AiRuleRefinementCandidate[] {
+  const payload = structuredJson?.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+  const candidates = (payload as { rule_refinement_candidates?: unknown }).rule_refinement_candidates;
+  if (!Array.isArray(candidates)) return [];
+  return candidates
+    .map((item): AiRuleRefinementCandidate | null => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
+      const source = item as Record<string, unknown>;
+      const title = safeCandidateText(source.title);
+      const rationale = safeCandidateText(source.rationale);
+      const changeSummary = safeCandidateText(source.change_summary);
+      if (!title || !rationale || !changeSummary) return null;
+      const expected = source.expected_metric_effect && typeof source.expected_metric_effect === 'object' && !Array.isArray(source.expected_metric_effect)
+        ? source.expected_metric_effect as Record<string, unknown>
+        : {};
+      return {
+        title,
+        target_area: safeCandidateText(source.target_area) ?? 'filter',
+        rationale,
+        change_summary: changeSummary,
+        entry_change: safeCandidateText(source.entry_change),
+        exit_change: safeCandidateText(source.exit_change),
+        risk_change: safeCandidateText(source.risk_change),
+        validation_plan: safeCandidateText(source.validation_plan) ?? '元versionと主要指標を比較します。',
+        expected_metric_effect: {
+          profit_factor: safeCandidateText(expected.profit_factor),
+          win_rate: safeCandidateText(expected.win_rate),
+          max_drawdown: safeCandidateText(expected.max_drawdown),
+          trade_count: safeCandidateText(expected.trade_count),
+        },
+      };
+    })
+    .filter((item): item is AiRuleRefinementCandidate => item !== null)
+    .slice(0, 4);
 }
 
 function aiSummaryJobTriggerLabel(trigger: string | null | undefined): string {
@@ -434,6 +503,74 @@ function ReportAiSummaryCard({ title, report }: { title: string; report: ReportW
   );
 }
 
+function RuleRefinementCandidatesSection({
+  candidates,
+  isAiReviewAvailable,
+  creatingCandidateIndex,
+  createdCandidateLinks,
+  candidateCreateError,
+  onCreateCandidateVersion,
+}: {
+  candidates: AiRuleRefinementCandidate[];
+  isAiReviewAvailable: boolean;
+  creatingCandidateIndex: number | null;
+  createdCandidateLinks: Record<number, string>;
+  candidateCreateError: string | null;
+  onCreateCandidateVersion: (candidateIndex: number) => void | Promise<void>;
+}) {
+  return (
+    <SectionCard title="改善候補">
+      <p className="mt-0 text-sm text-slate-600">
+        AI総評に含まれる rule_refinement_candidates を read-only に表示します。表示だけでは clone / rewrite / Pine生成 / backtest は実行しません。
+      </p>
+      {candidateCreateError ? <InlineNotice tone="danger" className="mb-3">{candidateCreateError}</InlineNotice> : null}
+      {candidates.length === 0 ? (
+        <EmptyState title={isAiReviewAvailable ? '改善候補はありません。' : 'AI総評が未生成です。'}>
+          <p className="m-0 text-sm text-slate-600">
+            改善候補が必要な場合は、Backtest AI summary を生成または再生成してください。
+          </p>
+        </EmptyState>
+      ) : (
+        <div className="grid gap-3">
+          {candidates.map((candidate, index) => {
+            const candidateIndex = index + 1;
+            const createdLink = createdCandidateLinks[candidateIndex] ?? null;
+            return (
+              <div key={`${candidate.title}-${candidateIndex}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-semibold text-sky-700">候補{candidateIndex}: {candidate.title}</div>
+                    <div className="mt-1 text-xs text-slate-600">対象: {candidate.target_area}</div>
+                  </div>
+                  {createdLink ? (
+                    <TextLink href={createdLink}>作成済み version を開く</TextLink>
+                  ) : (
+                    <Button
+                      data-testid={`create-refinement-candidate-${candidateIndex}`}
+                      onClick={() => onCreateCandidateVersion(candidateIndex)}
+                      disabled={creatingCandidateIndex !== null}
+                    >
+                      {creatingCandidateIndex === candidateIndex ? '作成中...' : 'この候補で改善版を作る'}
+                    </Button>
+                  )}
+                </div>
+                <KeyValueList className="mt-3 gap-1 text-sm">
+                  <KeyValueRow label="rationale">{candidate.rationale}</KeyValueRow>
+                  <KeyValueRow label="change">{candidate.change_summary}</KeyValueRow>
+                  {candidate.entry_change ? <KeyValueRow label="entry">{candidate.entry_change}</KeyValueRow> : null}
+                  {candidate.exit_change ? <KeyValueRow label="exit">{candidate.exit_change}</KeyValueRow> : null}
+                  {candidate.risk_change ? <KeyValueRow label="risk">{candidate.risk_change}</KeyValueRow> : null}
+                  <KeyValueRow label="validation">{candidate.validation_plan}</KeyValueRow>
+                </KeyValueList>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
 function ApplicationReportAiSummaryComparison({
   currentReport,
   relatedReports,
@@ -769,6 +906,9 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const [generateAiReviewError, setGenerateAiReviewError] = useState<string | null>(null);
   const [isCreatingImprovedVersion, setIsCreatingImprovedVersion] = useState(false);
   const [createImprovedVersionError, setCreateImprovedVersionError] = useState<string | null>(null);
+  const [creatingCandidateIndex, setCreatingCandidateIndex] = useState<number | null>(null);
+  const [candidateCreateError, setCandidateCreateError] = useState<string | null>(null);
+  const [createdCandidateLinks, setCreatedCandidateLinks] = useState<Record<number, string>>({});
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
   const comparisonIdFromQuery = parseBacktestComparisonId(location);
   const effectiveComparisonId = savedComparisonId ?? comparisonIdFromQuery;
@@ -821,6 +961,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
     data.backtest.execution_source === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest';
   const latestAiSummaryJob = data.latest_ai_summary_job ?? null;
   const symbolStrategyApplication = data.symbol_strategy_application;
+  const aiRuleRefinementCandidates = extractRuleRefinementCandidates(data.ai_review.structured_json);
   const strategyVersionsPath = usedStrategy.strategy_id ? buildBacktestRuleLabVersionsPath(usedStrategy.strategy_id) : null;
   const strategyVersionDetailPath =
     usedStrategy.strategy_id && usedStrategy.strategy_version_id
@@ -874,6 +1015,36 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
       setCreateImprovedVersionError(buildBacktestImprovementCloneFailureMessage());
     } finally {
       setIsCreatingImprovedVersion(false);
+    }
+  };
+
+  const onCreateCandidateVersion = async (candidateIndex: number) => {
+    setCreatingCandidateIndex(candidateIndex);
+    setCandidateCreateError(null);
+    try {
+      const sessionResponse = await postApi<StrategyOptimizationSessionData>(
+        `/api/backtests/${backtestId}/optimization-sessions`,
+        { objective_type: 'balanced' },
+      );
+      const session = sessionResponse.optimization_session;
+      const candidate = session.candidates.find((item) => item.candidate_index === candidateIndex);
+      if (!candidate) {
+        throw new Error('改善候補が見つかりません。AI総評を再生成してから再試行してください。');
+      }
+      const versionResponse = await postApi<StrategyRefinementCandidateCreateVersionData>(
+        `/api/strategy-refinement-candidates/${candidate.id}/create-version`,
+        {},
+      );
+      const detailUrl = versionResponse.detail_url ?? versionResponse.refinement_candidate.detail_url;
+      if (!detailUrl) {
+        throw new Error('作成済み version の遷移先を取得できませんでした。');
+      }
+      setCreatedCandidateLinks((current) => ({ ...current, [candidateIndex]: detailUrl }));
+      setLocation(detailUrl);
+    } catch (error: any) {
+      setCandidateCreateError(error?.message ?? '改善候補から version を作成できませんでした。');
+    } finally {
+      setCreatingCandidateIndex(null);
     }
   };
 
@@ -1240,6 +1411,15 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           </EmptyState>
         )}
       </SectionCard>
+
+      <RuleRefinementCandidatesSection
+        candidates={aiRuleRefinementCandidates}
+        isAiReviewAvailable={data.ai_review.status === 'available'}
+        creatingCandidateIndex={creatingCandidateIndex}
+        createdCandidateLinks={createdCandidateLinks}
+        candidateCreateError={candidateCreateError}
+        onCreateCandidateVersion={onCreateCandidateVersion}
+      />
 
       <section style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
         <h2 style={{ marginTop: 0 }}>import 履歴</h2>

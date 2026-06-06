@@ -1361,6 +1361,111 @@ export type BacktestAiSummaryJobData = {
   completed_at: string | null;
 };
 
+export type StrategyRefinementCandidateData = {
+  id: string;
+  session_id: string;
+  source_backtest_id: string | null;
+  parent_strategy_version_id: string;
+  created_strategy_version_id: string | null;
+  candidate_index: number;
+  status: string;
+  title: string;
+  target_area: string;
+  rationale: string;
+  change_summary: string;
+  entry_change: string | null;
+  exit_change: string | null;
+  risk_change: string | null;
+  validation_plan: string;
+  expected_metric_effect: {
+    profit_factor: string | null;
+    win_rate: string | null;
+    max_drawdown: string | null;
+    trade_count: string | null;
+  };
+  selected_at: string | null;
+  created_at: string;
+  updated_at: string;
+  detail_url?: string | null;
+  latest_backtest_report?: {
+    id: string;
+    title: string;
+    status: string;
+    execution_source: string;
+    market: string;
+    timeframe: string;
+    updated_at: string;
+    metrics: Record<string, number | string | null>;
+    diff_vs_base?: Record<string, number | null>;
+  } | null;
+};
+
+export type StrategyOptimizationSessionData = {
+  optimization_session: {
+    id: string;
+    symbol_id: string | null;
+    strategy_rule_id: string;
+    base_strategy_version_id: string;
+    source_backtest_id: string | null;
+    source_ai_summary_id: string | null;
+    objective_type: string;
+    status: string;
+    candidate_count: number;
+    created_at: string;
+    updated_at: string;
+    candidates: StrategyRefinementCandidateData[];
+    source_backtest?: {
+      id: string;
+      title: string;
+      status: string;
+      execution_source: string;
+      market: string;
+      timeframe: string;
+      updated_at: string;
+      metrics: Record<string, number | string | null>;
+    } | null;
+    base_version?: {
+      id: string;
+      strategy_id?: string | null;
+      market?: string | null;
+      timeframe?: string | null;
+      status?: string | null;
+      updated_at?: string | null;
+    };
+    comparison_rows?: Array<{
+      candidate_id: string;
+      candidate_index: number;
+      status: string;
+      latest_backtest_report: StrategyRefinementCandidateData['latest_backtest_report'];
+    }>;
+    meta?: {
+      includes_raw_prompt: false;
+      includes_raw_provider_response: false;
+      includes_raw_csv: false;
+      includes_raw_import_text: false;
+      includes_raw_pine: false;
+    };
+  };
+};
+
+export type StrategyRefinementCandidateCreateVersionData = {
+  strategy_version: {
+    id: string;
+    strategy_id?: string;
+    cloned_from_version_id?: string | null;
+    status?: string;
+    market?: string;
+    timeframe?: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  refinement_candidate: StrategyRefinementCandidateData;
+  detail_url: string | null;
+  rewrite_context?: {
+    refinement_candidate: Record<string, unknown>;
+  };
+};
+
 export type BacktestDetailData = {
   backtest: BacktestCreateData['backtest'];
   used_strategy: {

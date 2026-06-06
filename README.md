@@ -147,6 +147,17 @@ pnpm run down
 - provider は Home/Symbol/Comparison AI と同じ境界（`HOME_AI_PROVIDER=stub|local_llm|openai_api`）を利用する。
 - `local_llm` / `openai_api` 失敗時は既定で `ai_jobs=failed` を返す（必要時のみ `AI_ENABLE_STUB_FALLBACK=true`）。
 
+## Strategy Optimization Session（MVP）
+- Backtest AI summary の `payload.rule_refinement_candidates` から、明示操作で optimization session と改善候補を保存できる。
+  - `POST /api/backtests/:backtestId/optimization-sessions`
+  - `GET /api/strategy-optimization-sessions/:sessionId`
+  - `GET /api/strategy-refinement-candidates/:candidateId`
+  - `POST /api/strategy-refinement-candidates/:candidateId/create-version`
+  - `PATCH /api/strategy-refinement-candidates/:candidateId/status`
+- session 作成は clone / rewrite / Pine generation / backtest / apply を起動しない。
+- candidate create-version は parent strategy version を clone するだけで、rewrite / Pine generation / backtest / apply を起動しない。
+- rewrite draft は optional `refinement_candidate_id` を受け取れるが、draft 作成のみで保存や Pine generation は行わない。
+
 ## 自然言語→Pine 生成（LLM-first 最小）
 - API:
   - `POST /api/strategy-versions/:versionId/pine/generate`

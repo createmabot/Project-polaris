@@ -53,6 +53,29 @@
 - `GET /api/backtests/:backtestId/imports`
   - BacktestImport history を返す。
 
+## 4-1. Strategy Optimization Session MVP
+
+- `POST /api/backtests/:backtestId/optimization-sessions`
+  - 保存済み Backtest AI summary の `payload.rule_refinement_candidates` から session / candidates を作成する。
+  - request body は optional `objective_type` を受ける。default は `balanced`。
+  - 表示、AI summary 存在確認、session 作成だけでは clone / rewrite / Pine generation / backtest / apply を起動しない。
+- `GET /api/strategy-optimization-sessions/:sessionId`
+  - session と candidates を返す。
+- `GET /api/strategy-refinement-candidates/:candidateId`
+  - 改善候補 detail を返す。
+- `PATCH /api/strategy-refinement-candidates/:candidateId/status`
+  - `proposed | version_created | tested | selected | rejected | archived` を受け、candidate status だけを更新する。
+- `POST /api/strategy-refinement-candidates/:candidateId/create-version`
+  - parent strategy version を clone し、created strategy version id を candidate に記録する。
+  - 作成済み candidate では既存 version への detail URL を返し、重複 clone を作らない。
+  - annotation には candidate title / change summary の sanitized 短文だけを保存する。
+  - rewrite / Pine generation / backtest / apply は起動しない。
+- `POST /api/strategy-versions/:versionId/natural-language-rule/rewrite-draft`
+  - optional `refinement_candidate_id` を受け、rewrite draft の context として使える。
+  - draft 作成のみで、自然言語ルール保存、Pine generation、backtest、apply は起動しない。
+
+Strategy Optimization Session API response には raw prompt、raw provider response、raw reviewer response、raw CSV、raw import text、raw Pine、endpoint / model 実値、secret / token / credential、local path、stack trace、full natural language rule、full generated Pine を含めない。
+
 ## 5. application 起点の実行 API
 
 - `POST /api/symbol-strategy-applications/:applicationId/csv-import`
