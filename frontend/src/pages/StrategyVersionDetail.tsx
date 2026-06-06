@@ -24,6 +24,7 @@ import {
   StrategyVersionListData,
   BacktestDetailData,
   StrategyVersionRuleRewriteDraftData,
+  StrategyRefinementCandidateData,
 } from '../api/types';
 import {
   buildStrategyVersionDetailUrl,
@@ -90,6 +91,7 @@ type ImproveApplicationContext = {
   applicationId: string | null;
   sourceVersionId: string | null;
   sourceBacktestId: string | null;
+  refinementCandidateId: string | null;
   returnTo: string | null;
 };
 
@@ -174,6 +176,7 @@ export function parseImproveApplicationContext(search: string): ImproveApplicati
     applicationId: sanitizeQueryId(params.get('application_id')),
     sourceVersionId: sanitizeQueryId(params.get('source_version_id')),
     sourceBacktestId: sanitizeQueryId(params.get('source_backtest_id')),
+    refinementCandidateId: sanitizeQueryId(params.get('refinement_candidate_id')),
     returnTo: sanitizeImproveApplicationReturnTo(params.get('return_to')),
   };
 }
@@ -665,10 +668,17 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const sourceBacktestApiPath = improveApplicationContext?.sourceBacktestId
     ? `/api/backtests/${improveApplicationContext.sourceBacktestId}`
     : null;
+  const refinementCandidateApiPath = improveApplicationContext?.refinementCandidateId
+    ? `/api/strategy-refinement-candidates/${improveApplicationContext.refinementCandidateId}`
+    : null;
   const {
     data: sourceBacktestData,
     error: sourceBacktestError,
   } = useSWR<BacktestDetailData>(sourceBacktestApiPath, swrFetcher);
+  const {
+    data: refinementCandidateData,
+    error: refinementCandidateError,
+  } = useSWR<{ refinement_candidate: StrategyRefinementCandidateData }>(refinementCandidateApiPath, swrFetcher);
   const sourceBacktestMemoText = useMemo(
     () => (sourceBacktestData ? buildSourceBacktestImprovementMemo(sourceBacktestData) : ''),
     [sourceBacktestData],
@@ -941,6 +951,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         `/api/strategy-versions/${versionId}/natural-language-rule/rewrite-draft`,
         {
           source_backtest_id: improveApplicationContext?.sourceBacktestId ?? null,
+          refinement_candidate_id: improveApplicationContext?.refinementCandidateId ?? null,
           improvement_memo: memo,
           current_rule: editingNaturalLanguageRule,
           mode: 'improvement_from_backtest',
@@ -1165,6 +1176,27 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           {sourceBacktestData.symbol_strategy_application?.related_reports?.length ? (
             <InlineNotice tone='info' className='mb-3'>
               同じ application の関連レポートが {sourceBacktestData.symbol_strategy_application.related_reports.length} 件あります。詳細比較は元の BacktestDetail で確認します。
+            </InlineNotice>
+          ) : null}
+          {refinementCandidateData?.refinement_candidate ? (
+            <div className='mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-slate-700'>
+              <div className='mb-2 font-semibold text-amber-900'>選択中の改善候補</div>
+              <KeyValueList className='gap-x-4 gap-y-1 sm:grid-cols-2'>
+                <KeyValueRow label='candidate'>
+                  候補{refinementCandidateData.refinement_candidate.candidate_index}: {refinementCandidateData.refinement_candidate.title}
+                </KeyValueRow>
+                <KeyValueRow label='target'>{refinementCandidateData.refinement_candidate.target_area}</KeyValueRow>
+                <KeyValueRow label='change'>{refinementCandidateData.refinement_candidate.change_summary}</KeyValueRow>
+                <KeyValueRow label='validation'>{refinementCandidateData.refinement_candidate.validation_plan}</KeyValueRow>
+              </KeyValueList>
+              <p className='mb-0 mt-2 text-slate-600'>
+                LLM rewrite ではこの候補を優先して、単一の自然言語ルール本文 draft を作ります。
+              </p>
+            </div>
+          ) : null}
+          {refinementCandidateError ? (
+            <InlineNotice tone='warning' className='mb-3'>
+              選択中の改善候補を取得できませんでした。source backtest context だけで編集を続行できます。
             </InlineNotice>
           ) : null}
           <TextArea

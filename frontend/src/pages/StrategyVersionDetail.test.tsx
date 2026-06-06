@@ -351,8 +351,18 @@ function setupSWR(
   pinePayload: any = null,
   sourceBacktestPayload: any = null,
   sourceBacktestError: Error | null = null,
+  refinementCandidatePayload: any = null,
+  refinementCandidateError: Error | null = null,
 ) {
   mockUseSWR.mockImplementation((key: string) => {
+    if (typeof key === 'string' && key.startsWith('/api/strategy-refinement-candidates/')) {
+      return {
+        isLoading: false,
+        error: refinementCandidateError,
+        mutate: vi.fn(),
+        data: refinementCandidateError ? null : refinementCandidatePayload,
+      };
+    }
     if (typeof key === 'string' && key.startsWith('/api/backtests/')) {
       return {
         isLoading: false,
@@ -429,6 +439,7 @@ describe('StrategyVersionDetail', () => {
       application_id: 'app-1',
       source_version_id: 'ver-source-1',
       source_backtest_id: 'bt-source-1',
+      refinement_candidate_id: 'cand-1',
       return_to: '/backtests/bt-source-1',
     });
 
@@ -439,6 +450,7 @@ describe('StrategyVersionDetail', () => {
       applicationId: 'app-1',
       sourceVersionId: 'ver-source-1',
       sourceBacktestId: 'bt-source-1',
+      refinementCandidateId: 'cand-1',
       returnTo: '/backtests/bt-source-1',
     });
   });
@@ -647,6 +659,7 @@ describe('StrategyVersionDetail', () => {
       application_id: 'app-1',
       source_version_id: 'ver-source-1',
       source_backtest_id: 'bt-source-1',
+      refinement_candidate_id: 'cand-1',
       return_to: '/backtests/bt-source-1',
     });
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
@@ -656,6 +669,35 @@ describe('StrategyVersionDetail', () => {
       createListPayload(),
       null,
       createSourceBacktestPayload(),
+      null,
+      {
+        refinement_candidate: {
+          id: 'cand-1',
+          session_id: 'sess-1',
+          source_backtest_id: 'bt-source-1',
+          parent_strategy_version_id: 'ver-source-1',
+          created_strategy_version_id: 'ver-1',
+          candidate_index: 1,
+          status: 'version_created',
+          title: 'entry filterを強化する',
+          target_area: 'entry',
+          rationale: 'PFを改善するため。',
+          change_summary: '出来高filterを追加する。',
+          entry_change: '出来高が20日平均以上の場合だけentryする。',
+          exit_change: null,
+          risk_change: null,
+          validation_plan: '候補1のPFと勝率を比較する。',
+          expected_metric_effect: {
+            profit_factor: '改善候補',
+            win_rate: null,
+            max_drawdown: null,
+            trade_count: null,
+          },
+          selected_at: null,
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      },
     );
 
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
@@ -715,6 +757,7 @@ describe('StrategyVersionDetail', () => {
       application_id: 'app-1',
       source_version_id: 'ver-source-1',
       source_backtest_id: 'bt-source-1',
+      refinement_candidate_id: 'cand-1',
       return_to: '/backtests/bt-source-1',
     });
     mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
@@ -724,6 +767,35 @@ describe('StrategyVersionDetail', () => {
       createListPayload(),
       null,
       createSourceBacktestPayload(),
+      null,
+      {
+        refinement_candidate: {
+          id: 'cand-1',
+          session_id: 'sess-1',
+          source_backtest_id: 'bt-source-1',
+          parent_strategy_version_id: 'ver-source-1',
+          created_strategy_version_id: 'ver-1',
+          candidate_index: 1,
+          status: 'version_created',
+          title: 'entry filterを強化する',
+          target_area: 'entry',
+          rationale: 'PFを改善するため。',
+          change_summary: '出来高filterを追加する。',
+          entry_change: '出来高が20日平均以上の場合だけentryする。',
+          exit_change: null,
+          risk_change: null,
+          validation_plan: '候補1のPFと勝率を比較する。',
+          expected_metric_effect: {
+            profit_factor: '改善候補',
+            win_rate: null,
+            max_drawdown: null,
+            trade_count: null,
+          },
+          selected_at: null,
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      },
     );
     mockPostApi.mockResolvedValue({
       draft: {
@@ -736,7 +808,9 @@ describe('StrategyVersionDetail', () => {
       },
     });
 
-    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('選択中の改善候補');
+    expect(html).toContain('候補1: entry filterを強化する');
     expect(mockPostApi).not.toHaveBeenCalled();
 
     const rewriteButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'llm-rewrite-natural-language-rule');
@@ -748,6 +822,7 @@ describe('StrategyVersionDetail', () => {
       '/api/strategy-versions/ver-1/natural-language-rule/rewrite-draft',
       expect.objectContaining({
         source_backtest_id: 'bt-source-1',
+        refinement_candidate_id: 'cand-1',
         improvement_memo: expect.stringContaining('検証結果 source validation report'),
         current_rule: expect.any(String),
         mode: 'improvement_from_backtest',

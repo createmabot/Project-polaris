@@ -261,6 +261,96 @@ describe('BacktestDetail', () => {
     expect(mutate).toHaveBeenCalledTimes(1);
   });
 
+  it('shows AI rule refinement candidates and creates a candidate version only after explicit click', async () => {
+    mockLocation = '/backtests/bt-candidates';
+    mockUseSWR.mockReset();
+    mockPostApi
+      .mockResolvedValueOnce({
+        optimization_session: {
+          id: 'sess-1',
+          candidates: [
+            {
+              id: 'cand-1',
+              candidate_index: 1,
+              title: 'entry filterを強化する',
+              status: 'proposed',
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        strategy_version: { id: 'ver-candidate-1' },
+        refinement_candidate: {
+          id: 'cand-1',
+          detail_url: '/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1',
+        },
+        detail_url: '/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1',
+      });
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-candidates',
+          strategy_version_id: 'ver-1',
+          title: 'candidate source',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'imported',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: null,
+        },
+        latest_import: null,
+        imports: [],
+        ai_review: {
+          summary_id: 'sum-candidates',
+          title: 'AI総評',
+          body_markdown: '改善候補あり',
+          structured_json: {
+            payload: {
+              rule_refinement_candidates: [
+                {
+                  title: 'entry filterを強化する',
+                  target_area: 'entry',
+                  rationale: 'PFを改善するため。',
+                  change_summary: '出来高filterを追加する。',
+                  entry_change: '出来高が20日平均以上の場合のみentryする。',
+                  validation_plan: '候補1のPFと勝率を比較する。',
+                  expected_metric_effect: {
+                    profit_factor: '改善候補',
+                  },
+                },
+              ],
+            },
+          },
+          generated_at: '2026-01-01T00:00:00.000Z',
+          status: 'available',
+          insufficient_context: false,
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-candidates' }} />);
+    expect(html).toContain('改善候補');
+    expect(html).toContain('候補1: entry filterを強化する');
+    expect(html).toContain('出来高filterを追加する。');
+    expect(mockPostApi).not.toHaveBeenCalled();
+
+    const button = buttonRenderCalls.find((call) => call.props['data-testid'] === 'create-refinement-candidate-1');
+    expect(button).toBeTruthy();
+    await button?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenNthCalledWith(1, '/api/backtests/bt-candidates/optimization-sessions', { objective_type: 'balanced' });
+    expect(mockPostApi).toHaveBeenNthCalledWith(2, '/api/strategy-refinement-candidates/cand-1/create-version', {});
+    expect(mockSetLocation).toHaveBeenCalledWith('/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1');
+  });
+
   it('shows parse error on failed parse', () => {
     mockLocation = '/backtests/bt-2';
     mockUseSWR.mockReset();

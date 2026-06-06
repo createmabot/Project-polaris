@@ -46,6 +46,7 @@ model Symbol {
   comparisonSymbols  ComparisonSymbol[]
   strategyApplications SymbolStrategyApplication[]
   investmentCalendarEvents InvestmentCalendarEvent[]
+  strategyOptimizationSessions StrategyOptimizationSession[]
 
   @@map("symbols")
 }
@@ -456,6 +457,7 @@ model StrategyRule {
 
   versions StrategyRuleVersion[]
   symbolStrategyApplications SymbolStrategyApplication[]
+  optimizationSessions StrategyOptimizationSession[]
 
   @@index([userId])
   @@index([createdAt])
@@ -488,6 +490,9 @@ model StrategyRuleVersion {
   @@map("strategy_rule_versions")
 
   backtests Backtest[]
+  optimizationSessionsBase StrategyOptimizationSession[] @relation("StrategyOptimizationSessionBaseVersion")
+  refinementCandidatesParent StrategyRefinementCandidate[] @relation("StrategyRefinementCandidateParentVersion")
+  refinementCandidatesCreated StrategyRefinementCandidate[] @relation("StrategyRefinementCandidateCreatedVersion")
   pineScripts PineScript[]
   pineRevisionInputs PineRevisionInput[]
   pineGenerationJobs PineGenerationJob[]
@@ -668,10 +673,73 @@ model Backtest {
   comparisonsAsBase   BacktestComparison[] @relation("BacktestComparisonBase")
   comparisonsAsTarget BacktestComparison[] @relation("BacktestComparisonTarget")
   symbolStrategyApplicationRuns SymbolStrategyApplicationRun[]
+  optimizationSessions StrategyOptimizationSession[]
+  refinementCandidates StrategyRefinementCandidate[]
 
   @@index([strategyRuleVersionId, createdAt])
   @@index([status])
   @@map("backtests")
+}
+
+model StrategyOptimizationSession {
+  id                    String              @id @default(uuid())
+  symbolId              String?             @map("symbol_id")
+  symbol                Symbol?             @relation(fields: [symbolId], references: [id], onDelete: SetNull)
+  strategyRuleId        String              @map("strategy_rule_id")
+  strategyRule          StrategyRule        @relation(fields: [strategyRuleId], references: [id], onDelete: Restrict)
+  baseStrategyVersionId String              @map("base_strategy_version_id")
+  baseStrategyVersion   StrategyRuleVersion @relation("StrategyOptimizationSessionBaseVersion", fields: [baseStrategyVersionId], references: [id], onDelete: Restrict)
+  sourceBacktestId      String?             @map("source_backtest_id")
+  sourceBacktest        Backtest?           @relation(fields: [sourceBacktestId], references: [id], onDelete: SetNull)
+  sourceAiSummaryId     String?             @map("source_ai_summary_id")
+  objectiveType         String              @default("balanced") @map("objective_type")
+  status                String              @default("active")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  candidates StrategyRefinementCandidate[]
+
+  @@index([symbolId, createdAt])
+  @@index([strategyRuleId, createdAt])
+  @@index([baseStrategyVersionId, createdAt])
+  @@index([sourceBacktestId, createdAt])
+  @@index([sourceAiSummaryId])
+  @@index([objectiveType, createdAt])
+  @@index([status, createdAt])
+  @@map("strategy_optimization_sessions")
+}
+
+model StrategyRefinementCandidate {
+  id                           String              @id @default(uuid())
+  sessionId                    String              @map("session_id")
+  session                      StrategyOptimizationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sourceBacktestId             String?             @map("source_backtest_id")
+  sourceBacktest               Backtest?           @relation(fields: [sourceBacktestId], references: [id], onDelete: SetNull)
+  parentStrategyVersionId      String              @map("parent_strategy_version_id")
+  parentStrategyVersion        StrategyRuleVersion @relation("StrategyRefinementCandidateParentVersion", fields: [parentStrategyVersionId], references: [id], onDelete: Restrict)
+  createdStrategyRuleVersionId String?             @map("created_strategy_rule_version_id")
+  createdStrategyRuleVersion   StrategyRuleVersion? @relation("StrategyRefinementCandidateCreatedVersion", fields: [createdStrategyRuleVersionId], references: [id], onDelete: SetNull)
+  candidateIndex               Int                 @map("candidate_index")
+  status                       String              @default("proposed")
+  title                        String              @db.VarChar(160)
+  targetArea                   String              @map("target_area") @db.VarChar(40)
+  rationale                    String              @db.Text
+  changeSummary                String              @map("change_summary") @db.Text
+  entryChange                  String?             @map("entry_change") @db.Text
+  exitChange                   String?             @map("exit_change") @db.Text
+  riskChange                   String?             @map("risk_change") @db.Text
+  validationPlan               String?             @map("validation_plan") @db.Text
+  expectedMetricEffectJson     Json?               @map("expected_metric_effect_json")
+  selectedAt                   DateTime?           @map("selected_at")
+  createdAt                    DateTime            @default(now()) @map("created_at")
+  updatedAt                    DateTime            @updatedAt @map("updated_at")
+
+  @@index([sessionId, candidateIndex])
+  @@index([sourceBacktestId, createdAt])
+  @@index([parentStrategyVersionId, createdAt])
+  @@index([createdStrategyRuleVersionId])
+  @@index([status, createdAt])
+  @@map("strategy_refinement_candidates")
 }
 
 model BacktestImport {

@@ -12,6 +12,11 @@ import type {
 import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
+import {
+  candidateToRewriteContext,
+  candidateToRewriteMemo,
+  sanitizeOptimizationText,
+} from '../strategy/optimization-sessions';
 import { AppError, formatSuccess } from '../utils/response';
 
 type StrategyVersionRecord = {
@@ -1092,6 +1097,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { versionId: string };
     Body: {
       source_backtest_id?: unknown;
+      refinement_candidate_id?: unknown;
       improvement_memo?: unknown;
       current_rule?: unknown;
       mode?: unknown;
@@ -1101,6 +1107,10 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     const sourceBacktestId = readOptionalText(request.body?.source_backtest_id, 'source_backtest_id');
     if (sourceBacktestId && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(sourceBacktestId)) {
       throw new AppError(400, 'VALIDATION_ERROR', 'source_backtest_id is invalid.');
+    }
+    const refinementCandidateId = readOptionalText(request.body?.refinement_candidate_id, 'refinement_candidate_id');
+    if (refinementCandidateId && !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(refinementCandidateId)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'refinement_candidate_id is invalid.');
     }
     const improvementMemo = sanitizeRewriteInputText(request.body?.improvement_memo, 2400);
 
@@ -1113,9 +1123,32 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
     let metrics: NaturalLanguageRuleRewriteContext['metrics'] = null;
     let aiSummary: NaturalLanguageRuleRewriteContext['aiSummary'] = null;
-    if (sourceBacktestId) {
+    let effectiveSourceBacktestId = sourceBacktestId;
+    let refinementCandidateContext: RuleRefinementCandidate | null = null;
+    let candidateMemo: string | null = null;
+    if (refinementCandidateId) {
+      const candidate = await (prisma as any).strategyRefinementCandidate.findUnique({
+        where: { id: refinementCandidateId },
+      });
+      if (!candidate) {
+        throw new AppError(404, 'NOT_FOUND', 'strategy refinement candidate was not found.');
+      }
+      if (candidate.createdStrategyRuleVersionId && candidate.createdStrategyRuleVersionId !== version.id) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'refinement_candidate_id does not belong to this strategy version.');
+      }
+      if (!candidate.createdStrategyRuleVersionId && candidate.parentStrategyVersionId !== version.id) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'refinement_candidate_id does not belong to this strategy version.');
+      }
+      if (effectiveSourceBacktestId && candidate.sourceBacktestId && effectiveSourceBacktestId !== candidate.sourceBacktestId) {
+        throw new AppError(400, 'VALIDATION_ERROR', 'source_backtest_id does not match refinement_candidate_id.');
+      }
+      effectiveSourceBacktestId = effectiveSourceBacktestId ?? candidate.sourceBacktestId ?? null;
+      refinementCandidateContext = candidateToRewriteContext(candidate);
+      candidateMemo = candidateToRewriteMemo(candidate);
+    }
+    if (effectiveSourceBacktestId) {
       const backtest = await prisma.backtest.findUnique({
-        where: { id: sourceBacktestId },
+        where: { id: effectiveSourceBacktestId },
         include: {
           imports: {
             orderBy: { createdAt: 'desc' },
@@ -1152,17 +1185,32 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       });
       aiSummary = buildRewriteAiSummary(summary);
     }
+    if (refinementCandidateContext) {
+      const existingCandidates = aiSummary?.ruleRefinementCandidates ?? [];
+      aiSummary = {
+        nextActions: aiSummary?.nextActions ?? [],
+        overallView: aiSummary?.overallView ?? null,
+        risks: aiSummary?.risks ?? [],
+        strengths: aiSummary?.strengths ?? [],
+        keyMetrics: aiSummary?.keyMetrics ?? null,
+        ruleRefinementCandidates: [refinementCandidateContext, ...existingCandidates].slice(0, 4),
+      };
+    }
+    const mergedImprovementMemo = [candidateMemo, improvementMemo]
+      .map((item) => sanitizeOptimizationText(item, 1200))
+      .filter((item): item is string => Boolean(item))
+      .join('\n');
 
     const service = createNaturalLanguageRuleRewriteService();
     let rewritten;
     try {
       rewritten = await service.rewriteNaturalLanguageRuleDraft({
         strategyVersionId: version.id,
-        sourceBacktestId,
+        sourceBacktestId: effectiveSourceBacktestId,
         baseRule: version.naturalLanguageRule,
         market: version.market,
         timeframe: normalizeTimeframeAlias(version.timeframe),
-        improvementMemo,
+        improvementMemo: mergedImprovementMemo || null,
         metrics,
         aiSummary,
       });
@@ -1191,7 +1239,8 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
           natural_language_rule: rewritten.output.naturalLanguageRule,
           source: 'llm_rewrite',
           base_version_id: version.id,
-          source_backtest_id: sourceBacktestId,
+          source_backtest_id: effectiveSourceBacktestId,
+          refinement_candidate_id: refinementCandidateId,
           warnings: rewritten.output.warnings,
           assumptions: rewritten.output.assumptions,
         },

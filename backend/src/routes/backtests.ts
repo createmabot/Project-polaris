@@ -4,6 +4,10 @@ import { prisma } from '../db';
 import { AppError, formatSuccess } from '../utils/response';
 import { parseTradingViewSummaryCsv } from '../backtests/csv';
 import { enqueueCsvImportBacktestSummary, generateBacktestSummaryWithJob } from '../backtests/ai-summary';
+import {
+  extractRuleRefinementCandidatesFromSummary,
+  toOptimizationSessionResponse,
+} from '../strategy/optimization-sessions';
 
 type CreateBacktestBody = {
   strategy_version_id?: string;
@@ -850,6 +854,137 @@ export const backtestRoutes: FastifyPluginAsync = async (fastify) => {
       }));
     },
   );
+
+  fastify.post<{
+    Params: { backtestId: string };
+    Body: { objective_type?: unknown };
+  }>('/:backtestId/optimization-sessions', async (request, reply) => {
+    const { backtestId } = request.params;
+    const objectiveType = typeof request.body?.objective_type === 'string' && request.body.objective_type.trim()
+      ? request.body.objective_type.trim()
+      : 'balanced';
+    if (!/^[a-z][a-z0-9_-]{0,39}$/.test(objectiveType)) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'objective_type is invalid.');
+    }
+
+    const backtest = await prisma.backtest.findUnique({
+      where: { id: backtestId },
+      include: {
+        strategyRuleVersion: true,
+        imports: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+      },
+    });
+    if (!backtest) {
+      throw new AppError(404, 'NOT_FOUND', 'backtest was not found.');
+    }
+
+    const importIds = backtest.imports.map((item) => item.id);
+    const summary = await prisma.aiSummary.findFirst({
+      where: {
+        summaryScope: 'backtest_review',
+        OR: [
+          {
+            targetEntityType: 'backtest',
+            targetEntityId: backtest.id,
+          },
+          ...(importIds.length > 0
+            ? [
+                {
+                  targetEntityType: 'backtest_run',
+                  targetEntityId: {
+                    in: importIds,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      orderBy: [{ generatedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+    const sourceCandidates = extractRuleRefinementCandidatesFromSummary(summary?.structuredJson, 4);
+    if (sourceCandidates.length === 0) {
+      throw new AppError(
+        422,
+        'VALIDATION_ERROR',
+        'backtest AI summary has no rule refinement candidates.',
+        { reason: 'missing_rule_refinement_candidates' },
+      );
+    }
+
+    const application = await prisma.symbolStrategyApplicationRun.findFirst({
+      where: { backtestId: backtest.id },
+      orderBy: { createdAt: 'desc' },
+      include: { application: true },
+    });
+
+    const existingSession = await (prisma as any).strategyOptimizationSession.findFirst({
+      where: {
+        sourceBacktestId: backtest.id,
+        baseStrategyVersionId: backtest.strategyRuleVersionId,
+        objectiveType,
+        status: 'active',
+      },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+    if (existingSession) {
+      const existingCandidates = await (prisma as any).strategyRefinementCandidate.findMany({
+        where: { sessionId: existingSession.id },
+        orderBy: [{ candidateIndex: 'asc' }, { createdAt: 'asc' }],
+      });
+      return reply.status(200).send(
+        formatSuccess(request, {
+          optimization_session: toOptimizationSessionResponse(existingSession, existingCandidates),
+        }),
+      );
+    }
+
+    const created = await prisma.$transaction(async (tx) => {
+      const txOrm = tx as any;
+      const session = await txOrm.strategyOptimizationSession.create({
+        data: {
+          symbolId: application?.application.symbolId ?? null,
+          strategyRuleId: backtest.strategyRuleVersion.strategyRuleId,
+          baseStrategyVersionId: backtest.strategyRuleVersionId,
+          sourceBacktestId: backtest.id,
+          sourceAiSummaryId: summary?.id ?? null,
+          objectiveType,
+          status: 'active',
+        },
+      });
+      const candidates = await Promise.all(
+        sourceCandidates.map((candidate, index) =>
+          txOrm.strategyRefinementCandidate.create({
+            data: {
+              sessionId: session.id,
+              sourceBacktestId: backtest.id,
+              parentStrategyVersionId: backtest.strategyRuleVersionId,
+              candidateIndex: index + 1,
+              title: candidate.title,
+              targetArea: candidate.target_area,
+              rationale: candidate.rationale,
+              changeSummary: candidate.change_summary,
+              entryChange: candidate.entry_change,
+              exitChange: candidate.exit_change,
+              riskChange: candidate.risk_change,
+              validationPlan: candidate.validation_plan,
+              expectedMetricEffectJson: candidate.expected_metric_effect as Prisma.InputJsonValue,
+              status: 'proposed',
+            },
+          }),
+        ),
+      );
+      return { session, candidates };
+    });
+
+    return reply.status(201).send(
+      formatSuccess(request, {
+        optimization_session: toOptimizationSessionResponse(created.session, created.candidates),
+      }),
+    );
+  });
 
   fastify.get<{ Params: { backtestId: string } }>('/:backtestId', async (request, reply) => {
     const { backtestId } = request.params;

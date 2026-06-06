@@ -14,6 +14,7 @@ import BacktestComparisonDetail from "./pages/BacktestComparisonDetail";
 import BacktestList from "./pages/BacktestList";
 import StrategyVersionList from "./pages/StrategyVersionList";
 import StrategyVersionDetail from "./pages/StrategyVersionDetail";
+import StrategyOptimizationSessionDetail from "./pages/StrategyOptimizationSessionDetail";
 import WatchlistManage from "./pages/WatchlistManage";
 import PositionsManage from "./pages/PositionsManage";
 
@@ -33,6 +34,7 @@ function App() {
       <Route path="/strategies/:strategyId" component={StrategyDetail} />
       <Route path="/strategies" component={StrategyList} />
       <Route path="/strategy-versions/:versionId" component={StrategyVersionDetail} />
+      <Route path="/strategy-optimization-sessions/:sessionId" component={StrategyOptimizationSessionDetail} />
       <Route path="/watchlist" component={WatchlistManage} />
       <Route path="/positions" component={PositionsManage} />
       <Route path="/backtests" component={BacktestList} />
