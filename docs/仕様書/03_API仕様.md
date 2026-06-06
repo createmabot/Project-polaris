@@ -67,7 +67,7 @@
   - `proposed | version_created | tested | selected | rejected | archived` を受け、candidate status だけを更新する。
 - `POST /api/strategy-refinement-candidates/:candidateId/create-version`
   - parent strategy version を clone し、created strategy version id を candidate に記録する。
-  - 作成済み candidate では既存 version への detail URL を返し、重複 clone を作らない。
+  - 作成済み candidate では既存 version への detail URL を返し、重複 clone を作らない。`detail_url` は可能な場合 `symbol_id` / `symbol_code` / `symbol_name` / `application_id` / `source_version_id` / `source_backtest_id` / `refinement_candidate_id` / `return_to` を含む improvement context URL とする。application context が解決できない場合は candidate / source backtest context の fallback URL を返す。
   - annotation には candidate title / change summary の sanitized 短文だけを保存する。
   - rewrite / Pine generation / backtest / apply は起動しない。
 - `POST /api/strategy-versions/:versionId/natural-language-rule/rewrite-draft`

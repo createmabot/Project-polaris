@@ -32,6 +32,7 @@ type Runtime = {
   sessions: Map<string, any>;
   candidates: Map<string, any>;
   rewriteContexts: unknown[];
+  applicationRun: any | null;
 };
 
 let runtime: Runtime;
@@ -89,6 +90,21 @@ function createRuntime(): Runtime {
     sessions: new Map(),
     candidates: new Map(),
     rewriteContexts: [],
+    applicationRun: {
+      id: 'run-1',
+      backtestId: 'bt-1',
+      application: {
+        id: 'app-1',
+        symbolId: 'sym-1',
+        strategyRuleVersionId: 'ver-1',
+        symbol: {
+          id: 'sym-1',
+          symbol: '7203',
+          symbolCode: '7203',
+          displayName: 'トヨタ自動車',
+        },
+      },
+    },
   };
 }
 
@@ -186,14 +202,7 @@ vi.mock('../src/db', () => {
       findFirst: async () => aiSummaryRow,
     },
     symbolStrategyApplicationRun: {
-      findFirst: async () => ({
-        id: 'run-1',
-        backtestId: 'bt-1',
-        application: {
-          id: 'app-1',
-          symbolId: 'sym-1',
-        },
-      }),
+      findFirst: async () => runtime.applicationRun,
     },
     strategyOptimizationSession: {
       create: async ({ data }: any) => {
@@ -304,6 +313,24 @@ async function createApp() {
   return app;
 }
 
+function parseDetailUrl(value: string) {
+  return new URL(value, 'http://localhost');
+}
+
+function expectFullImproveDetailUrl(value: string, versionId = 'ver-created-1') {
+  const url = parseDetailUrl(value);
+  expect(url.pathname).toBe(`/strategy-versions/${versionId}`);
+  expect(url.searchParams.get('mode')).toBe('improve_application');
+  expect(url.searchParams.get('symbol_id')).toBe('sym-1');
+  expect(url.searchParams.get('symbol_code')).toBe('7203');
+  expect(url.searchParams.get('symbol_name')).toBe('トヨタ自動車');
+  expect(url.searchParams.get('application_id')).toBe('app-1');
+  expect(url.searchParams.get('source_version_id')).toBe('ver-1');
+  expect(url.searchParams.get('source_backtest_id')).toBe('bt-1');
+  expect(url.searchParams.get('refinement_candidate_id')).toBeTruthy();
+  expect(url.searchParams.get('return_to')).toBe('/backtests/bt-1');
+}
+
 describe('strategy optimization session routes', () => {
   beforeEach(() => {
     runtime = createRuntime();
@@ -384,11 +411,43 @@ describe('strategy optimization session routes', () => {
     });
     expect(body.detail_url).toContain('/strategy-versions/ver-created-1?');
     expect(body.detail_url).toContain('refinement_candidate_id=');
+    expectFullImproveDetailUrl(body.detail_url);
+    expectFullImproveDetailUrl(body.refinement_candidate.detail_url);
     expect(JSON.stringify(body)).not.toContain('natural_language_rule');
     expect(JSON.stringify(body)).not.toContain('generated_pine');
     const copiedPine = Array.from(runtime.pineScripts.values()).find((item) => item.strategyRuleVersionId === 'ver-created-1');
     expect(copiedPine?.parentPineScriptId).toBe('pine-1');
     expect(runtime.annotations.get('ver-created-1')?.label).toContain('entry filter');
+
+    await app.close();
+  });
+
+  it('returns the full improve context URL from idempotent candidate create-version', async () => {
+    const app = await createApp();
+    const createdSession = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/optimization-sessions',
+      payload: {},
+    });
+    const candidateId = createdSession.json().data.optimization_session.candidates[0].id;
+    await app.inject({
+      method: 'POST',
+      url: `/api/strategy-refinement-candidates/${candidateId}/create-version`,
+      payload: {},
+    });
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-refinement-candidates/${candidateId}/create-version`,
+      payload: {},
+    });
+
+    expect(second.statusCode).toBe(200);
+    const body = second.json().data;
+    expect(body.strategy_version.id).toBe('ver-created-1');
+    expectFullImproveDetailUrl(body.detail_url);
+    expectFullImproveDetailUrl(body.refinement_candidate.detail_url);
+    expect(runtime.versions.size).toBe(2);
 
     await app.close();
   });
@@ -495,6 +554,7 @@ describe('strategy optimization session routes', () => {
       status: 'draft',
     });
     expect(body.candidates[0].latest_backtest_report.metrics.profit_factor).toBe(1.24);
+    expectFullImproveDetailUrl(body.candidates[0].detail_url);
     expect(body.comparison_rows[0].latest_backtest_report.diff_vs_base.profit_factor).toBe(0.33);
     expect(body.meta).toMatchObject({
       includes_raw_prompt: false,
@@ -503,6 +563,38 @@ describe('strategy optimization session routes', () => {
       includes_raw_import_text: false,
       includes_raw_pine: false,
     });
+
+    await app.close();
+  });
+
+  it('falls back to candidate-only detail URL when application context is unavailable', async () => {
+    runtime.applicationRun = null;
+    const app = await createApp();
+    const createdSession = await app.inject({
+      method: 'POST',
+      url: '/api/backtests/bt-1/optimization-sessions',
+      payload: {},
+    });
+    const candidateId = createdSession.json().data.optimization_session.candidates[0].id;
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/strategy-refinement-candidates/${candidateId}/create-version`,
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(201);
+    const detailUrl = res.json().data.detail_url;
+    const url = parseDetailUrl(detailUrl);
+    expect(url.pathname).toBe('/strategy-versions/ver-created-1');
+    expect(url.searchParams.get('mode')).toBe('improve_application');
+    expect(url.searchParams.get('source_backtest_id')).toBe('bt-1');
+    expect(url.searchParams.get('refinement_candidate_id')).toBe(candidateId);
+    expect(url.searchParams.get('return_to')).toBe('/backtests/bt-1');
+    expect(url.searchParams.get('symbol_id')).toBeNull();
+    expect(url.searchParams.get('application_id')).toBeNull();
+    expect(JSON.stringify(res.json().data)).not.toContain('raw prompt');
+    expect(JSON.stringify(res.json().data)).not.toContain('token');
 
     await app.close();
   });
