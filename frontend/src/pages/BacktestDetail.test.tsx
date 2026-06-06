@@ -263,6 +263,8 @@ describe('BacktestDetail', () => {
 
   it('shows AI rule refinement candidates and creates a candidate version only after explicit click', async () => {
     mockLocation = '/backtests/bt-candidates';
+    const fullDetailUrl =
+      '/strategy-versions/ver-candidate-1?mode=improve_application&symbol_id=sym-1&symbol_code=7203&symbol_name=%E3%83%88%E3%83%A8%E3%82%BF%E8%87%AA%E5%8B%95%E8%BB%8A&application_id=app-1&source_version_id=ver-1&source_backtest_id=bt-candidates&refinement_candidate_id=cand-1&return_to=%2Fbacktests%2Fbt-candidates';
     mockUseSWR.mockReset();
     mockPostApi
       .mockResolvedValueOnce({
@@ -282,9 +284,9 @@ describe('BacktestDetail', () => {
         strategy_version: { id: 'ver-candidate-1' },
         refinement_candidate: {
           id: 'cand-1',
-          detail_url: '/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1',
+          detail_url: fullDetailUrl,
         },
-        detail_url: '/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1',
+        detail_url: fullDetailUrl,
       });
     mockUseSWR.mockReturnValue({
       isLoading: false,
@@ -348,7 +350,14 @@ describe('BacktestDetail', () => {
 
     expect(mockPostApi).toHaveBeenNthCalledWith(1, '/api/backtests/bt-candidates/optimization-sessions', { objective_type: 'balanced' });
     expect(mockPostApi).toHaveBeenNthCalledWith(2, '/api/strategy-refinement-candidates/cand-1/create-version', {});
-    expect(mockSetLocation).toHaveBeenCalledWith('/strategy-versions/ver-candidate-1?mode=improve_application&refinement_candidate_id=cand-1');
+    const navigatedUrl = mockSetLocation.mock.calls[0][0];
+    expect(navigatedUrl).toBe(fullDetailUrl);
+    const parsedUrl = new URL(navigatedUrl, 'http://localhost');
+    expect(parsedUrl.searchParams.get('mode')).toBe('improve_application');
+    expect(parsedUrl.searchParams.get('symbol_id')).toBe('sym-1');
+    expect(parsedUrl.searchParams.get('symbol_code')).toBe('7203');
+    expect(parsedUrl.searchParams.get('source_backtest_id')).toBe('bt-candidates');
+    expect(parsedUrl.searchParams.get('refinement_candidate_id')).toBe('cand-1');
   });
 
   it('shows parse error on failed parse', () => {

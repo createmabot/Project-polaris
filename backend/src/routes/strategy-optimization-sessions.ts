@@ -65,11 +65,59 @@ function diffNumber(value: number | null, base: number | null): number | null {
   return Number((value - base).toFixed(4));
 }
 
-function buildCandidateDetailUrl(candidate: any, versionId: string): string {
+type CandidateImproveApplicationContext = {
+  symbol_id: string;
+  symbol_code: string;
+  symbol_name: string;
+  application_id: string;
+  source_version_id: string;
+};
+
+async function resolveCandidateImproveApplicationContext(candidate: any): Promise<CandidateImproveApplicationContext | null> {
+  if (!candidate?.sourceBacktestId) return null;
+  const run = await prisma.symbolStrategyApplicationRun.findFirst({
+    where: { backtestId: candidate.sourceBacktestId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      application: {
+        include: {
+          symbol: true,
+        },
+      },
+    },
+  });
+  const application = run?.application;
+  const symbol = application?.symbol;
+  if (!application || !symbol) return null;
+  const symbolCode = symbol.symbolCode ?? symbol.symbol;
+  const symbolName = symbol.displayName ?? symbol.symbolCode ?? symbol.symbol;
+  if (!symbol.id || !symbolCode || !symbolName || !application.id) return null;
+  return {
+    symbol_id: symbol.id,
+    symbol_code: symbolCode,
+    symbol_name: symbolName,
+    application_id: application.id,
+    source_version_id: candidate.parentStrategyVersionId ?? application.strategyRuleVersionId,
+  };
+}
+
+function buildCandidateDetailUrl(
+  candidate: any,
+  versionId: string,
+  context: CandidateImproveApplicationContext | null = null,
+): string {
   const params = new URLSearchParams();
   params.set('mode', 'improve_application');
+  if (context) {
+    params.set('symbol_id', context.symbol_id);
+    params.set('symbol_code', context.symbol_code);
+    params.set('symbol_name', context.symbol_name);
+    params.set('application_id', context.application_id);
+    params.set('source_version_id', context.source_version_id);
+  }
   if (candidate.sourceBacktestId) params.set('source_backtest_id', candidate.sourceBacktestId);
   params.set('refinement_candidate_id', candidate.id);
+  if (candidate.sourceBacktestId) params.set('return_to', `/backtests/${candidate.sourceBacktestId}`);
   return `/strategy-versions/${encodeURIComponent(versionId)}?${params.toString()}`;
 }
 
@@ -108,6 +156,9 @@ export const strategyOptimizationSessionRoutes: FastifyPluginAsync = async (fast
     const baseMetrics = parseBacktestMetrics(sourceBacktest);
     const candidatesWithReports = await Promise.all(
       candidates.map(async (candidate: any) => {
+        const improveContext = candidate.createdStrategyRuleVersionId
+          ? await resolveCandidateImproveApplicationContext(candidate)
+          : null;
         const latestBacktest = candidate.createdStrategyRuleVersionId
           ? await prisma.backtest.findFirst({
               where: { strategyRuleVersionId: candidate.createdStrategyRuleVersionId },
@@ -120,7 +171,7 @@ export const strategyOptimizationSessionRoutes: FastifyPluginAsync = async (fast
         const latestMetrics = parseBacktestMetrics(latestBacktest);
         return toOptimizationCandidateResponse(candidate, {
           detail_url: candidate.createdStrategyRuleVersionId
-            ? buildCandidateDetailUrl(candidate, candidate.createdStrategyRuleVersionId)
+            ? buildCandidateDetailUrl(candidate, candidate.createdStrategyRuleVersionId, improveContext)
             : null,
           latest_backtest_report: latestBacktest
             ? {
@@ -239,15 +290,17 @@ export const strategyRefinementCandidateRoutes: FastifyPluginAsync = async (fast
       throw new AppError(404, 'NOT_FOUND', 'strategy refinement candidate was not found.');
     }
     if (existing.createdStrategyRuleVersionId) {
+      const improveContext = await resolveCandidateImproveApplicationContext(existing);
+      const detailUrl = buildCandidateDetailUrl(existing, existing.createdStrategyRuleVersionId, improveContext);
       return reply.status(200).send(
         formatSuccess(request, {
           strategy_version: {
             id: existing.createdStrategyRuleVersionId,
           },
           refinement_candidate: toOptimizationCandidateResponse(existing, {
-            detail_url: buildCandidateDetailUrl(existing, existing.createdStrategyRuleVersionId),
+            detail_url: detailUrl,
           }),
-          detail_url: buildCandidateDetailUrl(existing, existing.createdStrategyRuleVersionId),
+          detail_url: detailUrl,
         }),
       );
     }
@@ -334,26 +387,30 @@ export const strategyRefinementCandidateRoutes: FastifyPluginAsync = async (fast
     });
     if (!result.clonedVersion) {
       const versionId = result.candidate.createdStrategyRuleVersionId;
+      const improveContext = await resolveCandidateImproveApplicationContext(result.candidate);
+      const detailUrl = versionId ? buildCandidateDetailUrl(result.candidate, versionId, improveContext) : null;
       return reply.status(200).send(
         formatSuccess(request, {
           strategy_version: {
             id: versionId,
           },
           refinement_candidate: toOptimizationCandidateResponse(result.candidate, {
-            detail_url: versionId ? buildCandidateDetailUrl(result.candidate, versionId) : null,
+            detail_url: detailUrl,
           }),
-          detail_url: versionId ? buildCandidateDetailUrl(result.candidate, versionId) : null,
+          detail_url: detailUrl,
         }),
       );
     }
 
+    const improveContext = await resolveCandidateImproveApplicationContext(result.candidate);
+    const detailUrl = buildCandidateDetailUrl(result.candidate, result.clonedVersion.id, improveContext);
     return reply.status(201).send(
       formatSuccess(request, {
         strategy_version: toCreatedStrategyVersionResponse(result.clonedVersion),
         refinement_candidate: toOptimizationCandidateResponse(result.candidate, {
-          detail_url: buildCandidateDetailUrl(result.candidate, result.clonedVersion.id),
+          detail_url: detailUrl,
         }),
-        detail_url: buildCandidateDetailUrl(result.candidate, result.clonedVersion.id),
+        detail_url: detailUrl,
         rewrite_context: {
           refinement_candidate: candidateToRewriteContext(result.candidate),
         },
