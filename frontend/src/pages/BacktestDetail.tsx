@@ -503,11 +503,12 @@ function ReportAiSummaryCard({ title, report }: { title: string; report: ReportW
   );
 }
 
-function RuleRefinementCandidatesSection({
+export function RuleRefinementCandidatesSection({
   candidates,
   isAiReviewAvailable,
   creatingCandidateIndex,
   createdCandidateLinks,
+  optimizationSessionId,
   candidateCreateError,
   onCreateCandidateVersion,
 }: {
@@ -515,14 +516,24 @@ function RuleRefinementCandidatesSection({
   isAiReviewAvailable: boolean;
   creatingCandidateIndex: number | null;
   createdCandidateLinks: Record<number, string>;
+  optimizationSessionId: string | null;
   candidateCreateError: string | null;
   onCreateCandidateVersion: (candidateIndex: number) => void | Promise<void>;
 }) {
+  const optimizationSessionLink = optimizationSessionId
+    ? `/strategy-optimization-sessions/${encodeURIComponent(optimizationSessionId)}`
+    : null;
+
   return (
     <SectionCard title="改善候補">
       <p className="mt-0 text-sm text-slate-600">
         AI総評に含まれる rule_refinement_candidates を read-only に表示します。表示だけでは clone / rewrite / Pine生成 / backtest は実行しません。
       </p>
+      {optimizationSessionLink ? (
+        <div className="mb-3 text-sm">
+          <TextLink href={optimizationSessionLink}>Optimization Session を開く</TextLink>
+        </div>
+      ) : null}
       {candidateCreateError ? <InlineNotice tone="danger" className="mb-3">{candidateCreateError}</InlineNotice> : null}
       {candidates.length === 0 ? (
         <EmptyState title={isAiReviewAvailable ? '改善候補はありません。' : 'AI総評が未生成です。'}>
@@ -543,15 +554,25 @@ function RuleRefinementCandidatesSection({
                     <div className="mt-1 text-xs text-slate-600">対象: {candidate.target_area}</div>
                   </div>
                   {createdLink ? (
-                    <TextLink href={createdLink}>作成済み version を開く</TextLink>
+                    <div className="flex flex-wrap gap-3 text-sm">
+                      <TextLink href={createdLink}>作成済み version を開く</TextLink>
+                      {optimizationSessionLink ? (
+                        <TextLink href={optimizationSessionLink}>Optimization Session を開く</TextLink>
+                      ) : null}
+                    </div>
                   ) : (
-                    <Button
-                      data-testid={`create-refinement-candidate-${candidateIndex}`}
-                      onClick={() => onCreateCandidateVersion(candidateIndex)}
-                      disabled={creatingCandidateIndex !== null}
-                    >
-                      {creatingCandidateIndex === candidateIndex ? '作成中...' : 'この候補で改善版を作る'}
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <Button
+                        data-testid={`create-refinement-candidate-${candidateIndex}`}
+                        onClick={() => onCreateCandidateVersion(candidateIndex)}
+                        disabled={creatingCandidateIndex !== null}
+                      >
+                        {creatingCandidateIndex === candidateIndex ? '作成中...' : 'この候補で改善版を作る'}
+                      </Button>
+                      {optimizationSessionLink ? (
+                        <TextLink href={optimizationSessionLink}>Optimization Session を開く</TextLink>
+                      ) : null}
+                    </div>
                   )}
                 </div>
                 <KeyValueList className="mt-3 gap-1 text-sm">
@@ -909,6 +930,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const [creatingCandidateIndex, setCreatingCandidateIndex] = useState<number | null>(null);
   const [candidateCreateError, setCandidateCreateError] = useState<string | null>(null);
   const [createdCandidateLinks, setCreatedCandidateLinks] = useState<Record<number, string>>({});
+  const [optimizationSessionId, setOptimizationSessionId] = useState<string | null>(null);
   const returnPath = parseBacktestsReturnPath(location) ?? '/backtests';
   const comparisonIdFromQuery = parseBacktestComparisonId(location);
   const effectiveComparisonId = savedComparisonId ?? comparisonIdFromQuery;
@@ -1027,6 +1049,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         { objective_type: 'balanced' },
       );
       const session = sessionResponse.optimization_session;
+      setOptimizationSessionId(session.id);
       const candidate = session.candidates.find((item) => item.candidate_index === candidateIndex);
       if (!candidate) {
         throw new Error('改善候補が見つかりません。AI総評を再生成してから再試行してください。');
@@ -1417,6 +1440,7 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
         isAiReviewAvailable={data.ai_review.status === 'available'}
         creatingCandidateIndex={creatingCandidateIndex}
         createdCandidateLinks={createdCandidateLinks}
+        optimizationSessionId={optimizationSessionId}
         candidateCreateError={candidateCreateError}
         onCreateCandidateVersion={onCreateCandidateVersion}
       />
