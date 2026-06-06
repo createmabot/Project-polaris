@@ -51,6 +51,7 @@ vi.mock('../components/ui/Button', async () => {
 });
 
 import BacktestDetail, {
+  RuleRefinementCandidatesSection,
   buildBacktestImprovementCloneFailureMessage,
   parseBacktestsReturnPath,
 } from './BacktestDetail';
@@ -358,6 +359,39 @@ describe('BacktestDetail', () => {
     expect(parsedUrl.searchParams.get('symbol_code')).toBe('7203');
     expect(parsedUrl.searchParams.get('source_backtest_id')).toBe('bt-candidates');
     expect(parsedUrl.searchParams.get('refinement_candidate_id')).toBe('cand-1');
+  });
+
+  it('shows Optimization Session link with created refinement candidate version links without triggering APIs on render', () => {
+    const html = renderToStaticMarkup(
+      <RuleRefinementCandidatesSection
+        candidates={[
+          {
+            title: 'entry filterを強化する',
+            target_area: 'entry',
+            rationale: 'PFを改善するため。',
+            change_summary: '出来高filterを追加する。',
+            entry_change: '出来高が20日平均以上の場合のみentryする。',
+            exit_change: null,
+            risk_change: null,
+            validation_plan: '候補1のPFと勝率を比較する。',
+            expected_metric_effect: {
+              profit_factor: '改善候補',
+            },
+          },
+        ]}
+        isAiReviewAvailable
+        creatingCandidateIndex={null}
+        createdCandidateLinks={{ 1: '/strategy-versions/ver-candidate-1?mode=improve_application' }}
+        optimizationSessionId="sess-1"
+        candidateCreateError={null}
+        onCreateCandidateVersion={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('作成済み version を開く');
+    expect(html).toContain('Optimization Session を開く');
+    expect(html).toContain('href="/strategy-optimization-sessions/sess-1"');
+    expect(mockPostApi).not.toHaveBeenCalled();
   });
 
   it('shows parse error on failed parse', () => {
