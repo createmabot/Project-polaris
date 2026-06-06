@@ -639,6 +639,8 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('銘柄ページへ戻る');
     expect(html).toContain('この銘柄に改善版を適用');
     expect(html).toContain('data-testid="apply-improved-version"');
+    expect(html).not.toContain('Optimization Session を開く');
+    expect(html).not.toContain('/strategy-optimization-sessions/');
     expect(html).toContain('現在の branch');
     expect(html).toContain('現在の version がどの branch にいるかを確認します。');
     expect(html).toContain('現在表示中');
@@ -724,6 +726,9 @@ describe('StrategyVersionDetail', () => {
     expect(html).toContain('同じ application の関連レポートが 1 件あります。');
     expect(html).toContain('改善メモ');
     expect(html).toContain('LLMで新しいルール本文を作る');
+    expect(html).toContain('Optimization Session を開く');
+    expect(html).toContain('href="/strategy-optimization-sessions/sess-1"');
+    expect(html).toContain('この候補を含む改善探索 session で、base version と候補 version の検証結果を比較できます。');
     expect(html).toContain('元ルール、検証結果、AI総評、改善メモをもとに');
     expect(html).toContain('押下だけでは保存・Pine生成・検証・適用は行いません');
     expect(html).toContain('data-testid="llm-rewrite-natural-language-rule"');
