@@ -492,7 +492,7 @@ export function validateAndNormalizeStrategySpec(
     throw new Error('normalized strategy spec schema metadata is invalid');
   }
 
-  const normalizedTimeframe = normalizeTimeframeAlias(String(record.timeframe ?? version.timeframe));
+  const normalizedTimeframe = normalizeTimeframeAlias(version.timeframe);
   const side = sanitizeSpecText(record.side, 40);
   if (side && side !== 'long_only') {
     throw new Error('normalized strategy spec side must be long_only');

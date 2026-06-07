@@ -504,6 +504,23 @@ describe('strategy normalized spec routes', () => {
     expect(spec.indicators).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'MACD' })]));
   });
 
+  it('preserves saved version timeframe instead of trusting LLM output timeframe', async () => {
+    providerState.output = createLlmSpecOutput({ timeframe: 'D' });
+    runtime = createRuntime(createVersion({ timeframe: '4H' }));
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/normalized-spec/generate',
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    const spec = response.json().data.normalized_spec;
+    expect(spec.source.provider).toBe('local_llm');
+    expect(spec.source.fallback_used).toBe(false);
+    expect(spec.timeframe).toBe('4H');
+  });
+
   it('does not expose unsafe raw values in normalized spec responses', async () => {
     runtime = createRuntime(createVersion({
       naturalLanguageRule:
