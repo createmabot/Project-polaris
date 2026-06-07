@@ -12,6 +12,7 @@ import type {
 import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
+import { buildNormalizedStrategySpec, isNormalizedStrategySpec } from '../strategy/normalized-spec';
 import {
   candidateToRewriteContext,
   candidateToRewriteMemo,
@@ -58,6 +59,32 @@ function toStrategyVersionResponse(version: StrategyVersionRecord) {
     timeframe: normalizeTimeframeAlias(version.timeframe),
     created_at: version.createdAt,
     updated_at: version.updatedAt,
+  };
+}
+
+function toNormalizedSpecVersionResponse(version: StrategyVersionRecord) {
+  return {
+    id: version.id,
+    strategy_id: version.strategyRuleId,
+    status: version.status,
+    market: version.market,
+    timeframe: normalizeTimeframeAlias(version.timeframe),
+    updated_at: version.updatedAt,
+  };
+}
+
+function toNormalizedSpecData(versionId: string, normalizedRuleJson: unknown) {
+  const normalizedSpec = isNormalizedStrategySpec(normalizedRuleJson) ? normalizedRuleJson : null;
+  return {
+    strategy_version_id: versionId,
+    status: normalizedSpec ? 'available' : 'unavailable',
+    normalized_spec: normalizedSpec,
+    meta: {
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      internal_backtest_ready: false,
+      internal_backtest_ready_reason: 'normalized_strategy_spec v1 is a foundation artifact; internal backtest execution is not enabled.',
+    },
   };
 }
 
@@ -1068,6 +1095,59 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(200).send(
       formatSuccess(request, {
         annotation: toAnnotationResponse(annotation),
+      }),
+    );
+  });
+
+  fastify.get<{ Params: { versionId: string } }>('/:versionId/normalized-spec', async (request, reply) => {
+    const { versionId } = request.params;
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+      select: {
+        id: true,
+        normalizedRuleJson: true,
+      },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    return reply.status(200).send(formatSuccess(request, toNormalizedSpecData(version.id, version.normalizedRuleJson)));
+  });
+
+  fastify.post<{ Params: { versionId: string } }>('/:versionId/normalized-spec/generate', async (request, reply) => {
+    const { versionId } = request.params;
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+    if (!version.naturalLanguageRule.trim()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule must not be empty.');
+    }
+
+    const normalizedSpec = buildNormalizedStrategySpec({
+      id: version.id,
+      naturalLanguageRule: version.naturalLanguageRule,
+      market: version.market,
+      timeframe: version.timeframe,
+    });
+    const updated = await prisma.strategyRuleVersion.update({
+      where: { id: version.id },
+      data: {
+        normalizedRuleJson: normalizedSpec as Prisma.InputJsonValue,
+      },
+    });
+
+    return reply.status(200).send(
+      formatSuccess(request, {
+        strategy_version: toNormalizedSpecVersionResponse(updated),
+        normalized_spec: normalizedSpec,
+        warnings: normalizedSpec.warnings,
+        assumptions: normalizedSpec.assumptions,
       }),
     );
   });

@@ -594,6 +594,28 @@ export type StrategyVersionRuleRewriteDraftData = {
   };
 };
 
+export type NormalizedStrategySpecData = {
+  strategy_version_id: string;
+  status: 'available' | 'unavailable';
+  normalized_spec: Record<string, unknown> | null;
+  meta: {
+    schema_name: string;
+    schema_version: string;
+    internal_backtest_ready: boolean;
+    internal_backtest_ready_reason: string;
+  };
+};
+
+export type NormalizedStrategySpecGenerateData = {
+  strategy_version: Pick<
+    StrategyVersionData['strategy_version'],
+    'id' | 'strategy_id' | 'status' | 'market' | 'timeframe' | 'updated_at'
+  >;
+  normalized_spec: Record<string, unknown>;
+  warnings: string[];
+  assumptions: string[];
+};
+
 export type StrategyVersionPineGenerateData = {
   strategy_version: StrategyVersionData['strategy_version'];
   pine: {

@@ -8,6 +8,7 @@ const mockPostApi = vi.fn();
 const mockPatchApi = vi.fn();
 const mockUseLocation = vi.fn();
 const mockUseSearch = vi.fn();
+const mockMutateNormalizedSpec = vi.fn();
 const buttonRenderCalls = vi.hoisted(() => [] as Array<{
   text: string;
   props: {
@@ -224,6 +225,71 @@ function createLineagePayload() {
   };
 }
 
+function createNormalizedSpecPayload() {
+  return {
+    strategy_version_id: 'ver-1',
+    status: 'available',
+    normalized_spec: {
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      market: 'JP_STOCK',
+      timeframe: 'D',
+      side: 'long_only',
+      strategy_family: 'trend_following_ma',
+      indicators: [
+        { id: 'sma_25', type: 'SMA', length: 25, source: 'close' },
+        { id: 'rsi_14', type: 'RSI', length: 14, source: 'close' },
+      ],
+      entry: {
+        logic: 'all',
+        conditions: [
+          { id: 'entry_close_above_sma_25', type: 'price_vs_indicator', indicator: 'sma_25', rule: '終値が25期間SMAを上回る' },
+        ],
+      },
+      exit: {
+        logic: 'any',
+        conditions: [
+          { id: 'exit_close_below_sma_25', type: 'price_vs_indicator', indicator: 'sma_25', rule: '終値が25期間SMAを下回る' },
+        ],
+      },
+      risk: {
+        stop_loss: { type: 'percent', value: 5 },
+      },
+      filters: [
+        { id: 'filter_volume_above_volume_sma_20', type: 'volume_filter', indicator: 'volume_sma_20', rule: '出来高が20期間平均以上' },
+      ],
+      warnings: ['測定可能なexit条件を確認してください。'],
+      assumptions: ['MVPでは long_only として解釈します。'],
+      validation: {
+        supported_for_internal_backtest: false,
+        unsupported_features: [],
+        warnings: ['測定可能なexit条件を確認してください。'],
+        assumptions: ['MVPでは long_only として解釈します。'],
+      },
+    },
+    meta: {
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      internal_backtest_ready: false,
+      internal_backtest_ready_reason: 'foundation artifact',
+    },
+  };
+}
+
+function createUnavailableNormalizedSpecPayload() {
+  return {
+    strategy_version_id: 'ver-1',
+    status: 'unavailable',
+    normalized_spec: null,
+    meta: {
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      internal_backtest_ready: false,
+      internal_backtest_ready_reason: 'foundation artifact',
+    },
+  };
+}
+
 function createSourceBacktestPayload() {
   return {
     backtest: {
@@ -353,6 +419,7 @@ function setupSWR(
   sourceBacktestError: Error | null = null,
   refinementCandidatePayload: any = null,
   refinementCandidateError: Error | null = null,
+  normalizedSpecPayload: any = createUnavailableNormalizedSpecPayload(),
 ) {
   mockUseSWR.mockImplementation((key: string) => {
     if (typeof key === 'string' && key.startsWith('/api/strategy-refinement-candidates/')) {
@@ -377,6 +444,14 @@ function setupSWR(
         error: null,
         mutate: vi.fn(),
         data: pinePayload,
+      };
+    }
+    if (typeof key === 'string' && key.endsWith('/normalized-spec')) {
+      return {
+        isLoading: false,
+        error: null,
+        mutate: mockMutateNormalizedSpec,
+        data: normalizedSpecPayload,
       };
     }
     if (typeof key === 'string' && key.startsWith('/api/strategy-versions/')) {
@@ -413,6 +488,7 @@ describe('StrategyVersionDetail', () => {
     mockFetchApi.mockReset();
     mockPostApi.mockReset();
     mockPatchApi.mockReset();
+    mockMutateNormalizedSpec.mockReset();
     mockUseSearch.mockReset();
     mockUseSearch.mockReturnValue('');
   });
@@ -882,6 +958,79 @@ describe('StrategyVersionDetail', () => {
     expect(revisionButton?.props.disabled).toBe(true);
   });
 
+  it('renders available normalized strategy spec without triggering generation', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      createNormalizedSpecPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('構造化ルール spec');
+    expect(html).toContain('normalized_strategy_spec');
+    expect(html).toContain('trend_following_ma');
+    expect(html).toContain('SMA / sma_25');
+    expect(html).toContain('RSI / rsi_14');
+    expect(html).toContain('終値が25期間SMAを上回る');
+    expect(html).toContain('stop_loss: percent 5');
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('generates normalized strategy spec only after explicit button click', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+    mockPostApi.mockResolvedValue({
+      strategy_version: {
+        id: 'ver-1',
+        strategy_id: 'str-1',
+        status: 'generated',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        updated_at: '2026-06-01T00:00:00.000Z',
+      },
+      normalized_spec: createNormalizedSpecPayload().normalized_spec,
+      warnings: [],
+      assumptions: ['MVPでは long_only として解釈します。'],
+    });
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('構造化specはまだありません');
+    expect(mockPostApi).not.toHaveBeenCalled();
+
+    const generateButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'generate-normalized-spec-button');
+    expect(generateButton?.text).toBe('構造化specを生成');
+
+    await generateButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith('/api/strategy-versions/ver-1/normalized-spec/generate', {});
+    expect(mockMutateNormalizedSpec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        strategy_version_id: 'ver-1',
+        status: 'available',
+        normalized_spec: expect.objectContaining({ schema_name: 'normalized_strategy_spec' }),
+      }),
+      false,
+    );
+    expect(mockFetchApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs/pine-job-1');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/generation-jobs');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/regeneration-jobs');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/symbols/sym-1/strategy-applications');
+  });
+
   it('saves only the natural language rule when clicking the clarified save button', async () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
@@ -900,6 +1049,7 @@ describe('StrategyVersionDetail', () => {
     expect(mockPatchApi.mock.calls[0]?.[0]).toBe('/api/strategy-versions/ver-1');
     expect(mockPatchApi.mock.calls[0]?.[1]).toEqual({ natural_language_rule: expect.any(String) });
     expect(mockPostApi).not.toHaveBeenCalled();
+    expect(mockMutateNormalizedSpec).toHaveBeenCalled();
   });
 
   it('starts Pine generation job only when clicking the clarified rebuild button', async () => {

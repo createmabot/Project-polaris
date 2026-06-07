@@ -1272,5 +1272,6 @@ SymbolDetail では `銘柄概要` の直下に `投資カレンダー` section 
 - Phase 3 の SymbolDetail 直接 improvement clone 導線は廃止済み。SymbolDetail の application row では StrategyVersionDetail link、run / report 履歴、CSV import、archive / restore を確認し、改善版作成は BacktestDetail で検証レポートと AI総評を確認した後に行う。
 - Phase 4 では、improvement context 付き StrategyVersionDetail で `この銘柄に改善版を適用` を明示操作で実行できることを確認する。旧 application は自動 archive されず、必要ならユーザーが手動 archive する。
 - 改善候補から作成した StrategyVersionDetail では、`選択中の改善候補` に `Optimization Session を開く` link が表示され、base / candidate 比較 board へ戻れることを確認する。通常の StrategyVersionDetail ではこの link は表示されない。
+- StrategyVersionDetail の `構造化ルール spec` section で、未生成時に `構造化specを生成` を明示クリックし、market / timeframe / side、strategy family、indicator、entry / exit / risk / filter、warnings / assumptions、JSON preview が表示されることを確認する。生成・表示だけで Pine generation、backtest、AI summary、optimization、application apply が起動しないこと、ルール本文保存後は必要に応じて spec 再生成を案内することを確認する。
 - 全 phase で internal backtest 新規実行 UI、TradingView embedded chart widget、TradingView compile automation、auto Pine / auto save / auto backtest / AI summary 自動連鎖が追加されていないことを確認する。
 - raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace が UI / API / docs / PR に出ていないことを確認する。
