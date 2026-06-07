@@ -16,6 +16,7 @@ type Position = {
   entryTime: Date;
   entryPrice: number;
   quantity: number;
+  atrStopDistance: number | null;
 };
 
 type Condition = CompiledInternalBacktestSpec['entryConditions'][number];
@@ -158,6 +159,8 @@ function summarize(
   const firstClose = bars[0]?.close ?? null;
   const lastClose = bars[bars.length - 1]?.close ?? null;
   const priceChangePercent = firstClose && lastClose ? ((lastClose - firstClose) / firstClose) * 100 : null;
+  const firstTrade = trades[0] ?? null;
+  const lastTrade = trades[trades.length - 1] ?? null;
 
   return {
     summary_kind: 'internal_backtest_v1',
@@ -165,6 +168,12 @@ function summarize(
       from: iso(bars[0].time),
       to: iso(bars[bars.length - 1].time),
       bar_count: bars.length,
+    },
+    trade_period: {
+      first_entry_at: firstTrade?.entry_time ?? null,
+      last_exit_at: lastTrade?.exit_time ?? null,
+      first_trade_at: firstTrade?.entry_time ?? null,
+      last_trade_at: lastTrade?.exit_time ?? null,
     },
     metrics: {
       initial_capital: round(initialCapital),
@@ -231,18 +240,28 @@ export function executeInternalBacktest(input: {
 
     if (pendingEntry && !position) {
       const quantity = cash / bar.open;
+      const atrStopValue = spec.stopLossAtrIndicator
+        ? readNumericSeriesValue(series, spec.stopLossAtrIndicator, index)
+        : null;
       position = {
         entryIndex: index,
         entryTime: bar.time,
         entryPrice: bar.open,
         quantity,
+        atrStopDistance: atrStopValue !== null && spec.stopLossAtrMultiplier !== null
+          ? atrStopValue * spec.stopLossAtrMultiplier
+          : null,
       };
       cash = 0;
     }
     pendingEntry = false;
 
     if (position) {
-      const stopPrice = spec.stopLossPercent === null ? null : position.entryPrice * (1 - spec.stopLossPercent / 100);
+      const stopPrice = position.atrStopDistance !== null
+        ? position.entryPrice - position.atrStopDistance
+        : spec.stopLossPercent === null
+          ? null
+          : position.entryPrice * (1 - spec.stopLossPercent / 100);
       const takeProfitPrice = spec.takeProfitPercent === null ? null : position.entryPrice * (1 + spec.takeProfitPercent / 100);
       if (stopPrice !== null && bar.low <= stopPrice) {
         const trade = closeTrade(position, bar, index, stopPrice, 'stop_loss');
