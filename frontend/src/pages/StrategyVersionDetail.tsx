@@ -25,6 +25,8 @@ import {
   BacktestDetailData,
   StrategyVersionRuleRewriteDraftData,
   StrategyRefinementCandidateData,
+  NormalizedStrategySpecData,
+  NormalizedStrategySpecGenerateData,
 } from '../api/types';
 import {
   buildStrategyVersionDetailUrl,
@@ -203,6 +205,41 @@ function compactSafeText(value: string | null | undefined, maxLength = 240): str
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
+}
+
+function recordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)));
+}
+
+function stringField(record: Record<string, unknown> | null, key: string): string {
+  const value = record?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return '-';
+}
+
+function normalizedSpecListLabel(item: Record<string, unknown>): string {
+  const id = stringField(item, 'id');
+  const type = stringField(item, 'type');
+  const length = stringField(item, 'length');
+  const rule = stringField(item, 'rule');
+  const core = [type !== '-' ? type : null, id !== '-' ? id : null].filter(Boolean).join(' / ') || '-';
+  const details = [length !== '-' ? `length ${length}` : null, rule !== '-' ? rule : null].filter(Boolean).join(' / ');
+  return details ? `${core}: ${details}` : core;
+}
+
+function normalizedSpecRiskLabels(risk: Record<string, unknown> | null): string[] {
+  if (!risk) return [];
+  return Object.entries(risk).map(([key, value]) => {
+    const record = asRecord(value);
+    if (!record) return key;
+    const type = stringField(record, 'type');
+    const valueText = stringField(record, 'value');
+    const bars = stringField(record, 'bars');
+    const detail = valueText !== '-' ? valueText : bars !== '-' ? bars : '';
+    return detail ? `${key}: ${type} ${detail}` : `${key}: ${type}`;
+  });
 }
 
 function extractAiKeyPoints(structuredJson: Record<string, unknown> | null | undefined): string[] {
@@ -580,6 +617,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     `/api/strategy-versions/${versionId}/pine`,
     swrFetcher,
   );
+  const {
+    data: normalizedSpecData,
+    mutate: mutateNormalizedSpec,
+  } = useSWR<NormalizedStrategySpecData>(
+    `/api/strategy-versions/${versionId}/normalized-spec`,
+    swrFetcher,
+  );
 
   const [regenerating, setRegenerating] = useState(false);
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
@@ -612,11 +656,32 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [savingRule, setSavingRule] = useState(false);
   const [saveRuleError, setSaveRuleError] = useState<string | null>(null);
   const [saveRuleMessage, setSaveRuleMessage] = useState<string | null>(null);
+  const [generatingNormalizedSpec, setGeneratingNormalizedSpec] = useState(false);
+  const [normalizedSpecError, setNormalizedSpecError] = useState<string | null>(null);
+  const [normalizedSpecMessage, setNormalizedSpecMessage] = useState<string | null>(null);
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
 
   const version = data?.strategy_version ?? null;
   const compareBase = data?.compare_base ?? null;
+  const normalizedSpec = asRecord(normalizedSpecData?.normalized_spec);
+  const normalizedSpecEntry = asRecord(normalizedSpec?.entry);
+  const normalizedSpecExit = asRecord(normalizedSpec?.exit);
+  const normalizedSpecRisk = asRecord(normalizedSpec?.risk);
+  const normalizedSpecValidation = asRecord(normalizedSpec?.validation);
+  const normalizedSpecIndicators = recordArray(normalizedSpec?.indicators);
+  const normalizedSpecEntryConditions = recordArray(normalizedSpecEntry?.conditions);
+  const normalizedSpecExitConditions = recordArray(normalizedSpecExit?.conditions);
+  const normalizedSpecFilters = recordArray(normalizedSpec?.filters);
+  const normalizedSpecWarnings = Array.isArray(normalizedSpec?.warnings)
+    ? normalizedSpec.warnings.filter((item): item is string => typeof item === 'string')
+    : [];
+  const normalizedSpecAssumptions = Array.isArray(normalizedSpec?.assumptions)
+    ? normalizedSpec.assumptions.filter((item): item is string => typeof item === 'string')
+    : [];
+  const normalizedSpecUnsupported = Array.isArray(normalizedSpecValidation?.unsupported_features)
+    ? normalizedSpecValidation.unsupported_features.filter((item): item is string => typeof item === 'string')
+    : [];
   const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
   const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
   const pineState: 'unavailable' | 'generating' | 'warning' | 'failed' | 'available' = regenerating
@@ -977,6 +1042,34 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     }
   };
 
+  const onGenerateNormalizedSpec = async () => {
+    setGeneratingNormalizedSpec(true);
+    setNormalizedSpecError(null);
+    setNormalizedSpecMessage(null);
+    try {
+      const response = await postApi<NormalizedStrategySpecGenerateData>(
+        `/api/strategy-versions/${versionId}/normalized-spec/generate`,
+        {},
+      );
+      await mutateNormalizedSpec({
+        strategy_version_id: response.strategy_version.id,
+        status: 'available',
+        normalized_spec: response.normalized_spec,
+        meta: {
+          schema_name: 'normalized_strategy_spec',
+          schema_version: '1.0',
+          internal_backtest_ready: false,
+          internal_backtest_ready_reason: 'normalized_strategy_spec v1 is a foundation artifact; internal backtest execution is not enabled.',
+        },
+      }, false);
+      setNormalizedSpecMessage('構造化specを生成しました。表示だけではPine生成やbacktestは起動していません。');
+    } catch (requestError: any) {
+      setNormalizedSpecError(requestError?.message ?? '構造化specの生成に失敗しました。');
+    } finally {
+      setGeneratingNormalizedSpec(false);
+    }
+  };
+
   const onSaveRule = async () => {
     setSavingRule(true);
     setSaveRuleError(null);
@@ -986,7 +1079,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         natural_language_rule: editingNaturalLanguageRule,
       });
       await mutate(response, false);
-      setSaveRuleMessage('ルール本文を保存しました。必要に応じて Pine を再生成してください。');
+      await mutateNormalizedSpec();
+      setNormalizedSpecMessage(null);
+      setSaveRuleMessage('ルール本文を保存しました。必要に応じて構造化specを再生成し、その後に Pine を作り直してください。');
     } catch (requestError: any) {
       setSaveRuleError(requestError?.message ?? 'ルール保存に失敗しました。');
     } finally {
@@ -1380,6 +1475,128 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         </div>
         </SectionCard>
       </div>
+
+      <SectionCard
+        title='構造化ルール spec'
+        description='自然言語ルールを、将来の内部バックテストやPine生成補助に使える構造化specとして確認します。表示・生成だけではPine生成やbacktestは起動しません。'
+        className='mt-4'
+      >
+        <div className='mb-3 flex flex-wrap items-center gap-2'>
+          <StatusBadge status={normalizedSpecData?.status === 'available' ? 'available' : 'draft'}>
+            {normalizedSpecData?.status === 'available' ? 'available' : 'unavailable'}
+          </StatusBadge>
+          <span className='text-sm text-slate-600'>
+            schema: {normalizedSpecData?.meta.schema_name ?? 'normalized_strategy_spec'} / {normalizedSpecData?.meta.schema_version ?? '1.0'}
+          </span>
+          <span className='text-sm text-slate-600'>
+            internal backtest ready: {normalizedSpecData?.meta.internal_backtest_ready ? 'true' : 'false'}
+          </span>
+        </div>
+        <div className='mb-3 flex flex-wrap gap-2'>
+          <Button
+            variant='primary'
+            data-testid='generate-normalized-spec-button'
+            onClick={onGenerateNormalizedSpec}
+            disabled={generatingNormalizedSpec}
+          >
+            {generatingNormalizedSpec ? '生成中...' : '構造化specを生成'}
+          </Button>
+        </div>
+        {normalizedSpecMessage ? (
+          <InlineNotice tone='success' className='mb-3'>
+            {normalizedSpecMessage}
+          </InlineNotice>
+        ) : null}
+        {normalizedSpecError ? (
+          <InlineNotice tone='warning' className='mb-3'>
+            {normalizedSpecError}
+          </InlineNotice>
+        ) : null}
+        {!normalizedSpec ? (
+          <EmptyState title='構造化specはまだありません'>
+            `構造化specを生成` を押すと、保存済み自然言語ルールから normalized_strategy_spec v1 を作成します。
+          </EmptyState>
+        ) : (
+          <div className='grid gap-4'>
+            <KeyValueList className='gap-x-4 gap-y-1 sm:grid-cols-2'>
+              <KeyValueRow label='market'>{stringField(normalizedSpec, 'market')}</KeyValueRow>
+              <KeyValueRow label='timeframe'>{stringField(normalizedSpec, 'timeframe')}</KeyValueRow>
+              <KeyValueRow label='side'>{stringField(normalizedSpec, 'side')}</KeyValueRow>
+              <KeyValueRow label='strategy_family'>{stringField(normalizedSpec, 'strategy_family')}</KeyValueRow>
+            </KeyValueList>
+            <div className='grid gap-3 sm:grid-cols-2'>
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>indicators</div>
+                {normalizedSpecIndicators.length > 0 ? (
+                  <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                    {normalizedSpecIndicators.map((item, index) => (
+                      <li key={`indicator-${stringField(item, 'id')}-${index}`}>{normalizedSpecListLabel(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-0 text-sm text-slate-600'>抽出された indicator はありません。</p>
+                )}
+              </div>
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>filters</div>
+                {normalizedSpecFilters.length > 0 ? (
+                  <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                    {normalizedSpecFilters.map((item, index) => (
+                      <li key={`filter-${stringField(item, 'id')}-${index}`}>{normalizedSpecListLabel(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-0 text-sm text-slate-600'>抽出された filter はありません。</p>
+                )}
+              </div>
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>entry</div>
+                {normalizedSpecEntryConditions.length > 0 ? (
+                  <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                    {normalizedSpecEntryConditions.map((item, index) => (
+                      <li key={`entry-${stringField(item, 'id')}-${index}`}>{normalizedSpecListLabel(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-0 text-sm text-slate-600'>entry condition は未抽出です。</p>
+                )}
+              </div>
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>exit / risk</div>
+                {normalizedSpecExitConditions.length > 0 ? (
+                  <ul className='mb-2 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                    {normalizedSpecExitConditions.map((item, index) => (
+                      <li key={`exit-${stringField(item, 'id')}-${index}`}>{normalizedSpecListLabel(item)}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-2 text-sm text-slate-600'>exit condition は未抽出です。</p>
+                )}
+                {normalizedSpecRiskLabels(normalizedSpecRisk).length > 0 ? (
+                  <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                    {normalizedSpecRiskLabels(normalizedSpecRisk).map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className='mb-0 text-sm text-slate-600'>risk rule は未抽出です。</p>
+                )}
+              </div>
+            </div>
+            {(normalizedSpecWarnings.length > 0 || normalizedSpecUnsupported.length > 0 || normalizedSpecAssumptions.length > 0) ? (
+              <InlineNotice tone='info'>
+                {[...normalizedSpecWarnings, ...normalizedSpecUnsupported, ...normalizedSpecAssumptions].join(' / ')}
+              </InlineNotice>
+            ) : null}
+            <details className='rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700'>
+              <summary className='cursor-pointer font-semibold text-slate-900'>raw JSON preview</summary>
+              <pre className='mt-3 max-h-80 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100'>
+                {JSON.stringify(normalizedSpec, null, 2)}
+              </pre>
+            </details>
+          </div>
+        )}
+      </SectionCard>
 
       {saveRuleError && (
         <div style={{ marginTop: '0.8rem', padding: '0.75rem', background: '#fff4f4', border: '1px solid #e08a8a', color: '#a10000', borderRadius: '4px' }}>
