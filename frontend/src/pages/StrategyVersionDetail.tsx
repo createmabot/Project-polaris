@@ -1491,6 +1491,16 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           <span className='text-sm text-slate-600'>
             internal backtest ready: {normalizedSpecData?.meta.internal_backtest_ready ? 'true' : 'false'}
           </span>
+          {normalizedSpec ? (
+            <>
+              <span className='text-sm text-slate-600'>
+                source: {stringField(asRecord(normalizedSpec.source), 'provider') || 'unknown'}
+              </span>
+              {asRecord(normalizedSpec.source)?.fallback_used === true ? (
+                <StatusBadge tone='info'>fallback</StatusBadge>
+              ) : null}
+            </>
+          ) : null}
         </div>
         <div className='mb-3 flex flex-wrap gap-2'>
           <Button

@@ -7,6 +7,10 @@ export type NormalizedStrategySpec = {
     strategy_version_id: string;
     generated_from: 'natural_language_rule';
     generated_at: string;
+    provider?: 'local_llm' | 'openai_api' | 'deterministic';
+    provider_task?: 'strategy_spec_normalization';
+    fallback_used?: boolean;
+    requested_provider?: 'local_llm' | 'openai_api' | 'deterministic';
   };
   market: string;
   timeframe: string;
@@ -39,6 +43,181 @@ type StrategyVersionInput = {
   market: string;
   timeframe: string;
 };
+
+export type StrategySpecProviderName = 'local_llm' | 'openai_api' | 'deterministic';
+
+export type NormalizedStrategySpecMetadata = {
+  provider: StrategySpecProviderName;
+  requestedProvider?: StrategySpecProviderName;
+  fallbackUsed: boolean;
+  generatedAt?: string;
+};
+
+export type NormalizedStrategySpecValidationResult = {
+  spec: NormalizedStrategySpec;
+  warnings: string[];
+  assumptions: string[];
+};
+
+const ALLOWED_OPERATORS = new Set(['>', '>=', '<', '<=', '==', 'crosses_above', 'crosses_below']);
+
+const UNSAFE_TEXT_PATTERNS: RegExp[] = [
+  /https?:\/\/\S+/gi,
+  /\b(?:endpoint|url|model|token|secret|api[_-]?key|password|credential)\s*[:=]\s*[^\s,;]+/gi,
+  /\bBearer\s+[A-Za-z0-9._~+/-]+/gi,
+  /[A-Za-z]:\\[^\s"'<>]+/g,
+  /\/(?:Users|home|var|tmp|mnt|workspace|app)\/[^\s"'<>]+/g,
+  /\b(?:raw prompt|raw provider response|raw response|stack trace|Traceback)\b/gi,
+];
+
+function sanitizeSpecText(value: unknown, maxLength = 260): string | null {
+  if (typeof value !== 'string') return null;
+  let text = value.replace(/\r\n/g, '\n').replace(/[ \t\u3000]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+  if (!text) return null;
+  for (const pattern of UNSAFE_TEXT_PATTERNS) {
+    text = text.replace(pattern, '[redacted]');
+  }
+  if (text.length > maxLength) {
+    text = text.slice(0, maxLength).trim();
+  }
+  return text || null;
+}
+
+function sanitizeStringArray(value: unknown, limit = 12, maxLength = 220): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => sanitizeSpecText(item, maxLength))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, limit);
+}
+
+function normalizeOperator(value: unknown): string | null {
+  const raw = sanitizeSpecText(value, 40);
+  if (!raw) return null;
+  const normalized = raw
+    .replace(/=>/g, '>=')
+    .replace(/=<|≤/g, '<=')
+    .replace(/≥/g, '>=')
+    .replace(/＞/g, '>')
+    .replace(/＜/g, '<')
+    .replace(/以上/g, '>=')
+    .replace(/以下/g, '<=')
+    .replace(/上回る|より大きい/g, '>')
+    .replace(/下回る|より小さい/g, '<')
+    .replace(/cross(?:es)? above|cross_over|crossover|クロスアップ/gi, 'crosses_above')
+    .replace(/cross(?:es)? below|cross_under|crossunder|クロスダウン/gi, 'crosses_below')
+    .trim();
+  return ALLOWED_OPERATORS.has(normalized) ? normalized : null;
+}
+
+function normalizeNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(/%/g, '').trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function normalizeRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizeId(value: unknown, fallback: string): string {
+  const raw = sanitizeSpecText(value, 80);
+  if (!raw) return fallback;
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return normalized || fallback;
+}
+
+function normalizeIndicator(input: unknown, index: number): Record<string, unknown> | null {
+  const record = normalizeRecord(input);
+  if (!record) return null;
+  const type = sanitizeSpecText(record.type, 40)?.toUpperCase().replace('VOLUME_SMA', 'VOLUME_SMA') ?? null;
+  if (!type || !['SMA', 'EMA', 'RSI', 'MACD', 'ATR', 'VOLUME_SMA'].includes(type)) return null;
+  const length = normalizeNumber(record.length);
+  const id = normalizeId(record.id, `${type.toLowerCase()}_${length ?? index + 1}`);
+  const output: Record<string, unknown> = { id, type };
+  if (length !== null) output.length = length;
+  for (const key of ['fast', 'slow', 'signal']) {
+    const numeric = normalizeNumber(record[key]);
+    if (numeric !== null) output[key] = numeric;
+  }
+  const source = sanitizeSpecText(record.source, 40);
+  if (source) output.source = source;
+  return output;
+}
+
+function normalizeCondition(input: unknown, fallbackPrefix: string, index: number): Record<string, unknown> | null {
+  const record = normalizeRecord(input);
+  if (!record) return null;
+  const type = sanitizeSpecText(record.type, 80) ?? 'condition';
+  const id = normalizeId(record.id, `${fallbackPrefix}_${index + 1}`);
+  const output: Record<string, unknown> = { id, type };
+  for (const key of ['indicator', 'left', 'right', 'basis', 'rule']) {
+    const text = sanitizeSpecText(record[key], key === 'rule' ? 220 : 80);
+    if (text) output[key] = text;
+  }
+  const operator = normalizeOperator(record.operator);
+  if (operator) output.operator = operator;
+  for (const key of ['value', 'multiplier', 'bars']) {
+    const numeric = normalizeNumber(record[key]);
+    if (numeric !== null) output[key] = numeric;
+  }
+  return output;
+}
+
+function normalizeRisk(input: unknown): Record<string, unknown> {
+  const record = normalizeRecord(input);
+  if (!record) return {};
+  const output: Record<string, unknown> = {};
+  for (const [key, rawValue] of Object.entries(record)) {
+    const riskRecord = normalizeRecord(rawValue);
+    if (riskRecord) {
+      const normalized: Record<string, unknown> = {};
+      for (const [riskKey, riskValue] of Object.entries(riskRecord)) {
+        if (typeof riskValue === 'boolean') {
+          normalized[riskKey] = riskValue;
+          continue;
+        }
+        const numeric = normalizeNumber(riskValue);
+        if (numeric !== null) {
+          normalized[riskKey] = numeric;
+          continue;
+        }
+        const text = sanitizeSpecText(riskValue, 160);
+        if (text) normalized[riskKey] = text;
+      }
+      if (Object.keys(normalized).length > 0) output[normalizeId(key, key)] = normalized;
+      continue;
+    }
+    const text = sanitizeSpecText(rawValue, 180);
+    if (text) output[normalizeId(key, key)] = { supported: false, rule: text };
+  }
+  return output;
+}
+
+function withSourceMetadata(
+  spec: NormalizedStrategySpec,
+  metadata: NormalizedStrategySpecMetadata,
+): NormalizedStrategySpec {
+  return {
+    ...spec,
+    source: {
+      strategy_version_id: spec.source.strategy_version_id,
+      generated_from: 'natural_language_rule',
+      generated_at: metadata.generatedAt ?? new Date().toISOString(),
+      provider: metadata.provider,
+      provider_task: 'strategy_spec_normalization',
+      fallback_used: metadata.fallbackUsed,
+      requested_provider: metadata.requestedProvider ?? metadata.provider,
+    },
+  };
+}
 
 function compactRuleText(value: string): string {
   return value
@@ -90,7 +269,10 @@ function detectUnsupportedFeatures(text: string, timeframe: string): string[] {
   return Array.from(new Set(unsupported));
 }
 
-export function buildNormalizedStrategySpec(version: StrategyVersionInput): NormalizedStrategySpec {
+export function buildNormalizedStrategySpec(
+  version: StrategyVersionInput,
+  metadata: Partial<NormalizedStrategySpecMetadata> = {},
+): NormalizedStrategySpec {
   const text = compactRuleText(version.naturalLanguageRule);
   const normalizedTimeframe = normalizeTimeframeAlias(version.timeframe);
   const warnings: string[] = [];
@@ -251,7 +433,7 @@ export function buildNormalizedStrategySpec(version: StrategyVersionInput): Norm
   const uniqueExit = uniqueByKey(exitConditions, 'id');
   const uniqueFilters = uniqueByKey(filters, 'id');
 
-  return {
+  const spec: NormalizedStrategySpec = {
     schema_name: 'normalized_strategy_spec',
     schema_version: '1.0',
     source: {
@@ -283,11 +465,104 @@ export function buildNormalizedStrategySpec(version: StrategyVersionInput): Norm
     warnings,
     assumptions,
   };
+  return withSourceMetadata(spec, {
+    provider: metadata.provider ?? 'deterministic',
+    requestedProvider: metadata.requestedProvider ?? metadata.provider ?? 'deterministic',
+    fallbackUsed: metadata.fallbackUsed ?? false,
+    generatedAt: metadata.generatedAt,
+  });
 }
 
 export function isNormalizedStrategySpec(value: unknown): value is NormalizedStrategySpec {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return record.schema_name === 'normalized_strategy_spec' && record.schema_version === '1.0';
+}
+
+export function validateAndNormalizeStrategySpec(
+  value: unknown,
+  version: StrategyVersionInput,
+  metadata: NormalizedStrategySpecMetadata,
+): NormalizedStrategySpecValidationResult {
+  const record = normalizeRecord(value);
+  if (!record) {
+    throw new Error('normalized strategy spec must be an object');
+  }
+  if (record.schema_name !== 'normalized_strategy_spec' || record.schema_version !== '1.0') {
+    throw new Error('normalized strategy spec schema metadata is invalid');
+  }
+
+  const normalizedTimeframe = normalizeTimeframeAlias(String(record.timeframe ?? version.timeframe));
+  const side = sanitizeSpecText(record.side, 40);
+  if (side && side !== 'long_only') {
+    throw new Error('normalized strategy spec side must be long_only');
+  }
+
+  const indicators = (Array.isArray(record.indicators) ? record.indicators : [])
+    .map((item, index) => normalizeIndicator(item, index))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const entryRecord = normalizeRecord(record.entry);
+  const exitRecord = normalizeRecord(record.exit);
+  const entryConditions = (Array.isArray(entryRecord?.conditions) ? entryRecord.conditions : [])
+    .map((item, index) => normalizeCondition(item, 'entry', index))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const exitConditions = (Array.isArray(exitRecord?.conditions) ? exitRecord.conditions : [])
+    .map((item, index) => normalizeCondition(item, 'exit', index))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+  const filters = (Array.isArray(record.filters) ? record.filters : [])
+    .map((item, index) => normalizeCondition(item, 'filter', index))
+    .filter((item): item is Record<string, unknown> => Boolean(item));
+
+  if (indicators.length === 0 || entryConditions.length === 0 || exitConditions.length === 0) {
+    throw new Error('normalized strategy spec must include indicators, entry, and exit conditions');
+  }
+
+  const validationRecord = normalizeRecord(record.validation);
+  const unsupportedFeatures = sanitizeStringArray(validationRecord?.unsupported_features, 16, 120);
+  const warnings = sanitizeStringArray(record.warnings, 16, 180).concat(
+    sanitizeStringArray(validationRecord?.warnings, 16, 180),
+  );
+  const assumptions = sanitizeStringArray(record.assumptions, 16, 180).concat(
+    sanitizeStringArray(validationRecord?.assumptions, 16, 180),
+  );
+
+  const spec: NormalizedStrategySpec = {
+    schema_name: 'normalized_strategy_spec',
+    schema_version: '1.0',
+    source: {
+      strategy_version_id: version.id,
+      generated_from: 'natural_language_rule',
+      generated_at: metadata.generatedAt ?? new Date().toISOString(),
+    },
+    market: sanitizeSpecText(record.market, 40) ?? version.market,
+    timeframe: normalizedTimeframe,
+    side: 'long_only',
+    strategy_family: sanitizeSpecText(record.strategy_family, 80) ?? detectStrategyFamily(version.naturalLanguageRule),
+    indicators: uniqueByKey(indicators, 'id'),
+    entry: {
+      logic: entryRecord?.logic === 'any' ? 'all' : 'all',
+      conditions: uniqueByKey(entryConditions, 'id'),
+    },
+    exit: {
+      logic: exitRecord?.logic === 'all' ? 'any' : 'any',
+      conditions: uniqueByKey(exitConditions, 'id'),
+    },
+    risk: normalizeRisk(record.risk),
+    filters: uniqueByKey(filters, 'id'),
+    validation: {
+      supported_for_internal_backtest: false,
+      unsupported_features: unsupportedFeatures,
+      warnings: Array.from(new Set(warnings)),
+      assumptions: Array.from(new Set(assumptions)),
+    },
+    warnings: Array.from(new Set(warnings)),
+    assumptions: Array.from(new Set(assumptions)),
+  };
+
+  return {
+    spec: withSourceMetadata(spec, metadata),
+    warnings: spec.warnings,
+    assumptions: spec.assumptions,
+  };
 }
 
