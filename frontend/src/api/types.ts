@@ -616,6 +616,48 @@ export type NormalizedStrategySpecGenerateData = {
   assumptions: string[];
 };
 
+export type StrategyImplementationAlignmentData = {
+  schema_name: 'strategy_implementation_alignment';
+  schema_version: '1.0';
+  strategy_version_id: string;
+  status: 'ok' | 'warning' | 'mismatch' | 'unavailable' | string;
+  summary: {
+    matched_count: number;
+    mismatch_count: number;
+    missing_in_pine_count: number;
+    missing_in_spec_count: number;
+  };
+  matched: Array<{
+    area: 'indicator' | 'entry' | 'exit' | 'risk' | 'filter' | string;
+    label: string;
+    spec: string;
+    pine: string;
+  }>;
+  mismatches: Array<{
+    area: 'indicator' | 'entry' | 'exit' | 'risk' | 'filter' | string;
+    severity: 'warning' | 'error' | string;
+    label: string;
+    spec: string;
+    pine: string;
+    message: string;
+  }>;
+  missing_in_pine: Array<{
+    area: 'indicator' | 'entry' | 'exit' | 'risk' | 'filter' | string;
+    severity: 'warning' | 'error' | string;
+    label: string;
+    spec: string;
+  }>;
+  missing_in_spec: Array<{
+    area: 'indicator' | 'entry' | 'exit' | 'risk' | 'filter' | string;
+    severity: 'warning' | 'error' | string;
+    label: string;
+    pine: string;
+  }>;
+  warnings: string[];
+  assumptions: string[];
+  reason?: string;
+};
+
 export type StrategyVersionInternalBacktestData = {
   backtest: {
     id: string;

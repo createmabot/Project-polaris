@@ -19,6 +19,7 @@ import {
   validateAndNormalizeStrategySpec,
   type StrategySpecProviderName,
 } from '../strategy/normalized-spec';
+import { buildImplementationAlignmentReport } from '../strategy/implementation-alignment';
 import { executeInternalBacktest } from '../internal-backtest/engine';
 import { compileInternalBacktestSpec } from '../internal-backtest/spec';
 import { InternalBacktestValidationError, type InternalBacktestBar } from '../internal-backtest/types';
@@ -1238,6 +1239,30 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return reply.status(200).send(formatSuccess(request, toNormalizedSpecData(version.id, version.normalizedRuleJson)));
+  });
+
+  fastify.get<{ Params: { versionId: string } }>('/:versionId/implementation-alignment', async (request, reply) => {
+    const { versionId } = request.params;
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+      select: {
+        id: true,
+        normalizedRuleJson: true,
+        generatedPine: true,
+      },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+
+    return reply.status(200).send(
+      formatSuccess(request, buildImplementationAlignmentReport({
+        strategyVersionId: version.id,
+        generatedPine: version.generatedPine,
+        normalizedRuleJson: version.normalizedRuleJson,
+      })),
+    );
   });
 
   fastify.post<{ Params: { versionId: string } }>('/:versionId/normalized-spec/generate', async (request, reply) => {

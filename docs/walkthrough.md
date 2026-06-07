@@ -88,6 +88,14 @@ pnpm run dev
    - `latest_revision_input`
 2. 親子関係と修正理由が追跡できることを確認する。
 
+## 6-1. Pine / 構造化spec 整合性確認
+
+1. `StrategyVersionDetail` の `実装整合性チェック` section を確認する。
+2. 表示だけでは `implementation-alignment` API、Pine生成、spec生成、backtest、AI summary、適用が起動しないことを確認する。
+3. `Pineとspecの整合性を確認` を押し、generated Pine と `normalized_strategy_spec` v1 の indicators / entry / exit / risk / filters の matched / mismatch / missing in Pine / missing in spec が表示されることを確認する。
+4. Pine または spec が未生成の場合は unavailable reason が表示されることを確認する。
+5. status が warning / mismatch の場合、`内部バックテスト` section に TradingView 結果と internal backtest 結果がズレる可能性の warning が出ることを確認する。MVP では実行 block しない。
+
 ## 7. Backtest 作成と CSV 取込
 
 1. Backtest を作成する。
