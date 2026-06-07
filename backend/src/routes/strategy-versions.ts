@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { prisma } from '../db';
 import { HomeAiService } from '../ai/home-ai-service';
 import type { PineGenerationProgressStage } from '../ai/home-ai-service';
@@ -18,6 +19,8 @@ import {
   validateAndNormalizeStrategySpec,
   type StrategySpecProviderName,
 } from '../strategy/normalized-spec';
+import { executeInternalBacktest } from '../internal-backtest/engine';
+import { InternalBacktestValidationError, type InternalBacktestBar } from '../internal-backtest/types';
 import {
   candidateToRewriteContext,
   candidateToRewriteMemo,
@@ -80,6 +83,11 @@ function toNormalizedSpecVersionResponse(version: StrategyVersionRecord) {
 
 function toNormalizedSpecData(versionId: string, normalizedRuleJson: unknown) {
   const normalizedSpec = isNormalizedStrategySpec(normalizedRuleJson) ? normalizedRuleJson : null;
+  const internalBacktestReady =
+    normalizedSpec?.schema_name === 'normalized_strategy_spec'
+    && normalizedSpec.schema_version === '1.0'
+    && normalizeTimeframeAlias(normalizedSpec.timeframe) === 'D'
+    && normalizedSpec.side === 'long_only';
   return {
     strategy_version_id: versionId,
     status: normalizedSpec ? 'available' : 'unavailable',
@@ -87,11 +95,93 @@ function toNormalizedSpecData(versionId: string, normalizedRuleJson: unknown) {
     meta: {
       schema_name: 'normalized_strategy_spec',
       schema_version: '1.0',
-      internal_backtest_ready: false,
-      internal_backtest_ready_reason: 'normalized_strategy_spec v1 is a foundation artifact; internal backtest execution is not enabled.',
+      internal_backtest_ready: internalBacktestReady,
+      internal_backtest_ready_reason: internalBacktestReady
+        ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
+        : 'Internal Backtest Engine v1 requires D timeframe, long_only side, and a supported normalized_strategy_spec v1.',
     },
   };
 }
+
+function toFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (value && typeof value === 'object' && 'toNumber' in value && typeof value.toNumber === 'function') {
+    const parsed = value.toNumber();
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function toInternalBacktestBar(row: {
+  barTime: Date;
+  open: unknown;
+  high: unknown;
+  low: unknown;
+  close: unknown;
+  volume: unknown;
+  adjustedOpen?: unknown;
+  adjustedHigh?: unknown;
+  adjustedLow?: unknown;
+  adjustedClose?: unknown;
+}): InternalBacktestBar | null {
+  const open = toFiniteNumber(row.adjustedOpen) ?? toFiniteNumber(row.open);
+  const high = toFiniteNumber(row.adjustedHigh) ?? toFiniteNumber(row.high);
+  const low = toFiniteNumber(row.adjustedLow) ?? toFiniteNumber(row.low);
+  const close = toFiniteNumber(row.adjustedClose) ?? toFiniteNumber(row.close);
+  if (open === null || high === null || low === null || close === null) return null;
+  return {
+    time: row.barTime,
+    open,
+    high,
+    low,
+    close,
+    volume: toFiniteNumber(row.volume),
+  };
+}
+
+function toInternalBacktestAppError(error: InternalBacktestValidationError): AppError {
+  const messageByReason: Record<InternalBacktestValidationError['reason'], string> = {
+    missing_spec: 'normalized_strategy_spec v1 is required before running an internal backtest.',
+    unsupported_spec: 'This strategy spec is not supported by internal backtest v1.',
+    missing_market_bars: 'No D market price bars were found for this symbol.',
+  };
+  return new AppError(400, 'VALIDATION_ERROR', messageByReason[error.reason], {
+    reason: error.reason,
+    ...error.details,
+  });
+}
+
+function parseOptionalBacktestDate(value: unknown, fieldName: string): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be an ISO date string.`);
+  }
+  const parsed = new Date(value.trim());
+  if (Number.isNaN(parsed.getTime())) {
+    throw new AppError(400, 'VALIDATION_ERROR', `${fieldName} must be a valid ISO date string.`);
+  }
+  return parsed;
+}
+
+function parseInitialCapital(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 1_000_000;
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new AppError(400, 'VALIDATION_ERROR', 'initial_capital must be a positive number.');
+  }
+  return parsed;
+}
+
+type InternalBacktestBody = {
+  symbol_id?: unknown;
+  from?: unknown;
+  to?: unknown;
+  initial_capital?: unknown;
+};
 
 type StrategyVersionAnnotationBody = {
   label?: unknown;
@@ -1201,6 +1291,158 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         normalized_spec: normalizedSpec,
         warnings: normalizedSpec.warnings,
         assumptions: normalizedSpec.assumptions,
+      }),
+    );
+  });
+
+  fastify.post<{ Params: { versionId: string }; Body: InternalBacktestBody }>('/:versionId/internal-backtests', async (request, reply) => {
+    const { versionId } = request.params;
+    const symbolId = typeof request.body?.symbol_id === 'string' ? request.body.symbol_id.trim() : '';
+    if (!symbolId) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'symbol_id is required.');
+    }
+    const from = parseOptionalBacktestDate(request.body?.from, 'from');
+    const to = parseOptionalBacktestDate(request.body?.to, 'to');
+    if (from && to && from.getTime() > to.getTime()) {
+      throw new AppError(400, 'VALIDATION_ERROR', 'from must be earlier than or equal to to.');
+    }
+    const initialCapital = parseInitialCapital(request.body?.initial_capital);
+
+    const version = await prisma.strategyRuleVersion.findUnique({
+      where: { id: versionId },
+    });
+
+    if (!version) {
+      throw new AppError(404, 'NOT_FOUND', 'strategy version was not found.');
+    }
+    if (!isNormalizedStrategySpec(version.normalizedRuleJson)) {
+      throw toInternalBacktestAppError(
+        new InternalBacktestValidationError(
+          'normalized_strategy_spec v1 is required before running an internal backtest.',
+          'missing_spec',
+        ),
+      );
+    }
+
+    const timeframe = normalizeTimeframeAlias(version.timeframe);
+    if (timeframe !== 'D') {
+      throw toInternalBacktestAppError(
+        new InternalBacktestValidationError('internal backtest v1 supports D timeframe only.', 'unsupported_spec', {
+          timeframe,
+        }),
+      );
+    }
+
+    const symbol = await (prisma as any).symbol.findUnique({
+      where: { id: symbolId },
+    });
+    if (!symbol) {
+      throw toInternalBacktestAppError(
+        new InternalBacktestValidationError('No D market price bars were found for this symbol.', 'missing_market_bars', {
+          timeframe: 'D',
+        }),
+      );
+    }
+
+    const rows = await (prisma as any).marketPriceBar.findMany({
+      where: {
+        symbolId: symbol.id,
+        timeframe: 'D',
+        ...(from || to
+          ? {
+              barTime: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ barTime: 'asc' }],
+    });
+    const bars = (rows as Array<Parameters<typeof toInternalBacktestBar>[0]>)
+      .map(toInternalBacktestBar)
+      .filter((bar: InternalBacktestBar | null): bar is InternalBacktestBar => bar !== null);
+    if (bars.length < 2) {
+      throw toInternalBacktestAppError(
+        new InternalBacktestValidationError('No D market price bars were found for this symbol.', 'missing_market_bars', {
+          timeframe: 'D',
+        }),
+      );
+    }
+
+    let resultSummary;
+    try {
+      resultSummary = executeInternalBacktest({
+        spec: version.normalizedRuleJson,
+        bars,
+        initialCapital,
+      });
+    } catch (error) {
+      if (error instanceof InternalBacktestValidationError) {
+        throw toInternalBacktestAppError(error);
+      }
+      throw error;
+    }
+
+    const title = `Internal backtest: ${version.market} D`;
+    const capturedAt = new Date().toISOString();
+    const internalBacktestExecutionId = randomUUID();
+    const strategySnapshot = {
+      strategy_id: version.strategyRuleId,
+      strategy_version_id: version.id,
+      natural_language_rule: version.naturalLanguageRule,
+      generated_pine: null,
+      market: version.market,
+      timeframe: 'D',
+      warnings: Array.isArray(version.warningsJson) ? version.warningsJson : [],
+      assumptions: Array.isArray(version.assumptionsJson) ? version.assumptionsJson : [],
+      normalized_spec: version.normalizedRuleJson,
+      captured_at: capturedAt,
+      reported_at: capturedAt,
+      execution_source: 'internal_backtest',
+      internal_backtest_execution_id: internalBacktestExecutionId,
+      result_summary: resultSummary,
+      artifact_pointer: {
+        kind: 'backtest.strategy_snapshot_json.result_summary',
+        backtest_detail_path: null,
+      },
+      market_data: {
+        symbol_id: symbol.id,
+        timeframe: 'D',
+        source_type: 'market_price_bars',
+        from: from?.toISOString() ?? null,
+        to: to?.toISOString() ?? null,
+      },
+    };
+
+    const backtest = await prisma.backtest.create({
+      data: {
+        strategyRuleVersionId: version.id,
+        strategySnapshotJson: strategySnapshot as Prisma.InputJsonValue,
+        title,
+        executionSource: 'internal_backtest',
+        market: version.market,
+        timeframe: 'D',
+        status: 'completed',
+      },
+    });
+
+    const detailUrl = `/backtests/${backtest.id}`;
+    return reply.status(201).send(
+      formatSuccess(request, {
+        backtest: {
+          id: backtest.id,
+          strategy_version_id: backtest.strategyRuleVersionId,
+          title: backtest.title,
+          execution_source: backtest.executionSource,
+          market: backtest.market,
+          timeframe: backtest.timeframe,
+          status: backtest.status,
+          created_at: backtest.createdAt,
+          updated_at: backtest.updatedAt,
+        },
+        result_summary: resultSummary,
+        detail_url: detailUrl,
       }),
     );
   });

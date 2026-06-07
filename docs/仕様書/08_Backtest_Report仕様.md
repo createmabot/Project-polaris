@@ -21,11 +21,11 @@
 
 ### internal backtest report
 
-- Polaris engine 実行結果を保存した legacy report。
+- Polaris Internal Backtest Engine v1 または historical internal execution result を保存した importless report。
 - `BacktestImport` を持たない importless report。
 - `execution_source` は `internal_backtest` として扱う。
 - `strategySnapshotJson.result_summary` / `artifact_pointer` / `internal_backtest_execution_id` を持つ。
-- Stage 2C cleanup 後は new report conversion endpoint / execution relation / artifact table が存在しない。
+- StrategyVersionDetail の `内部バックテスト` は、保存済み normalized spec と `MarketPriceBar` を使い、明示クリック時だけ新しい `Backtest` を作成できる。application 起点 internal start / report conversion endpoint、execution relation、artifact table は復活させない。
 - conversion 完了直後の Backtest AI summary auto enqueue は新規には使われない。既存 AI summary と manual generation は generic Backtest report として維持する。
 - AI summary input は `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、`internal_backtest_execution_id`、importless report 文脈を中心に組み立てる。
 - `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。

@@ -1273,5 +1273,6 @@ SymbolDetail では `銘柄概要` の直下に `投資カレンダー` section 
 - Phase 4 では、improvement context 付き StrategyVersionDetail で `この銘柄に改善版を適用` を明示操作で実行できることを確認する。旧 application は自動 archive されず、必要ならユーザーが手動 archive する。
 - 改善候補から作成した StrategyVersionDetail では、`選択中の改善候補` に `Optimization Session を開く` link が表示され、base / candidate 比較 board へ戻れることを確認する。通常の StrategyVersionDetail ではこの link は表示されない。
 - StrategyVersionDetail の `構造化ルール spec` section で、未生成時に `構造化specを生成` を明示クリックし、source provider / fallback、market / timeframe / side、strategy family、indicator、entry / exit / risk / filter、warnings / assumptions、JSON preview が表示されることを確認する。生成は LLM-first だが deterministic validation / fallback を通ること、生成・表示だけで Pine generation、backtest、AI summary、optimization、application apply が起動しないこと、ルール本文保存後は必要に応じて spec 再生成を案内することを確認する。
-- 全 phase で internal backtest 新規実行 UI、TradingView embedded chart widget、TradingView compile automation、auto Pine / auto save / auto backtest / AI summary 自動連鎖が追加されていないことを確認する。
+- StrategyVersionDetail の `内部バックテスト` section で、symbol context がある場合は `symbol_id` が prefill され、`内部バックテストを実行` を明示クリックした場合だけ internal backtest API が呼ばれることを確認する。成功時は metrics summary と `検証レポートを開く` link が表示される。表示だけでは internal backtest、Pine generation、AI summary、optimization、application apply は起動しない。
+- 全 phase で TradingView embedded chart widget、TradingView compile automation、auto Pine / auto save / auto backtest / AI summary 自動連鎖が追加されていないことを確認する。
 - raw prompt、raw provider response、raw Codex output、endpoint、model 実値、secret、local path、stack trace が UI / API / docs / PR に出ていないことを確認する。
