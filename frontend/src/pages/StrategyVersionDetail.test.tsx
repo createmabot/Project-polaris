@@ -285,6 +285,27 @@ function createNormalizedSpecPayload() {
   };
 }
 
+function createInternalBacktestReadyNormalizedSpecPayload() {
+  const payload = createNormalizedSpecPayload();
+  return {
+    ...payload,
+    normalized_spec: {
+      ...payload.normalized_spec,
+      validation: {
+        ...payload.normalized_spec.validation,
+        supported_for_internal_backtest: true,
+        warnings: [],
+      },
+      warnings: [],
+    },
+    meta: {
+      ...payload.meta,
+      internal_backtest_ready: true,
+      internal_backtest_ready_reason: 'normalized_strategy_spec v1 is ready for internal backtest.',
+    },
+  };
+}
+
 function createUnavailableNormalizedSpecPayload() {
   return {
     strategy_version_id: 'ver-1',
@@ -1038,6 +1059,78 @@ describe('StrategyVersionDetail', () => {
       false,
     );
     expect(mockFetchApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs/pine-job-1');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/generation-jobs');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/regeneration-jobs');
+    expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/symbols/sym-1/strategy-applications');
+  });
+
+  it('runs internal backtest only after explicit button click with symbol context', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '7203',
+      symbol_name: 'Toyota',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      return_to: '/symbols/sym-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      undefined,
+      null,
+      null,
+      null,
+      null,
+      createInternalBacktestReadyNormalizedSpecPayload(),
+    );
+    mockPostApi.mockResolvedValue({
+      backtest: {
+        id: 'bt-internal-1',
+        strategy_version_id: 'ver-1',
+        title: 'Internal Backtest',
+        execution_source: 'internal_backtest',
+        market: 'JP_STOCK',
+        timeframe: 'D',
+        status: 'succeeded',
+        created_at: '2026-06-01T00:00:00.000Z',
+        updated_at: '2026-06-01T00:00:00.000Z',
+      },
+      result_summary: {
+        period: { from: '2024-01-01', to: '2024-03-01', bar_count: 40 },
+        metrics: {
+          trade_count: 3,
+          total_return_percent: 4.2,
+          profit_factor: 1.5,
+          max_drawdown_percent: -2.1,
+        },
+        warnings: [],
+      },
+      detail_url: '/backtests/bt-internal-1',
+    });
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+    expect(html).toContain('内部バックテスト');
+    expect(html).toContain('symbol_id:');
+    expect(html).toContain('sym-1');
+    expect(mockPostApi).not.toHaveBeenCalled();
+
+    const runButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'run-internal-backtest-button');
+    expect(runButton?.text).toBe('内部バックテストを実行');
+    expect(runButton?.props.disabled).toBe(false);
+
+    await runButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledTimes(1);
+    expect(mockPostApi).toHaveBeenCalledWith('/api/strategy-versions/ver-1/internal-backtests', {
+      symbol_id: 'sym-1',
+      initial_capital: 1000000,
+    });
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/generation-jobs');
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/regeneration-jobs');
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/symbols/sym-1/strategy-applications');

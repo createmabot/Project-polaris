@@ -27,6 +27,7 @@ import {
   StrategyRefinementCandidateData,
   NormalizedStrategySpecData,
   NormalizedStrategySpecGenerateData,
+  StrategyVersionInternalBacktestData,
 } from '../api/types';
 import {
   buildStrategyVersionDetailUrl,
@@ -193,6 +194,22 @@ function formatDateTime(value: string | null | undefined): string {
 function valueText(value: number | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '-';
   return String(value);
+}
+
+function metricText(metrics: Record<string, unknown> | null | undefined, key: string): string {
+  if (!metrics) return '-';
+  const value = metrics[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return '-';
+}
+
+function isNormalizedSpecInternalBacktestReady(normalizedSpec: Record<string, unknown> | null): boolean {
+  if (!normalizedSpec) return false;
+  return stringField(normalizedSpec, 'schema_name') === 'normalized_strategy_spec'
+    && stringField(normalizedSpec, 'schema_version') === '1.0'
+    && stringField(normalizedSpec, 'timeframe') === 'D'
+    && stringField(normalizedSpec, 'side') === 'long_only';
 }
 
 function compactSafeText(value: string | null | undefined, maxLength = 240): string {
@@ -612,6 +629,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const locationWithSearch = search ? `${location}?${search.startsWith('?') ? search.slice(1) : search}` : location;
+  const initialImproveApplicationContext = parseImproveApplicationContext(search);
   const { data, error, isLoading, mutate } = useSWR<StrategyVersionData>(`/api/strategy-versions/${versionId}`, swrFetcher);
   const { data: pineData, mutate: mutatePine } = useSWR<StrategyVersionPineData>(
     `/api/strategy-versions/${versionId}/pine`,
@@ -659,6 +677,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [generatingNormalizedSpec, setGeneratingNormalizedSpec] = useState(false);
   const [normalizedSpecError, setNormalizedSpecError] = useState<string | null>(null);
   const [normalizedSpecMessage, setNormalizedSpecMessage] = useState<string | null>(null);
+  const [internalBacktestSymbolId, setInternalBacktestSymbolId] = useState(initialImproveApplicationContext?.symbolId ?? '');
+  const [internalBacktestFrom, setInternalBacktestFrom] = useState('');
+  const [internalBacktestTo, setInternalBacktestTo] = useState('');
+  const [internalBacktestInitialCapital, setInternalBacktestInitialCapital] = useState('1000000');
+  const [internalBacktestRunning, setInternalBacktestRunning] = useState(false);
+  const [internalBacktestError, setInternalBacktestError] = useState<string | null>(null);
+  const [internalBacktestResult, setInternalBacktestResult] = useState<StrategyVersionInternalBacktestData | null>(null);
 
   const [editingNaturalLanguageRule, setEditingNaturalLanguageRule] = useState('');
 
@@ -762,12 +787,24 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   );
   const effectiveSourceBacktestImprovementMemo = sourceBacktestImprovementMemo.trim() || sourceBacktestMemoText.trim();
   const hasSourceBacktestContext = Boolean(improveApplicationContext?.sourceBacktestId);
+  const normalizedSpecReadyForInternalBacktest =
+    normalizedSpecData?.meta.internal_backtest_ready === true || isNormalizedSpecInternalBacktestReady(normalizedSpec);
+  const normalizedSpecReadyReason = normalizedSpecData?.meta.internal_backtest_ready_reason
+    ?? (normalizedSpecReadyForInternalBacktest
+      ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
+      : '内部バックテストには D / long_only の normalized_strategy_spec v1 が必要です。');
 
   useEffect(() => {
     if (version) {
       setEditingNaturalLanguageRule(version.natural_language_rule);
     }
   }, [version?.id, version?.natural_language_rule]);
+
+  useEffect(() => {
+    if (improveApplicationContext?.symbolId) {
+      setInternalBacktestSymbolId(improveApplicationContext.symbolId);
+    }
+  }, [improveApplicationContext?.symbolId]);
 
   useEffect(() => {
     const latestRevisionInput = pineData?.latest_revision_input;
@@ -1058,8 +1095,10 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         meta: {
           schema_name: 'normalized_strategy_spec',
           schema_version: '1.0',
-          internal_backtest_ready: false,
-          internal_backtest_ready_reason: 'normalized_strategy_spec v1 is a foundation artifact; internal backtest execution is not enabled.',
+          internal_backtest_ready: isNormalizedSpecInternalBacktestReady(response.normalized_spec),
+          internal_backtest_ready_reason: isNormalizedSpecInternalBacktestReady(response.normalized_spec)
+            ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
+            : '内部バックテストには D / long_only の normalized_strategy_spec v1 が必要です。',
         },
       }, false);
       setNormalizedSpecMessage('構造化specを生成しました。表示だけではPine生成やbacktestは起動していません。');
@@ -1067,6 +1106,45 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       setNormalizedSpecError(requestError?.message ?? '構造化specの生成に失敗しました。');
     } finally {
       setGeneratingNormalizedSpec(false);
+    }
+  };
+
+  const onRunInternalBacktest = async () => {
+    const symbolId = internalBacktestSymbolId.trim();
+    if (!symbolId) {
+      setInternalBacktestError('symbol_id を入力してください。');
+      return;
+    }
+    if (internalBacktestInitialCapital.trim()) {
+      const parsedInitialCapital = Number(internalBacktestInitialCapital);
+      if (!Number.isFinite(parsedInitialCapital) || parsedInitialCapital <= 0) {
+        setInternalBacktestError('initial capital は正の数値で入力してください。');
+        return;
+      }
+    }
+
+    setInternalBacktestRunning(true);
+    setInternalBacktestError(null);
+    setInternalBacktestResult(null);
+    try {
+      const initialCapital = Number(internalBacktestInitialCapital);
+      const payload: Record<string, unknown> = {
+        symbol_id: symbolId,
+      };
+      if (internalBacktestFrom.trim()) payload.from = internalBacktestFrom.trim();
+      if (internalBacktestTo.trim()) payload.to = internalBacktestTo.trim();
+      if (Number.isFinite(initialCapital) && initialCapital > 0) {
+        payload.initial_capital = initialCapital;
+      }
+      const response = await postApi<StrategyVersionInternalBacktestData>(
+        `/api/strategy-versions/${versionId}/internal-backtests`,
+        payload,
+      );
+      setInternalBacktestResult(response);
+    } catch (requestError: any) {
+      setInternalBacktestError(requestError?.message ?? '内部バックテストの実行に失敗しました。');
+    } finally {
+      setInternalBacktestRunning(false);
     }
   };
 
@@ -1606,6 +1684,119 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             </details>
           </div>
         )}
+      </SectionCard>
+
+      <SectionCard
+        title='内部バックテスト'
+        description='保存済みの normalized_strategy_spec v1 と Market Data の日足OHLCVで簡易検証します。表示だけでは実行されません。'
+        className='mt-4'
+      >
+        <div className='mb-3 flex flex-wrap items-center gap-2'>
+          <StatusBadge status={normalizedSpecReadyForInternalBacktest ? 'available' : 'draft'}>
+            {normalizedSpecReadyForInternalBacktest ? 'ready' : 'not ready'}
+          </StatusBadge>
+          <span className='text-sm text-slate-600'>{normalizedSpecReadyReason}</span>
+        </div>
+        {improveApplicationContext?.symbolId ? (
+          <InlineNotice tone='info' className='mb-3'>
+            symbol context: {improveApplicationContext.symbolCode} {improveApplicationContext.symbolName} / symbol_id:
+            {' '}<code>{improveApplicationContext.symbolId}</code>
+          </InlineNotice>
+        ) : (
+          <InlineNotice tone='info' className='mb-3'>
+            通常表示では symbol_id を手入力します。Market Data に D timeframe のOHLCVが必要です。
+          </InlineNotice>
+        )}
+        {(normalizedSpecUnsupported.length > 0 || normalizedSpecWarnings.length > 0) ? (
+          <InlineNotice tone='warning' className='mb-3'>
+            MVPでは一部の条件を無視または簡略化します: {[...normalizedSpecUnsupported, ...normalizedSpecWarnings].join(' / ')}
+          </InlineNotice>
+        ) : null}
+        <div className='grid gap-3 sm:grid-cols-2'>
+          <label className='text-sm font-semibold text-slate-700'>
+            symbol_id
+            <input
+              data-testid='internal-backtest-symbol-id-input'
+              className='mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm'
+              value={internalBacktestSymbolId}
+              onChange={(event) => setInternalBacktestSymbolId(event.target.value)}
+              placeholder='symbol id'
+            />
+          </label>
+          <label className='text-sm font-semibold text-slate-700'>
+            initial capital
+            <input
+              data-testid='internal-backtest-initial-capital-input'
+              className='mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm'
+              value={internalBacktestInitialCapital}
+              onChange={(event) => setInternalBacktestInitialCapital(event.target.value)}
+              inputMode='numeric'
+            />
+          </label>
+          <label className='text-sm font-semibold text-slate-700'>
+            from（任意）
+            <input
+              data-testid='internal-backtest-from-input'
+              className='mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm'
+              value={internalBacktestFrom}
+              onChange={(event) => setInternalBacktestFrom(event.target.value)}
+              placeholder='YYYY-MM-DD'
+            />
+          </label>
+          <label className='text-sm font-semibold text-slate-700'>
+            to（任意）
+            <input
+              data-testid='internal-backtest-to-input'
+              className='mt-1 w-full rounded border border-slate-300 px-3 py-2 text-sm'
+              value={internalBacktestTo}
+              onChange={(event) => setInternalBacktestTo(event.target.value)}
+              placeholder='YYYY-MM-DD'
+            />
+          </label>
+        </div>
+        <div className='mt-3 flex flex-wrap items-center gap-2'>
+          <Button
+            variant='primary'
+            data-testid='run-internal-backtest-button'
+            onClick={onRunInternalBacktest}
+            disabled={internalBacktestRunning || !normalizedSpecReadyForInternalBacktest}
+          >
+            {internalBacktestRunning ? '実行中...' : '内部バックテストを実行'}
+          </Button>
+          <span className='text-sm text-slate-600'>
+            long-only / 1 position / next open fill / commission and slippage 0 の MVP 前提です。
+          </span>
+        </div>
+        {internalBacktestError ? (
+          <InlineNotice tone='warning' className='mt-3'>
+            {internalBacktestError}
+          </InlineNotice>
+        ) : null}
+        {internalBacktestResult ? (
+          <div className='mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3'>
+            <div className='mb-2 font-semibold text-emerald-950'>内部バックテストを作成しました</div>
+            <KeyValueList className='gap-x-4 gap-y-1 sm:grid-cols-2'>
+              <KeyValueRow label='backtest_id'><code>{internalBacktestResult.backtest.id}</code></KeyValueRow>
+              <KeyValueRow label='status'>{internalBacktestResult.backtest.status}</KeyValueRow>
+              <KeyValueRow label='period'>
+                {valueText(internalBacktestResult.result_summary.period?.from)} - {valueText(internalBacktestResult.result_summary.period?.to)}
+              </KeyValueRow>
+              <KeyValueRow label='bar_count'>{valueText(internalBacktestResult.result_summary.period?.bar_count)}</KeyValueRow>
+              <KeyValueRow label='trade_count'>{metricText(internalBacktestResult.result_summary.metrics, 'trade_count')}</KeyValueRow>
+              <KeyValueRow label='total_return_percent'>{metricText(internalBacktestResult.result_summary.metrics, 'total_return_percent')}</KeyValueRow>
+              <KeyValueRow label='profit_factor'>{metricText(internalBacktestResult.result_summary.metrics, 'profit_factor')}</KeyValueRow>
+              <KeyValueRow label='max_drawdown_percent'>{metricText(internalBacktestResult.result_summary.metrics, 'max_drawdown_percent')}</KeyValueRow>
+            </KeyValueList>
+            {(internalBacktestResult.result_summary.warnings?.length ?? 0) > 0 ? (
+              <InlineNotice tone='info' className='mt-3'>
+                {internalBacktestResult.result_summary.warnings?.join(' / ')}
+              </InlineNotice>
+            ) : null}
+            <div className='mt-3'>
+              <TextLink href={internalBacktestResult.detail_url}>検証レポートを開く</TextLink>
+            </div>
+          </div>
+        ) : null}
       </SectionCard>
 
       {saveRuleError && (

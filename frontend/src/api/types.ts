@@ -616,6 +616,33 @@ export type NormalizedStrategySpecGenerateData = {
   assumptions: string[];
 };
 
+export type StrategyVersionInternalBacktestData = {
+  backtest: {
+    id: string;
+    strategy_version_id: string;
+    title: string;
+    execution_source: 'internal_backtest' | string;
+    market: string;
+    timeframe: string;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  result_summary: {
+    summary_kind?: string;
+    period?: {
+      from?: string | null;
+      to?: string | null;
+      bar_count?: number | null;
+    };
+    metrics?: Record<string, number | string | null>;
+    assumptions?: string[];
+    warnings?: string[];
+    unsupported_features?: string[];
+  };
+  detail_url: string;
+};
+
 export type StrategyVersionPineGenerateData = {
   strategy_version: StrategyVersionData['strategy_version'];
   pine: {
