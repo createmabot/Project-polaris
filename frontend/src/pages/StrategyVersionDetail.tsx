@@ -268,6 +268,13 @@ function stringField(record: Record<string, unknown> | null, key: string): strin
   return '-';
 }
 
+function optionalStringField(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function normalizedSpecListLabel(item: Record<string, unknown>): string {
   const id = stringField(item, 'id');
   const type = stringField(item, 'type');
@@ -746,7 +753,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const pineGenerationNotePayload = asRecord(asRecord(pineData?.generation_note)?.payload);
   const pineSpecUsage = asRecord(pineGenerationNotePayload?.spec_usage);
   const pineSpecUsedAsPrimary = pineSpecUsage?.used_as_primary_contract === true;
-  const pineSpecUsageWarning = stringField(pineSpecUsage, 'warning');
+  const pineSpecUsageWarning = optionalStringField(pineSpecUsage, 'warning');
   const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
   const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
   const pineState: 'unavailable' | 'generating' | 'warning' | 'failed' | 'available' = regenerating

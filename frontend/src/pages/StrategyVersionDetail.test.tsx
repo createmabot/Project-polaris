@@ -1129,6 +1129,43 @@ describe('StrategyVersionDetail', () => {
     expect(mockPostApi).not.toHaveBeenCalled();
   });
 
+  it('does not render placeholder warning text when Pine spec usage warning is absent', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      {
+        strategy_rule_version_id: 'ver-1',
+        status: 'available',
+        pine_script_id: 'pine-1',
+        generated_script: '//@version=6\nstrategy("ok")',
+        warnings: [],
+        generation_note: {
+          payload: {
+            spec_usage: {
+              normalized_strategy_spec_available: false,
+              used_as_primary_contract: false,
+            },
+          },
+        },
+      },
+      null,
+      null,
+      null,
+      null,
+      createUnavailableNormalizedSpecPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('構造化specが未生成です。');
+    expect(html).not.toContain('border-amber-200 bg-amber-50 text-amber-900 w-full">-</div>');
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
   it('generates normalized strategy spec only after explicit button click', async () => {
     mockUseSWR.mockReset();
     mockPostApi.mockReset();
