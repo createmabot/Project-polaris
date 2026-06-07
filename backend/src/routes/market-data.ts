@@ -125,6 +125,19 @@ function resolveHeader(headers: string[], aliases: readonly string[], fieldName:
 function parseBarTime(value: string): Date | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    if (!Number.isSafeInteger(numeric)) return null;
+    const timestampMs = numeric >= 1_000_000_000_000
+      ? numeric
+      : numeric >= 1_000_000_000 && numeric < 10_000_000_000
+        ? numeric * 1000
+        : null;
+    if (timestampMs === null) return null;
+    const parsed = new Date(timestampMs);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return new Date(Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate()));
+  }
   const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
   if (ymd) {
     const date = new Date(`${ymd[1]}-${ymd[2]}-${ymd[3]}T00:00:00.000Z`);
