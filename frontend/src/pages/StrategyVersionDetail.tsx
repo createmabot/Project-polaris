@@ -204,12 +204,35 @@ function metricText(metrics: Record<string, unknown> | null | undefined, key: st
   return '-';
 }
 
+function normalizeUnsupportedFeatureCode(value: string): string {
+  const compact = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (
+    compact === 'consecutive_loss_skip'
+    || compact === 'consecutive_loss_skip_logic'
+    || compact === 'consecutivelossskip'
+    || compact === 'consecutivelossskiplogic'
+  ) {
+    return 'consecutive_loss_skip';
+  }
+  return compact || value.trim();
+}
+
 function isNormalizedSpecInternalBacktestReady(normalizedSpec: Record<string, unknown> | null): boolean {
   if (!normalizedSpec) return false;
+  const validation = asRecord(normalizedSpec.validation);
+  const unsupportedFeatures = Array.isArray(validation?.unsupported_features)
+    ? validation.unsupported_features.filter((item): item is string => typeof item === 'string').map(normalizeUnsupportedFeatureCode)
+    : [];
+  const hardUnsupported = unsupportedFeatures.filter((item) => item !== 'consecutive_loss_skip');
   return stringField(normalizedSpec, 'schema_name') === 'normalized_strategy_spec'
     && stringField(normalizedSpec, 'schema_version') === '1.0'
     && stringField(normalizedSpec, 'timeframe') === 'D'
-    && stringField(normalizedSpec, 'side') === 'long_only';
+    && stringField(normalizedSpec, 'side') === 'long_only'
+    && hardUnsupported.length === 0;
 }
 
 function compactSafeText(value: string | null | undefined, maxLength = 240): string {
@@ -787,8 +810,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   );
   const effectiveSourceBacktestImprovementMemo = sourceBacktestImprovementMemo.trim() || sourceBacktestMemoText.trim();
   const hasSourceBacktestContext = Boolean(improveApplicationContext?.sourceBacktestId);
-  const normalizedSpecReadyForInternalBacktest =
-    normalizedSpecData?.meta.internal_backtest_ready === true || isNormalizedSpecInternalBacktestReady(normalizedSpec);
+  const normalizedSpecReadyForInternalBacktest = typeof normalizedSpecData?.meta.internal_backtest_ready === 'boolean'
+    ? normalizedSpecData.meta.internal_backtest_ready
+    : isNormalizedSpecInternalBacktestReady(normalizedSpec);
   const normalizedSpecReadyReason = normalizedSpecData?.meta.internal_backtest_ready_reason
     ?? (normalizedSpecReadyForInternalBacktest
       ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
@@ -1704,7 +1728,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
           </InlineNotice>
         ) : (
           <InlineNotice tone='info' className='mb-3'>
-            通常表示では symbol_id を手入力します。Market Data に D timeframe のOHLCVが必要です。
+            通常表示では symbol id または symbol code を入力します。Market Data に D timeframe のOHLCVが必要です。
           </InlineNotice>
         )}
         {(normalizedSpecUnsupported.length > 0 || normalizedSpecWarnings.length > 0) ? (
@@ -1714,13 +1738,13 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         ) : null}
         <div className='grid gap-3 sm:grid-cols-2'>
           <label className='text-sm font-semibold text-slate-700'>
-            symbol_id
+            symbol id / code
             <input
               data-testid='internal-backtest-symbol-id-input'
               className='mt-1 w-full rounded border border-slate-300 px-3 py-2 font-mono text-sm'
               value={internalBacktestSymbolId}
               onChange={(event) => setInternalBacktestSymbolId(event.target.value)}
-              placeholder='symbol id'
+              placeholder='例: 7203 または symbol UUID'
             />
           </label>
           <label className='text-sm font-semibold text-slate-700'>

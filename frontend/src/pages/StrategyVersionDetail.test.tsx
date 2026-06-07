@@ -1117,6 +1117,7 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
     expect(html).toContain('内部バックテスト');
     expect(html).toContain('symbol_id:');
+    expect(html).toContain('symbol id / code');
     expect(html).toContain('sym-1');
     expect(mockPostApi).not.toHaveBeenCalled();
 

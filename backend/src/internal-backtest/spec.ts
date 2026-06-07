@@ -67,6 +67,27 @@ function collectStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
 }
 
+function normalizeUnsupportedFeature(value: string): string {
+  const compact = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (
+    compact === 'consecutive_loss_skip'
+    || compact === 'consecutive_loss_skip_logic'
+    || compact === 'consecutivelossskip'
+    || compact === 'consecutivelossskiplogic'
+  ) {
+    return 'consecutive_loss_skip';
+  }
+  return compact || value.trim();
+}
+
+function collectNormalizedUnsupportedFeatures(value: unknown): string[] {
+  return Array.from(new Set(collectStringArray(value).map(normalizeUnsupportedFeature)));
+}
+
 function compileCondition(input: Record<string, unknown>, fallbackId: string): CompiledCondition {
   const rawType = stringFrom(input.type) ?? '';
   if (!['price_vs_indicator', 'indicator_threshold', 'volume_filter'].includes(rawType)) {
@@ -150,7 +171,7 @@ export function compileInternalBacktestSpec(value: NormalizedStrategySpec): Comp
     });
   }
 
-  const validationUnsupported = collectStringArray(value.validation?.unsupported_features);
+  const validationUnsupported = collectNormalizedUnsupportedFeatures(value.validation?.unsupported_features);
   const ignoredUnsupportedFeatures = validationUnsupported.filter((item) => IGNORED_UNSUPPORTED_FEATURES.has(item));
   const hardUnsupported = validationUnsupported.filter((item) => !IGNORED_UNSUPPORTED_FEATURES.has(item));
   if (hardUnsupported.length > 0) {

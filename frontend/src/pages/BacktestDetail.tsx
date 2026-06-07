@@ -216,6 +216,85 @@ function metricCard(label: string, value: string) {
 
 type ParsedImportSummary = NonNullable<BacktestDetailData['latest_import']>['parsed_summary'];
 
+type DisplayMetricSummary = {
+  totalTrades: number | string | null;
+  winRate: number | string | null;
+  profitFactor: number | string | null;
+  maxDrawdown: number | string | null;
+  maxDrawdownPercent: number | string | null;
+  netProfit: number | string | null;
+  totalReturnPercent: number | string | null;
+  averageTrade: number | string | null;
+  grossProfit: number | string | null;
+  grossLoss: number | string | null;
+  periodFrom: number | string | null;
+  periodTo: number | string | null;
+  barCount: number | string | null;
+};
+
+function numberLikeFromRecord(record: Record<string, unknown> | null, keys: string[]): number | string | null {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function buildCsvMetricSummary(summary: ParsedImportSummary | null | undefined): DisplayMetricSummary | null {
+  if (!summary) return null;
+  return {
+    totalTrades: summary.totalTrades ?? null,
+    winRate: summary.winRate ?? null,
+    profitFactor: summary.profitFactor ?? null,
+    maxDrawdown: summary.maxDrawdown ?? null,
+    maxDrawdownPercent: null,
+    netProfit: summary.netProfit ?? null,
+    totalReturnPercent: null,
+    averageTrade: null,
+    grossProfit: null,
+    grossLoss: null,
+    periodFrom: summary.periodFrom ?? null,
+    periodTo: summary.periodTo ?? null,
+    barCount: null,
+  };
+}
+
+function buildInternalBacktestMetricSummary(snapshot: BacktestDetailData['used_strategy']['snapshot']): DisplayMetricSummary | null {
+  const resultSummary = asRecord(snapshot?.result_summary ?? null);
+  const metrics = asRecord(resultSummary?.metrics ?? null);
+  const period = asRecord(resultSummary?.period ?? null);
+  if (!metrics && !period) return null;
+  return {
+    totalTrades: numberLikeFromRecord(metrics, ['total_trades', 'trade_count']),
+    winRate: numberLikeFromRecord(metrics, ['win_rate']),
+    profitFactor: numberLikeFromRecord(metrics, ['profit_factor']),
+    maxDrawdown: numberLikeFromRecord(metrics, ['max_drawdown']),
+    maxDrawdownPercent: numberLikeFromRecord(metrics, ['max_drawdown_percent']),
+    netProfit: numberLikeFromRecord(metrics, ['net_profit']),
+    totalReturnPercent: numberLikeFromRecord(metrics, ['total_return_percent']),
+    averageTrade: numberLikeFromRecord(metrics, ['average_trade']),
+    grossProfit: numberLikeFromRecord(metrics, ['gross_profit']),
+    grossLoss: numberLikeFromRecord(metrics, ['gross_loss']),
+    periodFrom: numberLikeFromRecord(period, ['from']),
+    periodTo: numberLikeFromRecord(period, ['to']),
+    barCount: numberLikeFromRecord(period, ['bar_count']) ?? numberLikeFromRecord(metrics, ['bar_count', 'evaluated_bar_count']),
+  };
+}
+
+function metricNumberText(value: number | string | null | undefined, digits = 2): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return formatNumber(value, digits);
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return '-';
+}
+
+function metricPercentText(value: number | string | null | undefined): string {
+  if (typeof value === 'number' && Number.isFinite(value)) return formatPercent(value);
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return '-';
+}
+
 function toNumber(value: number | null | undefined): number | null {
   if (value === null || value === undefined || Number.isNaN(value)) return null;
   return Number(value);
@@ -900,7 +979,13 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
         {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
         {metricCard('period from', recordText(period, 'from'))}
         {metricCard('period to', recordText(period, 'to'))}
-        {metricCard('bar_count', recordText(metrics, 'bar_count'))}
+        {metricCard('bar_count', recordText(period, 'bar_count'))}
+        {metricCard('total_trades', recordText(metrics, 'total_trades') !== '-' ? recordText(metrics, 'total_trades') : recordText(metrics, 'trade_count'))}
+        {metricCard('win_rate', recordText(metrics, 'win_rate'))}
+        {metricCard('profit_factor', recordText(metrics, 'profit_factor'))}
+        {metricCard('net_profit', recordText(metrics, 'net_profit'))}
+        {metricCard('max_drawdown', recordText(metrics, 'max_drawdown'))}
+        {metricCard('max_drawdown_percent', recordText(metrics, 'max_drawdown_percent'))}
         {metricCard('price_change_percent', recordText(metrics, 'price_change_percent'))}
         {metricCard('range_percent', recordText(metrics, 'range_percent'))}
         {metricCard('reported_at', formatDateTime(snapshot?.reported_at))}
@@ -964,7 +1049,6 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
   const latestImport = data.latest_import;
   const latestStatus = parseStatusText(latestImport?.parse_status);
-  const summary = latestImport?.parsed_summary;
   const parsedImports = data.imports.filter((item) => item.parsed_summary);
   const parsedImportCount = data.imports.filter((item) => item.parse_status === 'parsed').length;
   const failedImportCount = data.imports.filter((item) => item.parse_status === 'failed').length;
@@ -981,6 +1065,9 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
   const snapshot = usedStrategy.snapshot;
   const isInternalBacktestReport =
     data.backtest.execution_source === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest';
+  const summary = isInternalBacktestReport
+    ? buildInternalBacktestMetricSummary(snapshot)
+    : buildCsvMetricSummary(latestImport?.parsed_summary);
   const latestAiSummaryJob = data.latest_ai_summary_job ?? null;
   const symbolStrategyApplication = data.symbol_strategy_application;
   const aiRuleRefinementCandidates = extractRuleRefinementCandidates(data.ai_review.structured_json);
@@ -1223,11 +1310,17 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           <EmptyState title="解析済みサマリーはまだありません。" />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-            {metricCard('総取引数', formatNumber(summary.totalTrades, 0))}
-            {metricCard('勝率', formatPercent(summary.winRate))}
-            {metricCard('Profit Factor', formatNumber(summary.profitFactor, 2))}
-            {metricCard('最大ドローダウン', formatNumber(summary.maxDrawdown, 2))}
-            {metricCard('純利益', formatNumber(summary.netProfit, 2))}
+            {metricCard('総取引数', metricNumberText(summary.totalTrades, 0))}
+            {metricCard('勝率', metricPercentText(summary.winRate))}
+            {metricCard('Profit Factor', metricNumberText(summary.profitFactor, 2))}
+            {metricCard('最大ドローダウン', metricNumberText(summary.maxDrawdown, 2))}
+            {metricCard('最大ドローダウン率', metricPercentText(summary.maxDrawdownPercent))}
+            {metricCard('純利益', metricNumberText(summary.netProfit, 2))}
+            {metricCard('総リターン率', metricPercentText(summary.totalReturnPercent))}
+            {metricCard('平均損益', metricNumberText(summary.averageTrade, 2))}
+            {metricCard('Gross Profit', metricNumberText(summary.grossProfit, 2))}
+            {metricCard('Gross Loss', metricNumberText(summary.grossLoss, 2))}
+            {metricCard('bar count', metricNumberText(summary.barCount, 0))}
             {metricCard('対象期間（開始）', valueText(summary.periodFrom))}
             {metricCard('対象期間（終了）', valueText(summary.periodTo))}
           </div>

@@ -20,6 +20,7 @@ import {
   type StrategySpecProviderName,
 } from '../strategy/normalized-spec';
 import { executeInternalBacktest } from '../internal-backtest/engine';
+import { compileInternalBacktestSpec } from '../internal-backtest/spec';
 import { InternalBacktestValidationError, type InternalBacktestBar } from '../internal-backtest/types';
 import {
   candidateToRewriteContext,
@@ -83,11 +84,20 @@ function toNormalizedSpecVersionResponse(version: StrategyVersionRecord) {
 
 function toNormalizedSpecData(versionId: string, normalizedRuleJson: unknown) {
   const normalizedSpec = isNormalizedStrategySpec(normalizedRuleJson) ? normalizedRuleJson : null;
-  const internalBacktestReady =
-    normalizedSpec?.schema_name === 'normalized_strategy_spec'
-    && normalizedSpec.schema_version === '1.0'
-    && normalizeTimeframeAlias(normalizedSpec.timeframe) === 'D'
-    && normalizedSpec.side === 'long_only';
+  let internalBacktestReady = false;
+  let internalBacktestReadyReason = 'Internal Backtest Engine v1 requires D timeframe, long_only side, and a supported normalized_strategy_spec v1.';
+  if (normalizedSpec) {
+    try {
+      compileInternalBacktestSpec(normalizedSpec);
+      internalBacktestReady = true;
+      internalBacktestReadyReason = 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.';
+    } catch (error) {
+      internalBacktestReady = false;
+      if (error instanceof InternalBacktestValidationError) {
+        internalBacktestReadyReason = error.message;
+      }
+    }
+  }
   return {
     strategy_version_id: versionId,
     status: normalizedSpec ? 'available' : 'unavailable',
@@ -96,9 +106,7 @@ function toNormalizedSpecData(versionId: string, normalizedRuleJson: unknown) {
       schema_name: 'normalized_strategy_spec',
       schema_version: '1.0',
       internal_backtest_ready: internalBacktestReady,
-      internal_backtest_ready_reason: internalBacktestReady
-        ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
-        : 'Internal Backtest Engine v1 requires D timeframe, long_only side, and a supported normalized_strategy_spec v1.',
+      internal_backtest_ready_reason: internalBacktestReadyReason,
     },
   };
 }
@@ -182,6 +190,23 @@ type InternalBacktestBody = {
   to?: unknown;
   initial_capital?: unknown;
 };
+
+async function resolveInternalBacktestSymbol(symbolInput: string) {
+  const exactById = await (prisma as any).symbol.findUnique({
+    where: { id: symbolInput },
+  });
+  if (exactById) return exactById;
+
+  return (prisma as any).symbol.findFirst({
+    where: {
+      OR: [
+        { symbol: symbolInput },
+        { symbolCode: symbolInput },
+        { tradingviewSymbol: symbolInput },
+      ],
+    },
+  });
+}
 
 type StrategyVersionAnnotationBody = {
   label?: unknown;
@@ -1333,9 +1358,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       );
     }
 
-    const symbol = await (prisma as any).symbol.findUnique({
-      where: { id: symbolId },
-    });
+    const symbol = await resolveInternalBacktestSymbol(symbolId);
     if (!symbol) {
       throw toInternalBacktestAppError(
         new InternalBacktestValidationError('No D market price bars were found for this symbol.', 'missing_market_bars', {

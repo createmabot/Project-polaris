@@ -248,9 +248,18 @@ describe('internal backtest route', () => {
     });
     expect(body.data.detail_url).toBe('/backtests/backtest-1');
     expect(body.data.result_summary.metrics.trade_count).toBe(1);
+    expect(body.data.result_summary.metrics.total_trades).toBe(1);
     expect(body.data.result_summary.metrics.final_equity).toBe(900000);
     expect(body.data.result_summary.metrics.total_return_percent).toBe(-10);
+    expect(body.data.result_summary.metrics.net_profit).toBe(-100000);
+    expect(body.data.result_summary.metrics.max_drawdown).toBe(100000);
     expect(body.data.result_summary.metrics.max_drawdown_percent).toBe(10);
+    expect(body.data.result_summary.metrics.average_trade).toBe(-100000);
+    expect(body.data.result_summary.period).toMatchObject({
+      from: '2026-01-01T00:00:00.000Z',
+      to: '2026-01-04T00:00:00.000Z',
+      bar_count: 4,
+    });
     expect(body.data.result_summary.trades[0]).toMatchObject({
       entry_price: 12,
       exit_price: 10.8,
@@ -268,6 +277,45 @@ describe('internal backtest route', () => {
     expect(runtime.aiSummaryCreateCount).toBe(0);
     expect(runtime.pineScriptCreateCount).toBe(0);
     expect(runtime.optimizationSessionCreateCount).toBe(0);
+  });
+
+  it('accepts symbol code input and ignores canonical consecutive loss skip variants', async () => {
+    runtime = createRuntime(createVersion({
+      normalizedRuleJson: createSpec({
+        validation: {
+          supported_for_internal_backtest: false,
+          unsupported_features: ['CONSECUTIVE_LOSS_SKIP_LOGIC'],
+          warnings: ['連続損失によるエントリースキップ機能はサポート外です'],
+          assumptions: ['long_only execution.'],
+        },
+        warnings: ['連続損失によるエントリースキップ機能はサポート外です'],
+      }),
+    }));
+    const app = await buildApp();
+
+    const specRes = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-versions/ver-1/normalized-spec',
+    });
+    expect(specRes.statusCode).toBe(200);
+    expect(JSON.parse(specRes.body).data.meta).toMatchObject({
+      internal_backtest_ready: true,
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/internal-backtests',
+      payload: { symbol_id: '5253' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.data.result_summary.ignored_unsupported_features).toEqual(['consecutive_loss_skip']);
+    expect(body.data.result_summary.warnings.join(' ')).toContain('consecutive_loss_skip is ignored');
+    expect(runtime.backtests[0].strategySnapshotJson.market_data).toMatchObject({
+      symbol_id: 'sym-1',
+      timeframe: 'D',
+    });
   });
 
   it('returns safe validation errors for missing and unsupported specs', async () => {

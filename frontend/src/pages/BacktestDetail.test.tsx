@@ -1136,13 +1136,24 @@ describe('BacktestDetail', () => {
             execution_source: 'internal_backtest',
             internal_backtest_execution_id: 'exec-1',
             result_summary: {
-              summary_kind: 'engine_estimated',
+              summary_kind: 'internal_backtest_v1',
               period: {
                 from: '2025-01-01',
                 to: '2025-12-31',
+                bar_count: 245,
               },
               metrics: {
-                bar_count: 245,
+                total_trades: 12,
+                trade_count: 12,
+                win_rate: 58.33,
+                profit_factor: 1.42,
+                max_drawdown: 120000,
+                max_drawdown_percent: 8.5,
+                net_profit: 340000,
+                total_return_percent: 34,
+                average_trade: 28333.33,
+                gross_profit: 520000,
+                gross_loss: -180000,
                 price_change_percent: 12.34,
                 range_percent: 26.32,
               },
@@ -1205,9 +1216,28 @@ describe('BacktestDetail', () => {
     expect(html).toContain('internal backtest report');
     expect(html).toContain('BacktestImport');
     expect(html).toContain('exec-1');
-    expect(html).toContain('engine_estimated');
+    expect(html).toContain('internal_backtest_v1');
     expect(html).toContain('bar_count');
     expect(html).toContain('245');
+    expect(html).toContain('主要指標');
+    expect(html).toContain('総取引数');
+    expect(html).toContain('12');
+    expect(html).toContain('勝率');
+    expect(html).toContain('58.33%');
+    expect(html).toContain('Profit Factor');
+    expect(html).toContain('1.42');
+    expect(html).toContain('最大ドローダウン');
+    expect(html).toContain('120,000');
+    expect(html).toContain('最大ドローダウン率');
+    expect(html).toContain('8.50%');
+    expect(html).toContain('純利益');
+    expect(html).toContain('340,000');
+    expect(html).toContain('総リターン率');
+    expect(html).toContain('34.00%');
+    expect(html).toContain('対象期間（開始）');
+    expect(html).toContain('2025-01-01');
+    expect(html).toContain('対象期間（終了）');
+    expect(html).toContain('2025-12-31');
     expect(html).toContain('artifact_pointer');
     expect(html).toContain('internal_backtest_result');
     expect(html).toContain('artifact path は非表示化し、artifact file の実体読込、download、diff は行いません。');

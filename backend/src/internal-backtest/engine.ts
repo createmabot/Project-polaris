@@ -149,7 +149,12 @@ function summarize(
   const grossProfit = trades.filter((trade) => trade.pnl > 0).reduce((sum, trade) => sum + trade.pnl, 0);
   const grossLoss = trades.filter((trade) => trade.pnl < 0).reduce((sum, trade) => sum + trade.pnl, 0);
   const wins = trades.filter((trade) => trade.pnl > 0).length;
-  const maxDrawdown = equityCurve.reduce((max, point) => Math.max(max, point.drawdown_percent), 0);
+  const maxDrawdownPercent = equityCurve.reduce((max, point) => Math.max(max, point.drawdown_percent), 0);
+  let peakEquity = initialCapital;
+  const maxDrawdown = equityCurve.reduce((max, point) => {
+    peakEquity = Math.max(peakEquity, point.equity);
+    return Math.max(max, peakEquity - point.equity);
+  }, 0);
   const firstClose = bars[0]?.close ?? null;
   const lastClose = bars[bars.length - 1]?.close ?? null;
   const priceChangePercent = firstClose && lastClose ? ((lastClose - firstClose) / firstClose) * 100 : null;
@@ -167,12 +172,15 @@ function summarize(
       net_profit: round(finalEquity - initialCapital),
       total_return_percent: round(((finalEquity - initialCapital) / initialCapital) * 100),
       price_change_percent: priceChangePercent === null ? null : round(priceChangePercent),
+      total_trades: trades.length,
       trade_count: trades.length,
       win_rate: trades.length === 0 ? 0 : round((wins / trades.length) * 100),
       gross_profit: round(grossProfit),
       gross_loss: round(grossLoss),
+      average_trade: trades.length === 0 ? null : round((grossProfit + grossLoss) / trades.length),
       profit_factor: grossLoss < 0 ? round(grossProfit / Math.abs(grossLoss)) : null,
-      max_drawdown_percent: round(maxDrawdown),
+      max_drawdown: round(maxDrawdown),
+      max_drawdown_percent: round(maxDrawdownPercent),
     },
     trades,
     equity_curve: equityCurve,
