@@ -183,6 +183,52 @@ describe('market data routes', () => {
     expect(barsBody.data.pagination.has_next).toBe(true);
   });
 
+  it('imports TradingView daily chart export with Unix seconds time column', async () => {
+    const app = await buildApp();
+    const csvText = [
+      'time,open,high,low,close,Volume',
+      '1720051200,2001,2003,1934,1942,3567000',
+    ].join('\n');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/market-data/import-csv',
+      payload: {
+        timeframe: 'D',
+        source_name: 'tradingview',
+        file_name: 'tradingview_daily.csv',
+        csv_text: csvText,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.data.import.status).toBe('succeeded');
+    expect(body.data.import.inserted_count).toBeGreaterThanOrEqual(1);
+    expect(body.data.import.skipped_count).toBe(0);
+    expect(body.data.coverage.period_from).toBe('2024-07-04T00:00:00.000Z');
+    expect(JSON.stringify(body)).not.toContain(csvText);
+
+    const barsRes = await app.inject({
+      method: 'GET',
+      url: '/api/symbols/sym-1/market-data/bars?timeframe=D&limit=1',
+    });
+    expect(barsRes.statusCode).toBe(200);
+    const barsBody = JSON.parse(barsRes.body);
+    expect(barsBody.data.bars[0]).toMatchObject({
+      bar_time: '2024-07-04T00:00:00.000Z',
+      open: 2001,
+      high: 2003,
+      low: 1934,
+      close: 1942,
+      volume: 3567000,
+    });
+    const serialized = JSON.stringify({ import: body, bars: barsBody });
+    expect(serialized).not.toContain('stack');
+    expect(serialized).not.toContain('C:\\');
+    expect(serialized).not.toContain('secret');
+    expect(serialized).not.toContain('token');
+  });
+
   it('normalizes 1D to D, skips invalid rows, and upserts duplicate bars', async () => {
     const app = await buildApp();
     const first = await app.inject({
@@ -249,5 +295,20 @@ describe('market data routes', () => {
     expect(serialized).not.toContain('token');
     expect(serialized).not.toContain('stack');
     expect(serialized).not.toContain('C:\\');
+
+    const invalidNumericRes = await app.inject({
+      method: 'POST',
+      url: '/api/symbols/sym-1/market-data/import-csv',
+      payload: {
+        timeframe: 'D',
+        csv_text: 'time,open,high,low,close,Volume\n12345,1,2,1,2,100',
+      },
+    });
+    expect(invalidNumericRes.statusCode).toBe(400);
+    expect(invalidNumericRes.body).toContain('CSV does not contain any valid OHLCV rows.');
+    expect(invalidNumericRes.body).not.toContain('12345,1,2,1,2,100');
+    expect(invalidNumericRes.body).not.toContain('stack');
+    expect(invalidNumericRes.body).not.toContain('token');
+    expect(invalidNumericRes.body).not.toContain('C:\\');
   });
 });
