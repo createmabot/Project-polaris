@@ -8,15 +8,23 @@ export type InternalBacktestBar = {
 };
 
 export type InternalBacktestTrade = {
+  trade_no: number;
+  entry_at: string;
+  entry_bar_time: string | null;
   entry_time: string;
   entry_price: number;
+  entry_reason: 'entry_signal';
+  exit_at: string;
+  exit_bar_time: string | null;
   exit_time: string;
   exit_price: number;
   quantity: number;
+  gross_profit: number;
+  net_profit: number;
   pnl: number;
   return_percent: number;
   bars_held: number;
-  exit_reason: 'exit_signal' | 'stop_loss' | 'take_profit' | 'final_close';
+  exit_reason: 'exit_signal' | 'stop_loss' | 'take_profit' | 'time_exit' | 'final_close';
 };
 
 export type InternalBacktestEquityPoint = {
@@ -55,7 +63,17 @@ export type InternalBacktestResultSummary = {
     max_drawdown: number;
     max_drawdown_percent: number;
   };
+  trade_summary: {
+    trade_count: number;
+    first_entry_at: string | null;
+    last_exit_at: string | null;
+    exit_reason_counts: Array<{
+      exit_reason: InternalBacktestTrade['exit_reason'];
+      count: number;
+    }>;
+  };
   trades: InternalBacktestTrade[];
+  trades_truncated: boolean;
   equity_curve: InternalBacktestEquityPoint[];
   assumptions: string[];
   warnings: string[];

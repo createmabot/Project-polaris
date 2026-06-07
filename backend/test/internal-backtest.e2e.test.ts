@@ -286,10 +286,30 @@ describe('internal backtest route', () => {
       first_trade_at: '2026-01-03T00:00:00.000Z',
       last_trade_at: '2026-01-03T00:00:00.000Z',
     });
+    expect(body.data.result_summary.trade_summary).toMatchObject({
+      trade_count: 1,
+      first_entry_at: '2026-01-03T00:00:00.000Z',
+      last_exit_at: '2026-01-03T00:00:00.000Z',
+    });
+    expect(body.data.result_summary.trade_summary.exit_reason_counts).toEqual([
+      { exit_reason: 'stop_loss', count: 1 },
+    ]);
+    expect(body.data.result_summary.trades_truncated).toBe(false);
     expect(body.data.result_summary.trades[0]).toMatchObject({
+      trade_no: 1,
+      entry_at: '2026-01-03T00:00:00.000Z',
+      entry_bar_time: '2026-01-02T00:00:00.000Z',
       entry_price: 12,
+      entry_reason: 'entry_signal',
+      exit_at: '2026-01-03T00:00:00.000Z',
+      exit_bar_time: '2026-01-03T00:00:00.000Z',
       exit_price: 10.8,
       exit_reason: 'stop_loss',
+      gross_profit: -100000,
+      net_profit: -100000,
+      pnl: -100000,
+      return_percent: -10,
+      bars_held: 1,
     });
     expect(body.data.result_summary.ignored_unsupported_features).toContain('consecutive_loss_skip');
     expect(body.data.result_summary.warnings.join(' ')).toContain('consecutive_loss_skip is ignored');
@@ -350,6 +370,14 @@ describe('internal backtest route', () => {
       first_trade_at: null,
       last_trade_at: null,
     });
+    expect(body.data.result_summary.trade_summary).toEqual({
+      trade_count: 0,
+      first_entry_at: null,
+      last_exit_at: null,
+      exit_reason_counts: [],
+    });
+    expect(body.data.result_summary.trades).toEqual([]);
+    expect(body.data.result_summary.trades_truncated).toBe(false);
     expect(runtime.backtests[0].strategySnapshotJson.result_summary.trade_period.first_trade_at).toBeNull();
   });
 
