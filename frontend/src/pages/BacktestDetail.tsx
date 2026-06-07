@@ -289,6 +289,8 @@ function buildInternalBacktestMetricSummary(snapshot: BacktestDetailData['used_s
   const metrics = asRecord(resultSummary?.metrics ?? null);
   const period = asRecord(resultSummary?.period ?? null);
   const tradePeriod = asRecord(resultSummary?.trade_period ?? null);
+  const tradeSummary = asRecord(resultSummary?.trade_summary ?? null);
+  const trades = recordArray(resultSummary, 'trades');
   if (!metrics && !period) return null;
   return {
     totalTrades: numberLikeFromRecord(metrics, ['total_trades', 'trade_count']),
@@ -303,8 +305,14 @@ function buildInternalBacktestMetricSummary(snapshot: BacktestDetailData['used_s
     grossLoss: numberLikeFromRecord(metrics, ['gross_loss']),
     dataPeriodFrom: numberLikeFromRecord(period, ['from']),
     dataPeriodTo: numberLikeFromRecord(period, ['to']),
-    tradePeriodFrom: numberLikeFromRecord(tradePeriod, ['first_entry_at', 'first_trade_at']),
-    tradePeriodTo: numberLikeFromRecord(tradePeriod, ['last_exit_at', 'last_trade_at']),
+    tradePeriodFrom:
+      numberLikeFromRecord(tradePeriod, ['first_entry_at', 'first_trade_at'])
+      ?? numberLikeFromRecord(tradeSummary, ['first_entry_at', 'first_trade_at'])
+      ?? firstTradeText(trades, ['entry_at', 'entry_time']),
+    tradePeriodTo:
+      numberLikeFromRecord(tradePeriod, ['last_exit_at', 'last_trade_at'])
+      ?? numberLikeFromRecord(tradeSummary, ['last_exit_at', 'last_trade_at'])
+      ?? lastTradeText(trades, ['exit_at', 'exit_time']),
     barCount: numberLikeFromRecord(period, ['bar_count']) ?? numberLikeFromRecord(metrics, ['bar_count', 'evaluated_bar_count']),
   };
 }
@@ -324,6 +332,41 @@ function metricPercentText(value: number | string | null | undefined): string {
 function tradePeriodText(value: number | string | null | undefined): string {
   const text = valueText(value);
   return text === '-' ? '取引なし' : text;
+}
+
+function textFromRecordKeys(record: Record<string, unknown> | null, keys: string[]): string {
+  if (!record) return '-';
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '-';
+}
+
+function numberTextFromRecordKeys(record: Record<string, unknown>, keys: string[], digits = 2): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return formatNumber(value, digits);
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '-';
+}
+
+function firstTradeText(trades: Record<string, unknown>[], keys: string[]): string | null {
+  const values = trades
+    .map((trade) => textFromRecordKeys(trade, keys))
+    .filter((value) => value !== '-')
+    .sort();
+  return values[0] ?? null;
+}
+
+function lastTradeText(trades: Record<string, unknown>[], keys: string[]): string | null {
+  const values = trades
+    .map((trade) => textFromRecordKeys(trade, keys))
+    .filter((value) => value !== '-')
+    .sort();
+  return values[values.length - 1] ?? null;
 }
 
 function toNumber(value: number | null | undefined): number | null {
@@ -796,6 +839,126 @@ function ApplicationReportMetricsComparison({
   );
 }
 
+type ReportWithTradeDiagnostics = NonNullable<SymbolStrategyApplicationBacklink['current_report']> | RelatedApplicationReport;
+
+function reportTrades(report: ReportWithTradeDiagnostics | null | undefined): Record<string, unknown>[] {
+  return (report?.trade_diagnostics?.trades ?? []).filter((trade) => asRecord(trade)).map((trade) => trade as Record<string, unknown>);
+}
+
+function tradeNumericValue(trade: Record<string, unknown> | null | undefined, keys: string[]): number | null {
+  if (!trade) return null;
+  for (const key of keys) {
+    const value = trade[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value.replace(/,/g, ''));
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+function tradeProfitDiffText(csvTrade: Record<string, unknown> | null, internalTrade: Record<string, unknown> | null): string {
+  const csvProfit = tradeNumericValue(csvTrade, ['net_profit', 'profit', 'pnl']);
+  const internalProfit = tradeNumericValue(internalTrade, ['net_profit', 'profit', 'pnl']);
+  if (csvProfit === null || internalProfit === null) return '-';
+  const diff = internalProfit - csvProfit;
+  const sign = diff > 0 ? '+' : '';
+  return `${sign}${formatNumber(diff, 2)}`;
+}
+
+function ApplicationTradeDiagnosticsComparison({
+  currentReport,
+  relatedReports,
+}: {
+  currentReport: SymbolStrategyApplicationBacklink['current_report'];
+  relatedReports: NonNullable<SymbolStrategyApplicationBacklink['related_reports']>;
+}) {
+  const reports = [currentReport, ...relatedReports].filter((report): report is ReportWithTradeDiagnostics => Boolean(report));
+  const csvReport = reports.find((report) => report.trade_diagnostics?.source === 'csv_import' && reportTrades(report).length > 0) ?? null;
+  const internalReport = reports.find((report) => report.trade_diagnostics?.source === 'internal_backtest' && reportTrades(report).length > 0) ?? null;
+  const hasAnyDiagnostics = reports.some((report) => report.trade_diagnostics);
+  if (!hasAnyDiagnostics) return null;
+
+  const csvTrades = reportTrades(csvReport);
+  const internalTrades = reportTrades(internalReport);
+  const maxRows = Math.min(Math.max(csvTrades.length, internalTrades.length), 50);
+
+  return (
+    <SectionCard
+      title="取引明細比較"
+      description="同じ application 配下の CSV import report と internal backtest report を、trade_no / 表示順で診断比較します。完全一致や厳密な約定照合を保証するものではありません。"
+      className="mt-4"
+    >
+      {!csvReport || !internalReport ? (
+        <InlineNotice tone="info">
+          CSV import report と internal backtest report の両方に取引明細がある場合に比較できます。
+          現在は {csvReport ? 'CSV取引明細あり' : 'CSV取引明細なし'} / {internalReport ? 'internal取引明細あり' : 'internal取引明細なし'} です。
+        </InlineNotice>
+      ) : (
+        <>
+          <div className="mb-3 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+            <BacklinkInfoCard title="CSV import">
+              <TextLink href={`/backtests/${csvReport.backtest_id}`}>{csvReport.title}</TextLink>
+              <KeyValueList className="mt-2 gap-1 text-sm">
+                <KeyValueRow label="trade_count">{csvReport.trade_diagnostics?.trade_count ?? csvTrades.length}</KeyValueRow>
+                <KeyValueRow label="updated">{formatDateTime(csvReport.updated_at)}</KeyValueRow>
+              </KeyValueList>
+            </BacklinkInfoCard>
+            <BacklinkInfoCard title="internal backtest">
+              <TextLink href={`/backtests/${internalReport.backtest_id}`}>{internalReport.title}</TextLink>
+              <KeyValueList className="mt-2 gap-1 text-sm">
+                <KeyValueRow label="trade_count">{internalReport.trade_diagnostics?.trade_count ?? internalTrades.length}</KeyValueRow>
+                <KeyValueRow label="updated">{formatDateTime(internalReport.updated_at)}</KeyValueRow>
+              </KeyValueList>
+            </BacklinkInfoCard>
+          </div>
+          {maxRows === 0 ? (
+            <EmptyState title="比較できる取引明細はありません。" />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left">
+                    <th className="p-2">#</th>
+                    <th className="p-2">CSV entry</th>
+                    <th className="p-2">internal entry</th>
+                    <th className="p-2">CSV exit</th>
+                    <th className="p-2">internal exit</th>
+                    <th className="p-2">CSV profit</th>
+                    <th className="p-2">internal profit</th>
+                    <th className="p-2">profit diff</th>
+                    <th className="p-2">note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: maxRows }).map((_, index) => {
+                    const csvTrade = csvTrades[index] ?? null;
+                    const internalTrade = internalTrades[index] ?? null;
+                    return (
+                      <tr key={`trade-diagnostics-${index}`} className="border-b border-slate-100">
+                        <td className="p-2">{textFromRecordKeys(csvTrade, ['trade_no']) !== '-' ? textFromRecordKeys(csvTrade, ['trade_no']) : textFromRecordKeys(internalTrade, ['trade_no']) !== '-' ? textFromRecordKeys(internalTrade, ['trade_no']) : index + 1}</td>
+                        <td className="p-2">{textFromRecordKeys(csvTrade, ['entry_at', 'entry_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['entry_at', 'entry_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(csvTrade, ['exit_at', 'exit_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['exit_at', 'exit_time'])}</td>
+                        <td className="p-2">{numberTextFromRecordKeys(csvTrade ?? {}, ['net_profit', 'profit', 'pnl'])}</td>
+                        <td className="p-2">{numberTextFromRecordKeys(internalTrade ?? {}, ['net_profit', 'profit', 'pnl'])}</td>
+                        <td className="p-2">{tradeProfitDiffText(csvTrade, internalTrade)}</td>
+                        <td className="p-2 text-slate-600">trade_no順の診断比較</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </SectionCard>
+  );
+}
+
 function SymbolStrategyApplicationBacklinkSection({
   symbolStrategyApplication,
   onCreateImprovedVersion,
@@ -864,6 +1027,10 @@ function SymbolStrategyApplicationBacklinkSection({
       ) : null}
       <RelatedApplicationReports relatedReports={symbolStrategyApplication.related_reports ?? []} />
       <ApplicationReportMetricsComparison
+        currentReport={symbolStrategyApplication.current_report}
+        relatedReports={symbolStrategyApplication.related_reports ?? []}
+      />
+      <ApplicationTradeDiagnosticsComparison
         currentReport={symbolStrategyApplication.current_report}
         relatedReports={symbolStrategyApplication.related_reports ?? []}
       />
@@ -997,8 +1164,22 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
   const resultSummary = asRecord(snapshot?.result_summary ?? null);
   const period = asRecord(resultSummary?.period ?? null);
   const tradePeriod = asRecord(resultSummary?.trade_period ?? null);
+  const tradeSummary = asRecord(resultSummary?.trade_summary ?? null);
+  const trades = recordArray(resultSummary, 'trades');
   const metrics = asRecord(resultSummary?.metrics ?? null);
   const artifactPointer = asRecord(snapshot?.artifact_pointer ?? null);
+  const firstEntry =
+    textFromRecordKeys(tradePeriod, ['first_entry_at', 'first_trade_at']) !== '-'
+      ? textFromRecordKeys(tradePeriod, ['first_entry_at', 'first_trade_at'])
+      : textFromRecordKeys(tradeSummary, ['first_entry_at', 'first_trade_at']) !== '-'
+        ? textFromRecordKeys(tradeSummary, ['first_entry_at', 'first_trade_at'])
+        : firstTradeText(trades, ['entry_at', 'entry_time']);
+  const lastExit =
+    textFromRecordKeys(tradePeriod, ['last_exit_at', 'last_trade_at']) !== '-'
+      ? textFromRecordKeys(tradePeriod, ['last_exit_at', 'last_trade_at'])
+      : textFromRecordKeys(tradeSummary, ['last_exit_at', 'last_trade_at']) !== '-'
+        ? textFromRecordKeys(tradeSummary, ['last_exit_at', 'last_trade_at'])
+        : lastTradeText(trades, ['exit_at', 'exit_time']);
 
   return (
     <SectionCard
@@ -1011,8 +1192,8 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
         {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
         {metricCard('data period from', recordText(period, 'from'))}
         {metricCard('data period to', recordText(period, 'to'))}
-        {metricCard('trade period from', tradePeriodText(recordText(tradePeriod, 'first_entry_at') !== '-' ? recordText(tradePeriod, 'first_entry_at') : recordText(tradePeriod, 'first_trade_at')))}
-        {metricCard('trade period to', tradePeriodText(recordText(tradePeriod, 'last_exit_at') !== '-' ? recordText(tradePeriod, 'last_exit_at') : recordText(tradePeriod, 'last_trade_at')))}
+        {metricCard('trade period from', tradePeriodText(firstEntry))}
+        {metricCard('trade period to', tradePeriodText(lastExit))}
         {metricCard('bar_count', recordText(period, 'bar_count'))}
         {metricCard('total_trades', recordText(metrics, 'total_trades') !== '-' ? recordText(metrics, 'total_trades') : recordText(metrics, 'trade_count'))}
         {metricCard('win_rate', recordText(metrics, 'win_rate'))}
@@ -1034,24 +1215,40 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
   );
 }
 
-function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
-  const resultSummary = asRecord(snapshot?.result_summary ?? null);
-  const trades = recordArray(resultSummary, 'trades');
-  const tradesTruncated = resultSummary?.trades_truncated === true;
-  const tradeSummary = asRecord(resultSummary?.trade_summary ?? null);
+function TradeListSection({
+  title = '取引一覧',
+  description,
+  trades,
+  tradeSummary,
+  tradesTruncated = false,
+  emptyTitle = '取引はありません。',
+}: {
+  title?: string;
+  description: string;
+  trades: Record<string, unknown>[];
+  tradeSummary: Record<string, unknown> | null;
+  tradesTruncated?: boolean;
+  emptyTitle?: string;
+}) {
   const exitReasonCounts = recordArray(tradeSummary, 'exit_reason_counts');
   const visibleTrades = trades.slice(0, 50);
+  const firstEntry = textFromRecordKeys(tradeSummary, ['first_entry_at', 'first_trade_at']) !== '-'
+    ? textFromRecordKeys(tradeSummary, ['first_entry_at', 'first_trade_at'])
+    : firstTradeText(trades, ['entry_at', 'entry_time']);
+  const lastExit = textFromRecordKeys(tradeSummary, ['last_exit_at', 'last_trade_at']) !== '-'
+    ? textFromRecordKeys(tradeSummary, ['last_exit_at', 'last_trade_at'])
+    : lastTradeText(trades, ['exit_at', 'exit_time']);
 
   return (
     <SectionCard
-      title="取引一覧"
-      description="internal backtest engine が保存した約定単位の明細 preview です。raw CSV / raw import text は表示しません。"
+      title={title}
+      description={description}
       className="mt-4"
     >
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
-        {metricCard('trade_count', recordText(tradeSummary, 'trade_count') !== '-' ? recordText(tradeSummary, 'trade_count') : String(trades.length))}
-        {metricCard('first_entry_at', tradePeriodText(recordText(tradeSummary, 'first_entry_at')))}
-        {metricCard('last_exit_at', tradePeriodText(recordText(tradeSummary, 'last_exit_at')))}
+        {metricCard('trade_count', textFromRecordKeys(tradeSummary, ['trade_count']) !== '-' ? textFromRecordKeys(tradeSummary, ['trade_count']) : String(trades.length))}
+        {metricCard('first_entry_at', tradePeriodText(firstEntry))}
+        {metricCard('last_exit_at', tradePeriodText(lastExit))}
       </div>
       {exitReasonCounts.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
@@ -1066,7 +1263,7 @@ function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStra
         </div>
       ) : null}
       {visibleTrades.length === 0 ? (
-        <EmptyState title="取引はありません。" />
+        <EmptyState title={emptyTitle} />
       ) : (
         <>
           {(tradesTruncated || trades.length > visibleTrades.length) ? (
@@ -1092,16 +1289,16 @@ function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStra
               </thead>
               <tbody>
                 {visibleTrades.map((trade, index) => (
-                  <tr key={`${recordText(trade, 'trade_no')}-${recordText(trade, 'entry_at')}-${index}`} className="border-b border-slate-100">
-                    <td className="p-2">{recordText(trade, 'trade_no') !== '-' ? recordText(trade, 'trade_no') : index + 1}</td>
-                    <td className="p-2">{recordText(trade, 'entry_at') !== '-' ? recordText(trade, 'entry_at') : recordText(trade, 'entry_time')}</td>
-                    <td className="p-2">{recordNumberText(trade, 'entry_price')}</td>
-                    <td className="p-2">{recordText(trade, 'exit_at') !== '-' ? recordText(trade, 'exit_at') : recordText(trade, 'exit_time')}</td>
-                    <td className="p-2">{recordNumberText(trade, 'exit_price')}</td>
-                    <td className="p-2"><code>{recordText(trade, 'exit_reason')}</code></td>
-                    <td className="p-2">{recordNumberText(trade, 'quantity')}</td>
-                    <td className="p-2">{recordText(trade, 'net_profit') !== '-' ? recordNumberText(trade, 'net_profit') : recordNumberText(trade, 'pnl')}</td>
-                    <td className="p-2">{recordNumberText(trade, 'return_percent')}</td>
+                  <tr key={`${textFromRecordKeys(trade, ['trade_no'])}-${textFromRecordKeys(trade, ['entry_at', 'entry_time'])}-${index}`} className="border-b border-slate-100">
+                    <td className="p-2">{textFromRecordKeys(trade, ['trade_no']) !== '-' ? textFromRecordKeys(trade, ['trade_no']) : index + 1}</td>
+                    <td className="p-2">{textFromRecordKeys(trade, ['entry_at', 'entry_time'])}</td>
+                    <td className="p-2">{numberTextFromRecordKeys(trade, ['entry_price'])}</td>
+                    <td className="p-2">{textFromRecordKeys(trade, ['exit_at', 'exit_time'])}</td>
+                    <td className="p-2">{numberTextFromRecordKeys(trade, ['exit_price'])}</td>
+                    <td className="p-2"><code>{textFromRecordKeys(trade, ['exit_reason', 'signal', 'side'])}</code></td>
+                    <td className="p-2">{numberTextFromRecordKeys(trade, ['quantity'])}</td>
+                    <td className="p-2">{numberTextFromRecordKeys(trade, ['net_profit', 'profit', 'pnl'])}</td>
+                    <td className="p-2">{numberTextFromRecordKeys(trade, ['return_percent', 'profit_percent'])}</td>
                     <td className="p-2">{recordNumberText(trade, 'bars_held', 0)}</td>
                   </tr>
                 ))}
@@ -1111,6 +1308,32 @@ function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStra
         </>
       )}
     </SectionCard>
+  );
+}
+
+function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
+  const resultSummary = asRecord(snapshot?.result_summary ?? null);
+  return (
+    <TradeListSection
+      title="取引一覧"
+      description="internal backtest engine が保存した約定単位の明細 preview です。raw CSV / raw import text は表示しません。"
+      trades={recordArray(resultSummary, 'trades')}
+      tradeSummary={asRecord(resultSummary?.trade_summary ?? null)}
+      tradesTruncated={resultSummary?.trades_truncated === true}
+    />
+  );
+}
+
+function CsvTradeListSection({ parsedSummary }: { parsedSummary: ParsedImportSummary | null | undefined }) {
+  const record = asRecord(parsedSummary ?? null);
+  return (
+    <TradeListSection
+      title="取引一覧"
+      description="TradingView Strategy Tester の List of Trades CSV から正規化した約定単位の明細 preview です。raw CSV / raw import text は表示しません。"
+      trades={recordArray(record, 'trades')}
+      tradeSummary={asRecord(record?.trade_summary ?? null)}
+      emptyTitle="CSV取引明細はありません。"
+    />
   );
 }
 
@@ -1468,6 +1691,8 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
 
       {isInternalBacktestReport ? (
         <InternalBacktestTradeListSection snapshot={snapshot} />
+      ) : recordArray(asRecord(latestImport?.parsed_summary ?? null), 'trades').length > 0 ? (
+        <CsvTradeListSection parsedSummary={latestImport?.parsed_summary} />
       ) : (
         <CsvTradeListUnavailableSection />
       )}

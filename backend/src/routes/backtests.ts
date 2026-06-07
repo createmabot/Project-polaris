@@ -52,6 +52,9 @@ type ParsedImportSummary = {
   netProfit: number | null;
   periodFrom: string | null;
   periodTo: string | null;
+  trades?: Record<string, unknown>[];
+  trade_summary?: Record<string, unknown>;
+  trade_warnings?: string[];
 };
 
 type BacktestTradeSummaryInput = {
@@ -89,6 +92,15 @@ type ReportMetricsSummary = {
   max_drawdown_percent: number | null;
   profit_factor: number | null;
   win_rate: number | null;
+};
+
+type ReportTradeDiagnostics = {
+  source: 'csv_import' | 'internal_backtest';
+  has_trades: boolean;
+  trade_count: number | null;
+  trade_summary: Record<string, unknown> | null;
+  trades: Record<string, unknown>[];
+  trades_truncated: boolean;
 };
 
 type BacktestAiReviewView = {
@@ -130,6 +142,11 @@ function parseParsedImportSummary(value: unknown): ParsedImportSummary | null {
     netProfit: typeof value.netProfit === 'number' ? value.netProfit : null,
     periodFrom: typeof value.periodFrom === 'string' ? value.periodFrom : null,
     periodTo: typeof value.periodTo === 'string' ? value.periodTo : null,
+    ...(Array.isArray(value.trades) ? { trades: value.trades.filter(isRecord) } : {}),
+    ...(isRecord(value.trade_summary) ? { trade_summary: value.trade_summary } : {}),
+    ...(Array.isArray(value.trade_warnings)
+      ? { trade_warnings: value.trade_warnings.filter((item): item is string => typeof item === 'string') }
+      : {}),
   };
 }
 
@@ -399,6 +416,47 @@ function buildReportMetricsSummary(backtest: {
   return buildCsvReportMetricsSummary(backtest.imports ?? []);
 }
 
+function buildCsvTradeDiagnostics(imports: Array<{ parsedSummaryJson: unknown }>): ReportTradeDiagnostics {
+  const parsed = parseParsedImportSummary(imports[0]?.parsedSummaryJson ?? null);
+  const trades = parsed?.trades ?? [];
+  return {
+    source: 'csv_import',
+    has_trades: trades.length > 0,
+    trade_count: typeof parsed?.trade_summary?.trade_count === 'number'
+      ? parsed.trade_summary.trade_count
+      : parsed?.totalTrades ?? (trades.length > 0 ? trades.length : null),
+    trade_summary: parsed?.trade_summary ?? null,
+    trades,
+    trades_truncated: false,
+  };
+}
+
+function buildInternalTradeDiagnostics(snapshot: BacktestStrategySnapshot | null): ReportTradeDiagnostics {
+  const resultSummary = snapshot?.result_summary ?? null;
+  const trades = Array.isArray(resultSummary?.trades) ? resultSummary.trades.filter(isRecord) : [];
+  const tradeSummary = isRecord(resultSummary?.trade_summary) ? resultSummary.trade_summary : null;
+  return {
+    source: 'internal_backtest',
+    has_trades: trades.length > 0,
+    trade_count: typeof tradeSummary?.trade_count === 'number' ? tradeSummary.trade_count : (trades.length > 0 ? trades.length : null),
+    trade_summary: tradeSummary,
+    trades,
+    trades_truncated: resultSummary?.trades_truncated === true,
+  };
+}
+
+function buildReportTradeDiagnostics(backtest: {
+  executionSource: string;
+  strategySnapshotJson: unknown;
+  imports?: Array<{ parsedSummaryJson: unknown }>;
+}): ReportTradeDiagnostics {
+  const snapshot = normalizeBacktestStrategySnapshot(backtest.strategySnapshotJson);
+  if (backtest.executionSource === 'internal_backtest' || snapshot?.execution_source === 'internal_backtest') {
+    return buildInternalTradeDiagnostics(snapshot);
+  }
+  return buildCsvTradeDiagnostics(backtest.imports ?? []);
+}
+
 async function resolveLatestBacktestAiReview(backtestId: string, importIds: string[]) {
   const summary = await prisma.aiSummary.findFirst({
     where: {
@@ -525,6 +583,7 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
 
   const toRelatedReport = async (relatedRun: (typeof relatedRuns)[number]) => {
     if (!relatedRun.backtest) return null;
+    const tradeDiagnostics = buildReportTradeDiagnostics(relatedRun.backtest);
     return {
       backtest_id: relatedRun.backtest.id,
       title: relatedRun.backtest.title,
@@ -534,6 +593,7 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       run_status: relatedRun.status,
       updated_at: relatedRun.backtest.updatedAt,
       metrics: buildReportMetricsSummary(relatedRun.backtest),
+      ...(tradeDiagnostics.has_trades ? { trade_diagnostics: tradeDiagnostics } : {}),
       ai_review: await resolveRunAiReview(relatedRun),
     };
   };
@@ -574,17 +634,21 @@ async function resolveBacktestSymbolStrategyApplication(backtestId: string) {
       timeframe: run.application.strategyRuleVersion.timeframe,
     },
     current_report: run.backtest
-      ? {
-          backtest_id: run.backtest.id,
-          title: run.backtest.title,
-          execution_source: run.backtest.executionSource,
-          status: run.backtest.status,
-          run_type: run.runType,
-          run_status: run.status,
-          updated_at: run.backtest.updatedAt,
-          metrics: buildReportMetricsSummary(run.backtest),
-          ai_review: await resolveRunAiReview(run),
-        }
+      ? await (async (currentBacktest: NonNullable<typeof run.backtest>) => {
+          const tradeDiagnostics = buildReportTradeDiagnostics(currentBacktest);
+          return {
+            backtest_id: currentBacktest.id,
+            title: currentBacktest.title,
+            execution_source: currentBacktest.executionSource,
+            status: currentBacktest.status,
+            run_type: run.runType,
+            run_status: run.status,
+            updated_at: currentBacktest.updatedAt,
+            metrics: buildReportMetricsSummary(currentBacktest),
+            ...(tradeDiagnostics.has_trades ? { trade_diagnostics: tradeDiagnostics } : {}),
+            ai_review: await resolveRunAiReview(run),
+          };
+        })(run.backtest)
       : null,
     related_reports: relatedReports
       .filter((report): report is NonNullable<Awaited<ReturnType<typeof toRelatedReport>>> => report !== null),
