@@ -44,7 +44,7 @@ function createLlmSpecOutput(overrides: Record<string, unknown> = {}) {
     market: 'JP_STOCK',
     timeframe: 'D',
     side: 'long_only',
-    strategy_family: 'momentum_macd',
+    strategy_family: 'trend_momentum',
     indicators: [
       { id: 'macd_12_26_9', type: 'MACD', fast: 12, slow: 26, signal: 9 },
       { id: 'sma_25', type: 'SMA', length: '25', source: 'close' },
@@ -65,7 +65,7 @@ function createLlmSpecOutput(overrides: Record<string, unknown> = {}) {
       ],
     },
     risk: {
-      stop_loss: { type: 'percent', value: '5', basis: 'entry_price' },
+      stop_loss: { type: 'percent', value: '5', basis: 'entry_price', direction: 'below_entry' },
       time_exit: { type: 'bars', bars: 15 },
     },
     filters: [
@@ -91,7 +91,7 @@ vi.mock('../src/ai/home-provider', () => ({
       market: 'JP_STOCK',
       timeframe: 'D',
       side: 'long_only',
-      strategy_family: 'momentum_macd',
+      strategy_family: 'trend_momentum',
       indicators: [
         { id: 'macd_12_26_9', type: 'MACD', fast: 12, slow: 26, signal: 9 },
         { id: 'sma_25', type: 'SMA', length: '25', source: 'close' },
@@ -112,7 +112,7 @@ vi.mock('../src/ai/home-provider', () => ({
         ],
       },
       risk: {
-        stop_loss: { type: 'percent', value: '5', basis: 'entry_price' },
+        stop_loss: { type: 'percent', value: '5', basis: 'entry_price', direction: 'below_entry' },
         time_exit: { type: 'bars', bars: 15 },
       },
       filters: [
@@ -293,7 +293,7 @@ describe('strategy normalized spec routes', () => {
     expect(spec.market).toBe('JP_STOCK');
     expect(spec.timeframe).toBe('D');
     expect(spec.side).toBe('long_only');
-    expect(spec.strategy_family).toBe('momentum_macd');
+    expect(spec.strategy_family).toBe('trend_momentum');
     expect(spec.indicators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'MACD' }),
@@ -304,7 +304,7 @@ describe('strategy normalized spec routes', () => {
     expect(spec.filters).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'volume_filter', indicator: 'volume_sma_20' })]),
     );
-    expect(spec.risk.stop_loss).toEqual(expect.objectContaining({ type: 'percent', value: 5 }));
+    expect(spec.risk.stop_loss).toEqual(expect.objectContaining({ type: 'percent', value: 5, basis: 'entry_price', direction: 'below_entry' }));
     expect(spec.risk.time_exit).toEqual(expect.objectContaining({ type: 'bars', bars: 15 }));
     expect(spec.validation.supported_for_internal_backtest).toBe(false);
     expect(runtime.versions.get('ver-1')!.normalizedRuleJson).toEqual(spec);
@@ -340,7 +340,7 @@ describe('strategy normalized spec routes', () => {
 
   it('detects RSI, EMA, ATR, take profit, and unsupported short conditions as non-fatal warnings', async () => {
     providerState.output = createLlmSpecOutput({
-      strategy_family: 'momentum_rsi',
+      strategy_family: 'Trend_Following_Mean_Reversion_Hybrid',
       indicators: [
         { id: 'rsi_14', type: 'RSI', length: 14, source: 'close' },
         { id: 'ema_20', type: 'EMA', length: 20, source: 'close' },
@@ -385,6 +385,7 @@ describe('strategy normalized spec routes', () => {
 
     expect(response.statusCode).toBe(200);
     const spec = response.json().data.normalized_spec;
+    expect(spec.strategy_family).toBe('trend_momentum');
     expect(spec.indicators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: 'RSI', length: 14 }),
@@ -401,7 +402,7 @@ describe('strategy normalized spec routes', () => {
 
   it('uses LLM structured extraction to preserve separated entry, exit, volume multiplier, and unsupported history rules', async () => {
     providerState.output = createLlmSpecOutput({
-      strategy_family: 'rule_based_long',
+      strategy_family: 'Trend_Following_Mean_Reversion_Hybrid',
       indicators: [
         { id: 'sma_25', type: 'SMA', length: 25, source: 'close' },
         { id: 'sma_5', type: 'SMA', length: 5, source: 'close' },
@@ -423,12 +424,12 @@ describe('strategy normalized spec routes', () => {
         ],
       },
       risk: {
-        stop_loss: { type: 'percent', value: '5', basis: 'entry_price' },
+        stop_loss: { type: 'percent', value: '-5', basis: 'entry_price', description: 'エントリー価格から-5%' },
         time_exit: { type: 'bars', bars: '10' },
         consecutive_loss_skip: { supported: false, rule: '直近3回の取引が連続損失となった場合は次の1回分のentryをskip' },
       },
       filters: [
-        { id: 'filter_volume_1_5x', type: 'volume_filter', left: 'volume', operator: '>=', indicator: 'volume_sma_20', multiplier: '1.5', rule: '出来高が20日平均の1.5倍以上' },
+        { id: 'filter_volume_1_5x', type: 'volume_filter', left: 'volume', operator: '>=', indicator: 'volume_sma_20', right: { indicator: 'volume_sma_20', multiplier: '1.5' }, multiplier: '1.5', rule: '出来高が20日平均の1.5倍以上' },
       ],
       validation: {
         supported_for_internal_backtest: false,
@@ -454,6 +455,7 @@ describe('strategy normalized spec routes', () => {
     const spec = response.json().data.normalized_spec;
     expect(spec.source.provider).toBe('local_llm');
     expect(spec.source.fallback_used).toBe(false);
+    expect(spec.strategy_family).toBe('ma_rsi_volume_momentum');
     expect(spec.indicators).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: 'sma_25', type: 'SMA', length: 25 }),
@@ -469,7 +471,13 @@ describe('strategy normalized spec routes', () => {
       ]),
     );
     expect(spec.filters).toEqual(
-      expect.arrayContaining([expect.objectContaining({ indicator: 'volume_sma_20', multiplier: 1.5 })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          indicator: 'volume_sma_20',
+          multiplier: 1.5,
+          right: expect.objectContaining({ indicator: 'volume_sma_20', multiplier: 1.5 }),
+        }),
+      ]),
     );
     expect(spec.exit.conditions).toEqual(
       expect.arrayContaining([
@@ -477,7 +485,7 @@ describe('strategy normalized spec routes', () => {
         expect.objectContaining({ type: 'time_exit', bars: 10 }),
       ]),
     );
-    expect(spec.risk.stop_loss).toEqual(expect.objectContaining({ type: 'percent', value: 5, basis: 'entry_price' }));
+    expect(spec.risk.stop_loss).toEqual(expect.objectContaining({ type: 'percent', value: 5, basis: 'entry_price', direction: 'below_entry', side: 'long_stop_loss' }));
     expect(spec.risk.time_exit).toEqual(expect.objectContaining({ type: 'bars', bars: 10 }));
     expect(spec.risk.consecutive_loss_skip).toEqual(expect.objectContaining({ supported: false }));
     expect(spec.validation.unsupported_features).toEqual(expect.arrayContaining(['consecutive_loss_skip']));
