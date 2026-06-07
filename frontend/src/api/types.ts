@@ -84,6 +84,75 @@ export type InvestmentCalendarProviderStatus = {
   error_code?: string | null;
 };
 
+export type MarketDataImportData = {
+  id: string;
+  symbol_id: string;
+  timeframe: string;
+  source_type: string;
+  source_name: string | null;
+  file_name: string | null;
+  row_count: number;
+  inserted_count: number;
+  updated_count: number;
+  skipped_count: number;
+  period_from: string | null;
+  period_to: string | null;
+  status: string;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at: string | null;
+};
+
+export type MarketDataCoverageItem = {
+  timeframe: string;
+  source_type: string;
+  bar_count: number;
+  period_from: string | null;
+  period_to: string | null;
+  latest_bar_time: string | null;
+  adjusted_count: number;
+  last_imported_at: string | null;
+};
+
+export type MarketDataCoverageData = {
+  symbol: {
+    id: string;
+    symbol: string;
+    symbol_code: string | null;
+    display_name: string | null;
+  };
+  coverage: MarketDataCoverageItem[];
+  latest_imports: MarketDataImportData[];
+  meta: {
+    internal_backtest_ready: boolean;
+    internal_backtest_ready_reason: string;
+  };
+};
+
+export type MarketDataImportCsvData = {
+  import: MarketDataImportData;
+  coverage: MarketDataCoverageItem;
+};
+
+export type MarketPriceBarData = {
+  bar_time: string | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+  adjusted_close: number | null;
+  source_type: string;
+};
+
+export type MarketPriceBarsData = {
+  bars: MarketPriceBarData[];
+  pagination: {
+    limit: number;
+    has_next: boolean;
+  };
+};
+
 export type InvestmentCalendarData = {
   events: InvestmentCalendarEvent[];
   meta: {

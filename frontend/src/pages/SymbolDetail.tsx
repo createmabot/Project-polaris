@@ -8,6 +8,9 @@ import {
   SymbolAiSummaryData,
   InvestmentCalendarData,
   InvestmentCalendarRefreshData,
+  MarketDataCoverageData,
+  MarketDataImportCsvData,
+  MarketPriceBarsData,
   SymbolDetailData,
   SymbolReferenceRefreshData,
   SymbolStrategyApplicationCreateData,
@@ -158,6 +161,19 @@ const LABELS = {
   volume: '出来高',
   source: 'ソース',
   marketStatus: '市場状態',
+  marketDataTitle: 'マーケットデータ',
+  marketDataDescription: '内部バックテストに向けたOHLCV履歴データです。今回のMVPでは手動CSV import のみ対応し、外部データ自動取得やinternal backtestはまだ行いません。',
+  marketDataCoverage: 'coverage',
+  marketDataLatestImports: 'latest imports',
+  marketDataLatestBars: 'latest bars preview',
+  marketDataImport: 'OHLCV CSV import',
+  marketDataImportButton: 'OHLCV CSVを取り込む',
+  marketDataImporting: 'OHLCV CSV取込中...',
+  marketDataImportSuccess: 'OHLCV CSV取込が完了しました。coverage を更新しました。',
+  marketDataImportError: 'OHLCV CSV取込に失敗しました。',
+  marketDataNoCoverage: 'OHLCV履歴データはまだありません。',
+  marketDataNoBars: 'preview できる price bar はまだありません。',
+  marketDataInternalBacktestNotReady: 'internal backtest engine は未実装です。ここでは価格履歴の保存と確認だけを行います。',
 
   noAlerts: 'この銘柄のアラートはまだありません。',
   datetime: '日時',
@@ -444,6 +460,13 @@ const DEFAULT_STRATEGY_SELECTION_LIMIT = 5;
 export async function readCsvFileForImport(file: Pick<File, 'name' | 'text'>): Promise<{ fileName: string; csvText: string }> {
   return {
     fileName: file.name || 'tradingview.csv',
+    csvText: await file.text(),
+  };
+}
+
+export async function readMarketDataCsvFileForImport(file: Pick<File, 'name' | 'text'>): Promise<{ fileName: string; csvText: string }> {
+  return {
+    fileName: file.name || 'ohlcv.csv',
     csvText: await file.text(),
   };
 }
@@ -1343,6 +1366,226 @@ function StrategyApplySelectionPanel({
   );
 }
 
+export function MarketDataSection({
+  symbolId,
+  coverageData,
+  barsData,
+  coverageError,
+  barsError,
+  mutateCoverage,
+  mutateBars,
+  initialCsvText = '',
+  initialFileName = 'ohlcv.csv',
+}: {
+  symbolId: string;
+  coverageData?: MarketDataCoverageData;
+  barsData?: MarketPriceBarsData;
+  coverageError?: Error | null;
+  barsError?: Error | null;
+  mutateCoverage: () => Promise<unknown>;
+  mutateBars: () => Promise<unknown>;
+  initialCsvText?: string;
+  initialFileName?: string;
+}) {
+  const [sourceName, setSourceName] = useState('manual');
+  const [fileName, setFileName] = useState(initialFileName);
+  const [csvText, setCsvText] = useState(initialCsvText);
+  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const [fileReadError, setFileReadError] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const coverage = coverageData?.coverage?.[0] ?? null;
+  const latestImports = coverageData?.latest_imports ?? [];
+  const bars = barsData?.bars ?? [];
+
+  async function importMarketDataCsv() {
+    if (!csvText.trim()) return;
+    setIsImporting(true);
+    setImportMessage(null);
+    setImportError(null);
+    try {
+      const result = await postApi<MarketDataImportCsvData>(`/api/symbols/${symbolId}/market-data/import-csv`, {
+        timeframe: 'D',
+        source_name: sourceName,
+        file_name: fileName,
+        csv_text: csvText,
+      });
+      setImportMessage(
+        `${LABELS.marketDataImportSuccess} row ${result.import.row_count} / inserted ${result.import.inserted_count} / updated ${result.import.updated_count} / skipped ${result.import.skipped_count}`,
+      );
+      setCsvText('');
+      await Promise.all([mutateCoverage(), mutateBars()]);
+    } catch (error) {
+      setImportError(getErrorMessage(error, LABELS.marketDataImportError));
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void importMarketDataCsv();
+  }
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setIsReadingFile(true);
+    setFileReadError(null);
+    try {
+      const result = await readMarketDataCsvFileForImport(file);
+      setFileName(result.fileName);
+      setSelectedFileName(result.fileName);
+      setCsvText(result.csvText);
+    } catch {
+      setFileReadError(LABELS.csvFileReadError);
+    } finally {
+      setIsReadingFile(false);
+    }
+  }
+
+  return (
+    <DetailSection title={LABELS.marketDataTitle} description={LABELS.marketDataDescription}>
+      <InfoCard className="space-y-4">
+        <InlineNotice tone="info">{LABELS.marketDataInternalBacktestNotReady}</InlineNotice>
+        {coverageError || barsError ? (
+          <InlineNotice tone="warning">マーケットデータを取得できませんでした。時間をおいて再読み込みしてください。</InlineNotice>
+        ) : null}
+
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">{LABELS.marketDataCoverage}</h3>
+          {coverage ? (
+            <KeyValueList className="mt-2 gap-2 text-sm sm:grid-cols-2">
+              <KeyValueRow label="timeframe">{coverage.timeframe}</KeyValueRow>
+              <KeyValueRow label="source">{coverage.source_type}</KeyValueRow>
+              <KeyValueRow label="bar count">{coverage.bar_count}</KeyValueRow>
+              <KeyValueRow label="period">{formatDate(coverage.period_from)} - {formatDate(coverage.period_to)}</KeyValueRow>
+              <KeyValueRow label="latest">{formatDate(coverage.latest_bar_time)}</KeyValueRow>
+              <KeyValueRow label="adjusted">{coverage.adjusted_count}</KeyValueRow>
+            </KeyValueList>
+          ) : (
+            <EmptyText>{LABELS.marketDataNoCoverage}</EmptyText>
+          )}
+        </div>
+
+        <form onSubmit={handleSubmit} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <h3 className="mt-0 text-sm font-semibold text-slate-900">{LABELS.marketDataImport}</h3>
+          <div className="grid gap-3 md:grid-cols-3">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">timeframe</span>
+              <select value="D" disabled className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm">
+                <option value="D">日足（D）</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">source_name</span>
+              <input
+                value={sourceName}
+                onChange={(event) => setSourceName(event.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                placeholder="manual"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">{LABELS.csvFileName}</span>
+              <input
+                value={fileName}
+                onChange={(event) => setFileName(event.target.value)}
+                className="rounded-md border border-slate-300 px-3 py-2 text-sm"
+                placeholder="ohlcv.csv"
+              />
+            </label>
+          </div>
+          <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">{LABELS.csvFile}</span>
+              <input type="file" accept=".csv,text/csv,text/plain" onChange={handleFileChange} />
+              <span className="text-xs text-slate-500">OHLCV CSVファイルを選ぶとCSVテキスト欄に読み込みます。</span>
+              {selectedFileName ? <span className="text-xs text-slate-600">{LABELS.csvFileSelected}: <code>{selectedFileName}</code></span> : null}
+              {isReadingFile ? <span className="text-xs text-slate-600">{LABELS.csvFileReading}</span> : null}
+              {fileReadError ? <span className="text-xs text-rose-700">{fileReadError}</span> : null}
+            </label>
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              <span className="font-medium">{LABELS.csvText}</span>
+              <textarea
+                value={csvText}
+                onChange={(event) => setCsvText(event.target.value)}
+                rows={6}
+                className="rounded-md border border-slate-300 px-3 py-2 font-mono text-sm"
+                placeholder="date,open,high,low,close,volume"
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button type="button" variant="primary" onClick={importMarketDataCsv} disabled={isImporting || isReadingFile || !csvText.trim()}>
+              {isImporting ? LABELS.marketDataImporting : LABELS.marketDataImportButton}
+            </Button>
+          </div>
+          {importMessage ? <InlineNotice tone="success" className="mt-3">{importMessage}</InlineNotice> : null}
+          {importError ? <InlineNotice tone="danger" className="mt-3">{importError}</InlineNotice> : null}
+        </form>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">{LABELS.marketDataLatestImports}</h3>
+            {latestImports.length > 0 ? (
+              <div className="mt-2 space-y-2">
+                {latestImports.slice(0, 3).map((item) => (
+                  <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                    <div className="font-semibold text-slate-900">{item.file_name ?? item.source_name ?? item.source_type}</div>
+                    <MetaText>
+                      {item.status} / row {item.row_count} / inserted {item.inserted_count} / updated {item.updated_count} / skipped {item.skipped_count}
+                    </MetaText>
+                    <MetaText>{formatDate(item.period_from)} - {formatDate(item.period_to)} / imported {formatDate(item.created_at)}</MetaText>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyText>import 履歴はまだありません。</EmptyText>
+            )}
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">{LABELS.marketDataLatestBars}</h3>
+            {bars.length > 0 ? (
+              <div className="mt-2 overflow-x-auto rounded-lg border border-slate-200">
+                <table className="min-w-full border-collapse bg-white text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-600">
+                    <tr>
+                      <th className="px-2 py-2">date</th>
+                      <th className="px-2 py-2">open</th>
+                      <th className="px-2 py-2">high</th>
+                      <th className="px-2 py-2">low</th>
+                      <th className="px-2 py-2">close</th>
+                      <th className="px-2 py-2">volume</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bars.slice(0, 5).map((bar) => (
+                      <tr key={`${bar.bar_time}-${bar.source_type}`} className="border-t border-slate-100">
+                        <td className="px-2 py-2">{formatDate(bar.bar_time)}</td>
+                        <td className="px-2 py-2">{formatNumber(bar.open, 2)}</td>
+                        <td className="px-2 py-2">{formatNumber(bar.high, 2)}</td>
+                        <td className="px-2 py-2">{formatNumber(bar.low, 2)}</td>
+                        <td className="px-2 py-2">{formatNumber(bar.close, 2)}</td>
+                        <td className="px-2 py-2">{formatNumber(bar.volume, 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <EmptyText>{LABELS.marketDataNoBars}</EmptyText>
+            )}
+          </div>
+        </div>
+      </InfoCard>
+    </DetailSection>
+  );
+}
+
 export default function SymbolDetail() {
   const [, params] = useRoute('/symbols/:symbolId');
   const symbolId = params?.symbolId;
@@ -1399,6 +1642,22 @@ export default function SymbolDetail() {
     mutate: mutateCalendar,
   } = useSWR<InvestmentCalendarData>(
     symbolId ? `/api/symbols/${symbolId}/calendar-events?limit=20` : null,
+    swrFetcher,
+  );
+  const {
+    data: marketDataCoverage,
+    error: marketDataCoverageError,
+    mutate: mutateMarketDataCoverage,
+  } = useSWR<MarketDataCoverageData>(
+    symbolId ? `/api/symbols/${symbolId}/market-data/coverage?timeframe=D` : null,
+    swrFetcher,
+  );
+  const {
+    data: marketPriceBars,
+    error: marketPriceBarsError,
+    mutate: mutateMarketPriceBars,
+  } = useSWR<MarketPriceBarsData>(
+    symbolId ? `/api/symbols/${symbolId}/market-data/bars?timeframe=D&limit=5` : null,
     swrFetcher,
   );
 
@@ -1715,6 +1974,18 @@ export default function SymbolDetail() {
             ) : null}
           </InfoCard>
         </DetailSection>
+
+        {symbolId ? (
+          <MarketDataSection
+            symbolId={symbolId}
+            coverageData={marketDataCoverage}
+            barsData={marketPriceBars}
+            coverageError={marketDataCoverageError}
+            barsError={marketPriceBarsError}
+            mutateCoverage={mutateMarketDataCoverage}
+            mutateBars={mutateMarketPriceBars}
+          />
+        ) : null}
 
         <DetailSection
           title={LABELS.referencesTitle}

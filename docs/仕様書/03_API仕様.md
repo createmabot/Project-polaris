@@ -94,6 +94,22 @@ Stage 2C internal backtest backend cleanup:
 - `execution_source=internal_backtest` の Backtest report は historical legacy として read-only 表示を維持する。新規作成 / conversion は行わない。
 - historical internal report は `Backtest.strategySnapshotJson` の `result_summary` / `artifact_pointer` / `internal_backtest_execution_id` snapshot だけで説明する。DB execution relation は参照しない。
 
+## 6-1. Market data foundation MVP
+
+- `POST /api/symbols/:symbolId/market-data/import-csv`
+  - Symbol 単位で OHLCV CSV を manual import する。
+  - request は `timeframe`、`source_name`、`file_name`、`csv_text` を受ける。初回 MVP の `timeframe` は `D` のみで、`1D` は `D` に正規化する。
+  - CSV は `date/open/high/low/close` を必須列、`volume` / `adjusted_close` を任意列として扱う。invalid row は skipped count に入れる。
+  - 同一 `symbol + timeframe + bar_time + source_type` は upsert し、response は import summary と coverage summary だけを返す。
+- `GET /api/symbols/:symbolId/market-data/coverage`
+  - Symbol の price bar coverage と latest import summary を返す。
+  - `meta.internal_backtest_ready=false` を返し、今回の MVP が storage / confirmation only であることを示す。
+- `GET /api/symbols/:symbolId/market-data/bars`
+  - Symbol の latest OHLCV bars を返す。`timeframe`、`from`、`to`、`limit` を受ける。
+  - 初回は SymbolDetail の preview 用であり、internal backtest execution を起動しない。
+
+Market data API は raw CSV、raw import text、external provider raw response、endpoint、model 実値、secret、token、credential、local path、stack trace を response に含めない。external market data provider、scheduled refresh、crawler、internal backtest engine は今回追加しない。
+
 ## 7. AI summary
 
 - Backtest AI summary generation は既存 generate endpoint / button を維持する。
