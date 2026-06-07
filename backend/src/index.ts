@@ -18,6 +18,7 @@ import { strategyOptimizationSessionRoutes, strategyRefinementCandidateRoutes } 
 import { symbolStrategyApplicationRoutes } from './routes/symbol-strategy-applications';
 import { backtestRoutes } from './routes/backtests';
 import { backtestComparisonRoutes } from './routes/backtest-comparisons';
+import { marketDataRoutes } from './routes/market-data';
 import { summaryRoutes } from './routes/summaries';
 import { errorHandler } from './utils/response';
 import { setupWorker } from './queue';
@@ -48,6 +49,7 @@ fastify.register(homeRoutes, { prefix: '/api/home' });
 fastify.register(summaryRoutes, { prefix: '/api/summaries' });
 fastify.register(alertRoutes, { prefix: '/api/alerts' });
 fastify.register(symbolRoutes, { prefix: '/api/symbols' });
+fastify.register(marketDataRoutes, { prefix: '/api/symbols' });
 fastify.register(noteRoutes, { prefix: '/api/notes' });
 fastify.register(watchlistRoutes, { prefix: '/api/watchlists' });
 fastify.register(watchlistItemRoutes, { prefix: '/api/watchlist-items' });

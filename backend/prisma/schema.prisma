@@ -47,6 +47,8 @@ model Symbol {
   strategyApplications SymbolStrategyApplication[]
   investmentCalendarEvents InvestmentCalendarEvent[]
   strategyOptimizationSessions StrategyOptimizationSession[]
+  marketPriceBars MarketPriceBar[]
+  marketDataImports MarketDataImport[]
 
   @@map("symbols")
 }
@@ -199,6 +201,71 @@ model MarketSnapshot {
   @@index([snapshotType, targetCode, asOf])
   @@index([snapshotType, asOf])
   @@map("market_snapshots")
+}
+
+model MarketPriceBar {
+  id          String   @id @default(uuid())
+
+  symbolId    String   @map("symbol_id")
+  symbol      Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  timeframe   String
+  barTime     DateTime @map("bar_time")
+
+  open        Decimal  @db.Decimal(18, 6)
+  high        Decimal  @db.Decimal(18, 6)
+  low         Decimal  @db.Decimal(18, 6)
+  close       Decimal  @db.Decimal(18, 6)
+  volume      Decimal? @db.Decimal(20, 6)
+
+  adjustedOpen  Decimal? @map("adjusted_open") @db.Decimal(18, 6)
+  adjustedHigh  Decimal? @map("adjusted_high") @db.Decimal(18, 6)
+  adjustedLow   Decimal? @map("adjusted_low") @db.Decimal(18, 6)
+  adjustedClose Decimal? @map("adjusted_close") @db.Decimal(18, 6)
+
+  adjusted    Boolean  @default(false)
+  sourceType  String   @default("manual_csv") @map("source_type")
+  sourceName  String?  @map("source_name")
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([symbolId, timeframe, barTime, sourceType])
+  @@index([symbolId, timeframe, barTime])
+  @@index([symbolId, timeframe, sourceType, barTime])
+  @@index([sourceType, fetchedAt])
+  @@map("market_price_bars")
+}
+
+model MarketDataImport {
+  id            String   @id @default(uuid())
+
+  symbolId      String   @map("symbol_id")
+  symbol        Symbol   @relation(fields: [symbolId], references: [id], onDelete: Cascade)
+
+  timeframe     String
+  sourceType    String   @default("manual_csv") @map("source_type")
+  sourceName    String?  @map("source_name")
+  fileName      String?  @map("file_name")
+  rowCount      Int      @default(0) @map("row_count")
+  insertedCount Int      @default(0) @map("inserted_count")
+  updatedCount  Int      @default(0) @map("updated_count")
+  skippedCount  Int      @default(0) @map("skipped_count")
+
+  periodFrom    DateTime? @map("period_from")
+  periodTo      DateTime? @map("period_to")
+  status        String    @default("succeeded")
+  errorCode     String?   @map("error_code")
+  errorMessage  String?   @map("error_message") @db.Text
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([symbolId, timeframe, createdAt])
+  @@index([sourceType, createdAt])
+  @@index([status, createdAt])
+  @@map("market_data_imports")
 }
 
 model WebhookToken {

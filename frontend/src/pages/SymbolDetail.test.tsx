@@ -5,6 +5,15 @@ import { renderToStaticMarkup } from 'react-dom/server';
 const mockUseSWR = vi.fn();
 const mockUseRoute = vi.fn();
 const mockUseLocation = vi.fn(() => ['/symbols/sym-1', vi.fn()]);
+const mockPostApi = vi.hoisted(() => vi.fn(async (_path: string, _body?: unknown) => ({})));
+const buttonRenderCalls = vi.hoisted(() => [] as Array<{
+  text: string;
+  props: {
+    onClick?: (event?: unknown) => void | Promise<void>;
+    disabled?: boolean;
+    type?: string;
+  };
+}>);
 
 vi.mock('swr', () => ({
   default: (...args: unknown[]) => mockUseSWR(...args),
@@ -19,10 +28,28 @@ vi.mock('wouter', () => ({
 vi.mock('../api/client', () => ({
   swrFetcher: vi.fn(),
   patchApi: vi.fn(async () => ({})),
-  postApi: vi.fn(async () => ({})),
+  postApi: (path: string, body?: unknown) => mockPostApi(path, body),
 }));
 
-import SymbolDetail, { buildStrategySelectionListPath, readCsvFileForImport } from './SymbolDetail';
+vi.mock('../components/ui/Button', async () => {
+  const ReactModule = await vi.importActual<typeof import('react')>('react');
+  const getTextContent = (value: React.ReactNode): string => {
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (Array.isArray(value)) return value.map(getTextContent).join('');
+    return '';
+  };
+  return {
+    default: ({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => {
+      buttonRenderCalls.push({
+        text: getTextContent(children),
+        props: props as { onClick?: (event?: unknown) => void | Promise<void>; disabled?: boolean; type?: string },
+      });
+      return ReactModule.createElement('button', props, children);
+    },
+  };
+});
+
+import SymbolDetail, { MarketDataSection, buildStrategySelectionListPath, readCsvFileForImport, readMarketDataCsvFileForImport } from './SymbolDetail';
 
 const sideRailHomeFixture = {
   market_overview: { indices: [], fx: [], sectors: [] },
@@ -425,6 +452,72 @@ function getCommonSWRResult(key: string | null) {
       },
     };
   }
+  if (key === '/api/symbols/sym-1/market-data/coverage?timeframe=D') {
+    return {
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+      data: {
+        symbol: { id: 'sym-1', symbol: 'TYO:7203', symbol_code: '7203', display_name: 'Toyota' },
+        coverage: [
+          {
+            timeframe: 'D',
+            source_type: 'manual_csv',
+            bar_count: 2,
+            period_from: '2026-01-01T00:00:00.000Z',
+            period_to: '2026-01-02T00:00:00.000Z',
+            latest_bar_time: '2026-01-02T00:00:00.000Z',
+            adjusted_count: 1,
+            last_imported_at: '2026-01-03T00:00:00.000Z',
+          },
+        ],
+        latest_imports: [
+          {
+            id: 'mdi-1',
+            symbol_id: 'sym-1',
+            timeframe: 'D',
+            source_type: 'manual_csv',
+            source_name: 'manual',
+            file_name: 'ohlcv.csv',
+            row_count: 2,
+            inserted_count: 2,
+            updated_count: 0,
+            skipped_count: 0,
+            period_from: '2026-01-01T00:00:00.000Z',
+            period_to: '2026-01-02T00:00:00.000Z',
+            status: 'succeeded',
+            created_at: '2026-01-03T00:00:00.000Z',
+          },
+        ],
+        meta: {
+          internal_backtest_ready: false,
+          internal_backtest_ready_reason: 'internal_backtest_engine_not_implemented',
+        },
+      },
+    };
+  }
+  if (key === '/api/symbols/sym-1/market-data/bars?timeframe=D&limit=5') {
+    return {
+      isLoading: false,
+      error: null,
+      mutate: vi.fn(),
+      data: {
+        bars: [
+          {
+            bar_time: '2026-01-02T00:00:00.000Z',
+            open: 106,
+            high: 112,
+            low: 101,
+            close: 108,
+            volume: 1500,
+            adjusted_close: 107,
+            source_type: 'manual_csv',
+          },
+        ],
+        pagination: { limit: 5, has_next: false },
+      },
+    };
+  }
   if (key === '/api/strategies?page=1&limit=5&sort=updated_at&order=desc&status=active') {
     return { isLoading: false, error: null, data: strategyListFixture };
   }
@@ -578,6 +671,7 @@ describe('SymbolDetail', () => {
       '最新AI論点カード',
       '最新アラート',
       'ストラテジー / 検証結果',
+      'マーケットデータ',
       '関連参照情報',
       'Research Note',
     ].map((heading) => html.indexOf(heading));
@@ -639,8 +733,27 @@ describe('SymbolDetail', () => {
     expect(html).toContain('failed');
     expect(html).toContain('active application 2 / 2 件を表示中');
     expect(html).toContain('CSV report: 2 / internal report: 1');
+    expect(html).toContain('マーケットデータ');
+    expect(html).toContain('内部バックテストに向けたOHLCV履歴データです。');
+    expect(html).toContain('internal backtest engine は未実装です。');
+    expect(html).toContain('coverage');
+    expect(html).toContain('bar count');
+    expect(html).toContain('OHLCV CSV import');
+    expect(html).toContain('OHLCV CSVを取り込む');
+    expect(html).toContain('latest imports');
+    expect(html).toContain('ohlcv.csv');
+    expect(html).toContain('latest bars preview');
+    expect(html).toContain('108');
     expect(mockUseSWR).toHaveBeenCalledWith(
       '/api/symbols/sym-1/strategy-applications?status=active&page=1&limit=20&sort=updated_at&order=desc',
+      expect.any(Function),
+    );
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbols/sym-1/market-data/coverage?timeframe=D',
+      expect.any(Function),
+    );
+    expect(mockUseSWR).toHaveBeenCalledWith(
+      '/api/symbols/sym-1/market-data/bars?timeframe=D&limit=5',
       expect.any(Function),
     );
     expect(html).toContain('application_id:</strong> <code>application_1</code>');
@@ -708,6 +821,91 @@ describe('SymbolDetail', () => {
       '/api/strategies/strategy_1/versions?page=1&limit=20&sort=updated_at&order=desc',
       expect.any(Function),
     );
+  });
+
+  it('renders market data section without importing OHLCV CSV on display', () => {
+    mockPostApi.mockClear();
+    mockUseSWR.mockReset();
+    mockUseRoute.mockReset();
+    mockUseRoute.mockReturnValue([true, { symbolId: 'sym-1' }]);
+    mockUseSWR.mockImplementation((key: string) => {
+      const common = getCommonSWRResult(key);
+      if (common) return common;
+      if (key === '/api/symbols/sym-1') {
+        return { isLoading: false, error: null, data: baseSymbolData };
+      }
+      return { isLoading: false, error: null, data: null, mutate: vi.fn() };
+    });
+
+    const html = renderToStaticMarkup(<SymbolDetail />);
+
+    expect(html).toContain('マーケットデータ');
+    expect(html).toContain('OHLCV CSVを取り込む');
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('imports OHLCV CSV only after explicit market data import action', async () => {
+    mockPostApi.mockClear();
+    buttonRenderCalls.length = 0;
+    const mutateCoverage = vi.fn(async () => undefined);
+    const mutateBars = vi.fn(async () => undefined);
+    mockPostApi.mockResolvedValueOnce({
+      import: {
+        id: 'mdi-2',
+        symbol_id: 'sym-1',
+        timeframe: 'D',
+        source_type: 'manual_csv',
+        source_name: 'manual',
+        file_name: 'ohlcv.csv',
+        row_count: 1,
+        inserted_count: 1,
+        updated_count: 0,
+        skipped_count: 0,
+        period_from: '2026-01-01T00:00:00.000Z',
+        period_to: '2026-01-01T00:00:00.000Z',
+        status: 'succeeded',
+        error_code: null,
+        error_message: null,
+        created_at: '2026-01-02T00:00:00.000Z',
+      },
+      coverage: {
+        timeframe: 'D',
+        source_type: 'manual_csv',
+        bar_count: 1,
+        period_from: '2026-01-01T00:00:00.000Z',
+        period_to: '2026-01-01T00:00:00.000Z',
+        latest_bar_time: '2026-01-01T00:00:00.000Z',
+        adjusted_count: 0,
+        last_imported_at: '2026-01-02T00:00:00.000Z',
+      },
+    });
+
+    renderToStaticMarkup(
+      <MarketDataSection
+        symbolId="sym-1"
+        coverageData={undefined}
+        barsData={undefined}
+        coverageError={null}
+        barsError={null}
+        mutateCoverage={mutateCoverage}
+        mutateBars={mutateBars}
+        initialCsvText={'date,open,high,low,close,volume\n2026-01-01,100,110,95,105,1000'}
+      />,
+    );
+
+    expect(mockPostApi).not.toHaveBeenCalled();
+    const importButton = buttonRenderCalls.find((call) => call.text === 'OHLCV CSVを取り込む');
+    expect(importButton).toBeTruthy();
+    await importButton?.props.onClick?.();
+
+    expect(mockPostApi).toHaveBeenCalledWith('/api/symbols/sym-1/market-data/import-csv', {
+      timeframe: 'D',
+      source_name: 'manual',
+      file_name: 'ohlcv.csv',
+      csv_text: 'date,open,high,low,close,volume\n2026-01-01,100,110,95,105,1000',
+    });
+    expect(mutateCoverage).toHaveBeenCalledTimes(1);
+    expect(mutateBars).toHaveBeenCalledTimes(1);
   });
 
   it('renders restore action without breaking archived application rows', () => {
@@ -990,6 +1188,19 @@ describe('SymbolDetail', () => {
       fileName: 'tradingview.csv',
       csvText: 'csv body',
     });
+  });
+
+  it('reads selected OHLCV csv file text for market data import payload', async () => {
+    const file = {
+      name: 'ohlcv-export.csv',
+      text: vi.fn(async () => 'date,open,high,low,close\n2026-01-01,100,110,95,105'),
+    };
+
+    await expect(readMarketDataCsvFileForImport(file)).resolves.toEqual({
+      fileName: 'ohlcv-export.csv',
+      csvText: 'date,open,high,low,close\n2026-01-01,100,110,95,105',
+    });
+    expect(file.text).toHaveBeenCalledTimes(1);
   });
 
   it('builds compact strategy selection list query with optional search', () => {

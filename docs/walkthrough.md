@@ -2,7 +2,7 @@
 
 更新日: 2026-05-15
 
-本資料は、Rule Lab から Pine 生成・TradingView 一次検証・CSV 取込・Backtest AI 総評・比較までの一巡導線を、現行MVP実装に合わせて確認するための手順です。  
+本資料は、Rule Lab から Pine 生成・TradingView 一次検証・CSV 取込・Backtest AI 総評・比較までの一巡導線を、現行MVP実装に合わせて確認するための手順です。
 正本 docs は `docs/0` から参照し、本資料は実施手順のクイックチェック用途として扱います。
 
 読む順番と正本分類は `docs/57.北極星 docs正本整理・読む順番（現行）.md` を参照してください。本資料は仕様判断の一次資料ではなく、現行実装を確認するための walkthrough です。
@@ -171,11 +171,11 @@ pnpm run dev
 
 seed 後は以下で最小動作確認が可能です。
 
-1. version一覧  
+1. version一覧
 `http://localhost:5173/strategies/00000000-0000-4000-8000-000000000201/versions`
-2. version詳細  
+2. version詳細
 `http://localhost:5173/strategy-versions/00000000-0000-4000-8000-000000000202`
-3. backtest詳細  
+3. backtest詳細
 `http://localhost:5173/backtests/00000000-0000-4000-8000-000000000401`
 
 ## 13. 運用メモ
@@ -186,7 +186,7 @@ seed 後は以下で最小動作確認が可能です。
 
 ## 14. Home / SymbolDetail / Comparison 確認（最小）
 
-1. Home 表示ブロック確認  
+1. Home 表示ブロック確認
 `http://localhost:5173/` を開き、以下を確認する。
    - 共通サイドメニュー（監視 / 保有タブ、折りたたみ）
    - マーケット概況（主要指標 / 為替 / セクター）
@@ -196,26 +196,29 @@ seed 後は以下で最小動作確認が可能です。
    - `Home` 本体に watchlist / positions の詳細一覧が重複していないこと
    - Home 最上部に大型 hero header、比較 CTA、ルール検証ラボ CTA がないこと
 
-2. watchlist_symbols から SymbolDetail へ遷移  
+2. watchlist_symbols から SymbolDetail へ遷移
 左の共通サイドメニューの `監視` タブから銘柄名リンクを押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
-3. positions から SymbolDetail へ遷移  
+3. positions から SymbolDetail へ遷移
 左の共通サイドメニューの `保有` タブへ切り替え、銘柄名リンク（`symbol_id` がある行）を押し、`/symbols/:symbolId` へ遷移できることを確認する。
 
-4. daily_summary の latest / morning / evening 切替  
+4. daily_summary の latest / morning / evening 切替
 Home の `最新 / 朝 / 夜` を切り替え、AIデイリーサマリー section だけが summary 専用 API で更新されることを確認する。slot、生成日時、対象日または保存済み選択、unavailable 時の材料不足 / 未生成説明が読めること、Home 全体の loading、scroll reset、SideRail 再取得、投資カレンダー消失が起きないことも確認する。
 
-5. SymbolDetail の AI論点カード表示  
+5. SymbolDetail の AI論点カード表示
 `/symbols/:symbolId` で AI論点カードが `available` の場合、タイトル・本文（または論点リスト）・生成日時が表示されることを確認する。
 
-6. SymbolDetail の AI論点カード再生成  
-AI論点カード表示中でも `AI論点カードを再生成` ボタンが表示され、押下時に `生成中...` へ変化することを確認する。  
+5-1. SymbolDetail のマーケットデータ確認
+`/symbols/:symbolId` で `マーケットデータ` section が表示され、coverage、latest imports、latest bars preview、`OHLCV CSV import` が読めることを確認する。初回 MVP は manual CSV import のみで、表示だけでは import、external provider refresh、internal backtest は起動しない。`OHLCV CSVを取り込む` を押した場合だけ OHLCV CSV import が実行されることを確認する。raw CSV 本文が import 履歴として表示されないことも確認する。
+
+6. SymbolDetail の AI論点カード再生成
+AI論点カード表示中でも `AI論点カードを再生成` ボタンが表示され、押下時に `生成中...` へ変化することを確認する。
 未生成状態（`unavailable`）では既存の `AI論点カード生成` が表示されることを確認する。
 
-7. SymbolDetail から Comparison へ遷移  
+7. SymbolDetail から Comparison へ遷移
 `比較画面に進む` を押し、Comparison 画面へ遷移できることを確認する。
 
-8. Comparison の AI比較総評生成  
+8. Comparison の AI比較総評生成
 Comparison 画面で AI比較総評の生成操作を実行し、結果表示が更新されることを確認する。
 
 ## 15. Home / SymbolDetail / Comparison のE2E固定（最小）
