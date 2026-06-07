@@ -33,6 +33,7 @@ const envSchema = z.object({
   PRIMARY_LOCAL_MODEL:   z.string().default('qwen3-30b-a3b-2507'),
   HOME_AI_PROVIDER:      z.enum(['stub', 'local_llm', 'openai_api']).default('local_llm'),
   PINE_GENERATION_PROVIDER: z.enum(['deterministic', 'stub', 'local_llm', 'openai_api']).default('local_llm'),
+  STRATEGY_SPEC_PROVIDER: z.enum(['deterministic', 'local_llm', 'openai_api']).default('local_llm'),
   PINE_GENERATION_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(180000),
   RULE_REWRITE_LOCAL_LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
 

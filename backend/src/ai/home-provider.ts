@@ -7,6 +7,7 @@ import {
   reviewGeneratedPineScriptDeterministic,
 } from '../strategy/pine';
 import type { PineReviewIssue, PineReviewIssueCode, PineReviewResult } from '../strategy/pine';
+import { buildNormalizedStrategySpec, type NormalizedStrategySpec } from '../strategy/normalized-spec';
 
 export type HomeAiProviderType = 'stub' | 'local_llm' | 'openai_api';
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
@@ -295,6 +296,21 @@ export type NaturalLanguageRuleRewriteOutput = {
   promptVersion: string;
 };
 
+export type StrategySpecNormalizationContext = {
+  strategyVersionId: string;
+  naturalLanguageRule: string;
+  market: string;
+  timeframe: string;
+};
+
+export type StrategySpecNormalizationOutput = {
+  normalizedSpec: NormalizedStrategySpec | Record<string, unknown>;
+  warnings: string[];
+  assumptions: string[];
+  modelName: string;
+  promptVersion: string;
+};
+
 export type PineGenerationContext = {
   naturalLanguageSpec: string;
   normalizedRuleJson: Record<string, unknown> | null;
@@ -363,6 +379,7 @@ export type HomeAiProvider = {
   rewriteNaturalLanguageRuleDraft: (
     context: NaturalLanguageRuleRewriteContext,
   ) => Promise<NaturalLanguageRuleRewriteOutput>;
+  normalizeStrategySpec: (context: StrategySpecNormalizationContext) => Promise<StrategySpecNormalizationOutput>;
   generatePineScript: (context: PineGenerationContext) => Promise<PineGenerationOutput>;
   reviewPineScript?: (context: PineReviewContext) => Promise<PineReviewResult>;
 };
@@ -373,6 +390,7 @@ type LocalLlmTaskType =
   | 'comparison_summary'
   | 'backtest_summary'
   | 'natural_language_rule_rewrite'
+  | 'strategy_spec_normalization'
   | 'pine_generation';
 
 type LocalLlmSummaryChatOptions = {
@@ -1664,6 +1682,22 @@ class StubHomeAiProvider implements HomeAiProvider {
     });
   }
 
+  async normalizeStrategySpec(context: StrategySpecNormalizationContext): Promise<StrategySpecNormalizationOutput> {
+    const normalizedSpec = buildNormalizedStrategySpec({
+      id: context.strategyVersionId,
+      naturalLanguageRule: context.naturalLanguageRule,
+      market: context.market,
+      timeframe: context.timeframe,
+    });
+    return {
+      normalizedSpec,
+      warnings: normalizedSpec.warnings,
+      assumptions: normalizedSpec.assumptions,
+      modelName: 'stub-strategy-spec-v1',
+      promptVersion: 'v1.0.0-strategy-spec-stub',
+    };
+  }
+
   async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
     return buildDeterministicPineOutput(context, {
       modelName: 'stub-pine-v1',
@@ -2422,6 +2456,87 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     }
   }
 
+  async normalizeStrategySpec(context: StrategySpecNormalizationContext): Promise<StrategySpecNormalizationOutput> {
+    const content = await this.callOllamaSummaryChat({
+      taskType: 'strategy_spec_normalization',
+      systemPrompt: [
+        'You extract strategy rules into normalized_strategy_spec v1. Return strict JSON only.',
+        'Output schema_name must be normalized_strategy_spec and schema_version must be 1.0.',
+        'Extract entry, exit, risk, and filters separately. Preserve every measurable numeric threshold.',
+        'Do not merge entry moving average length with exit moving average length.',
+        'Preserve volume multipliers such as 1.5x, stop loss such as entry price -5%, and time exit bars.',
+        'Trading-history-dependent rules such as consecutive loss skip must be preserved as unsupported_features or risk with supported=false.',
+        'Do not invent indicators, thresholds, URLs, citations, investment advice, raw Pine, raw prompt, provider response, endpoint, model value, secret, token, local path, or stack trace.',
+        'Use supported scope only: timeframe D, side long_only, indicators SMA, EMA, RSI, MACD, ATR, volume_sma, and entry, exit, stop_loss, take_profit, time_exit.',
+        'Use machine-readable fields and concise Japanese rule descriptions.',
+      ].join(' '),
+      userPrompt: JSON.stringify({
+        task: 'strategy_spec_normalization',
+        strategy_version_id: context.strategyVersionId,
+        market: context.market,
+        timeframe: context.timeframe,
+        natural_language_rule: context.naturalLanguageRule,
+        supported_scope: {
+          timeframe: 'D',
+          side: 'long_only',
+          indicators: ['SMA', 'EMA', 'RSI', 'MACD', 'ATR', 'VOLUME_SMA'],
+          rules: ['entry', 'exit', 'stop_loss', 'take_profit', 'time_exit'],
+        },
+        output_schema: {
+          schema_name: 'normalized_strategy_spec',
+          schema_version: '1.0',
+          market: context.market,
+          timeframe: 'D',
+          side: 'long_only',
+          strategy_family: '<string>',
+          indicators: [{ id: '<indicator_id>', type: 'SMA|EMA|RSI|MACD|ATR|VOLUME_SMA', length: '<number>' }],
+          entry: {
+            logic: 'all',
+            conditions: [{ id: '<id>', type: '<type>', indicator: '<indicator_id>', operator: '>|>=|<|<=|crosses_above|crosses_below', value: '<number optional>', rule: '<short Japanese rule>' }],
+          },
+          exit: {
+            logic: 'any',
+            conditions: [{ id: '<id>', type: '<type>', indicator: '<indicator_id optional>', operator: '>|>=|<|<=|crosses_above|crosses_below', value: '<number optional>', rule: '<short Japanese rule>' }],
+          },
+          risk: {
+            stop_loss: { type: 'percent', value: '<number>', basis: 'entry_price' },
+            time_exit: { type: 'bars', bars: '<number>' },
+          },
+          filters: [{ id: '<id>', type: 'volume_filter', indicator: 'volume_sma_20', operator: '>=', multiplier: '<number optional>', rule: '<short Japanese rule>' }],
+          validation: {
+            supported_for_internal_backtest: false,
+            unsupported_features: ['<unsupported feature code>'],
+            warnings: ['<short Japanese warning>'],
+            assumptions: ['<short Japanese assumption>'],
+          },
+          warnings: ['<short Japanese warning>'],
+          assumptions: ['<short Japanese assumption>'],
+        },
+      }),
+      temperature: 0.1,
+      maxOutputTokens: 1800,
+      timeoutMs: getLocalLlmRuleRewriteTimeoutMs(),
+      think: false,
+    });
+
+    const candidates = this.extractJsonObjectCandidates(content);
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate);
+        return {
+          normalizedSpec: parsed,
+          warnings: [],
+          assumptions: [],
+          modelName: this.modelName,
+          promptVersion: 'v1.0.0-strategy-spec-local',
+        };
+      } catch {
+        // Try the next extracted object.
+      }
+    }
+    throw new Error('local_llm strategy_spec_normalization returned invalid JSON');
+  }
+
   async generatePineScript(context: PineGenerationContext): Promise<PineGenerationOutput> {
     const baseline = buildDeterministicPineOutput(context, {
       modelName: this.modelName,
@@ -2838,6 +2953,94 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
     } catch {
       return deterministic;
     }
+  }
+
+  async normalizeStrategySpec(context: StrategySpecNormalizationContext): Promise<StrategySpecNormalizationOutput> {
+    if (!this.apiKey) {
+      throw new Error('openai_api provider requires FALLBACK_API_KEY');
+    }
+
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: [
+          {
+            role: 'system',
+            content: [
+              'Extract strategy rules into normalized_strategy_spec v1. Return strict JSON only.',
+              'Output schema_name normalized_strategy_spec and schema_version 1.0.',
+              'Extract entry, exit, risk, and filters separately and preserve all numeric thresholds.',
+              'Do not merge entry MA length with exit MA length. Preserve volume multipliers, stop loss percent, and time exit bars.',
+              'Unsupported trading-history-dependent rules such as consecutive loss skip must be preserved as unsupported_features or risk supported=false.',
+              'Do not invent indicators or thresholds. Do not include URLs, citations, investment advice, raw Pine, raw prompt, provider response, endpoint, model value, secret, token, local path, or stack trace.',
+            ].join(' '),
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              task: 'strategy_spec_normalization',
+              strategy_version_id: context.strategyVersionId,
+              market: context.market,
+              timeframe: context.timeframe,
+              natural_language_rule: context.naturalLanguageRule,
+              supported_scope: {
+                timeframe: 'D',
+                side: 'long_only',
+                indicators: ['SMA', 'EMA', 'RSI', 'MACD', 'ATR', 'VOLUME_SMA'],
+                rules: ['entry', 'exit', 'stop_loss', 'take_profit', 'time_exit'],
+              },
+              output_schema: {
+                schema_name: 'normalized_strategy_spec',
+                schema_version: '1.0',
+                market: context.market,
+                timeframe: 'D',
+                side: 'long_only',
+                strategy_family: '<string>',
+                indicators: [],
+                entry: { logic: 'all', conditions: [] },
+                exit: { logic: 'any', conditions: [] },
+                risk: {},
+                filters: [],
+                validation: {
+                  supported_for_internal_backtest: false,
+                  unsupported_features: [],
+                  warnings: [],
+                  assumptions: [],
+                },
+                warnings: [],
+                assumptions: [],
+              },
+            }),
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+        max_tokens: 1800,
+      }),
+      signal: AbortSignal.timeout(90_000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`openai_api strategy spec normalization failed: HTTP ${response.status} | task_type=strategy_spec_normalization`);
+    }
+
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    if (!content) {
+      throw new Error('openai_api strategy spec normalization returned empty content');
+    }
+    return {
+      normalizedSpec: JSON.parse(content),
+      warnings: [],
+      assumptions: [],
+      modelName: this.modelName,
+      promptVersion: 'v1.0.0-strategy-spec-openai',
+    };
   }
 
   async generateDailySummary(context: DailySummaryContext): Promise<DailySummaryOutput> {

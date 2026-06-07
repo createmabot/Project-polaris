@@ -12,7 +12,12 @@ import type {
 import { env } from '../env';
 import { assessGeneratedPineScript } from '../strategy/pine';
 import { normalizeTimeframeAlias } from '../strategy/timeframe';
-import { buildNormalizedStrategySpec, isNormalizedStrategySpec } from '../strategy/normalized-spec';
+import {
+  buildNormalizedStrategySpec,
+  isNormalizedStrategySpec,
+  validateAndNormalizeStrategySpec,
+  type StrategySpecProviderName,
+} from '../strategy/normalized-spec';
 import {
   candidateToRewriteContext,
   candidateToRewriteMemo,
@@ -353,6 +358,10 @@ function resolvePineGenerationProviderType(): HomeAiProviderType {
     return 'stub';
   }
   return env.PINE_GENERATION_PROVIDER;
+}
+
+function resolveStrategySpecProviderType(): StrategySpecProviderName {
+  return env.STRATEGY_SPEC_PROVIDER;
 }
 
 function createPineGenerationService(): HomeAiService {
@@ -1129,12 +1138,56 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
       throw new AppError(400, 'VALIDATION_ERROR', 'natural_language_rule must not be empty.');
     }
 
-    const normalizedSpec = buildNormalizedStrategySpec({
+    const versionInput = {
       id: version.id,
       naturalLanguageRule: version.naturalLanguageRule,
       market: version.market,
       timeframe: version.timeframe,
-    });
+    };
+    const requestedProvider = resolveStrategySpecProviderType();
+    let normalizedSpec;
+
+    if (requestedProvider === 'deterministic') {
+      normalizedSpec = buildNormalizedStrategySpec(versionInput, {
+        provider: 'deterministic',
+        requestedProvider,
+        fallbackUsed: false,
+      });
+    } else {
+      try {
+        const provider = createHomeAiProvider(requestedProvider);
+        const providerOutput = await provider.normalizeStrategySpec({
+          strategyVersionId: version.id,
+          naturalLanguageRule: version.naturalLanguageRule,
+          market: version.market,
+          timeframe: version.timeframe,
+        });
+        normalizedSpec = validateAndNormalizeStrategySpec(providerOutput.normalizedSpec, versionInput, {
+          provider: requestedProvider,
+          requestedProvider,
+          fallbackUsed: false,
+        }).spec;
+      } catch {
+        normalizedSpec = buildNormalizedStrategySpec(versionInput, {
+          provider: 'deterministic',
+          requestedProvider,
+          fallbackUsed: true,
+        });
+        normalizedSpec.warnings = Array.from(
+          new Set([
+            'LLM spec normalization に失敗したため、deterministic parser による暫定specです。',
+            ...normalizedSpec.warnings,
+          ]),
+        );
+        normalizedSpec.validation.warnings = Array.from(
+          new Set([
+            'LLM spec normalization に失敗したため、deterministic parser による暫定specです。',
+            ...normalizedSpec.validation.warnings,
+          ]),
+        );
+      }
+    }
+
     const updated = await prisma.strategyRuleVersion.update({
       where: { id: version.id },
       data: {

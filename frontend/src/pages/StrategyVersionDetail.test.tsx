@@ -232,6 +232,15 @@ function createNormalizedSpecPayload() {
     normalized_spec: {
       schema_name: 'normalized_strategy_spec',
       schema_version: '1.0',
+      source: {
+        strategy_version_id: 'ver-1',
+        generated_from: 'natural_language_rule',
+        generated_at: '2026-06-01T00:00:00.000Z',
+        provider: 'local_llm',
+        provider_task: 'strategy_spec_normalization',
+        fallback_used: true,
+        requested_provider: 'local_llm',
+      },
       market: 'JP_STOCK',
       timeframe: 'D',
       side: 'long_only',
@@ -978,6 +987,9 @@ describe('StrategyVersionDetail', () => {
 
     expect(html).toContain('構造化ルール spec');
     expect(html).toContain('normalized_strategy_spec');
+    expect(html).toContain('source:');
+    expect(html).toContain('local_llm');
+    expect(html).toContain('fallback');
     expect(html).toContain('trend_following_ma');
     expect(html).toContain('SMA / sma_25');
     expect(html).toContain('RSI / rsi_14');
