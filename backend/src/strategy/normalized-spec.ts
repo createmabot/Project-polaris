@@ -60,6 +60,14 @@ export type NormalizedStrategySpecValidationResult = {
 };
 
 const ALLOWED_OPERATORS = new Set(['>', '>=', '<', '<=', '==', 'crosses_above', 'crosses_below']);
+const KNOWN_STRATEGY_FAMILIES = new Set([
+  'trend_momentum',
+  'mean_reversion',
+  'breakout',
+  'ma_rsi_volume_momentum',
+  'risk_management',
+  'other',
+]);
 
 const UNSAFE_TEXT_PATTERNS: RegExp[] = [
   /https?:\/\/\S+/gi,
@@ -119,6 +127,24 @@ function normalizeNumber(value: unknown): number | null {
   return null;
 }
 
+function normalizeStrategyFamily(value: unknown, fallbackText: string): string {
+  const raw = sanitizeSpecText(value, 100);
+  const normalized = (raw ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (KNOWN_STRATEGY_FAMILIES.has(normalized)) return normalized;
+  const source = `${normalized} ${fallbackText}`.toLowerCase();
+  if (/rsi/.test(source) && /(sma|ma_|moving|移動平均)/.test(source) && /(volume|出来高)/.test(source)) {
+    return 'ma_rsi_volume_momentum';
+  }
+  if (/macd|momentum|モメンタム|trend|トレンド/.test(source)) return 'trend_momentum';
+  if (/mean_reversion|reversion|逆張り|反転/.test(source)) return 'mean_reversion';
+  if (/breakout|ブレイク/.test(source)) return 'breakout';
+  if (/risk|stop|loss|損切|連敗/.test(source)) return 'risk_management';
+  return 'other';
+}
+
 function normalizeRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -162,6 +188,17 @@ function normalizeCondition(input: unknown, fallbackPrefix: string, index: numbe
     const text = sanitizeSpecText(record[key], key === 'rule' ? 220 : 80);
     if (text) output[key] = text;
   }
+  const rightRecord = normalizeRecord(record.right);
+  if (rightRecord) {
+    const right: Record<string, unknown> = {};
+    const indicator = sanitizeSpecText(rightRecord.indicator, 80);
+    const source = sanitizeSpecText(rightRecord.source, 80);
+    const multiplier = normalizeNumber(rightRecord.multiplier);
+    if (indicator) right.indicator = indicator;
+    if (source) right.source = source;
+    if (multiplier !== null) right.multiplier = multiplier;
+    if (Object.keys(right).length > 0) output.right = right;
+  }
   const operator = normalizeOperator(record.operator);
   if (operator) output.operator = operator;
   for (const key of ['value', 'multiplier', 'bars']) {
@@ -197,6 +234,16 @@ function normalizeRisk(input: unknown): Record<string, unknown> {
     }
     const text = sanitizeSpecText(rawValue, 180);
     if (text) output[normalizeId(key, key)] = { supported: false, rule: text };
+  }
+  const stopLoss = normalizeRecord(output.stop_loss);
+  if (stopLoss && stopLoss.type === 'percent') {
+    const value = normalizeNumber(stopLoss.value);
+    if (value !== null) {
+      stopLoss.value = Math.abs(value);
+      stopLoss.basis = sanitizeSpecText(stopLoss.basis, 80) ?? 'entry_price';
+      if (!stopLoss.direction) stopLoss.direction = 'below_entry';
+      if (!stopLoss.side) stopLoss.side = 'long_stop_loss';
+    }
   }
   return output;
 }
@@ -249,11 +296,12 @@ function firstNumber(text: string, patterns: RegExp[]): number | null {
 }
 
 function detectStrategyFamily(text: string): string {
-  if (/MACD|ＭＡＣＤ|macd|ヒストグラム/i.test(text)) return 'momentum_macd';
-  if (/RSI/i.test(text)) return 'momentum_rsi';
-  if (/移動平均|SMA|EMA|crossover|クロス/i.test(text)) return 'trend_following_ma';
+  if (/RSI/i.test(text) && /出来高|volume/i.test(text) && /移動平均|SMA|EMA/i.test(text)) return 'ma_rsi_volume_momentum';
+  if (/MACD|ＭＡＣＤ|macd|ヒストグラム/i.test(text)) return 'trend_momentum';
+  if (/RSI/i.test(text)) return 'trend_momentum';
+  if (/移動平均|SMA|EMA|crossover|クロス/i.test(text)) return 'trend_momentum';
   if (/ブレイク|breakout/i.test(text)) return 'breakout';
-  return 'rule_based_long';
+  return 'other';
 }
 
 function detectUnsupportedFeatures(text: string, timeframe: string): string[] {
@@ -391,7 +439,7 @@ export function buildNormalizedStrategySpec(
     /(?:損切り|stop\s*loss|stop).*?(\d+(?:\.\d+)?)\s*%/i,
   ]);
   if (stopLossPercent !== null) {
-    risk.stop_loss = { type: 'percent', value: stopLossPercent, basis: 'entry_price' };
+    risk.stop_loss = { type: 'percent', value: Math.abs(stopLossPercent), basis: 'entry_price', direction: 'below_entry', side: 'long_stop_loss' };
   }
 
   const takeProfitPercent = firstNumber(text, [
@@ -537,7 +585,7 @@ export function validateAndNormalizeStrategySpec(
     market: sanitizeSpecText(record.market, 40) ?? version.market,
     timeframe: normalizedTimeframe,
     side: 'long_only',
-    strategy_family: sanitizeSpecText(record.strategy_family, 80) ?? detectStrategyFamily(version.naturalLanguageRule),
+    strategy_family: normalizeStrategyFamily(record.strategy_family, version.naturalLanguageRule),
     indicators: uniqueByKey(indicators, 'id'),
     entry: {
       logic: entryRecord?.logic === 'any' ? 'all' : 'all',
