@@ -92,6 +92,7 @@ Internal Backtest Engine v1:
   - request は `symbol_id` を必須、`from` / `to` / `initial_capital` を任意で受ける。`symbol_id` の値は既存互換の field 名として扱い、実際には Symbol UUID、`symbol`、`symbol_code`、`tradingview_symbol` の完全一致から対象銘柄を解決する。
   - 保存済み `normalized_strategy_spec` v1 と `MarketPriceBar` の `D` timeframe OHLCV を使い、long-only / single position / next open fill / commission and slippage 0 の deterministic MVP として実行する。
   - `CONSECUTIVE_LOSS_SKIP_LOGIC` / `consecutive_loss_skip` など連続損失 skip の表記揺れは、MVP では `consecutive_loss_skip` として正規化し、実行時は無視したうえで warning / `ignored_unsupported_features` に残す。
+  - v1 MVP は `price_vs_indicator`、`indicator_threshold`、`indicator_range`、`indicator_vs_indicator`、`volume_filter`、percent stop、ATR multiple stop、bars time exit を評価対象にする。複合的な time + PnL exit、event / earnings filter、overfitting check は実行条件にはせず、warning / `ignored_unsupported_features` に残す。
   - response は `backtest`、`result_summary`、`detail_url` を返す。
   - 成功時は `Backtest` を `execution_source=internal_backtest` / `status=completed` として作成し、`strategySnapshotJson.result_summary` に metrics / trades / equity curve / assumptions / warnings を保存する。`BacktestImport` は作成しない。
   - 実行はユーザーの明示操作に限定する。表示、normalized spec 生成、Pine generation、AI summary、optimization、application apply から自動起動しない。

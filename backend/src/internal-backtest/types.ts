@@ -33,6 +33,12 @@ export type InternalBacktestResultSummary = {
     to: string;
     bar_count: number;
   };
+  trade_period: {
+    first_entry_at: string | null;
+    last_exit_at: string | null;
+    first_trade_at: string | null;
+    last_trade_at: string | null;
+  };
   metrics: {
     initial_capital: number;
     final_equity: number;

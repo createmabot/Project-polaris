@@ -221,13 +221,21 @@ function normalizeUnsupportedFeatureCode(value: string): string {
   return compact || value.trim();
 }
 
+const INTERNAL_BACKTEST_IGNORED_UNSUPPORTED_FEATURES = new Set([
+  'consecutive_loss_skip',
+  'complex_time_pnl_exit_logic',
+  'event_date_filtering',
+  'earnings_gap_handling',
+  'overfitting_check',
+]);
+
 function isNormalizedSpecInternalBacktestReady(normalizedSpec: Record<string, unknown> | null): boolean {
   if (!normalizedSpec) return false;
   const validation = asRecord(normalizedSpec.validation);
   const unsupportedFeatures = Array.isArray(validation?.unsupported_features)
     ? validation.unsupported_features.filter((item): item is string => typeof item === 'string').map(normalizeUnsupportedFeatureCode)
     : [];
-  const hardUnsupported = unsupportedFeatures.filter((item) => item !== 'consecutive_loss_skip');
+  const hardUnsupported = unsupportedFeatures.filter((item) => !INTERNAL_BACKTEST_IGNORED_UNSUPPORTED_FEATURES.has(item));
   return stringField(normalizedSpec, 'schema_name') === 'normalized_strategy_spec'
     && stringField(normalizedSpec, 'schema_version') === '1.0'
     && stringField(normalizedSpec, 'timeframe') === 'D'

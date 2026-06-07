@@ -187,6 +187,11 @@ describe('BacktestDetail', () => {
     expect(html).toContain('backtest ID:</strong> <code>bt-1</code>');
     expect(html).toContain('まず「基本情報 / 主指標」を確認し、次に「AI 総評」と「import 履歴」を確認してください。');
     expect(html).toContain('総取引数');
+    expect(html).toContain('取引発生期間（開始）');
+    expect(html).toContain('2025-01-01');
+    expect(html).toContain('取引発生期間（終了）');
+    expect(html).toContain('2025-12-31');
+    expect(html).not.toContain('検証データ期間（開始）');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('AI 総評');
@@ -1142,6 +1147,12 @@ describe('BacktestDetail', () => {
                 to: '2025-12-31',
                 bar_count: 245,
               },
+              trade_period: {
+                first_entry_at: '2025-02-03T00:00:00.000Z',
+                last_exit_at: '2025-11-28T00:00:00.000Z',
+                first_trade_at: '2025-02-03T00:00:00.000Z',
+                last_trade_at: '2025-11-28T00:00:00.000Z',
+              },
               metrics: {
                 total_trades: 12,
                 trade_count: 12,
@@ -1234,10 +1245,16 @@ describe('BacktestDetail', () => {
     expect(html).toContain('340,000');
     expect(html).toContain('総リターン率');
     expect(html).toContain('34.00%');
-    expect(html).toContain('対象期間（開始）');
+    expect(html).toContain('検証データ期間（開始）');
     expect(html).toContain('2025-01-01');
-    expect(html).toContain('対象期間（終了）');
+    expect(html).toContain('検証データ期間（終了）');
     expect(html).toContain('2025-12-31');
+    expect(html).toContain('取引発生期間（開始）');
+    expect(html).toContain('2025-02-03T00:00:00.000Z');
+    expect(html).toContain('取引発生期間（終了）');
+    expect(html).toContain('2025-11-28T00:00:00.000Z');
+    expect(html).toContain('data period from');
+    expect(html).toContain('trade period from');
     expect(html).toContain('artifact_pointer');
     expect(html).toContain('internal_backtest_result');
     expect(html).toContain('artifact path は非表示化し、artifact file の実体読込、download、diff は行いません。');

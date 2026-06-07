@@ -141,6 +141,26 @@ function createRuntime(version: StrategyRuleVersionRow = createVersion()): Runti
   };
 }
 
+function createDailyBars(count: number, symbolId = 'sym-1') {
+  const start = new Date('2026-01-01T00:00:00.000Z');
+  return Array.from({ length: count }, (_, index) => {
+    const base = 100 + index * 0.35 + Math.sin(index / 3) * 2;
+    const open = base - 0.4;
+    const close = base + Math.sin(index / 5) * 0.6;
+    return {
+      id: `bar-long-${index + 1}`,
+      symbolId,
+      timeframe: 'D',
+      barTime: new Date(start.getTime() + index * 24 * 60 * 60 * 1000),
+      open,
+      high: Math.max(open, close) + 1.2,
+      low: Math.min(open, close) - 1.2,
+      close,
+      volume: 1_000_000 + index * 10_000,
+    };
+  });
+}
+
 function matchesWhere(row: any, where: any = {}) {
   if (where.id && row.id !== where.id) return false;
   if (where.symbol && row.symbol !== where.symbol) return false;
@@ -260,6 +280,12 @@ describe('internal backtest route', () => {
       to: '2026-01-04T00:00:00.000Z',
       bar_count: 4,
     });
+    expect(body.data.result_summary.trade_period).toMatchObject({
+      first_entry_at: '2026-01-03T00:00:00.000Z',
+      last_exit_at: '2026-01-03T00:00:00.000Z',
+      first_trade_at: '2026-01-03T00:00:00.000Z',
+      last_trade_at: '2026-01-03T00:00:00.000Z',
+    });
     expect(body.data.result_summary.trades[0]).toMatchObject({
       entry_price: 12,
       exit_price: 10.8,
@@ -270,6 +296,7 @@ describe('internal backtest route', () => {
 
     expect(runtime.backtests).toHaveLength(1);
     expect(runtime.backtests[0].strategySnapshotJson.result_summary.metrics.final_equity).toBe(900000);
+    expect(runtime.backtests[0].strategySnapshotJson.result_summary.trade_period.first_entry_at).toBe('2026-01-03T00:00:00.000Z');
     expect(runtime.backtests[0].strategySnapshotJson.execution_source).toBe('internal_backtest');
     expect(runtime.backtests[0].strategySnapshotJson.generated_pine).toBeNull();
     expect(res.body).not.toContain('raw pine should not be copied');
@@ -277,6 +304,53 @@ describe('internal backtest route', () => {
     expect(runtime.aiSummaryCreateCount).toBe(0);
     expect(runtime.pineScriptCreateCount).toBe(0);
     expect(runtime.optimizationSessionCreateCount).toBe(0);
+  });
+
+  it('stores an empty trade period when internal backtest has no trades', async () => {
+    runtime = createRuntime(createVersion({
+      normalizedRuleJson: createSpec({
+        indicators: [{ id: 'rsi_14', type: 'RSI', length: 14 }],
+        entry: {
+          logic: 'all',
+          conditions: [
+            { id: 'entry_never', type: 'indicator_threshold', indicator: 'rsi_14', operator: '>', value: 1000 },
+          ],
+        },
+        exit: {
+          logic: 'any',
+          conditions: [
+            { id: 'exit_rsi', type: 'indicator_threshold', indicator: 'rsi_14', operator: '<', value: 45 },
+          ],
+        },
+        risk: {},
+        filters: [],
+        validation: {
+          supported_for_internal_backtest: true,
+          unsupported_features: [],
+          warnings: [],
+          assumptions: [],
+        },
+      }),
+    }));
+    runtime.bars = createDailyBars(40);
+    const app = await buildApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/internal-backtests',
+      payload: { symbol_id: 'sym-1' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.data.result_summary.metrics.total_trades).toBe(0);
+    expect(body.data.result_summary.trade_period).toEqual({
+      first_entry_at: null,
+      last_exit_at: null,
+      first_trade_at: null,
+      last_trade_at: null,
+    });
+    expect(runtime.backtests[0].strategySnapshotJson.result_summary.trade_period.first_trade_at).toBeNull();
   });
 
   it('accepts symbol code input and ignores canonical consecutive loss skip variants', async () => {
@@ -316,6 +390,96 @@ describe('internal backtest route', () => {
       symbol_id: 'sym-1',
       timeframe: 'D',
     });
+  });
+
+  it('runs expanded normalized specs with indicator ranges, indicator comparisons, ATR stops, and ignored MVP-only features', async () => {
+    runtime = createRuntime(createVersion({
+      normalizedRuleJson: createSpec({
+        indicators: [
+          { id: 'sma_25', type: 'SMA', length: 25 },
+          { id: 'sma_75', type: 'SMA', length: 75 },
+          { id: 'rsi_14', type: 'RSI', length: 14 },
+          { id: 'atr_14', type: 'ATR', length: 14 },
+          { id: 'volume_sma_20', type: 'VOLUME_SMA', length: 20 },
+        ],
+        entry: {
+          logic: 'all',
+          conditions: [
+            { id: 'entry_cond_1', rule: '終値が25日SMAを上回る', type: 'price_vs_indicator', operator: '>', indicator: 'sma_25' },
+            { id: 'entry_cond_2', rule: '25日SMAが75日SMAを上回る', type: 'indicator_vs_indicator', operator: '>', indicator: 'sma_25' },
+            { id: 'entry_cond_3', rule: 'RSI14が50以上', type: 'indicator_range', value: 50, operator: '>=', indicator: 'rsi_14' },
+            { id: 'entry_cond_4', rule: 'RSI14が70以下', type: 'indicator_range', value: 70, operator: '<=', indicator: 'rsi_14' },
+          ],
+        },
+        exit: {
+          logic: 'any',
+          conditions: [
+            { id: 'exit_cond_1', rule: '終値が25日SMAを下回る', type: 'price_vs_indicator', operator: '<', indicator: 'sma_25' },
+            { id: 'exit_cond_2', rule: 'RSI14が45未満', type: 'indicator_threshold', value: 45, operator: '<', indicator: 'rsi_14' },
+            { id: 'exit_cond_3', rule: '保有60営業日超かつ含み益がATR14の1.0倍未満', type: 'time_and_pnl' },
+          ],
+        },
+        risk: {
+          stop_loss: { type: 'atr_multiple', basis: 'entry_price', value: 2.5, direction: 'below', indicator_ref: 'atr_14' },
+          time_exit: { bars: 60, type: 'bars', condition_note: 'PnL < 1.0 * ATR14 required for this exit to trigger' },
+        },
+        filters: [
+          {
+            id: 'filter_vol_1',
+            rule: '出来高が20日平均出来高以上',
+            type: 'volume_filter',
+            operator: '>=',
+            indicator: 'volume_sma_20',
+            multiplier: 1,
+          },
+          {
+            id: 'filter_event_1',
+            rule: '決算イベント日は除外する',
+            type: 'event_date_filter',
+          },
+        ],
+        validation: {
+          supported_for_internal_backtest: false,
+          unsupported_features: [
+            'complex_time_pnl_exit_logic',
+            'event_date_filtering',
+            'earnings_gap_handling',
+            'overfitting_check',
+          ],
+          warnings: ['複合的な時間・利益条件は標準的な単一条件として完全にはサポートされていません'],
+          assumptions: ['ATRベースのストップロスはエントリー価格から下方に設定されます'],
+        },
+      }),
+    }));
+    runtime.bars = createDailyBars(100);
+    const app = await buildApp();
+
+    const specRes = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-versions/ver-1/normalized-spec',
+    });
+    expect(specRes.statusCode).toBe(200);
+    expect(JSON.parse(specRes.body).data.meta.internal_backtest_ready).toBe(true);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/internal-backtests',
+      payload: { symbol_id: 'sym-1' },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.data.result_summary.period.bar_count).toBe(100);
+    expect(body.data.result_summary.ignored_unsupported_features).toEqual(expect.arrayContaining([
+      'complex_time_pnl_exit_logic',
+      'event_date_filtering',
+      'earnings_gap_handling',
+      'overfitting_check',
+    ]));
+    expect(body.data.result_summary.warnings.join(' ')).toContain('complex_time_pnl_exit_logic is ignored');
+    expect(body.data.result_summary.metrics).toHaveProperty('total_trades');
+    expect(runtime.backtests).toHaveLength(1);
+    expect(res.body).not.toMatch(/secret|token|stack|Traceback|[A-Za-z]:\\|\/Users\/|\/home\//i);
   });
 
   it('returns safe validation errors for missing and unsupported specs', async () => {

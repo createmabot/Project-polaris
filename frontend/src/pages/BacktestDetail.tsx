@@ -227,8 +227,10 @@ type DisplayMetricSummary = {
   averageTrade: number | string | null;
   grossProfit: number | string | null;
   grossLoss: number | string | null;
-  periodFrom: number | string | null;
-  periodTo: number | string | null;
+  dataPeriodFrom: number | string | null;
+  dataPeriodTo: number | string | null;
+  tradePeriodFrom: number | string | null;
+  tradePeriodTo: number | string | null;
   barCount: number | string | null;
 };
 
@@ -255,8 +257,10 @@ function buildCsvMetricSummary(summary: ParsedImportSummary | null | undefined):
     averageTrade: null,
     grossProfit: null,
     grossLoss: null,
-    periodFrom: summary.periodFrom ?? null,
-    periodTo: summary.periodTo ?? null,
+    dataPeriodFrom: null,
+    dataPeriodTo: null,
+    tradePeriodFrom: summary.periodFrom ?? null,
+    tradePeriodTo: summary.periodTo ?? null,
     barCount: null,
   };
 }
@@ -265,6 +269,7 @@ function buildInternalBacktestMetricSummary(snapshot: BacktestDetailData['used_s
   const resultSummary = asRecord(snapshot?.result_summary ?? null);
   const metrics = asRecord(resultSummary?.metrics ?? null);
   const period = asRecord(resultSummary?.period ?? null);
+  const tradePeriod = asRecord(resultSummary?.trade_period ?? null);
   if (!metrics && !period) return null;
   return {
     totalTrades: numberLikeFromRecord(metrics, ['total_trades', 'trade_count']),
@@ -277,8 +282,10 @@ function buildInternalBacktestMetricSummary(snapshot: BacktestDetailData['used_s
     averageTrade: numberLikeFromRecord(metrics, ['average_trade']),
     grossProfit: numberLikeFromRecord(metrics, ['gross_profit']),
     grossLoss: numberLikeFromRecord(metrics, ['gross_loss']),
-    periodFrom: numberLikeFromRecord(period, ['from']),
-    periodTo: numberLikeFromRecord(period, ['to']),
+    dataPeriodFrom: numberLikeFromRecord(period, ['from']),
+    dataPeriodTo: numberLikeFromRecord(period, ['to']),
+    tradePeriodFrom: numberLikeFromRecord(tradePeriod, ['first_entry_at', 'first_trade_at']),
+    tradePeriodTo: numberLikeFromRecord(tradePeriod, ['last_exit_at', 'last_trade_at']),
     barCount: numberLikeFromRecord(period, ['bar_count']) ?? numberLikeFromRecord(metrics, ['bar_count', 'evaluated_bar_count']),
   };
 }
@@ -293,6 +300,11 @@ function metricPercentText(value: number | string | null | undefined): string {
   if (typeof value === 'number' && Number.isFinite(value)) return formatPercent(value);
   if (typeof value === 'string' && value.trim()) return value.trim();
   return '-';
+}
+
+function tradePeriodText(value: number | string | null | undefined): string {
+  const text = valueText(value);
+  return text === '-' ? '取引なし' : text;
 }
 
 function toNumber(value: number | null | undefined): number | null {
@@ -965,6 +977,7 @@ function ArtifactPointerPanel({
 function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
   const resultSummary = asRecord(snapshot?.result_summary ?? null);
   const period = asRecord(resultSummary?.period ?? null);
+  const tradePeriod = asRecord(resultSummary?.trade_period ?? null);
   const metrics = asRecord(resultSummary?.metrics ?? null);
   const artifactPointer = asRecord(snapshot?.artifact_pointer ?? null);
 
@@ -977,8 +990,10 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
       <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
         {metricCard('execution_id', valueText(snapshot?.internal_backtest_execution_id))}
         {metricCard('summary_kind', recordText(resultSummary, 'summary_kind'))}
-        {metricCard('period from', recordText(period, 'from'))}
-        {metricCard('period to', recordText(period, 'to'))}
+        {metricCard('data period from', recordText(period, 'from'))}
+        {metricCard('data period to', recordText(period, 'to'))}
+        {metricCard('trade period from', tradePeriodText(recordText(tradePeriod, 'first_entry_at') !== '-' ? recordText(tradePeriod, 'first_entry_at') : recordText(tradePeriod, 'first_trade_at')))}
+        {metricCard('trade period to', tradePeriodText(recordText(tradePeriod, 'last_exit_at') !== '-' ? recordText(tradePeriod, 'last_exit_at') : recordText(tradePeriod, 'last_trade_at')))}
         {metricCard('bar_count', recordText(period, 'bar_count'))}
         {metricCard('total_trades', recordText(metrics, 'total_trades') !== '-' ? recordText(metrics, 'total_trades') : recordText(metrics, 'trade_count'))}
         {metricCard('win_rate', recordText(metrics, 'win_rate'))}
@@ -1321,8 +1336,19 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
             {metricCard('Gross Profit', metricNumberText(summary.grossProfit, 2))}
             {metricCard('Gross Loss', metricNumberText(summary.grossLoss, 2))}
             {metricCard('bar count', metricNumberText(summary.barCount, 0))}
-            {metricCard('対象期間（開始）', valueText(summary.periodFrom))}
-            {metricCard('対象期間（終了）', valueText(summary.periodTo))}
+            {isInternalBacktestReport ? (
+              <>
+                {metricCard('検証データ期間（開始）', valueText(summary.dataPeriodFrom))}
+                {metricCard('検証データ期間（終了）', valueText(summary.dataPeriodTo))}
+                {metricCard('取引発生期間（開始）', tradePeriodText(summary.tradePeriodFrom))}
+                {metricCard('取引発生期間（終了）', tradePeriodText(summary.tradePeriodTo))}
+              </>
+            ) : (
+              <>
+                {metricCard('取引発生期間（開始）', valueText(summary.tradePeriodFrom))}
+                {metricCard('取引発生期間（終了）', valueText(summary.tradePeriodTo))}
+              </>
+            )}
           </div>
         )}
       </section>
