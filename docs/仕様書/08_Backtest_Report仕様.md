@@ -28,7 +28,7 @@
 - StrategyVersionDetail の `内部バックテスト` は、保存済み normalized spec と `MarketPriceBar` を使い、明示クリック時だけ新しい `Backtest` を作成できる。application 起点 internal start / report conversion endpoint、execution relation、artifact table は復活させない。
 - conversion 完了直後の Backtest AI summary auto enqueue は新規には使われない。既存 AI summary と manual generation は generic Backtest report として維持する。
 - AI summary input は `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、`internal_backtest_execution_id`、importless report 文脈を中心に組み立てる。
-- `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。
+- `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。ただし BacktestDetail の `主要指標` は `strategySnapshotJson.result_summary.metrics` / `period` から総取引数、勝率、Profit Factor、最大ドローダウン、純利益、総リターン率、対象期間を表示する。
 
 ### input 差分
 
@@ -41,6 +41,7 @@
 
 - 個別 report detail の正本画面。
 - source / status / metrics / AI summary / artifact を表示する。
+- `主要指標` は CSV import report では `BacktestImport.parsedSummaryJson`、internal backtest report では `strategySnapshotJson.result_summary.metrics` / `period` を読む。internal backtest report で `BacktestImport` がないことは正常扱いにする。
 - used strategy snapshot を表示し、report が参照した strategy version / Pine / assumptions を確認できるようにする。
 - 同一 application の related reports と current / related metrics 横並び比較補助を表示する。
 - metrics 欠損時は、取得元に該当 metric がないことを短く説明する。

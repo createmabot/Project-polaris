@@ -39,11 +39,14 @@ export type InternalBacktestResultSummary = {
     net_profit: number;
     total_return_percent: number;
     price_change_percent: number | null;
+    total_trades: number;
     trade_count: number;
     win_rate: number;
     gross_profit: number;
     gross_loss: number;
+    average_trade: number | null;
     profit_factor: number | null;
+    max_drawdown: number;
     max_drawdown_percent: number;
   };
   trades: InternalBacktestTrade[];
