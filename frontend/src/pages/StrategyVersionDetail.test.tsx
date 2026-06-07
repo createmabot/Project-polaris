@@ -1054,6 +1054,81 @@ describe('StrategyVersionDetail', () => {
     expect(mockPostApi).not.toHaveBeenCalled();
   });
 
+  it('shows spec-first Pine generation guidance when normalized spec is available', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      createNormalizedSpecPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('Pine生成は構造化specを優先して実装します。');
+    expect(html).toContain('自然言語ルール本文は補助文脈として扱います。');
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs', {});
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/normalized-spec/generate', {});
+  });
+
+  it('shows a spec generation warning near Pine generation when normalized spec is unavailable', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(createPayload({ withCompareBase: true, samePine: false }));
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('構造化specが未生成です。');
+    expect(html).toContain('Pine生成前に構造化specを生成すると、内部バックテストとの意味ズレを抑えやすくなります。');
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs', {});
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/normalized-spec/generate', {});
+  });
+
+  it('shows Pine generation note metadata when spec was used as the primary contract', () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      {
+        strategy_rule_version_id: 'ver-1',
+        status: 'available',
+        pine_script_id: 'pine-1',
+        generated_script: '//@version=6\nstrategy("ok")',
+        warnings: [],
+        generation_note: {
+          payload: {
+            spec_usage: {
+              normalized_strategy_spec_available: true,
+              used_as_primary_contract: true,
+            },
+          },
+        },
+      },
+      null,
+      null,
+      null,
+      null,
+      createNormalizedSpecPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('直近のPine生成は構造化specを主入力として実行されました。');
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
   it('generates normalized strategy spec only after explicit button click', async () => {
     mockUseSWR.mockReset();
     mockPostApi.mockReset();
