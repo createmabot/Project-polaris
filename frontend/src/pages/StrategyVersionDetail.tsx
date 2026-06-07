@@ -27,6 +27,7 @@ import {
   StrategyRefinementCandidateData,
   NormalizedStrategySpecData,
   NormalizedStrategySpecGenerateData,
+  StrategyImplementationAlignmentData,
   StrategyVersionInternalBacktestData,
 } from '../api/types';
 import {
@@ -708,6 +709,9 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const [generatingNormalizedSpec, setGeneratingNormalizedSpec] = useState(false);
   const [normalizedSpecError, setNormalizedSpecError] = useState<string | null>(null);
   const [normalizedSpecMessage, setNormalizedSpecMessage] = useState<string | null>(null);
+  const [alignmentLoading, setAlignmentLoading] = useState(false);
+  const [alignmentError, setAlignmentError] = useState<string | null>(null);
+  const [alignmentReport, setAlignmentReport] = useState<StrategyImplementationAlignmentData | null>(null);
   const [internalBacktestSymbolId, setInternalBacktestSymbolId] = useState(initialImproveApplicationContext?.symbolId ?? '');
   const [internalBacktestFrom, setInternalBacktestFrom] = useState('');
   const [internalBacktestTo, setInternalBacktestTo] = useState('');
@@ -825,6 +829,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
     ?? (normalizedSpecReadyForInternalBacktest
       ? 'normalized_strategy_spec v1 is ready for the Internal Backtest Engine v1 MVP.'
       : '内部バックテストには D / long_only の normalized_strategy_spec v1 が必要です。');
+  const alignmentHasInternalBacktestRisk = alignmentReport?.status === 'warning' || alignmentReport?.status === 'mismatch';
 
   useEffect(() => {
     if (version) {
@@ -1133,11 +1138,27 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             : '内部バックテストには D / long_only の normalized_strategy_spec v1 が必要です。',
         },
       }, false);
+      setAlignmentReport(null);
       setNormalizedSpecMessage('構造化specを生成しました。表示だけではPine生成やbacktestは起動していません。');
     } catch (requestError: any) {
       setNormalizedSpecError(requestError?.message ?? '構造化specの生成に失敗しました。');
     } finally {
       setGeneratingNormalizedSpec(false);
+    }
+  };
+
+  const onCheckImplementationAlignment = async () => {
+    setAlignmentLoading(true);
+    setAlignmentError(null);
+    try {
+      const response = await fetchApi<StrategyImplementationAlignmentData>(
+        `/api/strategy-versions/${versionId}/implementation-alignment`,
+      );
+      setAlignmentReport(response);
+    } catch (requestError: any) {
+      setAlignmentError(requestError?.message ?? '実装整合性チェックに失敗しました。');
+    } finally {
+      setAlignmentLoading(false);
     }
   };
 
@@ -1719,6 +1740,114 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
       </SectionCard>
 
       <SectionCard
+        title='実装整合性チェック'
+        description='Pine script と構造化specが同じ自然言語ルールを同じ意味で表しているか確認します。表示だけではPine生成・spec生成・backtestは起動しません。'
+        className='mt-4'
+      >
+        <div className='mb-3 flex flex-wrap items-center gap-2'>
+          <Button
+            variant='secondary'
+            data-testid='check-implementation-alignment-button'
+            onClick={onCheckImplementationAlignment}
+            disabled={alignmentLoading}
+          >
+            {alignmentLoading ? '確認中...' : 'Pineとspecの整合性を確認'}
+          </Button>
+          <span className='text-sm text-slate-600'>
+            generated Pine と normalized_strategy_spec v1 の semantic diagnostics です。TradingView parity は保証しません。
+          </span>
+        </div>
+        {alignmentError ? (
+          <InlineNotice tone='warning' className='mb-3'>
+            {alignmentError}
+          </InlineNotice>
+        ) : null}
+        {!alignmentReport ? (
+          <EmptyState title='整合性チェックは未実行です'>
+            `Pineとspecの整合性を確認` を押すと、entry / exit / risk / indicators / filters の差分を read-only で確認します。
+          </EmptyState>
+        ) : (
+          <div className='grid gap-3'>
+            <div className='flex flex-wrap items-center gap-2'>
+              <StatusBadge
+                status={alignmentReport.status}
+                tone={alignmentReport.status === 'mismatch' ? 'danger' : alignmentReport.status === 'warning' ? 'info' : undefined}
+              >
+                {alignmentReport.status}
+              </StatusBadge>
+              <span className='text-sm text-slate-600'>
+                matched {alignmentReport.summary.matched_count} / mismatch {alignmentReport.summary.mismatch_count}
+                {' '} / missing in Pine {alignmentReport.summary.missing_in_pine_count}
+                {' '} / missing in spec {alignmentReport.summary.missing_in_spec_count}
+              </span>
+            </div>
+            {alignmentReport.status === 'unavailable' ? (
+              <InlineNotice tone='info'>
+                {alignmentReport.reason === 'generated Pine is missing.'
+                  ? 'Pineが未生成のため比較できません。'
+                  : alignmentReport.reason === 'normalized strategy spec is missing.'
+                    ? '構造化specが未生成のため比較できません。'
+                    : alignmentReport.warnings.join(' / ') || '整合性チェックを利用できません。'}
+              </InlineNotice>
+            ) : null}
+            {alignmentReport.mismatches.length > 0 ? (
+              <div className='rounded-lg border border-amber-200 bg-amber-50 p-3'>
+                <div className='mb-2 font-semibold text-amber-950'>mismatches</div>
+                <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-amber-900'>
+                  {alignmentReport.mismatches.map((entry, index) => (
+                    <li key={`alignment-mismatch-${entry.label}-${index}`}>
+                      <strong>{entry.area}</strong> / {entry.label}: spec `{entry.spec}` / Pine `{entry.pine}` - {entry.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {alignmentReport.missing_in_pine.length > 0 ? (
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>missing in Pine</div>
+                <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                  {alignmentReport.missing_in_pine.map((entry, index) => (
+                    <li key={`alignment-missing-pine-${entry.label}-${index}`}>
+                      <strong>{entry.area}</strong> / {entry.label}: {entry.spec}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {alignmentReport.missing_in_spec.length > 0 ? (
+              <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
+                <div className='mb-2 font-semibold text-slate-900'>missing in spec</div>
+                <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
+                  {alignmentReport.missing_in_spec.map((entry, index) => (
+                    <li key={`alignment-missing-spec-${entry.label}-${index}`}>
+                      <strong>{entry.area}</strong> / {entry.label}: {entry.pine}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {alignmentReport.matched.length > 0 ? (
+              <details className='rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700'>
+                <summary className='cursor-pointer font-semibold text-slate-900'>matched details</summary>
+                <ul className='mb-0 mt-2 list-disc space-y-1 pl-5'>
+                  {alignmentReport.matched.slice(0, 12).map((entry, index) => (
+                    <li key={`alignment-match-${entry.label}-${index}`}>
+                      <strong>{entry.area}</strong> / {entry.label}: spec `{entry.spec}` / Pine `{entry.pine}`
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+            {(alignmentReport.warnings.length > 0 || alignmentReport.assumptions.length > 0) ? (
+              <InlineNotice tone='info'>
+                {[...alignmentReport.warnings, ...alignmentReport.assumptions].join(' / ')}
+              </InlineNotice>
+            ) : null}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
         title='内部バックテスト'
         description='保存済みの normalized_strategy_spec v1 と Market Data の日足OHLCVで簡易検証します。表示だけでは実行されません。'
         className='mt-4'
@@ -1742,6 +1871,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         {(normalizedSpecUnsupported.length > 0 || normalizedSpecWarnings.length > 0) ? (
           <InlineNotice tone='warning' className='mb-3'>
             MVPでは一部の条件を無視または簡略化します: {[...normalizedSpecUnsupported, ...normalizedSpecWarnings].join(' / ')}
+          </InlineNotice>
+        ) : null}
+        {alignmentHasInternalBacktestRisk ? (
+          <InlineNotice tone='warning' className='mb-3'>
+            Pineと構造化specに差分があります。TradingView結果とinternal backtest結果がズレる可能性があります。
           </InlineNotice>
         ) : null}
         <div className='grid gap-3 sm:grid-cols-2'>

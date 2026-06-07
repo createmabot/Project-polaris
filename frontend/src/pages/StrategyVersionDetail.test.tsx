@@ -320,6 +320,41 @@ function createUnavailableNormalizedSpecPayload() {
   };
 }
 
+function createAlignmentPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    schema_name: 'strategy_implementation_alignment',
+    schema_version: '1.0',
+    strategy_version_id: 'ver-1',
+    status: 'warning',
+    summary: {
+      matched_count: 2,
+      mismatch_count: 1,
+      missing_in_pine_count: 1,
+      missing_in_spec_count: 0,
+    },
+    matched: [
+      { area: 'indicator', label: 'SMA 25', spec: 'SMA 25', pine: 'SMA 25' },
+    ],
+    mismatches: [
+      {
+        area: 'entry',
+        severity: 'warning',
+        label: 'rsi_14 >= 50',
+        spec: 'rsi_14 >= 50',
+        pine: 'rsi_14 crosses_above 50',
+        message: 'RSI condition differs between spec and Pine.',
+      },
+    ],
+    missing_in_pine: [
+      { area: 'filter', severity: 'warning', label: 'volume filter', spec: 'volume >= volume_sma_20 * 1.5' },
+    ],
+    missing_in_spec: [],
+    warnings: [],
+    assumptions: ['deterministic diagnostics'],
+    ...overrides,
+  };
+}
+
 function createSourceBacktestPayload() {
   return {
     backtest: {
@@ -1062,6 +1097,62 @@ describe('StrategyVersionDetail', () => {
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/generation-jobs');
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/strategy-versions/ver-1/pine/regeneration-jobs');
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/symbols/sym-1/strategy-applications');
+  });
+
+  it('renders implementation alignment section without auto checking', () => {
+    mockUseSWR.mockReset();
+    mockFetchApi.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      createInternalBacktestReadyNormalizedSpecPayload(),
+    );
+
+    const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    expect(html).toContain('実装整合性チェック');
+    expect(html).toContain('Pine script と構造化specが同じ自然言語ルールを同じ意味で表しているか確認します。');
+    expect(html).toContain('整合性チェックは未実行です');
+    expect(mockFetchApi).not.toHaveBeenCalled();
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
+  it('checks implementation alignment only after explicit button click', async () => {
+    mockUseSWR.mockReset();
+    mockFetchApi.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      null,
+      null,
+      null,
+      null,
+      null,
+      createInternalBacktestReadyNormalizedSpecPayload(),
+    );
+    mockFetchApi.mockResolvedValue(createAlignmentPayload());
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    const checkButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'check-implementation-alignment-button');
+    expect(checkButton?.text).toBe('Pineとspecの整合性を確認');
+    await checkButton?.props.onClick?.();
+
+    expect(mockFetchApi).toHaveBeenCalledWith('/api/strategy-versions/ver-1/implementation-alignment');
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/pine/generation-jobs', {});
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/normalized-spec/generate', {});
+    expect(mockPostApi).not.toHaveBeenCalledWith('/api/strategy-versions/ver-1/internal-backtests', expect.anything());
   });
 
   it('runs internal backtest only after explicit button click with symbol context', async () => {
