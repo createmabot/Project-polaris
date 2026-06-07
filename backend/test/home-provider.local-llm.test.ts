@@ -480,6 +480,9 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.think).toBe(false);
     expect(body.options.num_predict).toBe(1800);
     expect(body.messages[0].content).toContain('Return user-facing warnings and assumptions in Japanese');
+    expect(body.messages[0].content).toContain('If normalized_strategy_spec is present');
+    expect(body.messages[0].content).toContain('prefer normalized_strategy_spec');
+    expect(body.messages[0].content).toContain('Do not omit measurable thresholds from normalized_strategy_spec');
     expect(body.messages[0].content).toContain('Return one strict JSON object only');
     expect(body.messages[0].content).toContain('generated_script value must contain Pine Script only');
     expect(body.messages[0].content).toContain('Use //@version=6 and strategy(...)');
@@ -533,6 +536,10 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('Keep generated_script as valid Pine Script');
     expect(body.messages[0].content).toContain('do not translate Pine code');
     expect(body.messages[1].content).toContain('<Japanese user-facing string>');
+    const userPayload = JSON.parse(body.messages[1].content);
+    expect(userPayload.spec_available).toBe(false);
+    expect(userPayload.normalized_strategy_spec).toBeNull();
+    expect(userPayload.implementation_priority).toBe('natural_language_rule');
     expect(result.generatedScript).toContain('strategy("X"');
   });
 

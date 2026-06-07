@@ -102,6 +102,55 @@ let runtime: Runtime;
 const generatePineScriptMock = vi.fn();
 const rewriteRuleDraftMock = vi.fn();
 
+function createNormalizedStrategySpec(overrides: Record<string, unknown> = {}) {
+  return {
+    schema_name: 'normalized_strategy_spec',
+    schema_version: '1.0',
+    source: {
+      strategy_version_id: 'ver-1',
+      generated_from: 'natural_language_rule',
+      generated_at: '2026-04-25T10:00:00.000Z',
+      provider: 'local_llm',
+      provider_task: 'strategy_spec_normalization',
+      fallback_used: false,
+    },
+    market: 'JP_STOCK',
+    timeframe: 'D',
+    side: 'long_only',
+    strategy_family: 'ma_rsi_volume_momentum',
+    indicators: [
+      { id: 'sma_25', type: 'SMA', length: 25 },
+      { id: 'rsi_14', type: 'RSI', length: 14 },
+    ],
+    entry: {
+      logic: 'all',
+      conditions: [
+        { id: 'entry_1', type: 'price_vs_indicator', indicator: 'sma_25', operator: '>', rule: 'close > sma_25' },
+        { id: 'entry_2', type: 'indicator_threshold', indicator: 'rsi_14', operator: '>=', value: 50, rule: 'rsi_14 >= 50' },
+      ],
+    },
+    exit: {
+      logic: 'any',
+      conditions: [
+        { id: 'exit_1', type: 'price_vs_indicator', indicator: 'sma_25', operator: '<', rule: 'close < sma_25' },
+      ],
+    },
+    risk: {
+      stop_loss: { type: 'percent', value: 5, basis: 'entry_price', direction: 'below_entry' },
+    },
+    filters: [],
+    validation: {
+      supported_for_internal_backtest: true,
+      unsupported_features: [],
+      warnings: [],
+      assumptions: [],
+    },
+    warnings: [],
+    assumptions: [],
+    ...overrides,
+  };
+}
+
 function createRuntime(): Runtime {
   const now = new Date('2026-04-25T10:00:00.000Z');
   return {
@@ -931,6 +980,145 @@ describe('strategy version pine endpoints', () => {
     expect(fetched.statusCode).toBe(200);
     expect(fetched.json().data.status).toBe('available');
     expect(typeof fetched.json().data.generated_script).toBe('string');
+
+    await app.close();
+  });
+
+  it('passes normalized_strategy_spec as the primary Pine generation contract when available', async () => {
+    const spec = createNormalizedStrategySpec();
+    runtime.versions.set('ver-1', {
+      ...runtime.versions.get('ver-1')!,
+      normalizedRuleJson: spec,
+    });
+    generatePineScriptMock.mockImplementation(async (context: any) => ({
+      output: {
+        normalizedRuleJson: context.normalizedRuleJson,
+        generatedScript: '//@version=6\nstrategy("spec-first", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    }));
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
+
+    const context = generatePineScriptMock.mock.calls[0][0];
+    expect(context.normalizedStrategySpec).toMatchObject({
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      entry: expect.any(Object),
+    });
+    expect(context.specAvailable).toBe(true);
+    expect(context.specSource).toMatchObject({
+      provider: 'local_llm',
+      fallbackUsed: false,
+    });
+
+    const note = Array.from(runtime.pineScripts.values())[0].generationNoteJson as any;
+    expect(note.payload.spec_usage).toMatchObject({
+      normalized_strategy_spec_available: true,
+      used_as_primary_contract: true,
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+      source_provider: 'local_llm',
+      fallback_used: false,
+    });
+    expect(JSON.stringify(note)).not.toContain('raw prompt');
+    expect(JSON.stringify(note)).not.toContain('endpoint');
+    expect(JSON.stringify(note)).not.toContain('secret');
+
+    await app.close();
+  });
+
+  it('keeps legacy Pine generation available and records a warning when normalized_strategy_spec is missing', async () => {
+    generatePineScriptMock.mockImplementation(async (context: any) => ({
+      output: {
+        normalizedRuleJson: context.normalizedRuleJson ?? {},
+        generatedScript: '//@version=6\nstrategy("legacy", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    }));
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json().data.pine.warnings).toContain(
+      '構造化specが未生成のため、自然言語ルール本文を主入力としてPineを生成しました。',
+    );
+    const context = generatePineScriptMock.mock.calls[0][0];
+    expect(context.normalizedStrategySpec).toBeNull();
+    expect(context.specAvailable).toBe(false);
+    const note = Array.from(runtime.pineScripts.values())[0].generationNoteJson as any;
+    expect(note.payload.spec_usage).toMatchObject({
+      normalized_strategy_spec_available: false,
+      used_as_primary_contract: false,
+      warning: 'Pine was generated from natural_language_rule without normalized_strategy_spec.',
+    });
+
+    await app.close();
+  });
+
+  it('does not treat unrelated normalizedRuleJson as normalized_strategy_spec for Pine generation', async () => {
+    runtime.versions.set('ver-1', {
+      ...runtime.versions.get('ver-1')!,
+      normalizedRuleJson: { schema_name: 'legacy_rule_json', entry: ['close > sma'] },
+    });
+    generatePineScriptMock.mockResolvedValue({
+      output: {
+        normalizedRuleJson: { schema_name: 'legacy_rule_json', entry: ['close > sma'] },
+        generatedScript: '//@version=6\nstrategy("legacy-json", overlay=true)',
+        warnings: [],
+        assumptions: [],
+        status: 'generated',
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    });
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
+    const context = generatePineScriptMock.mock.calls[0][0];
+    expect(context.normalizedRuleJson).toMatchObject({ schema_name: 'legacy_rule_json' });
+    expect(context.normalizedStrategySpec).toBeNull();
+    expect(context.specAvailable).toBe(false);
+    const note = Array.from(runtime.pineScripts.values())[0].generationNoteJson as any;
+    expect(note.payload.spec_usage.normalized_strategy_spec_available).toBe(false);
 
     await app.close();
   });

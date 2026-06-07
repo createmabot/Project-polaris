@@ -59,11 +59,13 @@ pnpm run dev
 ## 3. 自然言語 -> Pine 生成
 
 1. `StrategyVersionDetail` で `Pine を生成` を実行する。
-2. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
-3. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
-4. `warnings` / `assumptions` 相当の表示は `警告` / `前提` として日本語で読めることを確認する。provider 由来の自由文が英語で残る場合は prompt compliance / provider quality の確認対象とし、後段固定 mapping では変換しない。生成 script 自体は変えない。
-5. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
-6. 生成した Pine は TradingView の symbol / chart timeframe 上で検証する。internal backtest engine の市場 / 時間足対応範囲が同時に広がったわけではない。
+2. `構造化ルール spec` が available の場合、Pine 生成 section に「Pine生成は構造化specを優先して実装します」と表示されることを確認する。spec が unavailable の場合は、Pine 生成前に構造化spec生成を促す warning が出ることを確認する。
+3. `POST /api/strategy-versions/:versionId/pine/generate` 成功を確認する。
+4. `GET /api/strategy-versions/:versionId/pine` で `status=available` と `generated_script` を確認する。
+5. generation note の `spec_usage` がある場合、直近の Pine 生成が構造化specを主入力にしたか、自然言語ルールのみだったかが補助表示されることを確認する。
+6. `warnings` / `assumptions` 相当の表示は `警告` / `前提` として日本語で読めることを確認する。provider 由来の自由文が英語で残る場合は prompt compliance / provider quality の確認対象とし、後段固定 mapping では変換しない。生成 script 自体は変えない。
+7. Pine 表示付近の `コピー` ボタンで、TradingView 貼り付け用に全文コピーできることを確認する。
+8. 生成した Pine は TradingView の symbol / chart timeframe 上で検証する。internal backtest engine の市場 / 時間足対応範囲が同時に広がったわけではない。
 
 ## 4. TradingView 一次検証
 

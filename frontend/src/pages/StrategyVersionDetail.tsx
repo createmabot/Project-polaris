@@ -268,6 +268,13 @@ function stringField(record: Record<string, unknown> | null, key: string): strin
   return '-';
 }
 
+function optionalStringField(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return null;
+}
+
 function normalizedSpecListLabel(item: Record<string, unknown>): string {
   const id = stringField(item, 'id');
   const type = stringField(item, 'type');
@@ -742,6 +749,11 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
   const normalizedSpecUnsupported = Array.isArray(normalizedSpecValidation?.unsupported_features)
     ? normalizedSpecValidation.unsupported_features.filter((item): item is string => typeof item === 'string')
     : [];
+  const normalizedSpecAvailable = normalizedSpecData?.status === 'available' && Boolean(normalizedSpec);
+  const pineGenerationNotePayload = asRecord(asRecord(pineData?.generation_note)?.payload);
+  const pineSpecUsage = asRecord(pineGenerationNotePayload?.spec_usage);
+  const pineSpecUsedAsPrimary = pineSpecUsage?.used_as_primary_contract === true;
+  const pineSpecUsageWarning = optionalStringField(pineSpecUsage, 'warning');
   const warnings = version && Array.isArray(version.warnings) ? version.warnings : [];
   const assumptions = version && Array.isArray(version.assumptions) ? version.assumptions : [];
   const pineState: 'unavailable' | 'generating' | 'warning' | 'failed' | 'available' = regenerating
@@ -1517,6 +1529,24 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               >
                 Pine 状態: {pineStateText}
               </StatusBadge>
+              {normalizedSpecAvailable ? (
+                <InlineNotice tone='info' className='w-full'>
+                  Pine生成は構造化specを優先して実装します。自然言語ルール本文は補助文脈として扱います。
+                </InlineNotice>
+              ) : (
+                <InlineNotice tone='warning' className='w-full'>
+                  構造化specが未生成です。Pine生成前に構造化specを生成すると、内部バックテストとの意味ズレを抑えやすくなります。
+                </InlineNotice>
+              )}
+              {pineSpecUsedAsPrimary ? (
+                <InlineNotice tone='success' className='w-full'>
+                  直近のPine生成は構造化specを主入力として実行されました。
+                </InlineNotice>
+              ) : pineSpecUsageWarning ? (
+                <InlineNotice tone='warning' className='w-full'>
+                  {pineSpecUsageWarning}
+                </InlineNotice>
+              ) : null}
               <Button
                 variant='primary'
                 onClick={onSaveRule}

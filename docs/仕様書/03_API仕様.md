@@ -225,6 +225,9 @@ Codex CLI manual JSON import の最小 API:
 StrategyVersion Pine generation の market / timeframe:
 
 - `POST /api/strategy-versions/:versionId/pine/generate` と `POST /api/strategy-versions/:versionId/pine/regenerate` は、保存済み StrategyVersion の `market` / `timeframe` を Pine provider context に渡す。
+- Pine generation は、保存済み `normalizedRuleJson` が `normalized_strategy_spec` v1 の場合、`normalized_strategy_spec` を主入力の実装契約として provider context に渡す。`natural_language_rule` は補助文脈とし、両者が矛盾する場合は spec を優先するよう provider prompt で指示する。
+- `normalized_strategy_spec` v1 がない場合は、互換性維持のため従来どおり `natural_language_rule` を主入力にした Pine generation を許可する。ただし generation note の `payload.spec_usage` に `normalized_strategy_spec_available=false` / `used_as_primary_contract=false` と warning を残し、response warnings にも構造化spec未使用の案内を含める。
+- `generation_note.payload.spec_usage` は、`normalized_strategy_spec_available`、`used_as_primary_contract`、schema name / version、source provider、fallback flag を返す。raw prompt、provider response、endpoint、model 実値、secret、token、local path、stack trace は含めない。
 - job start endpoint（`/pine/generation-jobs` / `/pine/regeneration-jobs`）も同じ market / timeframe context を使い、sync endpoint と互換の validation / normalization / repair boundary を維持する。
 - reviewer repair は priority mapping に基づき、severity `error`、`repairable=true`、priority > 0 の issue だけを code で重複排除し、priority 順の最大 3 件を `repair_request.reviewIssues` に渡す。priority 0 の readability / plotting preference / below-vs-crossunder nuance / narrative comment などは repair を起動しない。
 - AI reviewer provider の malformed JSON / empty output / invalid response は、deterministic reviewer が blocking issue を出していない限り generation を失敗させず、sanitized warning / summary として扱う。deterministic reviewer が blocking issue を出している場合は provider reviewer failure に関係なく deterministic issue で repair / failure 判定する。

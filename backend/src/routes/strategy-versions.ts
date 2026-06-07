@@ -17,6 +17,7 @@ import {
   buildNormalizedStrategySpec,
   isNormalizedStrategySpec,
   validateAndNormalizeStrategySpec,
+  type NormalizedStrategySpec,
   type StrategySpecProviderName,
 } from '../strategy/normalized-spec';
 import { buildImplementationAlignmentReport } from '../strategy/implementation-alignment';
@@ -280,6 +281,40 @@ function normalizeRuleJson(value: unknown): Record<string, unknown> | null {
     return null;
   }
   return value as Record<string, unknown>;
+}
+
+function resolveNormalizedStrategySpec(value: unknown): NormalizedStrategySpec | null {
+  return isNormalizedStrategySpec(value) ? value : null;
+}
+
+function resolveSpecUsage(normalizedRuleJson: unknown) {
+  const normalizedSpec = resolveNormalizedStrategySpec(normalizedRuleJson);
+  if (!normalizedSpec) {
+    return {
+      normalizedSpec: null,
+      note: {
+        normalized_strategy_spec_available: false,
+        used_as_primary_contract: false,
+        warning: 'Pine was generated from natural_language_rule without normalized_strategy_spec.',
+      },
+      warning: '構造化specが未生成のため、自然言語ルール本文を主入力としてPineを生成しました。',
+    };
+  }
+
+  const source: Record<string, unknown> = isRecord(normalizedSpec.source) ? normalizedSpec.source : {};
+  const sourceProvider = stringOrNull(source.provider);
+  return {
+    normalizedSpec,
+    note: {
+      normalized_strategy_spec_available: true,
+      used_as_primary_contract: true,
+      schema_name: normalizedSpec.schema_name,
+      schema_version: normalizedSpec.schema_version,
+      source_provider: sourceProvider,
+      fallback_used: source.fallback_used === true,
+    },
+    warning: null,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -821,6 +856,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     onStage?: (stage: PineGenerationJobStage) => void | Promise<void>;
   }) => {
     const homeAiService = createPineGenerationService();
+    const specUsage = resolveSpecUsage(params.version.normalizedRuleJson);
     let output;
     let log;
     try {
@@ -828,6 +864,15 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         {
           naturalLanguageSpec: params.version.naturalLanguageRule,
           normalizedRuleJson: normalizeRuleJson(params.version.normalizedRuleJson),
+          normalizedStrategySpec: specUsage.normalizedSpec,
+          specAvailable: Boolean(specUsage.normalizedSpec),
+          specSource: specUsage.normalizedSpec
+            ? {
+                provider: stringOrNull(isRecord(specUsage.normalizedSpec.source) ? specUsage.normalizedSpec.source.provider : null),
+                fallbackUsed:
+                  isRecord(specUsage.normalizedSpec.source) && specUsage.normalizedSpec.source.fallback_used === true,
+              }
+            : null,
           targetMarket: params.version.market,
           targetTimeframe: normalizeTimeframeAlias(params.version.timeframe),
           regenerationInput: params.revisionInput
@@ -880,7 +925,13 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
 
     await params.onStage?.('最終確認');
     const validation = assessGeneratedPineScript(output.generatedScript);
-    const warnings = [...new Set([...output.warnings, ...validation.warnings])];
+    const warnings = [
+      ...new Set([
+        ...output.warnings,
+        ...validation.warnings,
+        ...(specUsage.warning ? [specUsage.warning] : []),
+      ]),
+    ];
     const shouldFail = output.status === 'failed' || !validation.normalizedScript || validation.failureReason !== null;
     const finalStatus: 'generated' | 'failed' = shouldFail ? 'failed' : 'generated';
     const finalScript = finalStatus === 'generated' ? validation.normalizedScript : null;
@@ -901,6 +952,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
         invalid_reason_codes: invalidReasonCodes,
         pine_reviewer: output.reviewerSummary ?? null,
         pine_reviewer_issues: output.reviewerIssues ?? [],
+        spec_usage: specUsage.note,
         provider: log.provider,
         fallback_to_stub: log.fallbackToStub,
         regeneration: params.revisionInput

@@ -7,7 +7,11 @@ import {
   reviewGeneratedPineScriptDeterministic,
 } from '../strategy/pine';
 import type { PineReviewIssue, PineReviewIssueCode, PineReviewResult } from '../strategy/pine';
-import { buildNormalizedStrategySpec, type NormalizedStrategySpec } from '../strategy/normalized-spec';
+import {
+  buildNormalizedStrategySpec,
+  isNormalizedStrategySpec,
+  type NormalizedStrategySpec,
+} from '../strategy/normalized-spec';
 
 export type HomeAiProviderType = 'stub' | 'local_llm' | 'openai_api';
 export type DailySummaryType = 'latest' | 'morning' | 'evening';
@@ -314,6 +318,12 @@ export type StrategySpecNormalizationOutput = {
 export type PineGenerationContext = {
   naturalLanguageSpec: string;
   normalizedRuleJson: Record<string, unknown> | null;
+  normalizedStrategySpec?: NormalizedStrategySpec | null;
+  specAvailable?: boolean;
+  specSource?: {
+    provider?: string | null;
+    fallbackUsed?: boolean | null;
+  } | null;
   targetMarket: string;
   targetTimeframe: string;
   regenerationInput?: {
@@ -428,6 +438,19 @@ const PINE_REPAIR_SYSTEM_PROMPT = [
   'Do not include raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, URLs, citations, web search results, or profit guarantees.',
 ].join(' ');
 
+const PINE_SPEC_FIRST_PROMPT_LINES = [
+  'If normalized_strategy_spec is present, treat it as the primary implementation contract.',
+  'natural_language_rule is supporting context only. If normalized_strategy_spec and natural_language_rule appear to conflict, prefer normalized_strategy_spec.',
+  'Implement all supported parts of normalized_strategy_spec: indicators, entry.conditions, filters, exit.conditions, risk.stop_loss, risk.take_profit, and risk.time_exit.',
+  'Preserve unsupported_features as warnings or assumptions, not Pine behavior, unless explicitly supported by the current Pine generation scope.',
+  'Do not invent additional strategy logic not present in normalized_strategy_spec.',
+  'Do not omit measurable thresholds from normalized_strategy_spec.',
+  'For volume filters with multiplier, implement the multiplier.',
+  'For percent stop loss, use strategy.position_avg_price after the position is open.',
+  'For time_exit bars, implement bars-since-entry state safely.',
+  'For long_only specs, do not generate short entries.',
+];
+
 function readBoundedPositiveInteger(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -455,6 +478,11 @@ function getLocalLlmRuleRewriteTimeoutMs(): number {
 }
 
 function buildPineGenerationUserPayload(context: PineGenerationContext): Record<string, unknown> {
+  const normalizedStrategySpec =
+    context.normalizedStrategySpec && isNormalizedStrategySpec(context.normalizedStrategySpec)
+      ? context.normalizedStrategySpec
+      : null;
+  const specAvailable = Boolean(normalizedStrategySpec);
   const outputSchema = {
     generated_script: '<string>',
     warnings: ['<Japanese user-facing string>'],
@@ -467,6 +495,10 @@ function buildPineGenerationUserPayload(context: PineGenerationContext): Record<
       task: 'repair_pine_script',
       natural_language_spec: context.naturalLanguageSpec,
       normalized_rule_json: context.normalizedRuleJson,
+      normalized_strategy_spec: normalizedStrategySpec,
+      spec_available: specAvailable,
+      spec_source: context.specSource ?? null,
+      implementation_priority: specAvailable ? 'normalized_strategy_spec_first' : 'natural_language_rule',
       target_market: context.targetMarket,
       target_timeframe: context.targetTimeframe,
       repair_request: context.repairRequest,
@@ -482,6 +514,10 @@ function buildPineGenerationUserPayload(context: PineGenerationContext): Record<
   return {
     natural_language_spec: context.naturalLanguageSpec,
     normalized_rule_json: context.normalizedRuleJson,
+    normalized_strategy_spec: normalizedStrategySpec,
+    spec_available: specAvailable,
+    spec_source: context.specSource ?? null,
+    implementation_priority: specAvailable ? 'normalized_strategy_spec_first' : 'natural_language_rule',
     target_market: context.targetMarket,
     target_timeframe: context.targetTimeframe,
     regeneration_input: context.regenerationInput ?? null,
@@ -2573,6 +2609,7 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
               :
               [
                 'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script.',
+                ...PINE_SPEC_FIRST_PROMPT_LINES,
                 'Return one strict JSON object only. Do not include markdown fences around the JSON.',
                 'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
                 'Use //@version=6 and strategy(...), not indicator(...), unless strategy output is impossible.',
@@ -3429,6 +3466,7 @@ class OpenAiHomeAiProvider implements HomeAiProvider {
               ? PINE_REPAIR_SYSTEM_PROMPT
               : [
               'Convert natural language rule to Pine script. Use regeneration_input when provided to revise existing script. Return strict JSON.',
+              ...PINE_SPEC_FIRST_PROMPT_LINES,
               'Return one strict JSON object only. Do not include markdown fences around the JSON.',
               'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
               'Use //@version=6 and strategy(...), not indicator(...), unless strategy output is impossible.',
