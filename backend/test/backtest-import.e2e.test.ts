@@ -898,6 +898,31 @@ describe('backtest import vertical slice', () => {
     expect(body.data.import.parsed_summary.winRate).toBe(50);
     expect(body.data.import.parsed_summary.periodFrom).toBe('2026-03-25');
     expect(body.data.import.parsed_summary.periodTo).toBe('2026-04-10');
+    expect(body.data.import.parsed_summary.trade_summary).toMatchObject({
+      trade_count: 2,
+      first_entry_at: '2026-03-25',
+      last_exit_at: '2026-04-10',
+      gross_profit: 100,
+      gross_loss: -50,
+    });
+    expect(body.data.import.parsed_summary.trades).toHaveLength(2);
+    expect(body.data.import.parsed_summary.trades[0]).toMatchObject({
+      trade_no: 1,
+      side: 'long',
+      signal: 'Long',
+      entry_at: '2026-03-25',
+      entry_price: 1000,
+      exit_at: '2026-04-01',
+      exit_price: 1100,
+      quantity: 1,
+      profit: 100,
+      net_profit: 100,
+      profit_percent: 10,
+      return_percent: 10,
+    });
+    expect(JSON.stringify(body.data)).not.toContain(TRADES_CSV_JP);
+    expect(JSON.stringify(body.data)).not.toContain('token');
+    expect(JSON.stringify(body.data)).not.toContain('secret');
 
     await app.close();
   });
@@ -1050,6 +1075,30 @@ describe('backtest import vertical slice', () => {
     expect(body.data.import.parsed_summary.winRate).toBe(50);
     expect(body.data.import.parsed_summary.periodFrom).toBe('2026-03-25');
     expect(body.data.import.parsed_summary.periodTo).toBe('2026-04-10');
+    expect(body.data.import.parsed_summary.trade_summary).toMatchObject({
+      trade_count: 2,
+      first_entry_at: '2026-03-25',
+      last_exit_at: '2026-04-10',
+      gross_profit: 100,
+      gross_loss: -50,
+    });
+    expect(body.data.import.parsed_summary.trades).toHaveLength(2);
+    expect(body.data.import.parsed_summary.trades[0]).toMatchObject({
+      trade_no: 1,
+      side: 'long',
+      signal: 'Long',
+      entry_at: '2026-03-25',
+      entry_price: 1000,
+      exit_at: '2026-04-01',
+      exit_price: 1100,
+      quantity: 1,
+      profit: 100,
+      net_profit: 100,
+      profit_percent: null,
+      return_percent: null,
+    });
+    expect(JSON.stringify(body.data)).not.toContain(TRADES_CSV_EN);
+    expect(JSON.stringify(body.data)).not.toContain('stack trace');
 
     await app.close();
   });

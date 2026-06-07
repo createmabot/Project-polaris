@@ -216,6 +216,123 @@ describe('BacktestDetail', () => {
     expect(html).not.toContain('この検証結果をもとに改善版を作る');
   });
 
+  it('renders CSV parsed trade list when TradingView list-of-trades details are available', () => {
+    mockLocation = '/backtests/bt-csv-trades';
+    mockUseSWR.mockReset();
+    mockUseSWR.mockReturnValue({
+      isLoading: false,
+      error: null,
+      data: {
+        backtest: {
+          id: 'bt-csv-trades',
+          strategy_version_id: 'ver-1',
+          title: 'CSV trades',
+          execution_source: 'tradingview',
+          market: 'JP_STOCK',
+          timeframe: 'D',
+          status: 'imported',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        used_strategy: {
+          strategy_id: 'str-1',
+          strategy_version_id: 'ver-1',
+          snapshot: {
+            strategy_id: 'str-1',
+            strategy_version_id: 'ver-1',
+            natural_language_rule: 'CSV trade test',
+            generated_pine: null,
+            market: 'JP_STOCK',
+            timeframe: 'D',
+            warnings: [],
+            assumptions: [],
+            captured_at: new Date().toISOString(),
+          },
+        },
+        latest_import: {
+          id: 'imp-trades',
+          file_name: 'list_of_trades.csv',
+          file_size: 200,
+          content_type: 'text/csv',
+          parse_status: 'parsed',
+          parse_error: null,
+          parsed_summary: {
+            totalTrades: 2,
+            winRate: 50,
+            profitFactor: 2,
+            maxDrawdown: -50,
+            netProfit: 50,
+            periodFrom: '2026-03-25',
+            periodTo: '2026-04-10',
+            trade_summary: {
+              trade_count: 2,
+              first_entry_at: '2026-03-25',
+              last_exit_at: '2026-04-10',
+              gross_profit: 100,
+              gross_loss: -50,
+            },
+            trades: [
+              {
+                trade_no: 1,
+                side: 'long',
+                signal: 'Long',
+                entry_at: '2026-03-25',
+                entry_price: 1000,
+                exit_at: '2026-04-01',
+                exit_price: 1100,
+                quantity: 1,
+                profit: 100,
+                net_profit: 100,
+                profit_percent: 10,
+                return_percent: 10,
+              },
+              {
+                trade_no: 2,
+                side: 'long',
+                signal: 'Long',
+                entry_at: '2026-04-05',
+                entry_price: 1100,
+                exit_at: '2026-04-10',
+                exit_price: 1050,
+                quantity: 1,
+                profit: -50,
+                net_profit: -50,
+                profit_percent: -4.55,
+                return_percent: -4.55,
+              },
+            ],
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        ai_review: {
+          summary_id: null,
+          title: null,
+          body_markdown: null,
+          structured_json: null,
+          generated_at: null,
+          status: 'unavailable',
+          insufficient_context: true,
+        },
+        imports: [],
+        symbol_strategy_application: null,
+      },
+    });
+
+    const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-csv-trades' }} />);
+    expect(html).toContain('TradingView Strategy Tester の List of Trades CSV から正規化した約定単位の明細 preview です。');
+    expect(html).toContain('trade_count');
+    expect(html).toContain('2026-03-25');
+    expect(html).toContain('2026-04-10');
+    expect(html).toContain('1,000');
+    expect(html).toContain('1,100');
+    expect(html).toContain('100');
+    expect(html).toContain('-50');
+    expect(html).not.toContain('CSV import の取引明細は保存されていません。');
+    expect(html).not.toContain('raw,csv,text');
+    expect(html).not.toContain('stack trace');
+  });
+
   it('regenerates an available AI review only after explicit click', async () => {
     mockLocation = '/backtests/bt-regen';
     mockUseSWR.mockReset();
@@ -895,6 +1012,37 @@ describe('BacktestDetail', () => {
               profit_factor: 1.42,
               win_rate: 48.5,
             },
+            trade_diagnostics: {
+              source: 'csv_import',
+              has_trades: true,
+              trade_count: 2,
+              trade_summary: {
+                trade_count: 2,
+                first_entry_at: '2026-03-25',
+                last_exit_at: '2026-04-10',
+              },
+              trades: [
+                {
+                  trade_no: 1,
+                  entry_at: '2026-03-25',
+                  entry_price: 1000,
+                  exit_at: '2026-04-01',
+                  exit_price: 1100,
+                  net_profit: 100,
+                  return_percent: 10,
+                },
+                {
+                  trade_no: 2,
+                  entry_at: '2026-04-05',
+                  entry_price: 1100,
+                  exit_at: '2026-04-10',
+                  exit_price: 1050,
+                  net_profit: -50,
+                  return_percent: -4.55,
+                },
+              ],
+              trades_truncated: false,
+            },
             ai_review: {
               summary_id: 'sum-current',
               title: 'CSV import AI summary',
@@ -923,6 +1071,37 @@ describe('BacktestDetail', () => {
                 max_drawdown_percent: -4.2,
                 profit_factor: 1.8,
                 win_rate: 55,
+              },
+              trade_diagnostics: {
+                source: 'internal_backtest',
+                has_trades: true,
+                trade_count: 2,
+                trade_summary: {
+                  trade_count: 2,
+                  first_entry_at: '2026-03-26T00:00:00.000Z',
+                  last_exit_at: '2026-04-11T00:00:00.000Z',
+                },
+                trades: [
+                  {
+                    trade_no: 1,
+                    entry_at: '2026-03-26T00:00:00.000Z',
+                    entry_price: 1005,
+                    exit_at: '2026-04-02T00:00:00.000Z',
+                    exit_price: 1110,
+                    net_profit: 105,
+                    return_percent: 10.45,
+                  },
+                  {
+                    trade_no: 2,
+                    entry_at: '2026-04-06T00:00:00.000Z',
+                    entry_price: 1108,
+                    exit_at: '2026-04-11T00:00:00.000Z',
+                    exit_price: 1040,
+                    net_profit: -68,
+                    return_percent: -6.14,
+                  },
+                ],
+                trades_truncated: false,
               },
               ai_review: {
                 summary_id: 'sum-related',
@@ -977,6 +1156,18 @@ describe('BacktestDetail', () => {
     expect(html).toContain('120');
     expect(html).toContain('total_return_percent');
     expect(html).toContain('12.3');
+    expect(html).toContain('取引明細比較');
+    expect(html).toContain('trade_no / 表示順で診断比較します');
+    expect(html).toContain('CSV import');
+    expect(html).toContain('internal backtest');
+    expect(html).toContain('href="/backtests/bt-application"');
+    expect(html).toContain('href="/backtests/bt-internal"');
+    expect(html).toContain('CSV entry');
+    expect(html).toContain('internal entry');
+    expect(html).toContain('profit diff');
+    expect(html).toContain('+5');
+    expect(html).toContain('-18');
+    expect(html).toContain('trade_no順の診断比較');
     expect(html).toContain('AI summary 横並び確認');
     expect(html).toContain('保存済み AI summary を read-only に並べます');
     expect(html).toContain('current report AI summary');

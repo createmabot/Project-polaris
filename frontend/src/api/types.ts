@@ -1451,10 +1451,53 @@ export type BacktestImportData = {
       netProfit: number | null;
       periodFrom: string | null;
       periodTo: string | null;
+      trades?: BacktestParsedTrade[];
+      trade_summary?: BacktestParsedTradeSummary;
+      trade_warnings?: string[];
     } | null;
     created_at: string;
     updated_at: string;
   };
+};
+
+export type BacktestParsedTrade = {
+  trade_no: number | string;
+  side?: 'long' | 'short' | 'unknown' | string;
+  signal?: string | null;
+  entry_at?: string | null;
+  entry_time?: string | null;
+  entry_price?: number | null;
+  exit_at?: string | null;
+  exit_time?: string | null;
+  exit_price?: number | null;
+  exit_reason?: string | null;
+  quantity?: number | null;
+  profit?: number | null;
+  net_profit?: number | null;
+  pnl?: number | null;
+  profit_percent?: number | null;
+  return_percent?: number | null;
+  bars_held?: number | null;
+};
+
+export type BacktestParsedTradeSummary = {
+  trade_count?: number | null;
+  first_entry_at?: string | null;
+  last_exit_at?: string | null;
+  first_trade_at?: string | null;
+  last_trade_at?: string | null;
+  gross_profit?: number | null;
+  gross_loss?: number | null;
+  exit_reason_counts?: Array<Record<string, unknown>>;
+};
+
+export type BacktestReportTradeDiagnostics = {
+  source: 'csv_import' | 'internal_backtest' | string;
+  has_trades: boolean;
+  trade_count: number | null;
+  trade_summary: BacktestParsedTradeSummary | Record<string, unknown> | null;
+  trades: BacktestParsedTrade[];
+  trades_truncated: boolean;
 };
 
 export type BacktestAiReviewData = {
@@ -1648,6 +1691,7 @@ export type BacktestDetailData = {
       run_status: string;
       updated_at: string;
       metrics: BacktestRelatedReportMetrics;
+      trade_diagnostics?: BacktestReportTradeDiagnostics;
       ai_review?: BacktestAiReviewData;
     } | null;
     related_reports?: Array<{
@@ -1659,6 +1703,7 @@ export type BacktestDetailData = {
       run_status: string;
       updated_at: string;
       metrics?: BacktestRelatedReportMetrics;
+      trade_diagnostics?: BacktestReportTradeDiagnostics;
       ai_review?: BacktestAiReviewData;
     }>;
   } | null;
