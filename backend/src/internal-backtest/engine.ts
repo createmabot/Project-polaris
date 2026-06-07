@@ -10,10 +10,12 @@ import type {
 } from './types';
 
 const DEFAULT_INITIAL_CAPITAL = 1_000_000;
+const MAX_PERSISTED_TRADES = 500;
 
 type Position = {
   entryIndex: number;
   entryTime: Date;
+  entrySignalTime: Date | null;
   entryPrice: number;
   quantity: number;
   atrStopDistance: number | null;
@@ -124,19 +126,46 @@ function drawdownPercent(equity: number, peak: number): number {
   return Math.max(0, ((peak - equity) / peak) * 100);
 }
 
-function closeTrade(position: Position, bar: InternalBacktestBar, exitIndex: number, exitPrice: number, exitReason: InternalBacktestTrade['exit_reason']): InternalBacktestTrade {
+function closeTrade(
+  tradeNo: number,
+  position: Position,
+  bar: InternalBacktestBar,
+  exitIndex: number,
+  exitPrice: number,
+  exitReason: InternalBacktestTrade['exit_reason'],
+  exitSignalTime: Date | null,
+): InternalBacktestTrade {
   const pnl = (exitPrice - position.entryPrice) * position.quantity;
+  const roundedPnl = round(pnl);
+  const entryAt = iso(position.entryTime);
+  const exitAt = iso(bar.time);
   return {
+    trade_no: tradeNo,
+    entry_at: entryAt,
+    entry_bar_time: position.entrySignalTime ? iso(position.entrySignalTime) : null,
     entry_time: iso(position.entryTime),
     entry_price: round(position.entryPrice),
-    exit_time: iso(bar.time),
+    entry_reason: 'entry_signal',
+    exit_at: exitAt,
+    exit_bar_time: exitSignalTime ? iso(exitSignalTime) : null,
+    exit_time: exitAt,
     exit_price: round(exitPrice),
     quantity: round(position.quantity),
-    pnl: round(pnl),
+    gross_profit: roundedPnl,
+    net_profit: roundedPnl,
+    pnl: roundedPnl,
     return_percent: round(((exitPrice - position.entryPrice) / position.entryPrice) * 100),
     bars_held: exitIndex - position.entryIndex + 1,
     exit_reason: exitReason,
   };
+}
+
+function buildExitReasonCounts(trades: InternalBacktestTrade[]) {
+  const counts = new Map<InternalBacktestTrade['exit_reason'], number>();
+  for (const trade of trades) {
+    counts.set(trade.exit_reason, (counts.get(trade.exit_reason) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).map(([exit_reason, count]) => ({ exit_reason, count }));
 }
 
 function summarize(
@@ -161,6 +190,7 @@ function summarize(
   const priceChangePercent = firstClose && lastClose ? ((lastClose - firstClose) / firstClose) * 100 : null;
   const firstTrade = trades[0] ?? null;
   const lastTrade = trades[trades.length - 1] ?? null;
+  const persistedTrades = trades.slice(0, MAX_PERSISTED_TRADES);
 
   return {
     summary_kind: 'internal_backtest_v1',
@@ -170,10 +200,10 @@ function summarize(
       bar_count: bars.length,
     },
     trade_period: {
-      first_entry_at: firstTrade?.entry_time ?? null,
-      last_exit_at: lastTrade?.exit_time ?? null,
-      first_trade_at: firstTrade?.entry_time ?? null,
-      last_trade_at: lastTrade?.exit_time ?? null,
+      first_entry_at: firstTrade?.entry_at ?? null,
+      last_exit_at: lastTrade?.exit_at ?? null,
+      first_trade_at: firstTrade?.entry_at ?? null,
+      last_trade_at: lastTrade?.exit_at ?? null,
     },
     metrics: {
       initial_capital: round(initialCapital),
@@ -191,7 +221,14 @@ function summarize(
       max_drawdown: round(maxDrawdown),
       max_drawdown_percent: round(maxDrawdownPercent),
     },
-    trades,
+    trade_summary: {
+      trade_count: trades.length,
+      first_entry_at: firstTrade?.entry_at ?? null,
+      last_exit_at: lastTrade?.exit_at ?? null,
+      exit_reason_counts: buildExitReasonCounts(trades),
+    },
+    trades: persistedTrades,
+    trades_truncated: trades.length > persistedTrades.length,
     equity_curve: equityCurve,
     assumptions: Array.from(new Set([
       `initial_capital is ${round(initialCapital)}.`,
@@ -221,8 +258,8 @@ export function executeInternalBacktest(input: {
   const equityCurve: InternalBacktestEquityPoint[] = [];
   let cash = initialCapital;
   let position: Position | null = null;
-  let pendingEntry = false;
-  let pendingExit = false;
+  let pendingEntrySignalIndex: number | null = null;
+  let pendingExit: { signalIndex: number; reason: 'exit_signal' | 'time_exit' } | null = null;
   let peakEquity = initialCapital;
 
   for (let index = 0; index < bars.length; index += 1) {
@@ -230,15 +267,16 @@ export function executeInternalBacktest(input: {
     let exitedThisBar = false;
 
     if (pendingExit && position) {
-      const trade = closeTrade(position, bar, index, bar.open, 'exit_signal');
+      const exitSignalTime = bars[pendingExit.signalIndex]?.time ?? null;
+      const trade = closeTrade(trades.length + 1, position, bar, index, bar.open, pendingExit.reason, exitSignalTime);
       trades.push(trade);
       cash = position.quantity * bar.open;
       position = null;
       exitedThisBar = true;
     }
-    pendingExit = false;
+    pendingExit = null;
 
-    if (pendingEntry && !position) {
+    if (pendingEntrySignalIndex !== null && !position) {
       const quantity = cash / bar.open;
       const atrStopValue = spec.stopLossAtrIndicator
         ? readNumericSeriesValue(series, spec.stopLossAtrIndicator, index)
@@ -246,6 +284,7 @@ export function executeInternalBacktest(input: {
       position = {
         entryIndex: index,
         entryTime: bar.time,
+        entrySignalTime: bars[pendingEntrySignalIndex]?.time ?? null,
         entryPrice: bar.open,
         quantity,
         atrStopDistance: atrStopValue !== null && spec.stopLossAtrMultiplier !== null
@@ -254,7 +293,7 @@ export function executeInternalBacktest(input: {
       };
       cash = 0;
     }
-    pendingEntry = false;
+    pendingEntrySignalIndex = null;
 
     if (position) {
       const stopPrice = position.atrStopDistance !== null
@@ -264,13 +303,13 @@ export function executeInternalBacktest(input: {
           : position.entryPrice * (1 - spec.stopLossPercent / 100);
       const takeProfitPrice = spec.takeProfitPercent === null ? null : position.entryPrice * (1 + spec.takeProfitPercent / 100);
       if (stopPrice !== null && bar.low <= stopPrice) {
-        const trade = closeTrade(position, bar, index, stopPrice, 'stop_loss');
+        const trade = closeTrade(trades.length + 1, position, bar, index, stopPrice, 'stop_loss', bar.time);
         trades.push(trade);
         cash = position.quantity * stopPrice;
         position = null;
         exitedThisBar = true;
       } else if (takeProfitPrice !== null && bar.high >= takeProfitPrice) {
-        const trade = closeTrade(position, bar, index, takeProfitPrice, 'take_profit');
+        const trade = closeTrade(trades.length + 1, position, bar, index, takeProfitPrice, 'take_profit', bar.time);
         trades.push(trade);
         cash = position.quantity * takeProfitPrice;
         position = null;
@@ -282,10 +321,10 @@ export function executeInternalBacktest(input: {
       const timeExit = spec.timeExitBars !== null && index - position.entryIndex + 1 >= spec.timeExitBars;
       const signalExit = evaluateAny(spec.exitConditions, bars, series, index);
       if ((timeExit || signalExit) && index < bars.length - 1) {
-        pendingExit = true;
+        pendingExit = { signalIndex: index, reason: timeExit ? 'time_exit' : 'exit_signal' };
       }
     } else if (!exitedThisBar && index < bars.length - 1 && evaluateAll([...spec.filterConditions, ...spec.entryConditions], bars, series, index)) {
-      pendingEntry = true;
+      pendingEntrySignalIndex = index;
     }
 
     const equity = position ? position.quantity * bar.close : cash;
@@ -301,7 +340,7 @@ export function executeInternalBacktest(input: {
   if (position) {
     const finalIndex = bars.length - 1;
     const finalBar = bars[finalIndex];
-    const trade = closeTrade(position, finalBar, finalIndex, finalBar.close, 'final_close');
+    const trade = closeTrade(trades.length + 1, position, finalBar, finalIndex, finalBar.close, 'final_close', finalBar.time);
     trades.push(trade);
     cash = position.quantity * finalBar.close;
     position = null;

@@ -179,6 +179,25 @@ function recordText(record: Record<string, unknown> | null, key: string): string
   return '-';
 }
 
+function recordArray(record: Record<string, unknown> | null, key: string): Record<string, unknown>[] {
+  if (!record) return [];
+  const value = record[key];
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => asRecord(item))
+    .filter((item): item is Record<string, unknown> => item !== null);
+}
+
+function recordNumberText(record: Record<string, unknown>, key: string, digits = 2): string {
+  const value = record[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return formatNumber(value, digits);
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? formatNumber(parsed, digits) : value.trim();
+  }
+  return '-';
+}
+
 function displayUnknown(value: unknown): string {
   if (value === null || value === undefined || value === '') return '-';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -1015,6 +1034,100 @@ function InternalBacktestReportSection({ snapshot }: { snapshot: BacktestStrateg
   );
 }
 
+function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStrategySnapshot | null }) {
+  const resultSummary = asRecord(snapshot?.result_summary ?? null);
+  const trades = recordArray(resultSummary, 'trades');
+  const tradesTruncated = resultSummary?.trades_truncated === true;
+  const tradeSummary = asRecord(resultSummary?.trade_summary ?? null);
+  const exitReasonCounts = recordArray(tradeSummary, 'exit_reason_counts');
+  const visibleTrades = trades.slice(0, 50);
+
+  return (
+    <SectionCard
+      title="取引一覧"
+      description="internal backtest engine が保存した約定単位の明細 preview です。raw CSV / raw import text は表示しません。"
+      className="mt-4"
+    >
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(190px,1fr))]">
+        {metricCard('trade_count', recordText(tradeSummary, 'trade_count') !== '-' ? recordText(tradeSummary, 'trade_count') : String(trades.length))}
+        {metricCard('first_entry_at', tradePeriodText(recordText(tradeSummary, 'first_entry_at')))}
+        {metricCard('last_exit_at', tradePeriodText(recordText(tradeSummary, 'last_exit_at')))}
+      </div>
+      {exitReasonCounts.length > 0 ? (
+        <div className="mt-3 flex flex-wrap gap-2 text-sm">
+          {exitReasonCounts.map((row) => (
+            <span
+              key={`${recordText(row, 'exit_reason')}-${recordText(row, 'count')}`}
+              className="rounded-full bg-slate-100 px-3 py-1 text-slate-700"
+            >
+              {recordText(row, 'exit_reason')}: {recordText(row, 'count')}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {visibleTrades.length === 0 ? (
+        <EmptyState title="取引はありません。" />
+      ) : (
+        <>
+          {(tradesTruncated || trades.length > visibleTrades.length) ? (
+            <InlineNotice tone="info" className="mt-3">
+              取引明細は先頭50件のみ表示しています。完全な trade-level diff と export は後続判断です。
+            </InlineNotice>
+          ) : null}
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left">
+                  <th className="p-2">#</th>
+                  <th className="p-2">entry at</th>
+                  <th className="p-2">entry price</th>
+                  <th className="p-2">exit at</th>
+                  <th className="p-2">exit price</th>
+                  <th className="p-2">exit reason</th>
+                  <th className="p-2">quantity</th>
+                  <th className="p-2">profit</th>
+                  <th className="p-2">return %</th>
+                  <th className="p-2">bars held</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTrades.map((trade, index) => (
+                  <tr key={`${recordText(trade, 'trade_no')}-${recordText(trade, 'entry_at')}-${index}`} className="border-b border-slate-100">
+                    <td className="p-2">{recordText(trade, 'trade_no') !== '-' ? recordText(trade, 'trade_no') : index + 1}</td>
+                    <td className="p-2">{recordText(trade, 'entry_at') !== '-' ? recordText(trade, 'entry_at') : recordText(trade, 'entry_time')}</td>
+                    <td className="p-2">{recordNumberText(trade, 'entry_price')}</td>
+                    <td className="p-2">{recordText(trade, 'exit_at') !== '-' ? recordText(trade, 'exit_at') : recordText(trade, 'exit_time')}</td>
+                    <td className="p-2">{recordNumberText(trade, 'exit_price')}</td>
+                    <td className="p-2"><code>{recordText(trade, 'exit_reason')}</code></td>
+                    <td className="p-2">{recordNumberText(trade, 'quantity')}</td>
+                    <td className="p-2">{recordText(trade, 'net_profit') !== '-' ? recordNumberText(trade, 'net_profit') : recordNumberText(trade, 'pnl')}</td>
+                    <td className="p-2">{recordNumberText(trade, 'return_percent')}</td>
+                    <td className="p-2">{recordNumberText(trade, 'bars_held', 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </SectionCard>
+  );
+}
+
+function CsvTradeListUnavailableSection() {
+  return (
+    <SectionCard
+      title="取引一覧"
+      description="CSV import report の取引明細保存状況"
+      className="mt-4"
+    >
+      <InlineNotice tone="info">
+        CSV import の取引明細は保存されていません。TradingView との差分診断には、今後の CSV 取引明細 parser 対応が必要です。
+      </InlineNotice>
+    </SectionCard>
+  );
+}
+
 export default function BacktestDetail({ params }: BacktestDetailProps) {
   const { backtestId } = params;
   const [location, setLocation] = useLocation();
@@ -1352,6 +1465,12 @@ export default function BacktestDetail({ params }: BacktestDetailProps) {
           </div>
         )}
       </section>
+
+      {isInternalBacktestReport ? (
+        <InternalBacktestTradeListSection snapshot={snapshot} />
+      ) : (
+        <CsvTradeListUnavailableSection />
+      )}
 
       <SectionCard
         title="バックテスト比較 inline"

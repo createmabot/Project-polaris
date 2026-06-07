@@ -192,6 +192,8 @@ describe('BacktestDetail', () => {
     expect(html).toContain('取引発生期間（終了）');
     expect(html).toContain('2025-12-31');
     expect(html).not.toContain('検証データ期間（開始）');
+    expect(html).toContain('CSV import の取引明細は保存されていません。');
+    expect(html).toContain('TradingView との差分診断には、今後の CSV 取引明細 parser 対応が必要です。');
     expect(html).toContain('解析成功');
     expect(html).toContain('href="/backtests?q=ma&amp;page=2"');
     expect(html).toContain('AI 総評');
@@ -1153,6 +1155,15 @@ describe('BacktestDetail', () => {
                 first_trade_at: '2025-02-03T00:00:00.000Z',
                 last_trade_at: '2025-11-28T00:00:00.000Z',
               },
+              trade_summary: {
+                trade_count: 2,
+                first_entry_at: '2025-02-03T00:00:00.000Z',
+                last_exit_at: '2025-11-28T00:00:00.000Z',
+                exit_reason_counts: [
+                  { exit_reason: 'exit_signal', count: 1 },
+                  { exit_reason: 'stop_loss', count: 1 },
+                ],
+              },
               metrics: {
                 total_trades: 12,
                 trade_count: 12,
@@ -1168,6 +1179,47 @@ describe('BacktestDetail', () => {
                 price_change_percent: 12.34,
                 range_percent: 26.32,
               },
+              trades: [
+                {
+                  trade_no: 1,
+                  entry_at: '2025-02-03T00:00:00.000Z',
+                  entry_bar_time: '2025-01-31T00:00:00.000Z',
+                  entry_time: '2025-02-03T00:00:00.000Z',
+                  entry_price: 1200,
+                  entry_reason: 'entry_signal',
+                  exit_at: '2025-03-04T00:00:00.000Z',
+                  exit_bar_time: '2025-03-03T00:00:00.000Z',
+                  exit_time: '2025-03-04T00:00:00.000Z',
+                  exit_price: 1320,
+                  exit_reason: 'exit_signal',
+                  quantity: 100,
+                  gross_profit: 12000,
+                  net_profit: 12000,
+                  pnl: 12000,
+                  return_percent: 10,
+                  bars_held: 21,
+                },
+                {
+                  trade_no: 2,
+                  entry_at: '2025-10-01T00:00:00.000Z',
+                  entry_bar_time: '2025-09-30T00:00:00.000Z',
+                  entry_time: '2025-10-01T00:00:00.000Z',
+                  entry_price: 1400,
+                  entry_reason: 'entry_signal',
+                  exit_at: '2025-11-28T00:00:00.000Z',
+                  exit_bar_time: '2025-11-28T00:00:00.000Z',
+                  exit_time: '2025-11-28T00:00:00.000Z',
+                  exit_price: 1330,
+                  exit_reason: 'stop_loss',
+                  quantity: 100,
+                  gross_profit: -7000,
+                  net_profit: -7000,
+                  pnl: -7000,
+                  return_percent: -5,
+                  bars_held: 42,
+                },
+              ],
+              trades_truncated: false,
             },
             artifact_pointer: {
               kind: 'internal_backtest_result',
@@ -1253,6 +1305,19 @@ describe('BacktestDetail', () => {
     expect(html).toContain('2025-02-03T00:00:00.000Z');
     expect(html).toContain('取引発生期間（終了）');
     expect(html).toContain('2025-11-28T00:00:00.000Z');
+    expect(html).toContain('取引一覧');
+    expect(html).toContain('internal backtest engine が保存した約定単位の明細 preview です。');
+    expect(html).toContain('entry at');
+    expect(html).toContain('exit at');
+    expect(html).toContain('exit reason');
+    expect(html).toContain('2025-02-03T00:00:00.000Z');
+    expect(html).toContain('2025-03-04T00:00:00.000Z');
+    expect(html).toContain('exit_signal');
+    expect(html).toContain('stop_loss');
+    expect(html).toContain('12,000');
+    expect(html).toContain('-7,000');
+    expect(html).toContain('10');
+    expect(html).toContain('42');
     expect(html).toContain('data period from');
     expect(html).toContain('trade period from');
     expect(html).toContain('artifact_pointer');
@@ -1335,5 +1400,7 @@ describe('BacktestDetail', () => {
     const html = renderToStaticMarkup(<BacktestDetail params={{ backtestId: 'bt-internal-no-artifact' }} />);
     expect(html).toContain('internal backtest report');
     expect(html).toContain('artifact metadata は未生成、または strategy snapshot に保存されていません。');
+    expect(html).toContain('取引一覧');
+    expect(html).toContain('取引はありません。');
   });
 });
