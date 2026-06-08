@@ -540,6 +540,41 @@ export class HomeAiService {
         );
       const canRepair = (assessed.retryable || providerOutputCanRepair) && attempt < maxRepairAttempts;
       if (!canRepair) {
+        if (this.isPineProviderFormatFailure(combinedInvalidReasonCodes, failureReason)) {
+          const fallbackOutput = await this.stubProvider.generatePineScript(context);
+          const fallbackAssessed = validateOutput(fallbackOutput.generatedScript);
+          if (!fallbackAssessed.failureReason && fallbackAssessed.normalizedScript) {
+            return {
+              output: {
+                ...fallbackOutput,
+                generatedScript: fallbackAssessed.normalizedScript,
+                warnings: Array.from(
+                  new Set([
+                    ...mergedOutputWarnings,
+                    ...assessed.warnings,
+                    ...fallbackOutput.warnings,
+                    ...fallbackAssessed.warnings,
+                    'LLM provider の応答形式が不安定だったため、deterministic Pine fallback を使用しました。',
+                  ]),
+                ),
+                status: 'generated',
+                repairAttempts: attempt,
+                failureReason: null,
+                invalidReasonCodes: fallbackAssessed.invalidReasonCodes,
+              },
+              log: {
+                ...run.log,
+                finalModel: fallbackOutput.modelName,
+                escalated: false,
+                escalationReason: 'provider_invalid_response_fallback_to_stub',
+                fallbackToStub: true,
+                retryCount: attempt,
+                durationMs: Date.now() - startedAt,
+              },
+            };
+          }
+        }
+
         return {
           output: {
             ...run.output,
@@ -593,6 +628,19 @@ export class HomeAiService {
         durationMs: Date.now() - startedAt,
       },
     };
+  }
+
+  private isPineProviderFormatFailure(invalidReasonCodes: string[], failureReason: string | null): boolean {
+    if (failureReason !== 'provider_invalid_response') {
+      return false;
+    }
+    const providerFormatCodes = new Set([
+      'provider_invalid_response',
+      'malformed_json',
+      'generated_script_missing',
+      'empty_output',
+    ]);
+    return invalidReasonCodes.some((code) => providerFormatCodes.has(code));
   }
 
   private resolveAttemptedModel(): string {

@@ -1043,6 +1043,111 @@ describe('strategy version pine endpoints', () => {
     await app.close();
   });
 
+  it('preserves normalized_strategy_spec when spec-first Pine generation fails', async () => {
+    const spec = createNormalizedStrategySpec();
+    runtime.versions.set('ver-1', {
+      ...runtime.versions.get('ver-1')!,
+      normalizedRuleJson: spec,
+    });
+    generatePineScriptMock.mockImplementation(async (context: any) => ({
+      output: {
+        normalizedRuleJson: {},
+        generatedScript: null,
+        warnings: ['reviewer failed'],
+        assumptions: [],
+        status: 'failed',
+        failureReason: 'reviewer_stop_order_guard_risk',
+        invalidReasonCodes: ['reviewer_stop_order_guard_risk'],
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    }));
+
+    const app = await createApp();
+
+    const generated = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generate',
+      payload: {},
+    });
+    expect(generated.statusCode).toBe(200);
+    expect(generated.json().data.strategy_version.status).toBe('failed');
+
+    const storedVersion = runtime.versions.get('ver-1')!;
+    expect(storedVersion.normalizedRuleJson).toEqual(spec);
+    const fetchedSpec = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-versions/ver-1/normalized-spec',
+    });
+    expect(fetchedSpec.statusCode).toBe(200);
+    expect(fetchedSpec.json().data.status).toBe('available');
+    expect(fetchedSpec.json().data.normalized_spec).toMatchObject({
+      schema_name: 'normalized_strategy_spec',
+      schema_version: '1.0',
+    });
+
+    await app.close();
+  });
+
+  it('preserves normalized_strategy_spec when async spec-first Pine generation job fails', async () => {
+    const spec = createNormalizedStrategySpec();
+    runtime.versions.set('ver-1', {
+      ...runtime.versions.get('ver-1')!,
+      normalizedRuleJson: spec,
+    });
+    generatePineScriptMock.mockImplementation(async (context: any) => ({
+      output: {
+        normalizedRuleJson: {},
+        generatedScript: null,
+        warnings: ['reviewer failed'],
+        assumptions: [],
+        status: 'failed',
+        failureReason: 'reviewer_stop_order_guard_risk',
+        invalidReasonCodes: ['reviewer_stop_order_guard_risk'],
+        modelName: 'local-model',
+        promptVersion: 'v1',
+      },
+      log: {
+        provider: 'local_llm',
+        fallbackToStub: false,
+      },
+    }));
+
+    const app = await createApp();
+
+    const queued = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/pine/generation-jobs',
+      payload: {},
+    });
+    expect(queued.statusCode).toBe(202);
+    const jobId = queued.json().data.job.id;
+
+    await flushAsyncJob();
+
+    const job = await app.inject({
+      method: 'GET',
+      url: `/api/strategy-versions/ver-1/pine/generation-jobs/${jobId}`,
+    });
+    expect(job.statusCode).toBe(200);
+    expect(job.json().data.job.status).toBe('failed');
+
+    const storedVersion = runtime.versions.get('ver-1')!;
+    expect(storedVersion.normalizedRuleJson).toEqual(spec);
+    const fetchedSpec = await app.inject({
+      method: 'GET',
+      url: '/api/strategy-versions/ver-1/normalized-spec',
+    });
+    expect(fetchedSpec.statusCode).toBe(200);
+    expect(fetchedSpec.json().data.status).toBe('available');
+
+    await app.close();
+  });
+
   it('keeps legacy Pine generation available and records a warning when normalized_strategy_spec is missing', async () => {
     generatePineScriptMock.mockImplementation(async (context: any) => ({
       output: {
