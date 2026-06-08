@@ -614,6 +614,47 @@ describe('HomeAiService', () => {
     );
   });
 
+  it('falls back to deterministic Pine when provider response format remains invalid after retries', async () => {
+    const provider = createProvider('ok');
+    const stubProvider = createStubProvider();
+    const pineMock = provider.generatePineScript as ReturnType<typeof vi.fn>;
+    const stubPineMock = stubProvider.generatePineScript as ReturnType<typeof vi.fn>;
+    pineMock.mockReset();
+    pineMock.mockResolvedValue({
+      normalizedRuleJson: {},
+      generatedScript: null,
+      warnings: ['LLM Pine生成のJSONを解析できませんでした。修復リトライを試みます。'],
+      assumptions: [],
+      status: 'failed',
+      failureReason: 'provider_invalid_response',
+      invalidReasonCodes: ['provider_invalid_response', 'malformed_json', 'empty_output'],
+      modelName: 'local-model',
+      promptVersion: 'v1',
+    });
+
+    const service = new HomeAiService(provider, stubProvider);
+    const result = await service.generatePineScript(
+      {
+        naturalLanguageSpec: 'SMA25を上回り、RSI14が50以上なら買い。終値がSMA25を下回れば決済。',
+        normalizedRuleJson: null,
+        targetMarket: 'JP_STOCK',
+        targetTimeframe: 'D',
+      },
+      { maxRepairAttempts: 1, validateOutput: assessGeneratedPineScript },
+    );
+
+    expect(result.output.status).toBe('generated');
+    expect(result.output.generatedScript).toContain('//@version=6');
+    expect(result.output.generatedScript).toContain('strategy("stub"');
+    expect(result.output.warnings).toContain(
+      'LLM provider の応答形式が不安定だったため、deterministic Pine fallback を使用しました。',
+    );
+    expect(result.log.fallbackToStub).toBe(true);
+    expect(result.log.escalationReason).toBe('provider_invalid_response_fallback_to_stub');
+    expect(pineMock).toHaveBeenCalledTimes(2);
+    expect(stubPineMock).toHaveBeenCalledTimes(1);
+  });
+
   it('repairs reviewer error Pine output within the existing retry budget', async () => {
     const provider = createProvider('ok');
     const stubProvider = createStubProvider();

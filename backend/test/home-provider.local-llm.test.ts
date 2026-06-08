@@ -456,12 +456,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
         done_reason: 'stop',
         message: {
           role: 'assistant',
-          content: JSON.stringify({
-            generated_script: '//@version=6\nstrategy("X", overlay=true)',
-            warnings: [],
-            assumptions: [],
-            normalized_rule_json: { entry: ['close > sma(25)'], exit: ['close < sma(25)'] },
-          }),
+          content: '//@version=6\nstrategy("X", overlay=true)\nplot(close)',
         },
       }),
       text: async () => '',
@@ -479,13 +474,14 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.stream).toBe(false);
     expect(body.think).toBe(false);
     expect(body.options.num_predict).toBe(1800);
-    expect(body.messages[0].content).toContain('Return user-facing warnings and assumptions in Japanese');
+    expect(body.messages[0].content).toContain('Return Pine Script text only');
+    expect(body.messages[0].content).toContain('Do not return JSON');
     expect(body.messages[0].content).toContain('If normalized_strategy_spec is present');
     expect(body.messages[0].content).toContain('prefer normalized_strategy_spec');
     expect(body.messages[0].content).toContain('Do not omit measurable thresholds from normalized_strategy_spec');
-    expect(body.messages[0].content).toContain('Return one strict JSON object only');
-    expect(body.messages[0].content).toContain('generated_script value must contain Pine Script only');
-    expect(body.messages[0].content).toContain('Use //@version=6 and strategy(...)');
+    expect(body.messages[0].content).not.toContain('Return one strict JSON object only');
+    expect(body.messages[0].content).not.toContain('generated_script value must contain Pine Script only');
+    expect(body.messages[0].content).toContain('Start the response with //@version=6');
     expect(body.messages[0].content).toContain('Use long-only behavior by default');
     expect(body.messages[0].content).toContain('do not generate strategy.short entries');
     expect(body.messages[0].content).toContain('strategy.position_size == 0');
@@ -521,25 +517,23 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     expect(body.messages[0].content).toContain('entryCondition = setupActive and triggerCondition');
     expect(body.messages[0].content).toContain('below, or less than');
     expect(body.messages[0].content).toContain('Use ta.crossunder only when the wording explicitly says');
-    expect(body.messages[0].content).toContain('capture it on the position-open transition');
+    expect(body.messages[0].content).toContain('capture ATR after the position becomes open');
     expect(body.messages[0].content).toContain('Avoid representative ATR patterns that capture state with if strategy.position_size > 0 and na(entryAtr)');
     expect(body.messages[0].content).toContain('Do not declare unused variables');
-    expect(body.messages[0].content).toContain('generated_script comments should be short section comments only');
     expect(body.messages[0].content).toContain('If plotting a stop line, guard it with position and na checks');
     expect(body.messages[0].content).toContain('prefer strategy.exit(..., stop=...)');
     expect(body.messages[0].content).toContain('Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...)');
     expect(body.messages[0].content).toContain('Use strategy.close() for rule-based exits');
     expect(body.messages[0].content).toContain('not for ordinary stop loss or take profit orders');
     expect(body.messages[0].content).toContain('Avoid plotting volume or average volume');
-    expect(body.messages[0].content).toContain('Do not include narrative comments');
-    expect(body.messages[0].content).toContain('Do not include URLs, citations, web search results, or profit guarantees');
-    expect(body.messages[0].content).toContain('Keep generated_script as valid Pine Script');
-    expect(body.messages[0].content).toContain('do not translate Pine code');
-    expect(body.messages[1].content).toContain('<Japanese user-facing string>');
+    expect(body.messages[0].content).toContain('Do not include explanations, narrative notes, URLs, citations');
+    expect(body.messages[1].content).not.toContain('<Japanese user-facing string>');
     const userPayload = JSON.parse(body.messages[1].content);
     expect(userPayload.spec_available).toBe(false);
     expect(userPayload.normalized_strategy_spec).toBeNull();
     expect(userPayload.implementation_priority).toBe('natural_language_rule');
+    expect(userPayload.output_schema).toBeUndefined();
+    expect(userPayload.output_contract).toBe('pine_script_text_only');
     expect(result.generatedScript).toContain('strategy("X"');
   });
 
@@ -640,12 +634,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
         done_reason: 'stop',
         message: {
           role: 'assistant',
-          content: JSON.stringify({
-            generated_script: '//@version=6\nstrategy("Repaired", overlay=true)\nplot(close)',
-            warnings: ['指定された reviewer 指摘のみを修正しました。'],
-            assumptions: [],
-            normalized_rule_json: { strategy_type: 'long_only' },
-          }),
+          content: '//@version=6\nstrategy("Repaired", overlay=true)\nplot(close)',
         },
       }),
       text: async () => '',
@@ -676,10 +665,14 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
     const systemPrompt = body.messages[0].content;
     const userPayload = JSON.parse(body.messages[1].content);
     expect(systemPrompt).toContain('Repair an existing Pine v6 strategy script');
+    expect(systemPrompt).toContain('Return Pine Script text only');
+    expect(systemPrompt).toContain('Do not return JSON');
     expect(systemPrompt).toContain('Prioritize repair_template over repair_hint');
     expect(systemPrompt).toContain('Preserve unrelated strategy logic');
     expect(systemPrompt).not.toContain('Do not reuse an ATR stop template for a percentage stop');
     expect(userPayload.task).toBe('repair_pine_script');
+    expect(userPayload.output_schema).toBeUndefined();
+    expect(userPayload.output_contract).toBe('pine_script_text_only');
     expect(userPayload.regeneration_input).toBeUndefined();
     expect(userPayload.repair_request.reviewIssues).toEqual([
       {
@@ -703,12 +696,7 @@ describe('LocalLlmHomeAiProvider summary calls', () => {
         done_reason: 'stop',
         message: {
           role: 'assistant',
-          content: JSON.stringify({
-            generated_script: '//@version=6\nstrategy("Repaired Again", overlay=true)\nplot(close)',
-            warnings: [],
-            assumptions: [],
-            normalized_rule_json: { strategy_type: 'long_only' },
-          }),
+          content: '//@version=6\nstrategy("Repaired Again", overlay=true)\nplot(close)',
         },
       }),
       text: async () => '',
@@ -1124,6 +1112,37 @@ plot(strategy.position_size > 0 and not na(entryAtr) ? strategy.position_avg_pri
     expect(result.warnings.join(' ')).toContain('JSONを解析できませんでした');
   });
 
+  it('uses Pine script text as the normal local LLM generation output', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        model: 'gemma4-ns',
+        done_reason: 'stop',
+        message: {
+          role: 'assistant',
+          content: [
+            '以下がPineです。',
+            '```pine',
+            '//@version=6',
+            'strategy("Raw Pine", overlay=true)',
+            'plot(close)',
+            '```',
+          ].join('\n'),
+        },
+      }),
+      text: async () => '',
+    });
+
+    const provider = await loadLocalProvider(fetchMock);
+    const result = await provider.generatePineScript(createPineContext());
+
+    expect(result.status).toBe('generated');
+    expect(result.generatedScript).toContain('//@version=6');
+    expect(result.generatedScript).toContain('strategy("Raw Pine"');
+    expect(result.generatedScript).not.toContain('以下がPineです');
+    expect(result.warnings.join(' ')).not.toContain('JSON envelope');
+  });
+
   it('does not silently fall back to deterministic Pine when generated_script is missing', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -1152,7 +1171,7 @@ plot(strategy.position_size > 0 and not na(entryAtr) ? strategy.position_avg_pri
     expect(result.warnings.join(' ')).toContain('generated_script');
   });
 
-  it('fails pine generation when content is empty and finish reason is length', async () => {
+  it('returns retryable pine failure when content is empty and finish reason is length', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -1170,10 +1189,12 @@ plot(strategy.position_size > 0 and not na(entryAtr) ? strategy.position_avg_pri
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const provider = await loadLocalProvider(fetchMock);
 
-    await expect(provider.generatePineScript(createPineContext())).rejects.toThrow(
-      /task_type=pine_generation|finish_reason=length|empty content with finish_reason=length/,
-    );
+    const result = await provider.generatePineScript(createPineContext());
 
+    expect(result.status).toBe('failed');
+    expect(result.generatedScript).toBeNull();
+    expect(result.failureReason).toBe('provider_invalid_response');
+    expect(result.invalidReasonCodes).toContain('empty_output');
     expect(errorSpy).toHaveBeenCalled();
     expect(String(errorSpy.mock.calls[0][0])).toContain('"task_type":"pine_generation"');
   });

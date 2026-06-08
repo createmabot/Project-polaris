@@ -938,6 +938,12 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     const failureReason = output.failureReason ?? validation.failureReason;
     const repairAttempts = output.repairAttempts ?? 0;
     const invalidReasonCodes = output.invalidReasonCodes ?? validation.invalidReasonCodes ?? [];
+    const outputNormalizedRuleJson = normalizeRuleJson(output.normalizedRuleJson);
+    const nextNormalizedRuleJson = specUsage.normalizedSpec
+      ? params.version.normalizedRuleJson
+      : finalStatus === 'generated' && outputNormalizedRuleJson
+        ? outputNormalizedRuleJson
+        : params.version.normalizedRuleJson;
 
     const generationNote = {
       schema_name: 'pine_generation_notes',
@@ -994,7 +1000,7 @@ export const strategyVersionRoutes: FastifyPluginAsync = async (fastify) => {
     const updated = await prisma.strategyRuleVersion.update({
       where: { id: params.version.id },
       data: {
-        normalizedRuleJson: output.normalizedRuleJson as Prisma.InputJsonValue,
+        normalizedRuleJson: (nextNormalizedRuleJson ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         generatedPine: finalScript,
         warningsJson: warnings as Prisma.InputJsonValue,
         assumptionsJson: output.assumptions as Prisma.InputJsonValue,

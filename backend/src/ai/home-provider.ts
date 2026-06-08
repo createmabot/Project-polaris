@@ -438,6 +438,18 @@ const PINE_REPAIR_SYSTEM_PROMPT = [
   'Do not include raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, URLs, citations, web search results, or profit guarantees.',
 ].join(' ');
 
+const LOCAL_LLM_PINE_REPAIR_SYSTEM_PROMPT = [
+  'Repair an existing Pine v6 strategy script using only the listed repair_request.reviewIssues.',
+  'Return Pine Script text only. Do not return JSON. Do not include markdown fences.',
+  'Start the response with //@version=6.',
+  'Fix only the listed issue codes. Prioritize repair_template over repair_hint when repair_template is present.',
+  'Preserve unrelated strategy logic, indicators, entry/exit intent, risk settings, target market, and target timeframe.',
+  'If the same issue persists after a prior repair attempt, apply the listed repair_template exactly unless doing so would break Pine syntax.',
+  'Use strategy(...), not indicator(...), for strategy output.',
+  'Keep Pine code, identifiers, function names, and required Pine syntax untranslated.',
+  'Do not include explanations, notes, URLs, citations, raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, or profit guarantees.',
+].join(' ');
+
 const PINE_SPEC_FIRST_PROMPT_LINES = [
   'If normalized_strategy_spec is present, treat it as the primary implementation contract.',
   'natural_language_rule is supporting context only. If normalized_strategy_spec and natural_language_rule appear to conflict, prefer normalized_strategy_spec.',
@@ -450,6 +462,61 @@ const PINE_SPEC_FIRST_PROMPT_LINES = [
   'For time_exit bars, implement bars-since-entry state safely.',
   'For long_only specs, do not generate short entries.',
 ];
+
+const LOCAL_LLM_PINE_GENERATION_SYSTEM_PROMPT = [
+  'Convert the provided trading rule into Pine v6 strategy code.',
+  'Return Pine Script text only. Do not return JSON. Do not include markdown fences.',
+  'Start the response with //@version=6.',
+  'Use strategy(...), not indicator(...), unless strategy output is impossible.',
+  ...PINE_SPEC_FIRST_PROMPT_LINES,
+  'Use long-only behavior by default unless the user explicitly requests short behavior and it can be represented safely.',
+  'For long-only strategies, do not generate strategy.short entries or short-side strategy.entry calls.',
+  'Call strategy.entry only inside a block that confirms strategy.position_size == 0, unless the user explicitly requests pyramiding and it is supported.',
+  'Call strategy.exit only inside a block that confirms strategy.position_size > 0. Submit strategy.exit on every bar while the position is open, not only on the entry bar.',
+  'Do not compute stop or limit prices from strategy.position_avg_price in the same block where strategy.entry is called.',
+  'When an ATR stop uses entry-time ATR, declare a var float such as entryAtr and capture ATR after the position becomes open, for example when strategy.position_size > 0 and strategy.position_size[1] == 0.',
+  'Do not reset entry-time state variables such as entryAtr with a simple if strategy.position_size == 0 block immediately after the entry block.',
+  'Remember that on the same bar after strategy.entry is submitted, strategy.position_size may still be 0, so a simple flat-state reset can erase entry-time state too early.',
+  'Reset entry-time state variables only on an open-to-flat transition. Prefer: if strategy.position_size == 0 and strategy.position_size[1] > 0 then entryAtr := na.',
+  'Compute stop prices that depend on entryAtr only under strategy.position_size > 0 and not na(entryAtr).',
+  'Do not compute stopLossPrice at top level while flat when it depends on entryAtr or strategy.position_avg_price.',
+  'Do not use close as a substitute for the actual entry price when calculating stop loss.',
+  'Do not create entry_price := close or entryPrice := close unless the user explicitly requests signal-bar close as the entry-price basis.',
+  'For entry-price-based stops, use strategy.position_avg_price after the position is open.',
+  'Entry-time ATR may be stored as state, but calculate the stop price from strategy.position_avg_price, not from signal-bar close.',
+  'For fixed percentage stop loss, calculate stopLossPrice while the position is open using strategy.position_avg_price, for example strategy.position_avg_price * 0.95 for a 5% long stop.',
+  'Do not create entryPrice or entry_price from strategy.position_avg_price inside the entry block. Wait until the position is open and use strategy.position_avg_price directly for stop calculations.',
+  'Fixed percentage stops do not need entry-time state variables unless the user explicitly requests them.',
+  'Only create ATR variables, entryAtr, atrValue, or other ATR state when the user asks for an ATR stop, ATR filter, or ATR breakout.',
+  'If the user does not ask for ATR, do not create entryAtr, atrValue, ta.atr, or ATR state.',
+  'Do not reuse an ATR stop template for a percentage stop.',
+  'Preserve oscillator threshold direction exactly. RSI above 60 means rsi > 60, or ta.crossover(rsi, 60) only when crossing above is requested.',
+  'Do not use ta.crossunder(rsi, 60) for an overbought exit unless the user asks for falling back below 60.',
+  'RSI crosses back above 30 means ta.crossover(rsi, 30); RSI crosses below a threshold means ta.crossunder.',
+  'With overlay=true, do not plot RSI, Stochastic, MACD histogram, ADX, or other oscillators by default.',
+  'Plot price indicators by default if helpful, but plot oscillators only when explicitly requested or when overlay=false is intended for a separate pane.',
+  'Do not use color.color.*; use color=color.green, color=color.red, or another supported color.* value.',
+  'Do not use plot.style_dashed in plot(); prefer supported styles such as plot.style_linebr where appropriate, or omit unsupported style arguments.',
+  'For wording like "after setup, trigger" or "X state then Y", use state variables such as var bool setupActive.',
+  'Do not directly require setupCondition and triggerCondition on the same bar when setup can contradict trigger.',
+  'Prefer setting setupActive := true while flat on setup, using entryCondition = setupActive and triggerCondition, then resetting setupActive after entry or when invalidated.',
+  'For wording such as 下回った場合, below, or less than, use a state condition such as close < ma or adx < threshold.',
+  'Use ta.crossunder only when the wording explicitly says 下抜け, クロス, crosses below, or crossunder.',
+  'Avoid representative ATR patterns that capture state with if strategy.position_size > 0 and na(entryAtr).',
+  'Do not declare unused variables. Do not create ATR variables or state unless ATR is actually used.',
+  'If plotting a stop line, guard it with position and na checks, for example plot(strategy.position_size > 0 and not na(entryAtr) ? stopLossPrice : na, style=plot.style_linebr).',
+  'For stop loss or take profit, prefer strategy.exit(..., stop=...) or strategy.exit(..., limit=...).',
+  'Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...) unless the user explicitly requests that behavior.',
+  'Use strategy.close() for rule-based exits such as moving-average crossunder, dead cross, or close below moving average, not for ordinary stop loss or take profit orders.',
+  'Avoid plotting volume or average volume on an overlay price chart unless the user explicitly requests it.',
+  'Write self-contained Pine code with every variable declared before use; do not leave TODOs, placeholders, ellipses, or pseudo-code.',
+  'Use ta.* built-ins for indicators and valid strategy.entry, strategy.close, or strategy.exit calls; do not invent Pine functions or parameters.',
+  'Avoid repainting and future-data dependencies. Do not use lookahead_on, negative history references, or future bar assumptions.',
+  'If request.security is required, use barmerge.lookahead_off and keep the request minimal; otherwise avoid cross-symbol or higher-timeframe data.',
+  'Use explicit boolean entry and exit conditions and guard orders with strategy.position_size when appropriate.',
+  'Respect target_market and target_timeframe context, but do not claim TradingView compile success.',
+  'Do not include explanations, narrative notes, URLs, citations, web search results, raw prompt, raw response, endpoint, model, secret, token, credential, local path, stack trace, or profit guarantees.',
+].join(' ');
 
 function readBoundedPositiveInteger(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
@@ -524,6 +591,16 @@ function buildPineGenerationUserPayload(context: PineGenerationContext): Record<
     repair_request: null,
     output_schema: outputSchema,
   };
+}
+
+function buildLocalLlmPineGenerationUserPayload(context: PineGenerationContext): Record<string, unknown> {
+  const payload = buildPineGenerationUserPayload(context);
+  delete payload.output_schema;
+  payload.output_contract = 'pine_script_text_only';
+  if (payload.repair_request && typeof payload.repair_request === 'object') {
+    delete (payload.repair_request as Record<string, unknown>).output_schema;
+  }
+  return payload;
 }
 
 function buildDeterministicDailyOutput(
@@ -1825,6 +1902,30 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
     return trimmed.length > 0 && trimmed !== '<string>' && trimmed !== 'string' && !/^<[^>]+>$/.test(trimmed);
   }
 
+  private extractRawPineScript(content: string): string | null {
+    const candidates: string[] = [];
+    const fencedBlockPattern = /```(?:pine|pinescript|pine-script|tradingview)?\s*([\s\S]*?)```/gi;
+    let fencedMatch: RegExpExecArray | null;
+    while ((fencedMatch = fencedBlockPattern.exec(content)) !== null) {
+      candidates.push(fencedMatch[1] ?? '');
+    }
+    candidates.push(content);
+
+    for (const candidate of candidates) {
+      const lines = candidate.split(/\r?\n/);
+      const startIndex = lines.findIndex((line) => line.trim().startsWith('//@version='));
+      if (startIndex < 0) {
+        continue;
+      }
+      const script = lines.slice(startIndex).join('\n').trim();
+      if (/^\/\/@version=\d+/m.test(script) && /\b(strategy|indicator)\s*\(/i.test(script)) {
+        return script;
+      }
+    }
+
+    return null;
+  }
+
   private normalizeFinishReason(payload: any): string | null {
     const raw = payload?.done_reason ?? payload?.finish_reason ?? payload?.doneReason ?? null;
     if (typeof raw !== 'string') {
@@ -2605,75 +2706,12 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           {
             role: 'system',
             content: context.repairRequest
-              ? PINE_REPAIR_SYSTEM_PROMPT
-              :
-              [
-                'Convert natural language trading rule into Pine v6 script. Use regeneration_input when provided to revise existing script.',
-                ...PINE_SPEC_FIRST_PROMPT_LINES,
-                'Return one strict JSON object only. Do not include markdown fences around the JSON.',
-                'The generated_script value must contain Pine Script only. Do not include markdown fences, explanations, or comments outside Pine syntax in generated_script.',
-                'Use //@version=6 and strategy(...), not indicator(...), unless strategy output is impossible.',
-                'Use long-only behavior by default unless the user explicitly requests short behavior and it can be represented safely.',
-                'For long-only strategies, do not generate strategy.short entries or short-side strategy.entry calls.',
-                'Call strategy.entry only inside a block that confirms strategy.position_size == 0, unless the user explicitly requests pyramiding and it is supported.',
-                'Call strategy.exit only inside a block that confirms strategy.position_size > 0. Submit strategy.exit on every bar while the position is open, not only on the entry bar.',
-                'Do not compute stop or limit prices from strategy.position_avg_price in the same block where strategy.entry is called.',
-                'When an ATR stop uses entry-time ATR, declare a var float such as entryAtr and capture ATR after the position becomes open, for example when strategy.position_size > 0 and strategy.position_size[1] == 0.',
-                'Do not reset entry-time state variables such as entryAtr with a simple if strategy.position_size == 0 block immediately after the entry block.',
-                'Remember that on the same bar after strategy.entry is submitted, strategy.position_size may still be 0, so a simple flat-state reset can erase entry-time state too early.',
-                'Reset entry-time state variables only on an open-to-flat transition. Prefer: if strategy.position_size == 0 and strategy.position_size[1] > 0 then entryAtr := na.',
-                'Compute stop prices that depend on entryAtr only under strategy.position_size > 0 and not na(entryAtr).',
-                'Do not compute stopLossPrice at top level while flat when it depends on entryAtr or strategy.position_avg_price.',
-                'Do not use close as a substitute for the actual entry price when calculating stop loss.',
-                'Do not create entry_price := close or entryPrice := close unless the user explicitly requests signal-bar close as the entry-price basis.',
-                'For entry-price-based stops, use strategy.position_avg_price after the position is open.',
-                'Entry-time ATR may be stored as state, but calculate the stop price from strategy.position_avg_price, not from signal-bar close.',
-                'For fixed percentage stop loss, calculate stopLossPrice while the position is open using strategy.position_avg_price, for example strategy.position_avg_price * 0.95 for a 5% long stop.',
-                'Do not create entryPrice or entry_price from strategy.position_avg_price inside the entry block. Wait until the position is open and use strategy.position_avg_price directly for stop calculations.',
-                'Fixed percentage stops do not need entry-time state variables unless the user explicitly requests them.',
-                'Only create ATR variables, entryAtr, atrValue, or other ATR state when the user asks for an ATR stop, ATR filter, or ATR breakout.',
-                'If the user does not ask for ATR, do not create entryAtr, atrValue, ta.atr, or ATR state.',
-                'Do not reuse an ATR stop template for a percentage stop.',
-                'Preserve oscillator threshold direction exactly. RSI above 60 means rsi > 60, or ta.crossover(rsi, 60) only when crossing above is requested.',
-                'Do not use ta.crossunder(rsi, 60) for an overbought exit unless the user asks for falling back below 60.',
-                'RSI crosses back above 30 means ta.crossover(rsi, 30); RSI crosses below a threshold means ta.crossunder.',
-                'With overlay=true, do not plot RSI, Stochastic, MACD histogram, ADX, or other oscillators by default.',
-                'Plot price indicators by default if helpful, but plot oscillators only when explicitly requested or when overlay=false is intended for a separate pane.',
-                'Do not use color.color.*; use color=color.green, color=color.red, or another supported color.* value.',
-                'Do not use plot.style_dashed in plot(); prefer supported styles such as plot.style_linebr where appropriate, or omit unsupported style arguments.',
-                'For wording like "after setup, trigger" or "X state then Y", use state variables such as var bool setupActive.',
-                'Do not directly require setupCondition and triggerCondition on the same bar when setup can contradict trigger.',
-                'Prefer setting setupActive := true while flat on setup, using entryCondition = setupActive and triggerCondition, then resetting setupActive after entry or when invalidated.',
-                'For wording such as 下回った場合, below, or less than, use a state condition such as close < ma or adx < threshold.',
-                'Use ta.crossunder only when the wording explicitly says 下抜け, クロス, crosses below, or crossunder.',
-                'For entry-time ATR, capture it on the position-open transition using strategy.position_size > 0 and strategy.position_size[1] == 0.',
-                'Avoid representative ATR patterns that capture state with if strategy.position_size > 0 and na(entryAtr).',
-                'Do not declare unused variables. Do not create ATR variables or state unless ATR is actually used.',
-                "generated_script comments should be short section comments only; avoid narrative markers such as Note:, 注意:, Since, To ensure, Let's use, より正確な実装, or Pine Scriptの仕様上.",
-                'If plotting a stop line, guard it with position and na checks, for example plot(strategy.position_size > 0 and not na(entryAtr) ? stopLossPrice : na, style=plot.style_linebr).',
-                'For stop loss or take profit, prefer strategy.exit(..., stop=...) or strategy.exit(..., limit=...).',
-                'Avoid manual bar-based stops such as if low <= stopLossPrice then strategy.close(...) unless the user explicitly requests that behavior.',
-                'Use strategy.close() for rule-based exits such as moving-average crossunder, dead cross, or close below moving average, not for ordinary stop loss or take profit orders.',
-                'Avoid plotting volume or average volume on an overlay price chart unless the user explicitly requests it. Plot only main price-based indicators by default.',
-                'Do not include narrative comments such as 修正:, 注意:, or provider limitation explanations inside generated_script. Short section comments are allowed only when they clarify code structure.',
-                'Put limitations, approximations, and unsupported features in warnings or assumptions, not in long Pine comments.',
-                'Write self-contained Pine code with every variable declared before use; do not leave TODOs, placeholders, ellipses, or pseudo-code.',
-                'Use ta.* built-ins for indicators and valid strategy.entry, strategy.close, or strategy.exit calls; do not invent Pine functions or parameters.',
-                'Avoid repainting and future-data dependencies. Do not use lookahead_on, negative history references, or future bar assumptions.',
-                'If request.security is required, use barmerge.lookahead_off and keep the request minimal; otherwise avoid cross-symbol or higher-timeframe data.',
-                'Use explicit boolean entry and exit conditions and guard orders with strategy.position_size when appropriate.',
-                'Respect target_market and target_timeframe context, but do not claim TradingView compile success.',
-                'Do not include URLs, citations, web search results, or profit guarantees.',
-                'Return user-facing warnings and assumptions in Japanese.',
-                'Do not write English explanatory sentences in warnings or assumptions.',
-                'Keep generated_script as valid Pine Script; do not translate Pine code, identifiers, function names, or required Pine syntax.',
-                'Technical terms such as ATR, RSI, SMA, Chandelier Exit, strategy.entry may remain in English, but the explanatory sentence must be Japanese.',
-                'If failure_reason is needed for a user-facing failure, prefer Japanese. Keep invalid_reason_codes and internal enum/code values in English.',
-              ].join(' '),
+              ? LOCAL_LLM_PINE_REPAIR_SYSTEM_PROMPT
+              : LOCAL_LLM_PINE_GENERATION_SYSTEM_PROMPT,
           },
           {
             role: 'user',
-            content: JSON.stringify(buildPineGenerationUserPayload(context)),
+            content: JSON.stringify(buildLocalLlmPineGenerationUserPayload(context)),
           },
         ],
         stream: false,
@@ -2707,17 +2745,12 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
           has_thinking: hasThinking,
         }),
       );
-      throw new Error(
-        [
-          `local_llm pine generation returned invalid output: ${
-            finishReason === 'length' ? 'empty content with finish_reason=length' : 'empty content'
-          }`,
-          'task_type=pine_generation',
-          'think=false',
-          `finish_reason=${finishReason ?? 'null'}`,
-          `content_present=${hasContent}`,
-          `thinking_present=${hasThinking}`,
-        ].join(' | '),
+      return failedProviderOutput(
+        finishReason === 'length'
+          ? 'LLM Pine生成の本文が出力上限に達して空でした。修復リトライを試みます。'
+          : 'LLM Pine生成の本文が空でした。修復リトライを試みます。',
+        'provider_invalid_response',
+        ['provider_invalid_response', 'empty_output'],
       );
     }
     if (finishReason === 'length') {
@@ -2747,6 +2780,23 @@ class LocalLlmHomeAiProvider implements HomeAiProvider {
         // Try the next balanced object. Local models sometimes include a prose example before the real envelope.
       }
     }
+
+    if (!parsed) {
+      const extractedScript = this.extractRawPineScript(messageContent);
+      if (extractedScript) {
+        return {
+          ...baseline,
+          generatedScript: extractedScript,
+          warnings: baseline.warnings,
+          assumptions: baseline.assumptions,
+          normalizedRuleJson: baseline.normalizedRuleJson,
+          status: 'generated',
+          modelName: this.modelName,
+          promptVersion: 'v1.0.0-pine-local',
+        };
+      }
+    }
+
     if (!parsed && !parsedAnyJson) {
       return failedProviderOutput(
         'LLM Pine生成のJSONを解析できませんでした。修復リトライを試みます。',
