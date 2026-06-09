@@ -36,6 +36,8 @@ const SUPPORTED_OPERATORS = new Set(['>', '>=', '<', '<=', '==', 'crosses_above'
 const IGNORED_UNSUPPORTED_FEATURES = new Set([
   'consecutive_loss_skip',
   'complex_time_pnl_exit_logic',
+  'conditional_time_exit_with_pnl_check',
+  'gap_risk_slippage_management',
   'event_date_filtering',
   'earnings_gap_handling',
   'overfitting_check',
