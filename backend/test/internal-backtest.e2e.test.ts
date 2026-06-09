@@ -470,6 +470,8 @@ describe('internal backtest route', () => {
           supported_for_internal_backtest: false,
           unsupported_features: [
             'complex_time_pnl_exit_logic',
+            'conditional_time_exit_with_pnl_check',
+            'gap_risk_slippage_management',
             'event_date_filtering',
             'earnings_gap_handling',
             'overfitting_check',
@@ -500,6 +502,8 @@ describe('internal backtest route', () => {
     expect(body.data.result_summary.period.bar_count).toBe(100);
     expect(body.data.result_summary.ignored_unsupported_features).toEqual(expect.arrayContaining([
       'complex_time_pnl_exit_logic',
+      'conditional_time_exit_with_pnl_check',
+      'gap_risk_slippage_management',
       'event_date_filtering',
       'earnings_gap_handling',
       'overfitting_check',

@@ -1340,6 +1340,58 @@ describe('StrategyVersionDetail', () => {
     expect(mockPostApi.mock.calls.map((call) => call[0])).not.toContain('/api/symbols/sym-1/strategy-applications');
   });
 
+  it('keeps internal backtest enabled when only ignorable unsupported features are present', async () => {
+    mockUseSWR.mockReset();
+    mockPostApi.mockReset();
+    mockUseLocation.mockReset();
+    const query = new URLSearchParams({
+      mode: 'improve_application',
+      symbol_id: 'sym-1',
+      symbol_code: '6758',
+      symbol_name: 'Sony',
+      application_id: 'app-1',
+      source_version_id: 'ver-source-1',
+      return_to: '/symbols/sym-1',
+    });
+    mockUseLocation.mockReturnValue(['/strategy-versions/ver-1', vi.fn()]);
+    mockUseSearch.mockReturnValue(query.toString());
+    const normalizedSpecPayload = createInternalBacktestReadyNormalizedSpecPayload();
+    setupSWR(
+      createPayload({ withCompareBase: true, samePine: false }),
+      createListPayload(),
+      undefined,
+      null,
+      null,
+      null,
+      null,
+      {
+        ...normalizedSpecPayload,
+        normalized_spec: {
+          ...normalizedSpecPayload.normalized_spec,
+          validation: {
+            ...normalizedSpecPayload.normalized_spec.validation,
+            supported_for_internal_backtest: false,
+            unsupported_features: [
+              'conditional_time_exit_with_pnl_check',
+              'gap_risk_slippage_management',
+            ],
+          },
+        },
+        meta: {
+          schema_name: 'normalized_strategy_spec',
+          schema_version: '1.0',
+        },
+      },
+    );
+
+    renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
+
+    const runButton = buttonRenderCalls.find((call) => call.props['data-testid'] === 'run-internal-backtest-button');
+    expect(runButton?.text).toBe('内部バックテストを実行');
+    expect(runButton?.props.disabled).toBe(false);
+    expect(mockPostApi).not.toHaveBeenCalled();
+  });
+
   it('saves only the natural language rule when clicking the clarified save button', async () => {
     mockUseSWR.mockReset();
     mockUseLocation.mockReset();
