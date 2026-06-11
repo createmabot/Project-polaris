@@ -100,6 +100,15 @@ pnpm run dev
 6. Pine または spec が未生成の場合は unavailable reason が表示されることを確認する。
 7. status が warning / mismatch の場合、`内部バックテスト` section に deterministic 簡易診断由来の false positive 可能性を含む warning が出ることを確認する。MVP では実行 block しない。
 
+## 6-2. Internal Backtest signal / fill 診断
+
+1. `StrategyVersionDetail` の `内部バックテスト` section で、保存済み normalized spec と Market Data `D` OHLCV を使って明示クリックで internal backtest を実行する。
+2. BacktestDetail に遷移し、`主要指標` に検証データ期間と取引発生期間が分かれて表示されることを確認する。
+3. `取引一覧` で internal trade の `entry signal` / `entry fill` / `exit signal` / `exit fill` が分かれて表示されることを確認する。
+4. quantity が整数株で表示されることを確認する。MVP では `floor(cash / entry_price)` で計算し、日本株100株単元には未対応。
+5. trade row の `debug details` を開き、entry / filter / exit condition の判定値が整形表示されることを確認する。raw Pine、raw CSV、raw prompt は表示しない。
+6. 同じ application に TradingView List of Trades CSV report と internal backtest report がある場合、`取引明細比較` で TV entry fill / internal entry signal / internal entry fill / TV exit fill / internal exit signal / internal exit fill / quantity / profit diff が表示されることを確認する。
+
 ## 7. Backtest 作成と CSV 取込
 
 1. Backtest を作成する。
@@ -418,7 +427,8 @@ TradingView 実 CSV の出し方と、北極星での取り込み確認手順は
 3. 北極星の Rule Lab / Backtest 画面から CSV import を実行する。
 4. Backtest Detail で `latest import` `imports` `parsed件数` `failed件数` を確認する。
 5. List of Trades CSV を取り込んだ場合は、Backtest Detail の `取引一覧` に正規化済み trade_no、entry / exit、price、profit が表示されることを確認する。Performance Summary など取引明細を含まない CSV では、取引明細がない旨の notice を確認する。
-6. 最新 import が failed でも、過去 parsed import が残っていれば比較・AI総評は継続確認する。
+6. 同じ application に internal backtest report がある場合、`取引明細比較` で TradingView 側 entry / exit を fill として扱い、internal 側の signal / fill と並べて表示されることを確認する。
+7. 最新 import が failed でも、過去 parsed import が残っていれば比較・AI総評は継続確認する。
 
 注記:
 - TradingView の画面名は環境により `Strategy Report` と `Strategy Tester` の揺れがある。
