@@ -1126,6 +1126,7 @@ describe('StrategyVersionDetail', () => {
     const html = renderToStaticMarkup(<StrategyVersionDetail params={{ versionId: 'ver-1' }} />);
 
     expect(html).toContain('直近のPine生成は構造化specを主入力として実行されました。');
+    expect(html).toContain('このPineは構造化specを主契約として生成されています。');
     expect(mockPostApi).not.toHaveBeenCalled();
   });
 
@@ -1232,6 +1233,8 @@ describe('StrategyVersionDetail', () => {
 
     expect(html).toContain('実装整合性チェック');
     expect(html).toContain('Pine script と構造化specが同じ自然言語ルールを同じ意味で表しているか確認します。');
+    expect(html).toContain('この整合性チェックは簡易診断です。');
+    expect(html).toContain('false positive が出る場合があります。');
     expect(html).toContain('整合性チェックは未実行です');
     expect(mockFetchApi).not.toHaveBeenCalled();
     expect(mockPostApi).not.toHaveBeenCalled();

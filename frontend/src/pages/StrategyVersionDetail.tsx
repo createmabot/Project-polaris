@@ -1789,6 +1789,14 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             generated Pine と normalized_strategy_spec v1 の semantic diagnostics です。TradingView parity は保証しません。
           </span>
         </div>
+        <InlineNotice tone='info' className='mb-3'>
+          この整合性チェックは簡易診断です。Pine の中間変数、複合条件、状態変数を完全には解析できないため、false positive が出る場合があります。
+        </InlineNotice>
+        {pineSpecUsedAsPrimary ? (
+          <InlineNotice tone='info' className='mb-3'>
+            このPineは構造化specを主契約として生成されています。
+          </InlineNotice>
+        ) : null}
         {alignmentError ? (
           <InlineNotice tone='warning' className='mb-3'>
             {alignmentError}
@@ -1809,8 +1817,8 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
               </StatusBadge>
               <span className='text-sm text-slate-600'>
                 matched {alignmentReport.summary.matched_count} / mismatch {alignmentReport.summary.mismatch_count}
-                {' '} / missing in Pine {alignmentReport.summary.missing_in_pine_count}
-                {' '} / missing in spec {alignmentReport.summary.missing_in_spec_count}
+                {' '} / missing in Pine（要確認） {alignmentReport.summary.missing_in_pine_count}
+                {' '} / missing in spec（要確認） {alignmentReport.summary.missing_in_spec_count}
               </span>
             </div>
             {alignmentReport.status === 'unavailable' ? (
@@ -1836,7 +1844,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             ) : null}
             {alignmentReport.missing_in_pine.length > 0 ? (
               <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
-                <div className='mb-2 font-semibold text-slate-900'>missing in Pine</div>
+                <div className='mb-2 font-semibold text-slate-900'>missing in Pine（要確認）</div>
                 <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
                   {alignmentReport.missing_in_pine.map((entry, index) => (
                     <li key={`alignment-missing-pine-${entry.label}-${index}`}>
@@ -1848,7 +1856,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
             ) : null}
             {alignmentReport.missing_in_spec.length > 0 ? (
               <div className='rounded-lg border border-slate-200 bg-slate-50 p-3'>
-                <div className='mb-2 font-semibold text-slate-900'>missing in spec</div>
+                <div className='mb-2 font-semibold text-slate-900'>missing in spec（要確認）</div>
                 <ul className='mb-0 list-disc space-y-1 pl-5 text-sm text-slate-700'>
                   {alignmentReport.missing_in_spec.map((entry, index) => (
                     <li key={`alignment-missing-spec-${entry.label}-${index}`}>
@@ -1907,7 +1915,7 @@ export default function StrategyVersionDetail({ params }: StrategyVersionDetailP
         ) : null}
         {alignmentHasInternalBacktestRisk ? (
           <InlineNotice tone='warning' className='mb-3'>
-            Pineと構造化specに差分があります。TradingView結果とinternal backtest結果がズレる可能性があります。
+            Pineと構造化specに差分がある可能性があります。この警告は deterministic 簡易診断由来で、Pine の中間変数や複合条件を追えない false positive を含む場合があります。TradingView結果とinternal backtest結果の比較時に確認してください。
           </InlineNotice>
         ) : null}
         <div className='grid gap-3 sm:grid-cols-2'>
