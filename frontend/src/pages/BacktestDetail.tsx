@@ -867,6 +867,76 @@ function tradeProfitDiffText(csvTrade: Record<string, unknown> | null, internalT
   return `${sign}${formatNumber(diff, 2)}`;
 }
 
+function tradeDifferenceNote(csvTrade: Record<string, unknown> | null, internalTrade: Record<string, unknown> | null): string {
+  const notes: string[] = [];
+  const csvEntryFill = textFromRecordKeys(csvTrade, ['entry_at', 'entry_time']);
+  const internalEntryFill = textFromRecordKeys(internalTrade, ['entry_fill_at', 'entry_at', 'entry_time']);
+  const csvExitFill = textFromRecordKeys(csvTrade, ['exit_at', 'exit_time']);
+  const internalExitFill = textFromRecordKeys(internalTrade, ['exit_fill_at', 'exit_at', 'exit_time']);
+  const csvQuantity = tradeNumericValue(csvTrade, ['quantity']);
+  const internalQuantity = tradeNumericValue(internalTrade, ['quantity']);
+  const csvProfit = tradeNumericValue(csvTrade, ['net_profit', 'profit', 'pnl']);
+  const internalProfit = tradeNumericValue(internalTrade, ['net_profit', 'profit', 'pnl']);
+  if (csvEntryFill !== '-' && internalEntryFill !== '-' && csvEntryFill !== internalEntryFill) notes.push('entry fill date differs');
+  if (csvExitFill !== '-' && internalExitFill !== '-' && csvExitFill !== internalExitFill) notes.push('exit fill date differs');
+  if (csvQuantity !== null && internalQuantity !== null && csvQuantity !== internalQuantity) notes.push('quantity differs');
+  if (csvProfit !== null && internalProfit !== null && csvProfit !== internalProfit) notes.push('profit differs');
+  return notes.length > 0 ? notes.join(' / ') : 'trade_no順の診断比較';
+}
+
+function renderDebugItems(items: Record<string, unknown>[]) {
+  if (items.length === 0) return null;
+  return (
+    <ul className="mt-1 list-disc space-y-1 pl-5">
+      {items.map((item, index) => (
+        <li key={`${textFromRecordKeys(item, ['id'])}-${index}`}>
+          <code>{textFromRecordKeys(item, ['label', 'id'])}</code>: {textFromRecordKeys(item, ['result'])}
+          {' '}
+          ({numberTextFromRecordKeys(item, ['left_value'], 4)} {textFromRecordKeys(item, ['operator'])} {numberTextFromRecordKeys(item, ['right_value'], 4)})
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TradeDebugDetails({ trade }: { trade: Record<string, unknown> }) {
+  const entryDebug = asRecord(trade.entry_debug ?? null);
+  const exitDebug = asRecord(trade.exit_debug ?? null);
+  const entryConditions = recordArray(entryDebug, 'conditions');
+  const entryFilters = recordArray(entryDebug, 'filters');
+  const exitConditions = recordArray(exitDebug, 'conditions');
+  const triggered = Array.isArray(exitDebug?.triggered)
+    ? exitDebug.triggered.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    : [];
+  if (entryConditions.length === 0 && entryFilters.length === 0 && exitConditions.length === 0 && triggered.length === 0) return null;
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-700">debug details</summary>
+      <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+        {entryConditions.length > 0 || entryFilters.length > 0 ? (
+          <div>
+            <div className="font-semibold">entry debug</div>
+            {renderDebugItems(entryConditions)}
+            {entryFilters.length > 0 ? (
+              <>
+                <div className="mt-2 font-semibold">entry filters</div>
+                {renderDebugItems(entryFilters)}
+              </>
+            ) : null}
+          </div>
+        ) : null}
+        {exitConditions.length > 0 ? (
+          <div className="mt-2">
+            <div className="font-semibold">exit debug</div>
+            {renderDebugItems(exitConditions)}
+            {triggered.length > 0 ? <div className="mt-1">triggered: <code>{triggered.join(', ')}</code></div> : null}
+          </div>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 function ApplicationTradeDiagnosticsComparison({
   currentReport,
   relatedReports,
@@ -921,10 +991,14 @@ function ApplicationTradeDiagnosticsComparison({
                 <thead>
                   <tr className="border-b border-slate-200 text-left">
                     <th className="p-2">#</th>
-                    <th className="p-2">CSV entry</th>
-                    <th className="p-2">internal entry</th>
-                    <th className="p-2">CSV exit</th>
-                    <th className="p-2">internal exit</th>
+                    <th className="p-2">TV entry fill</th>
+                    <th className="p-2">internal entry signal</th>
+                    <th className="p-2">internal entry fill</th>
+                    <th className="p-2">TV exit fill</th>
+                    <th className="p-2">internal exit signal</th>
+                    <th className="p-2">internal exit fill</th>
+                    <th className="p-2">TV qty</th>
+                    <th className="p-2">internal qty</th>
                     <th className="p-2">CSV profit</th>
                     <th className="p-2">internal profit</th>
                     <th className="p-2">profit diff</th>
@@ -939,13 +1013,17 @@ function ApplicationTradeDiagnosticsComparison({
                       <tr key={`trade-diagnostics-${index}`} className="border-b border-slate-100">
                         <td className="p-2">{textFromRecordKeys(csvTrade, ['trade_no']) !== '-' ? textFromRecordKeys(csvTrade, ['trade_no']) : textFromRecordKeys(internalTrade, ['trade_no']) !== '-' ? textFromRecordKeys(internalTrade, ['trade_no']) : index + 1}</td>
                         <td className="p-2">{textFromRecordKeys(csvTrade, ['entry_at', 'entry_time'])}</td>
-                        <td className="p-2">{textFromRecordKeys(internalTrade, ['entry_at', 'entry_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['entry_signal_at', 'entry_signal_bar_time', 'entry_bar_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['entry_fill_at', 'entry_at', 'entry_time'])}</td>
                         <td className="p-2">{textFromRecordKeys(csvTrade, ['exit_at', 'exit_time'])}</td>
-                        <td className="p-2">{textFromRecordKeys(internalTrade, ['exit_at', 'exit_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['exit_signal_at', 'exit_signal_bar_time', 'exit_bar_time'])}</td>
+                        <td className="p-2">{textFromRecordKeys(internalTrade, ['exit_fill_at', 'exit_at', 'exit_time'])}</td>
+                        <td className="p-2">{numberTextFromRecordKeys(csvTrade ?? {}, ['quantity'])}</td>
+                        <td className="p-2">{numberTextFromRecordKeys(internalTrade ?? {}, ['quantity'])}</td>
                         <td className="p-2">{numberTextFromRecordKeys(csvTrade ?? {}, ['net_profit', 'profit', 'pnl'])}</td>
                         <td className="p-2">{numberTextFromRecordKeys(internalTrade ?? {}, ['net_profit', 'profit', 'pnl'])}</td>
                         <td className="p-2">{tradeProfitDiffText(csvTrade, internalTrade)}</td>
-                        <td className="p-2 text-slate-600">trade_no順の診断比較</td>
+                        <td className="p-2 text-slate-600">{tradeDifferenceNote(csvTrade, internalTrade)}</td>
                       </tr>
                     );
                   })}
@@ -1222,6 +1300,7 @@ function TradeListSection({
   tradeSummary,
   tradesTruncated = false,
   emptyTitle = '取引はありません。',
+  showSignalFillDiagnostics = false,
 }: {
   title?: string;
   description: string;
@@ -1229,6 +1308,7 @@ function TradeListSection({
   tradeSummary: Record<string, unknown> | null;
   tradesTruncated?: boolean;
   emptyTitle?: string;
+  showSignalFillDiagnostics?: boolean;
 }) {
   const exitReasonCounts = recordArray(tradeSummary, 'exit_reason_counts');
   const visibleTrades = trades.slice(0, 50);
@@ -1272,13 +1352,15 @@ function TradeListSection({
             </InlineNotice>
           ) : null}
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[820px] border-collapse text-sm">
+            <table className="w-full min-w-[980px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left">
                   <th className="p-2">#</th>
-                  <th className="p-2">entry at</th>
+                  {showSignalFillDiagnostics ? <th className="p-2">entry signal</th> : null}
+                  <th className="p-2">{showSignalFillDiagnostics ? 'entry fill' : 'entry at'}</th>
                   <th className="p-2">entry price</th>
-                  <th className="p-2">exit at</th>
+                  {showSignalFillDiagnostics ? <th className="p-2">exit signal</th> : null}
+                  <th className="p-2">{showSignalFillDiagnostics ? 'exit fill' : 'exit at'}</th>
                   <th className="p-2">exit price</th>
                   <th className="p-2">exit reason</th>
                   <th className="p-2">quantity</th>
@@ -1291,9 +1373,14 @@ function TradeListSection({
                 {visibleTrades.map((trade, index) => (
                   <tr key={`${textFromRecordKeys(trade, ['trade_no'])}-${textFromRecordKeys(trade, ['entry_at', 'entry_time'])}-${index}`} className="border-b border-slate-100">
                     <td className="p-2">{textFromRecordKeys(trade, ['trade_no']) !== '-' ? textFromRecordKeys(trade, ['trade_no']) : index + 1}</td>
-                    <td className="p-2">{textFromRecordKeys(trade, ['entry_at', 'entry_time'])}</td>
+                    {showSignalFillDiagnostics ? <td className="p-2">{textFromRecordKeys(trade, ['entry_signal_at', 'entry_signal_bar_time', 'entry_bar_time'])}</td> : null}
+                    <td className="p-2">
+                      {textFromRecordKeys(trade, showSignalFillDiagnostics ? ['entry_fill_at', 'entry_at', 'entry_time'] : ['entry_at', 'entry_time'])}
+                      {showSignalFillDiagnostics ? <TradeDebugDetails trade={trade} /> : null}
+                    </td>
                     <td className="p-2">{numberTextFromRecordKeys(trade, ['entry_price'])}</td>
-                    <td className="p-2">{textFromRecordKeys(trade, ['exit_at', 'exit_time'])}</td>
+                    {showSignalFillDiagnostics ? <td className="p-2">{textFromRecordKeys(trade, ['exit_signal_at', 'exit_signal_bar_time', 'exit_bar_time'])}</td> : null}
+                    <td className="p-2">{textFromRecordKeys(trade, showSignalFillDiagnostics ? ['exit_fill_at', 'exit_at', 'exit_time'] : ['exit_at', 'exit_time'])}</td>
                     <td className="p-2">{numberTextFromRecordKeys(trade, ['exit_price'])}</td>
                     <td className="p-2"><code>{textFromRecordKeys(trade, ['exit_reason', 'signal', 'side'])}</code></td>
                     <td className="p-2">{numberTextFromRecordKeys(trade, ['quantity'])}</td>
@@ -1316,10 +1403,11 @@ function InternalBacktestTradeListSection({ snapshot }: { snapshot: BacktestStra
   return (
     <TradeListSection
       title="取引一覧"
-      description="internal backtest engine が保存した約定単位の明細 preview です。raw CSV / raw import text は表示しません。"
+      description="internal backtest engine が保存した約定単位の明細 preview です。signal は条件判定bar、fill は実際の約定barを示します。raw CSV / raw import text は表示しません。"
       trades={recordArray(resultSummary, 'trades')}
       tradeSummary={asRecord(resultSummary?.trade_summary ?? null)}
       tradesTruncated={resultSummary?.trades_truncated === true}
+      showSignalFillDiagnostics
     />
   );
 }

@@ -10,11 +10,19 @@ export type InternalBacktestBar = {
 export type InternalBacktestTrade = {
   trade_no: number;
   entry_at: string;
+  entry_signal_at: string | null;
+  entry_fill_at: string;
+  entry_signal_bar_time: string | null;
+  entry_fill_bar_time: string;
   entry_bar_time: string | null;
   entry_time: string;
   entry_price: number;
   entry_reason: 'entry_signal';
   exit_at: string;
+  exit_signal_at: string | null;
+  exit_fill_at: string;
+  exit_signal_bar_time: string | null;
+  exit_fill_bar_time: string;
   exit_bar_time: string | null;
   exit_time: string;
   exit_price: number;
@@ -25,6 +33,23 @@ export type InternalBacktestTrade = {
   return_percent: number;
   bars_held: number;
   exit_reason: 'exit_signal' | 'stop_loss' | 'take_profit' | 'time_exit' | 'final_close';
+  entry_debug?: InternalBacktestTradeDebug;
+  exit_debug?: InternalBacktestTradeDebug;
+};
+
+export type InternalBacktestConditionDebug = {
+  id: string;
+  label: string;
+  result: boolean;
+  left_value: number | null;
+  operator: string;
+  right_value: number | null;
+};
+
+export type InternalBacktestTradeDebug = {
+  conditions?: InternalBacktestConditionDebug[];
+  filters?: InternalBacktestConditionDebug[];
+  triggered?: string[];
 };
 
 export type InternalBacktestEquityPoint = {

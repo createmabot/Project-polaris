@@ -29,7 +29,9 @@
 - conversion 完了直後の Backtest AI summary auto enqueue は新規には使われない。既存 AI summary と manual generation は generic Backtest report として維持する。
 - AI summary input は `strategySnapshotJson.result_summary`、`artifact_pointer` metadata、`internal_backtest_execution_id`、importless report 文脈を中心に組み立てる。
 - `BacktestImport` がないため、CSV parsed summary 前提の項目は欠損として扱う。ただし BacktestDetail の `主要指標` は `strategySnapshotJson.result_summary.metrics` / `period` / `trade_period` から総取引数、勝率、Profit Factor、最大ドローダウン、純利益、総リターン率、検証データ期間、取引発生期間を表示する。
-- Internal Backtest Engine v1 の `result_summary` は、約定単位の `trades` と `trade_summary` を保存する。BacktestDetail はこの `trades` を最大 50 件の read-only preview として表示し、entry / exit 時刻、価格、exit reason、数量、損益、return、bars held を確認できるようにする。
+- Internal Backtest Engine v1 の `result_summary` は、約定単位の `trades` と `trade_summary` を保存する。BacktestDetail はこの `trades` を最大 50 件の read-only preview として表示し、entry signal / entry fill、exit signal / exit fill、価格、exit reason、数量、損益、return、bars held を確認できるようにする。
+- Internal Backtest Engine v1 の position quantity は小数株を避け、entry fill price 確定時に `floor(cash / entry_price)` の整数株として計算する。quantity が 0 以下の場合は entry を skip し warning / diagnostic に残す。日本株の100株単元は MVP では未対応とする。
+- Internal Backtest Engine v1 の trade には診断用に `entry_debug` / `exit_debug` を保存できる。debug は entry / exit の条件評価結果、left / right value、operator、triggered condition を read-only に整形表示するためのもので、raw spec 全文、raw Pine、raw CSV、raw prompt は含めない。
 
 ### input 差分
 
@@ -45,7 +47,7 @@
 - `主要指標` は CSV import report では `BacktestImport.parsedSummaryJson`、internal backtest report では `strategySnapshotJson.result_summary.metrics` / `period` / `trade_period` を読む。CSV import report の parsed period は取引発生期間として表示し、internal backtest report の `period` は使用した MarketPriceBar の検証データ期間、`trade_period` は first entry / last exit の取引発生期間として表示する。trade がない場合は `取引なし` と表示する。internal backtest report で `BacktestImport` がないことは正常扱いにする。
 - CSV import report は Performance Summary CSV では summary metrics のみを保存する。TradingView Strategy Tester の List of Trades CSV では、raw CSV 本文を API / UI に返さず、`BacktestImport.parsedSummaryJson.trades` / `trade_summary` に正規化済みの trade_no、entry / exit、price、quantity、profit、return を保存できる。BacktestDetail はこの正規化済み取引明細を最大 50 件の preview として表示する。取引明細がない CSV では、CSV取引明細がない旨を表示する。
 - used strategy snapshot を表示し、report が参照した strategy version / Pine / assumptions を確認できるようにする。
-- 同一 application の related reports と current / related metrics 横並び比較補助を表示する。CSV import report と internal backtest report の両方に正規化済み取引明細がある場合は、trade_no / 表示順で `取引明細比較` を表示する。これは診断補助であり、厳密な約定照合や優劣判定ではない。
+- 同一 application の related reports と current / related metrics 横並び比較補助を表示する。CSV import report と internal backtest report の両方に正規化済み取引明細がある場合は、trade_no / 表示順で `取引明細比較` を表示する。比較では TradingView CSV の entry / exit を約定日時として扱い、internal 側は entry signal / entry fill / exit signal / exit fill を分けて表示する。これは signal 差、fill 差、quantity 差、profit 差を切り分ける診断補助であり、厳密な約定照合や優劣判定ではない。
 - metrics 欠損時は、取得元に該当 metric がないことを短く説明する。
 - 同一 application 内の current report と related report の既存 AI summary を read-only に並べる comparison helper を担当する。
 - summary missing / failed / stale は polling ではなく、read-only status / note と既存 manual generate 導線で扱う。保存済み summary がある場合も、ユーザーが明示的に `AI総評を再生成` を押したときだけ `force=true` の manual regeneration を行う。

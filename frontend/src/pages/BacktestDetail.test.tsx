@@ -1028,6 +1028,7 @@ describe('BacktestDetail', () => {
                   entry_price: 1000,
                   exit_at: '2026-04-01',
                   exit_price: 1100,
+                  quantity: 100,
                   net_profit: 100,
                   return_percent: 10,
                 },
@@ -1037,6 +1038,7 @@ describe('BacktestDetail', () => {
                   entry_price: 1100,
                   exit_at: '2026-04-10',
                   exit_price: 1050,
+                  quantity: 80,
                   net_profit: -50,
                   return_percent: -4.55,
                 },
@@ -1085,18 +1087,28 @@ describe('BacktestDetail', () => {
                   {
                     trade_no: 1,
                     entry_at: '2026-03-26T00:00:00.000Z',
+                    entry_signal_at: '2026-03-25T00:00:00.000Z',
+                    entry_fill_at: '2026-03-26T00:00:00.000Z',
                     entry_price: 1005,
                     exit_at: '2026-04-02T00:00:00.000Z',
+                    exit_signal_at: '2026-04-01T00:00:00.000Z',
+                    exit_fill_at: '2026-04-02T00:00:00.000Z',
                     exit_price: 1110,
+                    quantity: 99,
                     net_profit: 105,
                     return_percent: 10.45,
                   },
                   {
                     trade_no: 2,
                     entry_at: '2026-04-06T00:00:00.000Z',
+                    entry_signal_at: '2026-04-05T00:00:00.000Z',
+                    entry_fill_at: '2026-04-06T00:00:00.000Z',
                     entry_price: 1108,
                     exit_at: '2026-04-11T00:00:00.000Z',
+                    exit_signal_at: '2026-04-10T00:00:00.000Z',
+                    exit_fill_at: '2026-04-11T00:00:00.000Z',
                     exit_price: 1040,
+                    quantity: 81,
                     net_profit: -68,
                     return_percent: -6.14,
                   },
@@ -1162,12 +1174,19 @@ describe('BacktestDetail', () => {
     expect(html).toContain('internal backtest');
     expect(html).toContain('href="/backtests/bt-application"');
     expect(html).toContain('href="/backtests/bt-internal"');
-    expect(html).toContain('CSV entry');
-    expect(html).toContain('internal entry');
+    expect(html).toContain('TV entry fill');
+    expect(html).toContain('internal entry signal');
+    expect(html).toContain('internal entry fill');
+    expect(html).toContain('TV exit fill');
+    expect(html).toContain('internal exit signal');
+    expect(html).toContain('internal exit fill');
+    expect(html).toContain('TV qty');
+    expect(html).toContain('internal qty');
     expect(html).toContain('profit diff');
+    expect(html).toContain('quantity differs');
     expect(html).toContain('+5');
     expect(html).toContain('-18');
-    expect(html).toContain('trade_no順の診断比較');
+    expect(html).toContain('entry fill date differs');
     expect(html).toContain('AI summary 横並び確認');
     expect(html).toContain('保存済み AI summary を read-only に並べます');
     expect(html).toContain('current report AI summary');
@@ -1374,11 +1393,19 @@ describe('BacktestDetail', () => {
                 {
                   trade_no: 1,
                   entry_at: '2025-02-03T00:00:00.000Z',
+                  entry_signal_at: '2025-01-31T00:00:00.000Z',
+                  entry_fill_at: '2025-02-03T00:00:00.000Z',
+                  entry_signal_bar_time: '2025-01-31T00:00:00.000Z',
+                  entry_fill_bar_time: '2025-02-03T00:00:00.000Z',
                   entry_bar_time: '2025-01-31T00:00:00.000Z',
                   entry_time: '2025-02-03T00:00:00.000Z',
                   entry_price: 1200,
                   entry_reason: 'entry_signal',
                   exit_at: '2025-03-04T00:00:00.000Z',
+                  exit_signal_at: '2025-03-03T00:00:00.000Z',
+                  exit_fill_at: '2025-03-04T00:00:00.000Z',
+                  exit_signal_bar_time: '2025-03-03T00:00:00.000Z',
+                  exit_fill_bar_time: '2025-03-04T00:00:00.000Z',
                   exit_bar_time: '2025-03-03T00:00:00.000Z',
                   exit_time: '2025-03-04T00:00:00.000Z',
                   exit_price: 1320,
@@ -1389,15 +1416,37 @@ describe('BacktestDetail', () => {
                   pnl: 12000,
                   return_percent: 10,
                   bars_held: 21,
+                  entry_debug: {
+                    conditions: [
+                      { id: 'entry_cond_1', label: 'close > sma_25', result: true, left_value: 1210, operator: '>', right_value: 1180 },
+                    ],
+                    filters: [
+                      { id: 'filter_vol_1', label: 'volume >= volume_sma_20 * 1.2', result: true, left_value: 1200000, operator: '>=', right_value: 1000000 },
+                    ],
+                  },
+                  exit_debug: {
+                    conditions: [
+                      { id: 'exit_cond_1', label: 'close < sma_25', result: true, left_value: 1310, operator: '<', right_value: 1320 },
+                    ],
+                    triggered: ['exit_cond_1'],
+                  },
                 },
                 {
                   trade_no: 2,
                   entry_at: '2025-10-01T00:00:00.000Z',
+                  entry_signal_at: '2025-09-30T00:00:00.000Z',
+                  entry_fill_at: '2025-10-01T00:00:00.000Z',
+                  entry_signal_bar_time: '2025-09-30T00:00:00.000Z',
+                  entry_fill_bar_time: '2025-10-01T00:00:00.000Z',
                   entry_bar_time: '2025-09-30T00:00:00.000Z',
                   entry_time: '2025-10-01T00:00:00.000Z',
                   entry_price: 1400,
                   entry_reason: 'entry_signal',
                   exit_at: '2025-11-28T00:00:00.000Z',
+                  exit_signal_at: '2025-11-28T00:00:00.000Z',
+                  exit_fill_at: '2025-11-28T00:00:00.000Z',
+                  exit_signal_bar_time: '2025-11-28T00:00:00.000Z',
+                  exit_fill_bar_time: '2025-11-28T00:00:00.000Z',
                   exit_bar_time: '2025-11-28T00:00:00.000Z',
                   exit_time: '2025-11-28T00:00:00.000Z',
                   exit_price: 1330,
@@ -1497,12 +1546,21 @@ describe('BacktestDetail', () => {
     expect(html).toContain('取引発生期間（終了）');
     expect(html).toContain('2025-11-28T00:00:00.000Z');
     expect(html).toContain('取引一覧');
-    expect(html).toContain('internal backtest engine が保存した約定単位の明細 preview です。');
-    expect(html).toContain('entry at');
-    expect(html).toContain('exit at');
+    expect(html).toContain('internal backtest engine が保存した約定単位の明細 preview です。signal は条件判定bar、fill は実際の約定barを示します。');
+    expect(html).toContain('entry signal');
+    expect(html).toContain('entry fill');
+    expect(html).toContain('exit signal');
+    expect(html).toContain('exit fill');
     expect(html).toContain('exit reason');
     expect(html).toContain('2025-02-03T00:00:00.000Z');
     expect(html).toContain('2025-03-04T00:00:00.000Z');
+    expect(html).toContain('debug details');
+    expect(html).toContain('entry debug');
+    expect(html).toContain('close &gt; sma_25');
+    expect(html).toContain('entry filters');
+    expect(html).toContain('volume &gt;= volume_sma_20 * 1.2');
+    expect(html).toContain('exit debug');
+    expect(html).toContain('triggered:');
     expect(html).toContain('exit_signal');
     expect(html).toContain('stop_loss');
     expect(html).toContain('12,000');

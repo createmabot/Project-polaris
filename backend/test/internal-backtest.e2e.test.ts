@@ -269,12 +269,12 @@ describe('internal backtest route', () => {
     expect(body.data.detail_url).toBe('/backtests/backtest-1');
     expect(body.data.result_summary.metrics.trade_count).toBe(1);
     expect(body.data.result_summary.metrics.total_trades).toBe(1);
-    expect(body.data.result_summary.metrics.final_equity).toBe(900000);
-    expect(body.data.result_summary.metrics.total_return_percent).toBe(-10);
-    expect(body.data.result_summary.metrics.net_profit).toBe(-100000);
-    expect(body.data.result_summary.metrics.max_drawdown).toBe(100000);
-    expect(body.data.result_summary.metrics.max_drawdown_percent).toBe(10);
-    expect(body.data.result_summary.metrics.average_trade).toBe(-100000);
+    expect(body.data.result_summary.metrics.final_equity).toBe(900000.4);
+    expect(body.data.result_summary.metrics.total_return_percent).toBeCloseTo(-9.99996);
+    expect(body.data.result_summary.metrics.net_profit).toBeCloseTo(-99999.6);
+    expect(body.data.result_summary.metrics.max_drawdown).toBeCloseTo(99999.6);
+    expect(body.data.result_summary.metrics.max_drawdown_percent).toBeCloseTo(10);
+    expect(body.data.result_summary.metrics.average_trade).toBeCloseTo(-99999.6);
     expect(body.data.result_summary.period).toMatchObject({
       from: '2026-01-01T00:00:00.000Z',
       to: '2026-01-04T00:00:00.000Z',
@@ -298,24 +298,58 @@ describe('internal backtest route', () => {
     expect(body.data.result_summary.trades[0]).toMatchObject({
       trade_no: 1,
       entry_at: '2026-01-03T00:00:00.000Z',
+      entry_signal_at: '2026-01-02T00:00:00.000Z',
+      entry_fill_at: '2026-01-03T00:00:00.000Z',
+      entry_signal_bar_time: '2026-01-02T00:00:00.000Z',
+      entry_fill_bar_time: '2026-01-03T00:00:00.000Z',
       entry_bar_time: '2026-01-02T00:00:00.000Z',
       entry_price: 12,
       entry_reason: 'entry_signal',
       exit_at: '2026-01-03T00:00:00.000Z',
+      exit_signal_at: '2026-01-03T00:00:00.000Z',
+      exit_fill_at: '2026-01-03T00:00:00.000Z',
+      exit_signal_bar_time: '2026-01-03T00:00:00.000Z',
+      exit_fill_bar_time: '2026-01-03T00:00:00.000Z',
       exit_bar_time: '2026-01-03T00:00:00.000Z',
       exit_price: 10.8,
       exit_reason: 'stop_loss',
-      gross_profit: -100000,
-      net_profit: -100000,
-      pnl: -100000,
+      quantity: 83333,
+      gross_profit: -99999.6,
+      net_profit: -99999.6,
+      pnl: -99999.6,
       return_percent: -10,
       bars_held: 1,
     });
+    expect(body.data.result_summary.trades[0].quantity).toBe(Number.parseInt(String(body.data.result_summary.trades[0].quantity), 10));
+    expect(body.data.result_summary.trades[0].entry_debug.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry_close_above_sma',
+        label: 'close > sma_2',
+        result: true,
+      }),
+    ]));
+    expect(body.data.result_summary.trades[0].entry_debug.filters).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'filter_volume',
+        label: 'volume >= volume_sma_2',
+        result: true,
+      }),
+    ]));
+    expect(body.data.result_summary.trades[0].exit_debug.conditions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stop_loss',
+        label: 'low <= stop_loss_price',
+        result: true,
+      }),
+    ]));
+    expect(body.data.result_summary.trades[0].exit_debug.triggered).toContain('stop_loss');
+    expect(body.data.result_summary.assumptions.join(' ')).toContain('floor(cash / entry_price)');
+    expect(body.data.result_summary.assumptions.join(' ')).toContain('100-share trading units are not supported');
     expect(body.data.result_summary.ignored_unsupported_features).toContain('consecutive_loss_skip');
     expect(body.data.result_summary.warnings.join(' ')).toContain('consecutive_loss_skip is ignored');
 
     expect(runtime.backtests).toHaveLength(1);
-    expect(runtime.backtests[0].strategySnapshotJson.result_summary.metrics.final_equity).toBe(900000);
+    expect(runtime.backtests[0].strategySnapshotJson.result_summary.metrics.final_equity).toBe(900000.4);
     expect(runtime.backtests[0].strategySnapshotJson.result_summary.trade_period.first_entry_at).toBe('2026-01-03T00:00:00.000Z');
     expect(runtime.backtests[0].strategySnapshotJson.execution_source).toBe('internal_backtest');
     expect(runtime.backtests[0].strategySnapshotJson.generated_pine).toBeNull();
@@ -379,6 +413,23 @@ describe('internal backtest route', () => {
     expect(body.data.result_summary.trades).toEqual([]);
     expect(body.data.result_summary.trades_truncated).toBe(false);
     expect(runtime.backtests[0].strategySnapshotJson.result_summary.trade_period.first_trade_at).toBeNull();
+  });
+
+  it('skips entry and records a diagnostic warning when integer quantity is zero', async () => {
+    const app = await buildApp();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/strategy-versions/ver-1/internal-backtests',
+      payload: { symbol_id: 'sym-1', initial_capital: 5 },
+    });
+
+    expect(res.statusCode).toBe(201);
+    const body = JSON.parse(res.body);
+    expect(body.data.result_summary.metrics.total_trades).toBe(0);
+    expect(body.data.result_summary.trades).toEqual([]);
+    expect(body.data.result_summary.warnings.join(' ')).toContain('quantity is 0');
+    expect(body.data.result_summary.assumptions.join(' ')).toContain('floor(cash / entry_price)');
   });
 
   it('accepts symbol code input and ignores canonical consecutive loss skip variants', async () => {
